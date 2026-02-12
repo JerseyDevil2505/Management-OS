@@ -300,6 +300,9 @@ const loadInitialData = async () => {
 
       if (selectedJob !== 'all') {
         query = query.eq('job_id', selectedJob);
+      } else if (jobs.length > 0) {
+        // Only include inspections from PPA jobs (jobs prop is pre-filtered)
+        query = query.in('job_id', jobs.map(j => j.id));
       }
 
       const startTime = Date.now();

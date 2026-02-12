@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes } from '../../lib/supabaseClient';
+import { autoNormalizeJob } from '../../lib/autoNormalization';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
@@ -11,7 +12,8 @@ const FileUploadButton = ({
   onUpdateJobCache,  // JobContainer's refresh callback
   isJobContainerLoading = false,  // Accept loading state from JobContainer
   codeFileOnly = false,  // NEW: When true, only allow code file uploads (disable source file)
-  standalone = false  // NEW: When true, component is rendered standalone (not in job container)
+  standalone = false,  // NEW: When true, component is rendered standalone (not in job container)
+  tenantConfig = null  // Tenant config for auto-normalization behavior
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
@@ -1857,7 +1859,22 @@ const handleCodeFileUpdate = async () => {
 
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
-          addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to process these sales changes`, 'warning');
+
+          // Auto-normalize for LOJIK/assessor jobs if tenant config says so
+          if (tenantConfig?.behavior?.autoNormalize) {
+            addBatchLog('🔄 Auto-normalizing sales data...', 'info');
+            try {
+              const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county);
+              addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
+              addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
+            } catch (normError) {
+              console.error('Auto-normalization failed:', normError);
+              addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
+              addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
+            }
+          } else {
+            addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to process these sales changes`, 'warning');
+          }
         }
       }
       // Check if rollback occurred

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null }) => {
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
@@ -24,12 +25,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const rawYear = new Date(jobData.end_date).getFullYear();
+    // LOJIK: assessment year is prior year (end_date is the job end, not assessment date)
+    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
-      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior-prior year
-      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 prior year
+      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
+      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 assessment year
     };
-  }, [jobData?.end_date]);
+  }, [jobData?.end_date, isLojikTenant]);
 
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
@@ -101,6 +104,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   ]);
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+
+  // ==================== SALES POOL STATE ====================
+  const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
+  const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
+  const [salesPoolSearch, setSalesPoolSearch] = useState('');
+  const [poolAnalyticsExpanded, setPoolAnalyticsExpanded] = useState({ vcs: false, style: false, typeUse: false, view: false });
+  // Pool display filters (filter the table view, not inclusion logic)
+  const [poolFilterVCS, setPoolFilterVCS] = useState([]);
+  const [poolFilterType, setPoolFilterType] = useState([]);
+  const [poolFilterStyle, setPoolFilterStyle] = useState([]);
+  const [poolFilterView, setPoolFilterView] = useState([]);
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -567,6 +581,213 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return Array.from(viewSet).sort();
   }, [properties]);
 
+  // Code description lookup maps (code -> human-readable definition from job's code table)
+  const codeDescriptions = useMemo(() => {
+    const parsedCodes = codeDefinitions || jobData?.parsed_code_definitions;
+    if (!parsedCodes) return { typeUse: {}, style: {}, view: {}, storyHeight: {} };
+    const typeUse = {}, style = {}, view = {}, storyHeight = {};
+    properties.forEach(p => {
+      if (p.asset_type_use && !typeUse[p.asset_type_use]) {
+        typeUse[p.asset_type_use] = interpretCodes.getTypeName?.({ asset_type_use: p.asset_type_use }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_design_style && !style[p.asset_design_style]) {
+        style[p.asset_design_style] = interpretCodes.getDesignName?.({ asset_design_style: p.asset_design_style }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_view && !view[p.asset_view]) {
+        view[p.asset_view] = interpretCodes.getViewName?.({ asset_view: p.asset_view }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_story_height && !storyHeight[p.asset_story_height]) {
+        storyHeight[p.asset_story_height] = interpretCodes.getStoryHeightName?.({ asset_story_height: p.asset_story_height }, parsedCodes, vendorType) || '';
+      }
+    });
+    return { typeUse, style, view, storyHeight };
+  }, [properties, codeDefinitions, jobData?.parsed_code_definitions, vendorType]);
+
+  // Helper to format code with definition
+  const getCodeLabel = useCallback((type, code) => {
+    if (!code) return '';
+    const desc = codeDescriptions[type]?.[code];
+    return desc && desc !== code ? `${code} - ${desc}` : code;
+  }, [codeDescriptions]);
+
+  // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
+  // Get all properties that have sales data (before date/code filtering)
+  const allSalesCandidates = useMemo(() => {
+    // Only show main card properties (avoid duplicate cards)
+    const seen = new Set();
+    return properties.filter(p => {
+      if (!p.sales_date) return false;
+      // Deduplicate by block-lot-qualifier
+      const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+      if (seen.has(baseKey)) return false;
+      seen.add(baseKey);
+
+      if (isLojikTenant) {
+        if (!p.sales_price || p.sales_price <= 100) return false;
+        const bc = parseInt(p.asset_building_class) || 0;
+        if (bc <= 10) return false;
+      } else {
+        if (!p.values_norm_time) return false;
+      }
+      return true;
+    });
+  }, [properties, isLojikTenant]);
+
+  // Compute which sales are included in the pool based on filters + overrides
+  const salesPoolEntries = useMemo(() => {
+    return allSalesCandidates.map(p => {
+      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}`;
+      const saleDate = p.sales_date;
+      const nuCode = String(p.sales_nu || '0').trim();
+
+      // Check date range
+      const inDateRange = (!compFilters.salesDateStart || saleDate >= compFilters.salesDateStart) &&
+                          (!compFilters.salesDateEnd || saleDate <= compFilters.salesDateEnd);
+
+      // Check sales code
+      const codeMatch = compFilters.salesCodes.length === 0 ||
+                        compFilters.salesCodes.some(fc => normalizeSalesCode(fc) === normalizeSalesCode(nuCode));
+
+      // Auto-included if passes date + code filters
+      const autoIncluded = inDateRange && codeMatch;
+
+      // Check for manual override
+      const override = salesPoolOverrides[key]; // true = force include, false = force exclude, undefined = auto
+
+      const included = override === true ? true : override === false ? false : autoIncluded;
+
+      // Detect farm/package sales
+      const packageData = interpretCodes.getPackageSaleData(properties, p);
+      const isFarm = packageData?.is_farm_package || p.property_m4_class === '3A';
+      const isPackage = packageData && (packageData.is_additional_card || packageData.is_multi_property_package);
+
+      return {
+        ...p,
+        _poolKey: key,
+        _autoIncluded: autoIncluded,
+        _override: override,
+        _included: included,
+        _inDateRange: inDateRange,
+        _codeMatch: codeMatch,
+        _isFarm: isFarm,
+        _isPackage: isPackage,
+        _packageData: packageData,
+      };
+    });
+  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode, properties]);
+
+  const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
+
+  // Unique values from pool candidates for filter dropdowns
+  const poolUniqueVCS = useMemo(() => [...new Set(allSalesCandidates.map(p => p.property_vcs).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueTypes = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_type_use).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueStyles = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_design_style).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueViews = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_view).filter(Boolean))].sort(), [allSalesCandidates]);
+
+  // ==================== SALES POOL ANALYTICS ====================
+  const includedPoolSales = useMemo(() => salesPoolEntries.filter(e => e._included), [salesPoolEntries]);
+
+  const poolVcsAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0, yearBuiltSum: 0, yearBuiltCount: 0 };
+
+    includedPoolSales.forEach(p => {
+      const vcs = p.property_vcs || 'Unknown';
+      if (!groups[vcs]) groups[vcs] = { count: 0, totalPrice: 0, sflaSum: 0, yearBuiltSum: 0, yearBuiltCount: 0 };
+      groups[vcs].count++;
+      if (p.sales_price) { groups[vcs].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[vcs].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      if (p.asset_year_built) { groups[vcs].yearBuiltSum += p.asset_year_built; groups[vcs].yearBuiltCount++; totals.yearBuiltSum += p.asset_year_built; totals.yearBuiltCount++; }
+      totals.count++;
+    });
+
+    const rows = Object.entries(groups).map(([vcs, d]) => ({
+      vcs, count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+      avgSFLA: d.count > 0 ? Math.round(d.sflaSum / d.count) : 0,
+      avgYearBuilt: d.yearBuiltCount > 0 ? Math.round(d.yearBuiltSum / d.yearBuiltCount) : 0,
+    })).sort((a, b) => a.vcs.localeCompare(b.vcs));
+
+    const summary = {
+      vcs: 'OVERALL', count: totals.count,
+      avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0,
+      avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0,
+      avgSFLA: totals.count > 0 ? Math.round(totals.sflaSum / totals.count) : 0,
+      avgYearBuilt: totals.yearBuiltCount > 0 ? Math.round(totals.yearBuiltSum / totals.yearBuiltCount) : 0,
+    };
+    return { rows, summary };
+  }, [includedPoolSales]);
+
+  const poolStyleAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const style = p.asset_design_style || 'Unknown';
+      if (!groups[style]) groups[style] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[style].count++;
+      if (p.sales_price) { groups[style].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[style].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([style, d]) => ({
+      style,
+      styleName: interpretCodes.getDesignName?.({ asset_design_style: style }, parsedCodes, vendorType) || style,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { styleName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
+
+  const poolTypeUseAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const type = p.asset_type_use || 'Unknown';
+      if (!groups[type]) groups[type] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[type].count++;
+      if (p.sales_price) { groups[type].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[type].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([type, d]) => ({
+      type,
+      typeName: interpretCodes.getTypeName?.({ asset_type_use: type }, parsedCodes, vendorType) || type,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { typeName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
+
+  const poolViewAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const view = p.asset_view || 'Unknown';
+      if (!groups[view]) groups[view] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[view].count++;
+      if (p.sales_price) { groups[view].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[view].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([view, d]) => ({
+      view,
+      viewName: interpretCodes.getViewName?.({ asset_view: view }, parsedCodes, vendorType) || view,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { viewName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
+
   // ==================== HANDLE CHIP TOGGLES ====================
   const toggleChip = (array, setter) => (value) => {
     if (array.includes(value)) {
@@ -597,7 +818,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       return;
     }
 
-    const compositeKey = `${manualBlockLot.block}-${manualBlockLot.lot}-${manualBlockLot.qualifier || ''}`;
+    const compositeKey = `${manualBlockLot.block}-${manualBlockLot.lot}${manualBlockLot.qualifier ? `-${manualBlockLot.qualifier}` : ''}`;
     
     if (manualProperties.includes(compositeKey)) {
       alert('This property is already added');
@@ -948,10 +1169,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       let subjects = [];
 
       if (manualProperties.length > 0) {
-        // Use manually entered properties (still enforce building_class > 10)
-        subjects = properties.filter(p =>
-          manualProperties.includes(p.property_composite_key) && isResidentialProperty(p)
-        );
+        // Use manually entered properties (match by block/lot/qualifier, same as detailed tab)
+        subjects = properties.filter(p => {
+          if (!isResidentialProperty(p)) return false;
+          return manualProperties.some(key => {
+            const parts = key.split('-');
+            const block = (parts[0] || '').trim().toUpperCase();
+            const lot = (parts[1] || '').trim().toUpperCase();
+            const qual = (parts[2] || '').trim().toUpperCase();
+            const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
+            const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
+            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
+            return blockMatch && lotMatch && qualMatch;
+          });
+        });
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
@@ -1020,12 +1251,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
 
-      // Step 2: Get eligible sales (from Sales Review logic)
+      // Step 2: Get eligible sales from the curated Sales Pool
       const eligibleSales = getEligibleSales();
-      console.log(`📊 Found ${eligibleSales.length} eligible sales (CSP period)`);
+      console.log(`📊 Found ${eligibleSales.length} eligible sales from Sales Pool`);
 
       if (eligibleSales.length === 0) {
-        alert(`No eligible sales found for comparison.\n\nThe CSP period (${compFilters.salesDateStart} to ${compFilters.salesDateEnd}) has no valid sales with time-adjusted prices.\n\nPlease check your Sales Review tab or adjust your date range.`);
+        alert(`No eligible sales found for comparison.\n\nThe Sales Pool (${compFilters.salesDateStart} to ${compFilters.salesDateEnd}) has no included sales.\n\nGo to the Sales Pool tab to adjust your date range, codes, or manually include sales.`);
         setIsEvaluating(false);
         setEvaluationProgress({ current: 0, total: 0 });
         return;
@@ -1113,41 +1344,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         };
 
         const matchingComps = aggregatedSales.filter(comp => {
+          // Helper: log why a specific comp is excluded (for first property debug)
+          const logExclusion = (reason, details) => {
+            if (isFirstProperty) {
+              console.log(`   🚫 ${comp.property_block}-${comp.property_lot}: excluded by ${reason}${details ? ` (${details})` : ''}`);
+            }
+          };
+
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) {
             if (isFirstProperty) debugFilters.self++;
             return false;
           }
 
-          // Sales codes filter (normalize blank, '00', '0' to '')
-          if (compFilters.salesCodes.length > 0) {
-            const normalizedCompCode = normalizeSalesCode(comp.sales_nu);
-            const normalizedFilterCodes = compFilters.salesCodes.map(normalizeSalesCode);
-            if (!normalizedFilterCodes.includes(normalizedCompCode)) {
-              if (isFirstProperty) debugFilters.salesCodes++;
-              return false;
-            }
-          }
-
-          // Sales date range
-          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) {
-            if (isFirstProperty) debugFilters.salesDate++;
-            return false;
-          }
-          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) {
-            if (isFirstProperty) debugFilters.salesDate++;
-            return false;
-          }
+          // Note: Sales codes and date range filtering is handled by the Sales Pool tab.
+          // The eligible sales passed to this loop are already curated by the pool.
 
           // VCS filter - always user-controlled via comp filters
           if (compFilters.sameVCS) {
             if (comp.property_vcs !== subject.property_vcs) {
               if (isFirstProperty) debugFilters.vcs++;
+              logExclusion('VCS', `comp=${comp.property_vcs} vs subject=${subject.property_vcs}`);
               return false;
             }
           } else if (compFilters.vcs.length > 0) {
             if (!compFilters.vcs.includes(comp.property_vcs)) {
               if (isFirstProperty) debugFilters.vcs++;
+              logExclusion('VCS filter list', `comp=${comp.property_vcs}`);
               return false;
             }
           }
@@ -1156,24 +1379,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameNeighborhood) {
             if (comp.asset_neighborhood !== subject.asset_neighborhood) {
               if (isFirstProperty) debugFilters.neighborhood++;
+              logExclusion('neighborhood', `comp=${comp.asset_neighborhood} vs subject=${subject.asset_neighborhood}`);
               return false;
             }
           } else if (compFilters.neighborhood.length > 0) {
             if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) {
               if (isFirstProperty) debugFilters.neighborhood++;
+              logExclusion('neighborhood filter list', `comp=${comp.asset_neighborhood}`);
               return false;
             }
           }
 
           // Lot size filter
           if (compFilters.sameLotSize) {
-            // "Similar lot size" - within 25% of subject's lot size
             const subjectLotAcre = subject.asset_lot_acre || 0;
             const compLotAcre = comp.asset_lot_acre || 0;
             if (subjectLotAcre > 0 && compLotAcre > 0) {
-              const tolerance = subjectLotAcre * 0.25; // 25% tolerance
+              const tolerance = subjectLotAcre * 0.25;
               if (Math.abs(compLotAcre - subjectLotAcre) > tolerance) {
                 if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+                logExclusion('lot size', `comp=${compLotAcre} vs subject=${subjectLotAcre} (25% tolerance=${tolerance.toFixed(2)})`);
                 return false;
               }
             }
@@ -1181,10 +1406,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             const compLotAcre = comp.asset_lot_acre || 0;
             if (compFilters.lotAcreMin && compLotAcre < parseFloat(compFilters.lotAcreMin)) {
               if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              logExclusion('lot size min', `comp=${compLotAcre} < min=${compFilters.lotAcreMin}`);
               return false;
             }
             if (compFilters.lotAcreMax && compLotAcre > parseFloat(compFilters.lotAcreMax)) {
               if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              logExclusion('lot size max', `comp=${compLotAcre} > max=${compFilters.lotAcreMax}`);
               return false;
             }
           }
@@ -1193,16 +1420,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.useBuiltRange) {
             if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built min', `comp=${comp.asset_year_built} < min=${compFilters.builtYearMin}`);
               return false;
             }
             if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built max', `comp=${comp.asset_year_built} > max=${compFilters.builtYearMax}`);
               return false;
             }
           } else {
-            const yearDiff = Math.abs((comp.asset_year_built || 0) - (subject.asset_year_built || 0));
+            // Normalize pre-1925 year built to 1925 for comparison purposes only.
+            // Historic homes (1790, 1850, 1910, etc.) are all treated as 1925 so they can match each other.
+            const YEAR_FLOOR = 1925;
+            const normalizedCompYear = Math.max(comp.asset_year_built || 0, YEAR_FLOOR);
+            const normalizedSubjectYear = Math.max(subject.asset_year_built || 0, YEAR_FLOOR);
+            const yearDiff = Math.abs(normalizedCompYear - normalizedSubjectYear);
             if (yearDiff > compFilters.builtWithinYears) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built', `diff=${yearDiff} > limit=${compFilters.builtWithinYears} (comp=${comp.asset_year_built}→${normalizedCompYear}, subject=${subject.asset_year_built}→${normalizedSubjectYear})`);
               return false;
             }
           }
@@ -1211,16 +1446,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.useSizeRange) {
             if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA min', `comp=${comp.asset_sfla} < min=${compFilters.sizeMin}`);
               return false;
             }
             if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA max', `comp=${comp.asset_sfla} > max=${compFilters.sizeMax}`);
               return false;
             }
           } else {
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
             if (sizeDiff > compFilters.sizeWithinSqft) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA', `diff=${sizeDiff} > limit=${compFilters.sizeWithinSqft} (comp=${comp.asset_sfla}, subject=${subject.asset_sfla})`);
               return false;
             }
           }
@@ -1229,11 +1467,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameZone) {
             if (comp.asset_zoning !== subject.asset_zoning) {
               if (isFirstProperty) debugFilters.zone++;
+              logExclusion('zone', `comp=${comp.asset_zoning} vs subject=${subject.asset_zoning}`);
               return false;
             }
           } else if (compFilters.zone.length > 0) {
             if (!compFilters.zone.includes(comp.asset_zoning)) {
               if (isFirstProperty) debugFilters.zone++;
+              logExclusion('zone filter list', `comp=${comp.asset_zoning}`);
               return false;
             }
           }
@@ -1242,11 +1482,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameBuildingClass) {
             if (comp.asset_building_class !== subject.asset_building_class) {
               if (isFirstProperty) debugFilters.buildingClass++;
+              logExclusion('building class', `comp=${comp.asset_building_class} vs subject=${subject.asset_building_class}`);
               return false;
             }
           } else if (compFilters.buildingClass.length > 0) {
             if (!compFilters.buildingClass.includes(comp.asset_building_class)) {
               if (isFirstProperty) debugFilters.buildingClass++;
+              logExclusion('building class filter list', `comp=${comp.asset_building_class}`);
               return false;
             }
           }
@@ -1255,11 +1497,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameTypeUse) {
             if (comp.asset_type_use !== subject.asset_type_use) {
               if (isFirstProperty) debugFilters.typeUse++;
+              logExclusion('type/use', `comp=${comp.asset_type_use} vs subject=${subject.asset_type_use}`);
               return false;
             }
           } else if (compFilters.typeUse.length > 0) {
             if (!compFilters.typeUse.includes(comp.asset_type_use)) {
               if (isFirstProperty) debugFilters.typeUse++;
+              logExclusion('type/use filter list', `comp=${comp.asset_type_use}`);
               return false;
             }
           }
@@ -1268,11 +1512,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameStyle) {
             if (comp.asset_design_style !== subject.asset_design_style) {
               if (isFirstProperty) debugFilters.style++;
+              logExclusion('style', `comp=${comp.asset_design_style} vs subject=${subject.asset_design_style}`);
               return false;
             }
           } else if (compFilters.style.length > 0) {
             if (!compFilters.style.includes(comp.asset_design_style)) {
               if (isFirstProperty) debugFilters.style++;
+              logExclusion('style filter list', `comp=${comp.asset_design_style}`);
               return false;
             }
           }
@@ -1281,11 +1527,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameStoryHeight) {
             if (comp.asset_story_height !== subject.asset_story_height) {
               if (isFirstProperty) debugFilters.storyHeight++;
+              logExclusion('story height', `comp=${comp.asset_story_height} vs subject=${subject.asset_story_height}`);
               return false;
             }
           } else if (compFilters.storyHeight.length > 0) {
             if (!compFilters.storyHeight.includes(comp.asset_story_height)) {
               if (isFirstProperty) debugFilters.storyHeight++;
+              logExclusion('story height filter list', `comp=${comp.asset_story_height}`);
               return false;
             }
           }
@@ -1294,11 +1542,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameView) {
             if (comp.asset_view !== subject.asset_view) {
               if (isFirstProperty) debugFilters.view++;
+              logExclusion('view', `comp=${comp.asset_view} vs subject=${subject.asset_view}`);
               return false;
             }
           } else if (compFilters.view.length > 0) {
             if (!compFilters.view.includes(comp.asset_view)) {
               if (isFirstProperty) debugFilters.view++;
+              logExclusion('view filter list', `comp=${comp.asset_view}`);
               return false;
             }
           }
@@ -1312,28 +1562,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
             const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
 
-            // If subject is a farm, only allow farm comps that have been normalized (have values_norm_time)
             if (subjectIsFarm) {
               if (!compIsFarm) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                logExclusion('farm (subject is farm, comp is not)', '');
                 return false;
               }
-              // For farm comps, require they have normalized time value (indicates they were processed)
               if (!comp.values_norm_time || comp.values_norm_time <= 0) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                logExclusion('farm (comp not normalized)', `values_norm_time=${comp.values_norm_time}`);
                 return false;
               }
             }
 
-            // If subject is NOT a farm, exclude farm comps to prevent skewed values
             if (!subjectIsFarm && compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              logExclusion('farm (subject not farm, comp is farm)', '');
               return false;
             }
           } else {
-            // Farm Sales Mode OFF: always exclude farm sales from comparisons
             if (compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              logExclusion('farm (farm mode off)', '');
               return false;
             }
           }
@@ -1540,29 +1790,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
   // ==================== GET ELIGIBLE SALES ====================
   const getEligibleSales = () => {
-    if (!jobData?.end_date) return [];
-
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
-
-    const cspStart = new Date(assessmentYear - 1, 9, 1);
-    const cspEnd = new Date(assessmentYear, 11, 31);
-
-    return properties.filter(p => {
-      if (!p.sales_date || !p.values_norm_time) return false;
-
-      const saleDate = new Date(p.sales_date);
-      const inCSP = saleDate >= cspStart && saleDate <= cspEnd;
-
-      // Check for manual override from Sales Review (property_market_analysis.cme_include_override)
-      const includeOverride = p.cme_include_override; // null, true, or false
-
-      // If override exists, respect it; otherwise use default (CSP auto-included)
-      if (includeOverride === true) return true; // Manual include (even if not in CSP)
-      if (includeOverride === false) return false; // Manual exclude (even if in CSP)
-
-      // Default: Include if in CSP period
-      return inCSP;
-    });
+    // Use the curated sales pool — respects user's date range, sales codes, and manual overrides
+    return salesPoolEntries.filter(e => e._included);
   };
 
   // ==================== CALCULATE ADJUSTMENTS ====================
@@ -1830,11 +2059,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       case 'stable':
         subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
         compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
-        break;
-
-      case 'pole_barn':
-        subjectValue = (subject.pole_barn_area && subject.pole_barn_area > 0) ? 1 : 0;
-        compValue = (comp.pole_barn_area && comp.pole_barn_area > 0) ? 1 : 0;
         break;
 
       default:
@@ -2354,6 +2578,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
+    { id: 'sales-pool', label: `Sales Pool (${includedSalesCount})`, icon: List },
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
     { id: 'summary', label: 'Summary', icon: BarChart3 }
@@ -2392,6 +2617,469 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
           <AdjustmentsTab jobData={jobData} properties={properties} />
+        )}
+
+        {/* SALES POOL TAB */}
+        {activeSubTab === 'sales-pool' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Sales Pool
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  {includedSalesCount} of {allSalesCandidates.length} sales included
+                </span>
+              </h3>
+
+              {/* Analytics Sections */}
+              <div className="mb-4 space-y-1">
+                {/* VCS Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, vcs: !prev.vcs }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">VCS Analysis</span>
+                    {poolAnalyticsExpanded.vcs ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.vcs && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">VCS</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg SFLA</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                          <th className="text-right py-1.5 px-2">Avg Yr Built</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolVcsAnalytics.summary.vcs}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolVcsAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.avgSFLA.toLocaleString()}</td>
+                            <td className="py-1.5 px-2 text-right">${poolVcsAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.avgYearBuilt || '-'}</td>
+                          </tr>
+                          {poolVcsAnalytics.rows.map(r => (
+                            <tr key={r.vcs} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.vcs}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">{r.avgSFLA.toLocaleString()}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">{r.avgYearBuilt || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Style Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, style: !prev.style }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">Style Analysis</span>
+                    {poolAnalyticsExpanded.style ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.style && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">Style</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolStyleAnalytics.summary.styleName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolStyleAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolStyleAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolStyleAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolStyleAnalytics.rows.map(r => (
+                            <tr key={r.style} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.styleName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Type/Use Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, typeUse: !prev.typeUse }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">Type/Use Analysis</span>
+                    {poolAnalyticsExpanded.typeUse ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.typeUse && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">Type/Use</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolTypeUseAnalytics.summary.typeName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolTypeUseAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolTypeUseAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolTypeUseAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolTypeUseAnalytics.rows.map(r => (
+                            <tr key={r.type} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.typeName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* View Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, view: !prev.view }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">View Analysis</span>
+                    {poolAnalyticsExpanded.view ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.view && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">View</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolViewAnalytics.summary.viewName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolViewAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolViewAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolViewAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolViewAnalytics.rows.map(r => (
+                            <tr key={r.view} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.viewName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="space-y-3 mb-4 pb-4 border-b border-gray-200">
+                {/* Row 1: Date range + Search (centered) */}
+                <div className="flex flex-wrap items-end justify-center gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
+                    <input type="date" value={compFilters.salesDateStart} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
+                    <input type="date" value={compFilters.salesDateEnd} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
+                    <input type="text" placeholder="Search..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
+                  </div>
+                  {Object.keys(salesPoolOverrides).length > 0 && (
+                    <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
+                      Clear overrides ({Object.keys(salesPoolOverrides).length})
+                    </button>
+                  )}
+                </div>
+                {/* Row 2: Sales Code, VCS, Type/Use, Style, View (centered) */}
+                <div className="flex flex-wrap items-end justify-center gap-4">
+                  {/* Sales Codes */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Code</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {compFilters.salesCodes.map(code => (
+                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 border border-blue-300 text-blue-800">
+                          {code || '00'}
+                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value && !compFilters.salesCodes.includes(e.target.value)) toggleCompFilterChip('salesCodes')(e.target.value); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Code</option>
+                        {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                          <option key={code} value={code}>{code || '00'}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* VCS Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">VCS</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterVCS.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 border border-green-300 text-green-800">
+                          {v}<button onClick={() => setPoolFilterVCS(prev => prev.filter(x => x !== v))} className="hover:text-green-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterVCS(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ VCS</option>
+                        {poolUniqueVCS.filter(v => !poolFilterVCS.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Type/Use Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Type/Use</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterType.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-purple-100 border border-purple-300 text-purple-800">
+                          {getCodeLabel('typeUse', v)}<button onClick={() => setPoolFilterType(prev => prev.filter(x => x !== v))} className="hover:text-purple-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterType(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Type</option>
+                        {poolUniqueTypes.filter(v => !poolFilterType.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('typeUse', v)}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Style Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Style</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterStyle.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 border border-orange-300 text-orange-800">
+                          {getCodeLabel('style', v)}<button onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== v))} className="hover:text-orange-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterStyle(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Style</option>
+                        {poolUniqueStyles.filter(v => !poolFilterStyle.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('style', v)}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* View Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">View</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterView.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-pink-100 border border-pink-300 text-pink-800">
+                          {getCodeLabel('view', v)}<button onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterView(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ View</option>
+                        {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('view', v)}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {(poolFilterVCS.length > 0 || poolFilterType.length > 0 || poolFilterStyle.length > 0 || poolFilterView.length > 0) && (
+                    <button onClick={() => { setPoolFilterVCS([]); setPoolFilterType([]); setPoolFilterStyle([]); setPoolFilterView([]); }} className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200">
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sales Table */}
+              <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      {(() => {
+                        const SortTh = ({ field, label, align = 'left' }) => (
+                          <th
+                            className={`px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none whitespace-nowrap ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+                            onClick={() => setSalesPoolSort(prev => ({ field, dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc' }))}
+                          >
+                            {label} {salesPoolSort.field === field ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                          </th>
+                        );
+                        return (
+                          <>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-16">Use</th>
+                            <SortTh field="property_vcs" label="VCS" />
+                            <SortTh field="property_block" label="Block" />
+                            <SortTh field="property_lot" label="Lot" />
+                            <SortTh field="property_qualifier" label="Qual" />
+                            <SortTh field="property_location" label="Location" />
+                            <SortTh field="asset_design_style" label="Style" />
+                            <SortTh field="_currentAsmt" label="Current Asmt" align="right" />
+                            <SortTh field="sales_price" label="Sales Price" align="right" />
+                            <SortTh field="asset_lot_acre" label="Lot Size Acre/SF" align="right" />
+                            <SortTh field="asset_lot_frontage" label="Lot FF" align="right" />
+                            <SortTh field="asset_sfla" label="Sq Ft" align="right" />
+                            <SortTh field="_ppsf" label="PPSF" align="right" />
+                            <SortTh field="sales_nu" label="Sale Code" align="center" />
+                            <SortTh field="sales_date" label="Sale Date" />
+                            <SortTh field="asset_year_built" label="Yr Built" align="right" />
+                            <SortTh field="asset_view" label="View" />
+                            <SortTh field="asset_type_use" label="Type/Use" />
+                            <SortTh field="_salesRatio" label="S Ratio" align="right" />
+                          </>
+                        );
+                      })()}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(() => {
+                      let displayed = [...salesPoolEntries];
+
+                      // Search filter
+                      if (salesPoolSearch) {
+                        const q = salesPoolSearch.toLowerCase();
+                        displayed = displayed.filter(p =>
+                          (p.property_block || '').toLowerCase().includes(q) ||
+                          (p.property_lot || '').toLowerCase().includes(q) ||
+                          (p.property_location || '').toLowerCase().includes(q)
+                        );
+                      }
+
+                      // Display filters
+                      if (poolFilterVCS.length > 0) displayed = displayed.filter(p => poolFilterVCS.includes(p.property_vcs));
+                      if (poolFilterType.length > 0) displayed = displayed.filter(p => poolFilterType.includes(p.asset_type_use));
+                      if (poolFilterStyle.length > 0) displayed = displayed.filter(p => poolFilterStyle.includes(p.asset_design_style));
+                      if (poolFilterView.length > 0) displayed = displayed.filter(p => poolFilterView.includes(p.asset_view));
+
+                      // Compute derived fields for sorting and display
+                      displayed = displayed.map(p => ({
+                        ...p,
+                        _currentAsmt: p.values_mod_total || p.values_cama_total || 0,
+                        _ppsf: p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0,
+                        // Sales Ratio = Current Assessment / Sale Price (calculate on ALL sales)
+                        _salesRatio: (p.values_mod_total || p.values_cama_total) && p.sales_price > 0
+                          ? ((p.values_mod_total || p.values_cama_total) / p.sales_price) * 100
+                          : 0,
+                      }));
+
+                      // Sort
+                      displayed.sort((a, b) => {
+                        const dir = salesPoolSort.dir === 'asc' ? 1 : -1;
+                        const field = salesPoolSort.field;
+                        const aVal = a[field];
+                        const bVal = b[field];
+                        // Numeric fields
+                        if (['sales_price', 'asset_sfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
+                          return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
+                        }
+                        return String(aVal || '').localeCompare(String(bVal || '')) * dir;
+                      });
+
+                      if (displayed.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={19} className="px-4 py-8 text-center text-gray-500">
+                              No sales match the current filters.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return displayed.map((p, idx) => {
+                        const key = p._poolKey;
+                        const included = p._included;
+
+                        // Format lot size: acre with decimals + (SF with comma)
+                        const lotSizeDisplay = (() => {
+                          const acre = p.asset_lot_acre ? Number(p.asset_lot_acre) : null;
+                          const sf = p.asset_lot_sf ? Number(p.asset_lot_sf) : null;
+                          if (acre && sf) return `${acre.toFixed(2)} (${sf.toLocaleString()})`;
+                          if (acre) return acre.toFixed(2);
+                          if (sf) return `(${sf.toLocaleString()})`;
+                          return '-';
+                        })();
+
+                        return (
+                          <tr
+                            key={key + '-' + idx}
+                            className={`${included ? 'bg-green-50' : ''} hover:bg-blue-50 transition-colors`}
+                          >
+                            <td className="px-2 py-1.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => setSalesPoolOverrides(prev => {
+                                    const next = { ...prev };
+                                    if (next[key] === true) { delete next[key]; } else { next[key] = true; }
+                                    return next;
+                                  })}
+                                  className={`p-0.5 rounded ${included ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-green-200'}`}
+                                  title="Include in pool"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setSalesPoolOverrides(prev => {
+                                    const next = { ...prev };
+                                    if (next[key] === false) { delete next[key]; } else { next[key] = false; }
+                                    return next;
+                                  })}
+                                  className={`p-0.5 rounded ${p._override === false ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-red-200'}`}
+                                  title="Exclude from pool"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              {p.property_vcs || ''}
+                              {p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded" title="Farm Sale">FARM</span>}
+                              {p._isPackage && !p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-800 rounded" title="Package Sale">PKG</span>}
+                            </td>
+                            <td className="px-2 py-1.5">{p.property_block}</td>
+                            <td className="px-2 py-1.5">{p.property_lot}</td>
+                            <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
+                            <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._currentAsmt > 0 ? `$${Number(p._currentAsmt).toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right whitespace-nowrap">{lotSizeDisplay}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_lot_frontage || '-'}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_view ? getCodeLabel('view', p.asset_view) : ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._salesRatio > 0 ? `${p._salesRatio.toFixed(1)}%` : '-'}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Legend */}
+              <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Include</span>
+                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Exclude</span>
+                <span>Green row = included in pool</span>
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">FARM</span>
+                <span className="px-1.5 py-0.5 bg-violet-100 text-violet-800 rounded">PKG</span>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* SEARCH TAB */}
@@ -2459,7 +3147,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     >
                       <option value="">Select Type/Use...</option>
                       {uniqueTypeUse.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>{getCodeLabel('typeUse', type)}</option>
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Can select multiple. Blank for all</p>
@@ -2471,7 +3159,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             key={type}
                             className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs"
                           >
-                            {type}
+                            {getCodeLabel('typeUse', type)}
                             <button
                               onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
                               className="ml-0.5 text-green-600 hover:text-green-800"
@@ -2698,31 +3386,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 Which comparables do you want to use?
               </h3>
 
-              {/* Row 1: Sales Codes + Sales Between */}
-              <div className="grid grid-cols-2 gap-8 mb-4">
+              {/* Row 1: Sales Codes + Sales Between (centered) */}
+              <div className="flex flex-wrap items-start justify-center gap-8 mb-4">
                 {/* Sales Codes - Dropdown with chips */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sales Codes</label>
-                  <select
-                    value=""
-                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                  >
-                    <option value="">Select code...</option>
-                    {uniqueSalesCodes.map(code => (
-                      <option key={code} value={code}>{code || '(blank)'}</option>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {compFilters.salesCodes.map(code => (
+                      <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                        {code || '(blank)'}
+                        <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                      </span>
                     ))}
-                  </select>
-                  {compFilters.salesCodes.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {compFilters.salesCodes.map(code => (
-                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                          {code || '(blank)'}
-                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
-                        </span>
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
+                      className="px-1 py-0.5 text-xs border border-gray-300 rounded w-20"
+                    >
+                      <option value="">+ Code</option>
+                      {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                        <option key={code} value={code}>{code || '(blank)'}</option>
                       ))}
-                    </div>
-                  )}
+                    </select>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">Can select multiple sales codes. Blank for all</p>
                 </div>
                 {/* Sales Between */}
@@ -2943,7 +3629,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameTypeUse}
                     >
                       <option value="">Select...</option>
-                      {uniqueTypeUse.map(t => <option key={t} value={t}>{t}</option>)}
+                      {uniqueTypeUse.map(t => <option key={t} value={t}>{getCodeLabel('typeUse', t)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Type/Use</span>
@@ -2962,7 +3648,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameStyle}
                     >
                       <option value="">Select...</option>
-                      {uniqueStyle.map(s => <option key={s} value={s}>{s}</option>)}
+                      {uniqueStyle.map(s => <option key={s} value={s}>{getCodeLabel('style', s)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Style</span>
@@ -2981,7 +3667,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameStoryHeight}
                     >
                       <option value="">Select...</option>
-                      {uniqueStoryHeight.map(h => <option key={h} value={h}>{h}</option>)}
+                      {uniqueStoryHeight.map(h => <option key={h} value={h}>{getCodeLabel('storyHeight', h)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Story Height</span>
@@ -3000,7 +3686,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameView}
                     >
                       <option value="">Select...</option>
-                      {uniqueView.map(v => <option key={v} value={v}>{v}</option>)}
+                      {uniqueView.map(v => <option key={v} value={v}>{getCodeLabel('view', v)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same View</span>
