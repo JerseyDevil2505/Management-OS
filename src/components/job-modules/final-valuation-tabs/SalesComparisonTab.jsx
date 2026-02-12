@@ -1307,6 +1307,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         };
 
         const matchingComps = aggregatedSales.filter(comp => {
+          // Helper: log why a specific comp is excluded (for first property debug)
+          const logExclusion = (reason, details) => {
+            if (isFirstProperty) {
+              console.log(`   🚫 ${comp.property_block}-${comp.property_lot}: excluded by ${reason}${details ? ` (${details})` : ''}`);
+            }
+          };
+
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) {
             if (isFirstProperty) debugFilters.self++;
@@ -1320,11 +1327,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameVCS) {
             if (comp.property_vcs !== subject.property_vcs) {
               if (isFirstProperty) debugFilters.vcs++;
+              logExclusion('VCS', `comp=${comp.property_vcs} vs subject=${subject.property_vcs}`);
               return false;
             }
           } else if (compFilters.vcs.length > 0) {
             if (!compFilters.vcs.includes(comp.property_vcs)) {
               if (isFirstProperty) debugFilters.vcs++;
+              logExclusion('VCS filter list', `comp=${comp.property_vcs}`);
               return false;
             }
           }
@@ -1333,24 +1342,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameNeighborhood) {
             if (comp.asset_neighborhood !== subject.asset_neighborhood) {
               if (isFirstProperty) debugFilters.neighborhood++;
+              logExclusion('neighborhood', `comp=${comp.asset_neighborhood} vs subject=${subject.asset_neighborhood}`);
               return false;
             }
           } else if (compFilters.neighborhood.length > 0) {
             if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) {
               if (isFirstProperty) debugFilters.neighborhood++;
+              logExclusion('neighborhood filter list', `comp=${comp.asset_neighborhood}`);
               return false;
             }
           }
 
           // Lot size filter
           if (compFilters.sameLotSize) {
-            // "Similar lot size" - within 25% of subject's lot size
             const subjectLotAcre = subject.asset_lot_acre || 0;
             const compLotAcre = comp.asset_lot_acre || 0;
             if (subjectLotAcre > 0 && compLotAcre > 0) {
-              const tolerance = subjectLotAcre * 0.25; // 25% tolerance
+              const tolerance = subjectLotAcre * 0.25;
               if (Math.abs(compLotAcre - subjectLotAcre) > tolerance) {
                 if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+                logExclusion('lot size', `comp=${compLotAcre} vs subject=${subjectLotAcre} (25% tolerance=${tolerance.toFixed(2)})`);
                 return false;
               }
             }
@@ -1358,10 +1369,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             const compLotAcre = comp.asset_lot_acre || 0;
             if (compFilters.lotAcreMin && compLotAcre < parseFloat(compFilters.lotAcreMin)) {
               if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              logExclusion('lot size min', `comp=${compLotAcre} < min=${compFilters.lotAcreMin}`);
               return false;
             }
             if (compFilters.lotAcreMax && compLotAcre > parseFloat(compFilters.lotAcreMax)) {
               if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              logExclusion('lot size max', `comp=${compLotAcre} > max=${compFilters.lotAcreMax}`);
               return false;
             }
           }
@@ -1370,16 +1383,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.useBuiltRange) {
             if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built min', `comp=${comp.asset_year_built} < min=${compFilters.builtYearMin}`);
               return false;
             }
             if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built max', `comp=${comp.asset_year_built} > max=${compFilters.builtYearMax}`);
               return false;
             }
           } else {
             const yearDiff = Math.abs((comp.asset_year_built || 0) - (subject.asset_year_built || 0));
             if (yearDiff > compFilters.builtWithinYears) {
               if (isFirstProperty) debugFilters.yearBuilt++;
+              logExclusion('year built', `diff=${yearDiff} > limit=${compFilters.builtWithinYears} (comp=${comp.asset_year_built}, subject=${subject.asset_year_built})`);
               return false;
             }
           }
@@ -1388,16 +1404,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.useSizeRange) {
             if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA min', `comp=${comp.asset_sfla} < min=${compFilters.sizeMin}`);
               return false;
             }
             if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA max', `comp=${comp.asset_sfla} > max=${compFilters.sizeMax}`);
               return false;
             }
           } else {
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
             if (sizeDiff > compFilters.sizeWithinSqft) {
               if (isFirstProperty) debugFilters.size++;
+              logExclusion('SFLA', `diff=${sizeDiff} > limit=${compFilters.sizeWithinSqft} (comp=${comp.asset_sfla}, subject=${subject.asset_sfla})`);
               return false;
             }
           }
@@ -1406,11 +1425,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameZone) {
             if (comp.asset_zoning !== subject.asset_zoning) {
               if (isFirstProperty) debugFilters.zone++;
+              logExclusion('zone', `comp=${comp.asset_zoning} vs subject=${subject.asset_zoning}`);
               return false;
             }
           } else if (compFilters.zone.length > 0) {
             if (!compFilters.zone.includes(comp.asset_zoning)) {
               if (isFirstProperty) debugFilters.zone++;
+              logExclusion('zone filter list', `comp=${comp.asset_zoning}`);
               return false;
             }
           }
@@ -1419,11 +1440,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameBuildingClass) {
             if (comp.asset_building_class !== subject.asset_building_class) {
               if (isFirstProperty) debugFilters.buildingClass++;
+              logExclusion('building class', `comp=${comp.asset_building_class} vs subject=${subject.asset_building_class}`);
               return false;
             }
           } else if (compFilters.buildingClass.length > 0) {
             if (!compFilters.buildingClass.includes(comp.asset_building_class)) {
               if (isFirstProperty) debugFilters.buildingClass++;
+              logExclusion('building class filter list', `comp=${comp.asset_building_class}`);
               return false;
             }
           }
@@ -1432,11 +1455,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameTypeUse) {
             if (comp.asset_type_use !== subject.asset_type_use) {
               if (isFirstProperty) debugFilters.typeUse++;
+              logExclusion('type/use', `comp=${comp.asset_type_use} vs subject=${subject.asset_type_use}`);
               return false;
             }
           } else if (compFilters.typeUse.length > 0) {
             if (!compFilters.typeUse.includes(comp.asset_type_use)) {
               if (isFirstProperty) debugFilters.typeUse++;
+              logExclusion('type/use filter list', `comp=${comp.asset_type_use}`);
               return false;
             }
           }
@@ -1445,11 +1470,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameStyle) {
             if (comp.asset_design_style !== subject.asset_design_style) {
               if (isFirstProperty) debugFilters.style++;
+              logExclusion('style', `comp=${comp.asset_design_style} vs subject=${subject.asset_design_style}`);
               return false;
             }
           } else if (compFilters.style.length > 0) {
             if (!compFilters.style.includes(comp.asset_design_style)) {
               if (isFirstProperty) debugFilters.style++;
+              logExclusion('style filter list', `comp=${comp.asset_design_style}`);
               return false;
             }
           }
@@ -1458,11 +1485,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameStoryHeight) {
             if (comp.asset_story_height !== subject.asset_story_height) {
               if (isFirstProperty) debugFilters.storyHeight++;
+              logExclusion('story height', `comp=${comp.asset_story_height} vs subject=${subject.asset_story_height}`);
               return false;
             }
           } else if (compFilters.storyHeight.length > 0) {
             if (!compFilters.storyHeight.includes(comp.asset_story_height)) {
               if (isFirstProperty) debugFilters.storyHeight++;
+              logExclusion('story height filter list', `comp=${comp.asset_story_height}`);
               return false;
             }
           }
@@ -1471,11 +1500,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (compFilters.sameView) {
             if (comp.asset_view !== subject.asset_view) {
               if (isFirstProperty) debugFilters.view++;
+              logExclusion('view', `comp=${comp.asset_view} vs subject=${subject.asset_view}`);
               return false;
             }
           } else if (compFilters.view.length > 0) {
             if (!compFilters.view.includes(comp.asset_view)) {
               if (isFirstProperty) debugFilters.view++;
+              logExclusion('view filter list', `comp=${comp.asset_view}`);
               return false;
             }
           }
@@ -1489,28 +1520,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
             const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
 
-            // If subject is a farm, only allow farm comps that have been normalized (have values_norm_time)
             if (subjectIsFarm) {
               if (!compIsFarm) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                logExclusion('farm (subject is farm, comp is not)', '');
                 return false;
               }
-              // For farm comps, require they have normalized time value (indicates they were processed)
               if (!comp.values_norm_time || comp.values_norm_time <= 0) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                logExclusion('farm (comp not normalized)', `values_norm_time=${comp.values_norm_time}`);
                 return false;
               }
             }
 
-            // If subject is NOT a farm, exclude farm comps to prevent skewed values
             if (!subjectIsFarm && compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              logExclusion('farm (subject not farm, comp is farm)', '');
               return false;
             }
           } else {
-            // Farm Sales Mode OFF: always exclude farm sales from comparisons
             if (compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              logExclusion('farm (farm mode off)', '');
               return false;
             }
           }
