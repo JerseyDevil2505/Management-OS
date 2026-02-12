@@ -8,7 +8,6 @@ const UserManagement = ({ onViewAs }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [filterOrg, setFilterOrg] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
@@ -25,7 +24,6 @@ const UserManagement = ({ onViewAs }) => {
     organizationId: ''
   });
   const [resetPassword, setResetPassword] = useState('');
-  const [confirmResetPassword, setConfirmResetPassword] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -53,7 +51,7 @@ const UserManagement = ({ onViewAs }) => {
         .from('employees')
         .select('*')
         .eq('employment_status', 'full_time')
-        .in('role', ['Management', 'Admin', 'Owner'])
+        .in('role', ['Management', 'Admin', 'Owner', 'client_user'])
         .order('last_name');
 
       if (error) throw error;
@@ -76,17 +74,9 @@ const UserManagement = ({ onViewAs }) => {
     return org.org_type === 'internal' ? 'PPA Inc (Internal)' : org.name;
   };
 
-  const isAssessorUser = (user) => {
-    return user.organization_id && user.organization_id !== PPA_ORG_ID;
-  };
-
-  const filteredUsers = filterOrg === 'all'
-    ? users
-    : filterOrg === 'ppa'
-      ? users.filter(u => !u.organization_id || u.organization_id === PPA_ORG_ID)
-      : users.filter(u => u.organization_id === filterOrg);
-
-  const uniqueOrgIds = [...new Set(users.map(u => u.organization_id).filter(Boolean))];
+  // Split users into PPA and LOJIK groups
+  const ppaUsers = users.filter(u => !u.organization_id || u.organization_id === PPA_ORG_ID);
+  const lojikUsers = users.filter(u => u.organization_id && u.organization_id !== PPA_ORG_ID);
 
   const orgList = Object.values(organizations).sort((a, b) => {
     // Internal orgs first, then alphabetical
@@ -330,45 +320,6 @@ const UserManagement = ({ onViewAs }) => {
         </button>
       </div>
 
-      {/* Access Control Summary */}
-      <div className="access-control-summary">
-        <h3>Tab Access Control</h3>
-        <div className="access-grid">
-          <div className="access-item">
-            <span className="access-tab">👥 Employees</span>
-            <span className="access-roles all-roles">All Users</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">📋 Jobs</span>
-            <span className="access-roles all-roles">All Users</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">⚖️ Appeal Coverage</span>
-            <span className="access-roles all-roles">All Users</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">💰 Billing</span>
-            <span className="access-roles admin-only">Admin + Owner</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">💸 Payroll</span>
-            <span className="access-roles admin-only">Admin + Owner</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">🔐 Users</span>
-            <span className="access-roles owner-only">Primary Owner Only</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">🏢 Organizations</span>
-            <span className="access-roles owner-only">Primary Owner Only</span>
-          </div>
-          <div className="access-item">
-            <span className="access-tab">💵 Revenue</span>
-            <span className="access-roles owner-only">Primary Owner Only</span>
-          </div>
-        </div>
-      </div>
-
       {error && (
         <div className="um-error">{error}</div>
       )}
@@ -377,173 +328,270 @@ const UserManagement = ({ onViewAs }) => {
         <div className="um-success">{successMessage}</div>
       )}
 
-      {/* Filter Bar */}
-      <div className="um-filter-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <label style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Filter:</label>
-        <select
-          value={filterOrg}
-          onChange={(e) => setFilterOrg(e.target.value)}
-          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.875rem' }}
-        >
-          <option value="all">All Users ({users.length})</option>
-          <option value="ppa">PPA Inc</option>
-          {uniqueOrgIds.filter(id => id !== PPA_ORG_ID).map(orgId => (
-            <option key={orgId} value={orgId}>{getOrgName(orgId)}</option>
-          ))}
-        </select>
-        <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
-          Showing {filteredUsers.length} of {users.length} users
-        </span>
-      </div>
-
       {loading ? (
         <div className="um-loading">Loading users...</div>
       ) : (
-        <div className="um-table-container">
-          <table className="um-table">
-            <colgroup>
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '7%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '23%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Organization</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Account</th>
-                <th>Password</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map(user => (
-                <tr key={user.id}>
-                  <td>{user.first_name} {user.last_name}</td>
-                  <td>{user.email}</td>
-                  <td>
-                    <span style={{
-                      padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600',
-                      background: isAssessorUser(user) ? '#dbeafe' : '#f3f4f6',
-                      color: isAssessorUser(user) ? '#1e40af' : '#6b7280'
-                    }}>
-                      {getOrgName(user.organization_id)}
-                    </span>
-                  </td>
-                  <td>
-                    {isAssessorUser(user) ? (
-                      <span style={{
-                        padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '600',
-                        background: '#dbeafe', color: '#1e40af'
-                      }}>
-                        Client User
-                      </span>
-                    ) : (
-                      <select
-                        value={user.role || 'Management'}
-                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                        className={`role-select ${getRoleBadgeClass(user.role)}`}
-                      >
-                        <option value="Owner">Owner</option>
-                        <option value="Admin">Admin</option>
-                        <option value="Management">Management</option>
-                      </select>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
-                      {user.employment_status || 'Active'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
-                      {user.has_account ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                  <td>
-                    {user.initial_password ? (
-                      <code style={{
-                        padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
-                        background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
-                      }}>
-                        {user.initial_password}
-                      </code>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
-                    )}
-                  </td>
-                  <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <button
-                      className="reset-pwd-btn"
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setShowResetModal(true);
-                      }}
-                      disabled={!user.has_account}
-                    >
-                      Reset Password
-                    </button>
-                    {showDeleteConfirm === user.id ? (
-                      <>
-                        <button
-                          onClick={() => handleDeleteUser(user)}
-                          style={{
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
-                            background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer',
-                            whiteSpace: 'nowrap'
-                          }}
+        <>
+          {/* PPA Users Table */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#1e3a5f', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              PPA Inc Users
+              <span style={{ fontSize: '0.75rem', fontWeight: '500', color: '#6b7280', background: '#f3f4f6', padding: '2px 8px', borderRadius: '12px' }}>
+                {ppaUsers.length}
+              </span>
+            </h3>
+            <div className="um-table-container">
+              <table className="um-table">
+                <colgroup>
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '22%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '25%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Account</th>
+                    <th>Password</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ppaUsers.map(user => (
+                    <tr key={user.id}>
+                      <td>{user.first_name} {user.last_name}</td>
+                      <td>{user.email}</td>
+                      <td>
+                        <select
+                          value={user.role || 'Management'}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          className={`role-select ${getRoleBadgeClass(user.role)}`}
                         >
-                          Confirm
-                        </button>
+                          <option value="Owner">Owner</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Management">Management</option>
+                        </select>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
+                          {user.employment_status || 'Active'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
+                          {user.has_account ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td>
+                        {user.initial_password ? (
+                          <code style={{
+                            padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
+                            background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
+                          }}>
+                            {user.initial_password}
+                          </code>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
+                        )}
+                      </td>
+                      <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <button
-                          onClick={() => setShowDeleteConfirm(null)}
-                          style={{
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
-                            background: '#e5e7eb', color: '#374151', border: 'none', cursor: 'pointer',
-                            whiteSpace: 'nowrap'
+                          className="reset-pwd-btn"
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowResetModal(true);
                           }}
+                          disabled={!user.has_account}
                         >
-                          Cancel
+                          Reset Password
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => setShowDeleteConfirm(user.id)}
-                        style={{
-                          padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
-                          background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        Delete
-                      </button>
-                    )}
-                    {isDevMode && isAssessorUser(user) && onViewAs && (
-                      <button
-                        onClick={() => onViewAs(user)}
-                        style={{
-                          padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
-                          background: '#7c3aed', color: 'white', border: 'none', cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                        title={`View dashboard as ${user.first_name} ${user.last_name}`}
-                      >
-                        View As
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        {showDeleteConfirm === user.id ? (
+                          <>
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setShowDeleteConfirm(null)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                background: '#e5e7eb', color: '#374151', border: 'none', cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setShowDeleteConfirm(user.id)}
+                            style={{
+                              padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                              background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LOJIK Clients Table */}
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#1e40af', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              LOJIK Clients
+              <span style={{ fontSize: '0.75rem', fontWeight: '500', color: '#1e40af', background: '#dbeafe', padding: '2px 8px', borderRadius: '12px' }}>
+                {lojikUsers.length}
+              </span>
+            </h3>
+            {lojikUsers.length === 0 ? (
+              <div style={{ padding: '24px', background: '#f9fafb', borderRadius: '8px', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                No LOJIK client users yet. Create one using the button above.
+              </div>
+            ) : (
+              <div className="um-table-container">
+                <table className="um-table">
+                  <colgroup>
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '25%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Organization</th>
+                      <th>Status</th>
+                      <th>Account</th>
+                      <th>Password</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lojikUsers.map(user => (
+                      <tr key={user.id}>
+                        <td>{user.first_name} {user.last_name}</td>
+                        <td>{user.email}</td>
+                        <td>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600',
+                            background: '#dbeafe', color: '#1e40af'
+                          }}>
+                            {getOrgName(user.organization_id)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
+                            {user.employment_status || 'Active'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
+                            {user.has_account ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td>
+                          {user.initial_password ? (
+                            <code style={{
+                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
+                              background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
+                            }}>
+                              {user.initial_password}
+                            </code>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
+                          )}
+                        </td>
+                        <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            className="reset-pwd-btn"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowResetModal(true);
+                            }}
+                            disabled={!user.has_account}
+                          >
+                            Reset Password
+                          </button>
+                          {showDeleteConfirm === user.id ? (
+                            <>
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                  background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteConfirm(null)}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                  background: '#e5e7eb', color: '#374151', border: 'none', cursor: 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setShowDeleteConfirm(user.id)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                          {isDevMode && onViewAs && (
+                            <button
+                              onClick={() => onViewAs(user)}
+                              style={{
+                                padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                                background: '#7c3aed', color: 'white', border: 'none', cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={`View dashboard as ${user.first_name} ${user.last_name}`}
+                            >
+                              View As
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Create User Modal */}
