@@ -1238,7 +1238,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
       const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
-      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\nRefresh the page to see changes in the adjustment grid.`);
+      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\n⚠️ IMPORTANT: You must reload your data file (re-upload in File Upload) for the system to capture attribute data based on this new configuration. Without reloading, CME evaluations may not detect the correct attributes for properties.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
