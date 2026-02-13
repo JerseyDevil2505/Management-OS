@@ -5,9 +5,13 @@ import './RevenueManagement.css';
 const RevenueManagement = () => {
   const [organizations, setOrganizations] = useState([]);
   const [staffCounts, setStaffCounts] = useState({});
+  const [orgCcddCodes, setOrgCcddCodes] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Billing year (resets 12/31)
+  const [billingYear, setBillingYear] = useState(new Date().getFullYear());
 
   // Price configuration
   const [priceConfig, setPriceConfig] = useState({
@@ -51,8 +55,24 @@ const RevenueManagement = () => {
         }
       });
 
+      // Load CCDD codes from jobs per org
+      const { data: jobs, error: jobError } = await supabase
+        .from('jobs')
+        .select('organization_id, ccdd_code')
+        .not('ccdd_code', 'is', null);
+
+      if (jobError) throw jobError;
+
+      const ccddMap = {};
+      (jobs || []).forEach(job => {
+        if (job.organization_id && job.ccdd_code) {
+          ccddMap[job.organization_id] = job.ccdd_code;
+        }
+      });
+
       setOrganizations(orgs || []);
       setStaffCounts(counts);
+      setOrgCcddCodes(ccddMap);
     } catch (err) {
       console.error('Error loading revenue data:', err);
       setError('Failed to load revenue data');
@@ -155,8 +175,8 @@ const RevenueManagement = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
     doc.text(`Date: ${today.toLocaleDateString()}`, pageWidth - margin, margin + 36, { align: 'right' });
-    const ccdd = org.ccdd_code || org.slug?.toUpperCase() || 'ORG';
-    doc.text(`Invoice #: ${today.getFullYear()}-${ccdd}`, pageWidth - margin, margin + 50, { align: 'right' });
+    const ccdd = orgCcddCodes[org.id] || org.slug?.toUpperCase() || 'ORG';
+    doc.text(`Invoice #: ${billingYear}-${ccdd}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     // Divider
     doc.setDrawColor(...lojikBlue);
@@ -337,13 +357,13 @@ const RevenueManagement = () => {
       { align: 'center' }
     );
 
-    const ccddFile = org.ccdd_code || org.slug || org.name.replace(/\s+/g, '_');
-    const fileName = `Invoice_${today.getFullYear()}_${ccddFile}.pdf`;
+    const ccddFile = orgCcddCodes[org.id] || org.slug || org.name.replace(/\s+/g, '_');
+    const fileName = `Invoice_${billingYear}_${ccddFile}.pdf`;
     doc.save(fileName);
 
     setSuccessMessage(`Invoice generated: ${fileName}`);
     setTimeout(() => setSuccessMessage(''), 3000);
-  }, [calculateFees, staffCounts, priceConfig]);
+  }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
 
   // Billing status helper
   const getBillingStatus = (org) => {
@@ -381,6 +401,26 @@ const RevenueManagement = () => {
       <div className="revenue-header">
         <h2>Revenue Management</h2>
         <div className="revenue-header-actions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>Billing Year:</label>
+            <select
+              value={billingYear}
+              onChange={(e) => setBillingYear(parseInt(e.target.value))}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #d1d5db',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                background: '#fff'
+              }}
+            >
+              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
           <button
             className="revenue-config-btn"
             onClick={() => setShowInvoiceModal(true)}
