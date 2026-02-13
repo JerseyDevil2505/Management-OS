@@ -622,16 +622,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       if (seen.has(baseKey)) return false;
       seen.add(baseKey);
 
-      if (isLojikTenant) {
-        if (!p.sales_price || p.sales_price <= 100) return false;
-        const bc = parseInt(p.asset_building_class) || 0;
-        if (bc <= 10) return false;
-      } else {
-        if (!p.values_norm_time) return false;
-      }
+      if (!p.sales_price || p.sales_price <= 100) return false;
+      // Building class must be > 10 (exclude null, empty, whitespace, zero, <=10)
+      const bc = parseInt(p.asset_building_class) || 0;
+      if (bc <= 10) return false;
       return true;
     });
-  }, [properties, isLojikTenant]);
+  }, [properties]);
 
   // Compute which sales are included in the pool based on filters + overrides
   const salesPoolEntries = useMemo(() => {
@@ -1037,23 +1034,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           if (!compRaw) {
             // Property not found in database
             notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
-          } else if (!compRaw.sales_price && !compRaw.values_norm_time) {
+          } else if (!compRaw.sales_price) {
             // Property found but no sales data
             noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
           } else {
             // Aggregate comp data across all cards (main + additional)
             const comp = aggregatePropertyData(compRaw);
 
-            // Use time-normalized value if available, otherwise fall back to sales price
-            const compValue = comp.values_norm_time || comp.sales_price;
-
-            // Calculate adjustments using aggregated data
+            // Calculate adjustments using aggregated data and sales_price as base
             const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
-              calculateAllAdjustments(subject, { ...comp, values_norm_time: compValue });
+              calculateAllAdjustments(subject, comp);
 
             const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
-            const grossAdjustmentPercent = compValue > 0
-              ? (grossAdjustment / compValue) * 100
+            const compBasePrice = comp.sales_price || 0;
+            const grossAdjustmentPercent = compBasePrice > 0
+              ? (grossAdjustment / compBasePrice) * 100
               : 0;
 
             fetchedComps.push({
@@ -1568,9 +1563,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 logExclusion('farm (subject is farm, comp is not)', '');
                 return false;
               }
-              if (!comp.values_norm_time || comp.values_norm_time <= 0) {
+              if (!comp.sales_price || comp.sales_price <= 0) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
-                logExclusion('farm (comp not normalized)', `values_norm_time=${comp.values_norm_time}`);
+                logExclusion('farm (comp has no sales price)', `sales_price=${comp.sales_price}`);
                 return false;
               }
             }
@@ -1618,8 +1613,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             calculateAllAdjustments(subject, comp, subjectMapping?.bracket);
 
           const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
-          const grossAdjustmentPercent = comp.values_norm_time > 0
-            ? (grossAdjustment / comp.values_norm_time) * 100
+          const compBasePrice = comp.sales_price || 0;
+          const grossAdjustmentPercent = compBasePrice > 0
+            ? (grossAdjustment / compBasePrice) * 100
             : 0;
 
           // Apply adjustment tolerance filters
@@ -1628,7 +1624,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           // Individual adjustment tolerance
           if (compFilters.individualAdjPct > 0) {
             const hasLargeAdjustment = adjustments.some(adj =>
-              Math.abs((adj.amount / comp.values_norm_time) * 100) > compFilters.individualAdjPct
+              compBasePrice > 0 && Math.abs((adj.amount / compBasePrice) * 100) > compFilters.individualAdjPct
             );
             if (hasLargeAdjustment) passesTolerance = false;
           }
@@ -1684,7 +1680,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
         const subjectSoldInCSP = subjectSaleDate &&
           (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
-          subject.values_norm_time > 0;
+          (subject.sales_price || 0) > 0;
 
         let priorityComp = null;
         if (subjectSoldInCSP) {
@@ -1694,7 +1690,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             totalAdjustment: 0,
             grossAdjustment: 0,
             grossAdjustmentPercent: 0,
-            adjustedPrice: subject.values_norm_time,
+            adjustedPrice: subject.sales_price,
             adjustmentPercent: 0,
             passesTolerance: true,
             isSubjectSale: true,
@@ -1806,13 +1802,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     });
     
     const totalAdjustment = adjustments.reduce((sum, adj) => sum + adj.amount, 0);
-    const adjustedPrice = (comp.values_norm_time || 0) + totalAdjustment;
-    
+    const compBasePrice = comp.sales_price || 0;
+    const adjustedPrice = compBasePrice + totalAdjustment;
+
     return {
       adjustments,
       totalAdjustment,
       adjustedPrice,
-      adjustmentPercent: comp.values_norm_time > 0 ? (totalAdjustment / comp.values_norm_time) * 100 : 0
+      adjustmentPercent: compBasePrice > 0 ? (totalAdjustment / compBasePrice) * 100 : 0
     };
   };
 
@@ -1871,7 +1868,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
     } else {
       // Use default bracket
-      const bracketIndex = getPriceBracketIndex(comp.values_norm_time, overrideBracket);
+      const bracketIndex = getPriceBracketIndex(comp.sales_price, overrideBracket);
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
 
       // Debug first property only
@@ -2326,7 +2323,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         // Positive difference (subject better) = add to comp price (e.g., +2 steps = +20%)
         // Negative difference (comp better) = subtract from comp price (e.g., -2 steps = -20%)
         // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE)
-        return (comp.values_norm_time || 0) * (adjustmentValue / 100) * difference;
+        return (comp.sales_price || 0) * (adjustmentValue / 100) * difference;
 
       default:
         return 0;
@@ -2503,7 +2500,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       comps.forEach((comp, idx) => {
         const compNum = idx + 1;
         row[`Comp ${compNum} BLQ`] = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? '/' + comp.property_qualifier : ''}`;
-        row[`Comp ${compNum} Sale Price`] = comp.values_norm_time || comp.sales_price || 0;
+        row[`Comp ${compNum} Sale Price`] = comp.sales_price || 0;
         row[`Comp ${compNum} Adjusted`] = Math.round(comp.adjustedPrice || 0);
         row[`Comp ${compNum} Net Adj %`] = comp.adjustmentPercent ? (comp.adjustmentPercent / 100) : 0;
       });

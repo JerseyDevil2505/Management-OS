@@ -139,13 +139,13 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       values: [7500, 10000, 15000, 15000, 20000, 25000, 30000, 40000, 45000, 60000] },
     { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical',
       values: [5000, 5000, 10000, 10000, 15000, 20000, 20000, 25000, 30000, 40000] },
-    { id: 'bathrooms', name: 'Bathrooms', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'bathrooms', name: 'Bathrooms', type: 'count', isDefault: true, category: 'physical',
       values: [1500, 2500, 5000, 5000, 7500, 10000, 12500, 15000, 25000, 35000] },
-    { id: 'bedrooms', name: 'Bedrooms', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'bedrooms', name: 'Bedrooms', type: 'count', isDefault: true, category: 'physical',
       values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'ac', name: 'AC', type: 'flat', isDefault: true, category: 'physical',
       values: [1000, 2500, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000] },
-    { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'fireplaces', name: 'Fireplaces', type: 'count', isDefault: true, category: 'physical',
       values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
     { id: 'garage', name: 'Garage', type: 'count', isDefault: true, category: 'physical',
       values: [2500, 5000, 7500, 7500, 7500, 10000, 15000, 25000, 35000, 40000] },
@@ -350,9 +350,9 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
   // ==================== SALES STATS FOR MAPPING HINTS ====================
   const isQualifyingSale = useCallback((p) => {
-    // Must have a sale price
-    const price = p.values_norm_time || p.sales_price;
-    if (!price || price <= 0) return false;
+    // Must have a sale price > $100
+    const price = p.sales_price;
+    if (!price || price <= 100) return false;
     // Must be residential (building class > 10)
     const buildingClass = parseInt(p.asset_building_class) || 0;
     if (buildingClass <= 10) return false;
@@ -368,7 +368,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     const byTypeUse = {};
     properties.forEach(p => {
       if (!isQualifyingSale(p)) return;
-      const price = p.values_norm_time || p.sales_price;
+      const price = p.sales_price;
       const vcs = p.property_vcs || 'Unknown';
       const tu = p.asset_type_use || 'Unknown';
       if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };
@@ -1238,7 +1238,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
       const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
-      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\nRefresh the page to see changes in the adjustment grid.`);
+      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\n⚠️ IMPORTANT: You must reload your data file (re-upload in File Upload) for the system to capture attribute data based on this new configuration. Without reloading, CME evaluations may not detect the correct attributes for properties.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);

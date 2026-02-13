@@ -1605,11 +1605,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // IMPORTANT: Save the normalized sales immediately to persist them
       await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
 
-      // After time normalization save
+      // After time normalization save - use callRefresh to ensure forceRefresh is passed
       if (onUpdateJobCache) {
         setTimeout(() => {
-          console.log('🔄 PreValuationTab requesting parent refresh...');
-          onUpdateJobCache();
+          console.log('🔄 PreValuationTab requesting parent refresh after time normalization...');
+          callRefresh({ forceRefresh: true });
         }, 500);
       }
 
@@ -2087,11 +2087,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
 
-      // After size normalization save
+      // After size normalization save - use callRefresh to ensure forceRefresh is passed
       if (onUpdateJobCache) {
         setTimeout(() => {
-          console.log('🔄 PreValuationTab requesting parent refresh...');
-          onUpdateJobCache();
+          console.log('🔄 PreValuationTab requesting parent refresh after size normalization...');
+          callRefresh({ forceRefresh: true });
         }, 500);
       }
 
