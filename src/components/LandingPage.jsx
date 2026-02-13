@@ -212,7 +212,7 @@ const LandingPage = ({ onLogin }) => {
                   <div className="stat-label">Statewide Coverage</div>
                 </div>
                 <div className="stat-item">
-                  <div className="stat-value">3</div>
+                  <div className="stat-value">2</div>
                   <div className="stat-label">Approaches to Value</div>
                 </div>
               </div>
@@ -222,7 +222,7 @@ const LandingPage = ({ onLogin }) => {
       </main>
 
       <footer className="landing-footer">
-        <p>&copy; 2025 LOJIK for Professional Property Appraisers Inc. All rights reserved.</p>
+        <p>&copy; 2025 LOJIK. All rights reserved.</p>
       </footer>
     </div>
   );
