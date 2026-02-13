@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle, LineChart } from 'lucide-react';
+import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle, LineChart, Scale } from 'lucide-react';
 import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import { PPA_ORG_ID, getJobTenantConfig, getLabel } from '../../lib/tenantConfig';
 import DataVisualizations from './DataVisualizations';
@@ -8,6 +8,7 @@ import ProductionTracker from './ProductionTracker';
 import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
+import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
@@ -1044,6 +1045,23 @@ const JobContainer = ({
       };
     }
 
+    // Appeal Log: provide CME navigation callback
+    if (activeModule === 'appeal-log') {
+      return {
+        ...baseProps,
+        onNavigateToCME: (blq) => {
+          // Set navigation target in jobData so FinalValuation can pick it up
+          setJobData(prev => prev ? {
+            ...prev,
+            navigateToCME: blq,
+            _clearNavigateToCME: () => setJobData(p => p ? { ...p, navigateToCME: null, _clearNavigateToCME: null } : p)
+          } : prev);
+          // Switch to Final Valuation module
+          setActiveModule('final-valuation');
+        }
+      };
+    }
+
     // 🔧 Future modules can get their specific props here
     if (activeModule === 'checklist') {
       return {
@@ -1117,6 +1135,14 @@ const JobContainer = ({
       component: FinalValuation,
       description: 'Final property valuations',
       configKey: 'finalValuation'
+    },
+    {
+      id: 'appeal-log',
+      name: 'Appeal Log',
+      icon: Scale,
+      component: AppealLogTab,
+      description: 'Chapter 123 appeal tracking and defense',
+      configKey: 'appealLog'
     }
   ];
 

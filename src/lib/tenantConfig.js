@@ -37,6 +37,7 @@ const TENANT_CONFIGS = {
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,
+      appealLog: true,
     },
 
     // UI labels / terminology
@@ -77,6 +78,7 @@ const TENANT_CONFIGS = {
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,
+      appealLog: true,
     },
 
     labels: {
