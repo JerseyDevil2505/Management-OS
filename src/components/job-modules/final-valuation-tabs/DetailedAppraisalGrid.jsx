@@ -189,7 +189,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         return `Auto - Mapped`;
       }
       // Fall back to price-based bracket
-      const subjectValue = subject.values_norm_time || subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
+      const subjectValue = subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
       const bracketIndex = cmeBrackets.findIndex(b => subjectValue >= b.min && subjectValue <= b.max);
       if (bracketIndex >= 0 && cmeBrackets[bracketIndex]) {
         return `Auto (${cmeBrackets[bracketIndex].label})`;
@@ -1121,7 +1121,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       let totalAdjustment = 0;
 
       // Get comp's sales price (edited or original)
-      const compSalesPrice = getEditedValue(compKey, 'sales_price') || comp.values_norm_time || comp.sales_price || 0;
+      const compSalesPrice = getEditedValue(compKey, 'sales_price') || comp.sales_price || 0;
 
       // Calculate adjustments for each adjustable attribute
       Object.keys(EDITABLE_CONFIG).forEach(attrId => {
