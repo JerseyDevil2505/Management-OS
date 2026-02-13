@@ -746,27 +746,6 @@ const SalesReviewTab = ({
     }));
   };
 
-  // Get HPI multiplier for normalization (matches PreValuation logic)
-  const getHPIMultiplier = useCallback((saleYear, targetYear = 2025) => {
-    if (!hpiData || hpiData.length === 0) return 1.0;
-
-    const maxHPIYear = Math.max(...hpiData.map(h => h.observation_year));
-
-    if (saleYear > maxHPIYear) return 1.0;
-    const effectiveTargetYear = targetYear > maxHPIYear ? maxHPIYear : targetYear;
-    if (saleYear === effectiveTargetYear) return 1.0;
-
-    const saleYearData = hpiData.find(h => h.observation_year === saleYear);
-    const targetYearData = hpiData.find(h => h.observation_year === effectiveTargetYear);
-
-    if (!saleYearData || !targetYearData) return 1.0;
-
-    const saleHPI = saleYearData.hpi_index || 100;
-    const targetHPI = targetYearData.hpi_index || 100;
-
-    return targetHPI / saleHPI;
-  }, [hpiData]);
-
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
 
@@ -884,37 +863,6 @@ const SalesReviewTab = ({
   };
 
 
-  // Auto-normalize using HPI data (matches PreValuation logic)
-  const handleAutoNormalize = async (property) => {
-    if (!property.sales_date || !property.sales_price) {
-      alert('Cannot normalize: Missing sale date or price');
-      return;
-    }
-
-    try {
-      const saleYear = new Date(property.sales_date).getFullYear();
-      const targetYear = 2025; // Current assessment year
-      const hpiMultiplier = getHPIMultiplier(saleYear, targetYear);
-      const timeNormalizedPrice = Math.round(property.sales_price * hpiMultiplier);
-
-      const { error } = await supabase
-        .from('property_records')
-        .update({ values_norm_time: timeNormalizedPrice })
-        .eq('id', property.id);
-
-      if (error) throw error;
-
-      alert(`Normalized value created: ${formatCurrency(timeNormalizedPrice)}\nHPI Multiplier: ${hpiMultiplier.toFixed(4)}`);
-
-      // Refresh data
-      if (onUpdateJobCache) {
-        onUpdateJobCache(jobData.id, { forceRefresh: true });
-      }
-    } catch (error) {
-      console.error('Error auto-normalizing:', error);
-      alert(`Failed to normalize: ${error.message}`);
-    }
-  };
 
   // ==================== CLEAR NORMALIZATION ====================
 
@@ -1838,7 +1786,6 @@ const SalesReviewTab = ({
                 <SortableHeader sortKey="sales_nu" label="NU" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader sortKey="sales_price" label="Sale Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Price/SF</th>
-                <th className="px-3 py-3 text-center font-medium text-gray-700">Normalize</th>
                 <SortableHeader sortKey="values_norm_time" label="Norm Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Norm $/SF</th>
                 <SortableHeader sortKey="salesRatio" label="Sales Ratio" align="right" sortConfig={sortConfig} onSort={handleSort} />
@@ -1887,17 +1834,6 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{prop.sales_nu || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.sales_price)}</td>
                   <td className="px-3 py-2 text-right">{prop.pricePerSF ? formatCurrency(prop.pricePerSF) : '-'}</td>
-                  <td className="px-3 py-2 text-center">
-                    {prop.sales_date && !prop.values_norm_time && (
-                      <button
-                        onClick={() => handleAutoNormalize(prop)}
-                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                        title="Auto-normalize using HPI data"
-                      >
-                        Auto
-                      </button>
-                    )}
-                  </td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_norm_time)}</td>
                   <td className="px-3 py-2 text-right">{prop.normPricePerSF ? formatCurrency(prop.normPricePerSF) : '-'}</td>
                   <td className="px-3 py-2 text-right">{prop.salesRatio !== null ? formatPercent(prop.salesRatio) : '-'}</td>
