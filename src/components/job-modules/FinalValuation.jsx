@@ -15,7 +15,8 @@ const FinalValuation = ({
   onUpdateJobCache = () => {},
   tenantConfig = null
 }) => {
-  const [activeTab, setActiveTab] = useState('sales-review');
+  const isAssessor = tenantConfig?.orgType === 'assessor';
+  const [activeTab, setActiveTab] = useState(isAssessor ? 'sales-comparison' : 'sales-review');
   const [finalValuationData, setFinalValuationData] = useState({});
   const [isLoadingFinalData, setIsLoadingFinalData] = useState(true);
 

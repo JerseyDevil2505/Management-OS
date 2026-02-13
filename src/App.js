@@ -152,6 +152,7 @@ const App = () => {
 
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
+  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
 
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
@@ -1155,6 +1156,10 @@ const App = () => {
               <button
                 onClick={() => {
                   setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                  // If viewing a job, also trigger JobContainer to reload its data
+                  if (selectedJob && activeView === 'job-modules') {
+                    setFileRefreshTrigger(prev => prev + 1);
+                  }
                   loadLiveData(['all']).then(() => {
                     setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
                     setTimeout(() => {
@@ -1530,6 +1535,7 @@ const App = () => {
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
+              fileRefreshTrigger={fileRefreshTrigger}
               tenantConfig={getJobTenantConfig(selectedJob)}
             />
           </div>
