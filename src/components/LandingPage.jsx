@@ -159,7 +159,7 @@ const LandingPage = ({ onLogin }) => {
                 <div className="feature-image">
                   <img src="https://images.pexels.com/photos/97080/pexels-photo-97080.jpeg" alt="Production Tracking" />
                 </div>
-                <h4>Production Tracking</h4>
+                <h4>Inspection Info</h4>
                 <p>Real-time inspection analytics, inspector performance metrics, validation reporting, and workflow management</p>
               </div>
               <div className="feature-card">
