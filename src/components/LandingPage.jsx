@@ -128,16 +128,6 @@ const LandingPage = ({ onLogin }) => {
                   }
                 })}
                 className="dev-bypass-button"
-                style={{
-                  marginTop: '1rem',
-                  padding: '0.5rem 1rem',
-                  background: '#64748b',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  cursor: 'pointer'
-                }}
               >
                 Development Access
               </button>

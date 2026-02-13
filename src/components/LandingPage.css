@@ -188,6 +188,7 @@
   border-radius: 8px;
   transition: all 0.2s;
   background-color: #f8fafc;
+  box-sizing: border-box;
 }
 
 .form-group input:focus {
@@ -277,6 +278,22 @@
 .login-footer p {
   color: #64748b;
   font-size: 0.875rem;
+}
+
+.dev-bypass-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #64748b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.dev-bypass-button:hover {
+  background: #475569;
 }
 
 /* Enhanced Features Section */
