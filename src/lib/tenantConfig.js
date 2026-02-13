@@ -18,7 +18,7 @@ const TENANT_CONFIGS = {
   // PPA Inc - full reassessment/revaluation firm features
   internal: {
     orgType: 'internal',
-    productName: 'PPA Management OS',
+    productName: 'PPA Property Assessment Copilot',
 
     // Top-level nav modules (App.js)
     modules: {

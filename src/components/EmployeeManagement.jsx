@@ -1050,7 +1050,7 @@ const loadEmployees = () => {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          PPA Management OS - Employee Management
+          PPA Property Assessment Copilot - Employee Management
         </h1>
         <p className="text-gray-600">
           Professional Property Appraisers Inc - Employee Database & Management

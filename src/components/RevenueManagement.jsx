@@ -155,7 +155,8 @@ const RevenueManagement = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
     doc.text(`Date: ${today.toLocaleDateString()}`, pageWidth - margin, margin + 36, { align: 'right' });
-    doc.text(`Invoice #: INV-${org.slug?.toUpperCase() || 'ORG'}-${today.getFullYear()}`, pageWidth - margin, margin + 50, { align: 'right' });
+    const ccdd = org.ccdd_code || org.slug?.toUpperCase() || 'ORG';
+    doc.text(`Invoice #: ${today.getFullYear()}-${ccdd}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     // Divider
     doc.setDrawColor(...lojikBlue);
@@ -199,8 +200,12 @@ const RevenueManagement = () => {
     doc.setFontSize(11);
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.text('LOJIK for Professional', pageWidth - margin - 200, yPos + 18);
-    doc.text('Property Appraisers Inc.', pageWidth - margin - 200, yPos + 32);
+    doc.text('LOJIK', pageWidth - margin - 200, yPos + 18);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    doc.text('PO BOX 1225', pageWidth - margin - 200, yPos + 32);
+    doc.text('DELRAN, NJ 08075', pageWidth - margin - 200, yPos + 44);
 
     // Fee calculations
     const fees = calculateFees(org);
@@ -213,7 +218,7 @@ const RevenueManagement = () => {
     const rows = [];
 
     if (fees.isFree) {
-      rows.push(['1', 'Free Account - Management OS Platform Access', '1', '$0.00', '$0.00']);
+      rows.push(['1', 'Free Account - Property Assessment Copilot', '1', '$0.00', '$0.00']);
     } else {
       // Line item fee
       rows.push([
@@ -227,7 +232,7 @@ const RevenueManagement = () => {
       // Primary user fee
       rows.push([
         '2',
-        'Primary User License - Management OS Platform',
+        'Primary User License - Property Assessment Copilot',
         '1',
         `$${priceConfig.primaryUserFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         `$${priceConfig.primaryUserFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
@@ -322,13 +327,14 @@ const RevenueManagement = () => {
     doc.setTextColor(140, 140, 140);
     doc.setFont('helvetica', 'normal');
     doc.text(
-      `LOJIK for Professional Property Appraisers Inc. | Generated ${today.toLocaleDateString()}`,
+      `LOJIK | Generated ${today.toLocaleDateString()}`,
       pageWidth / 2,
       pageHeight - 25,
       { align: 'center' }
     );
 
-    const fileName = `Invoice_${org.slug || org.name.replace(/\s+/g, '_')}_${today.getFullYear()}.pdf`;
+    const ccddFile = org.ccdd_code || org.slug || org.name.replace(/\s+/g, '_');
+    const fileName = `Invoice_${today.getFullYear()}_${ccddFile}.pdf`;
     doc.save(fileName);
 
     setSuccessMessage(`Invoice generated: ${fileName}`);
