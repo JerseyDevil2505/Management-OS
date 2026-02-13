@@ -2,12 +2,15 @@
 
 .revenue-container {
   padding: 2rem;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
 .revenue-header {
-  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
 }
 
 .revenue-header h2 {
@@ -16,101 +19,411 @@
   margin: 0;
 }
 
-/* Placeholder */
-.revenue-placeholder {
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-  border: 2px dashed #10b981;
-  border-radius: 12px;
-  padding: 3rem;
-  text-align: center;
-  margin-bottom: 2rem;
+.revenue-header-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
-.placeholder-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.revenue-placeholder h3 {
-  font-size: 1.5rem;
-  color: #065f46;
-  margin: 0 0 1rem 0;
-}
-
-.revenue-placeholder p {
-  color: #047857;
-  margin: 0.5rem 0;
-}
-
-.revenue-placeholder ul {
-  text-align: left;
-  display: inline-block;
-  margin: 1rem 0;
-  padding-left: 1.5rem;
-}
-
-.revenue-placeholder li {
-  color: #047857;
-  margin: 0.5rem 0;
-}
-
-.placeholder-note {
-  background: white;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-top: 1.5rem;
-  color: #374151;
-}
-
-/* Preview Section */
-.revenue-preview {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 1.5rem;
-}
-
-.revenue-preview h4 {
-  margin: 0 0 1rem 0;
-  color: #64748b;
+.revenue-config-btn {
+  padding: 0.5rem 1rem;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.preview-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+.revenue-config-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
 }
 
-.preview-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+/* Messages */
+.revenue-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 0.75rem 1rem;
   border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.revenue-success {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.revenue-loading {
+  text-align: center;
+  padding: 3rem;
+  color: #64748b;
+  font-size: 1rem;
+}
+
+/* Summary Cards */
+.revenue-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.revenue-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   padding: 1.25rem;
   text-align: center;
 }
 
-.preview-label {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-bottom: 0.5rem;
+.revenue-card-primary {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  border: none;
+  grid-column: span 1;
 }
 
-.preview-value {
+.revenue-card-primary .revenue-card-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.revenue-card-primary .revenue-card-value {
+  color: white;
   font-size: 1.5rem;
+}
+
+.revenue-card-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.revenue-card-value {
+  font-size: 1.375rem;
   font-weight: 700;
+  color: #1e293b;
+}
+
+/* Rate Chips */
+.revenue-rates {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.rate-chip {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  padding: 0.375rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Revenue Table */
+.revenue-table-wrapper {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.revenue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.revenue-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.875rem 1rem;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.revenue-table tbody td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.revenue-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.revenue-table tfoot td {
+  padding: 0.875rem 1rem;
+  border-top: 2px solid #e2e8f0;
+  font-weight: 700;
+  color: #1e293b;
+  background: #f8fafc;
+}
+
+.revenue-col-right {
+  text-align: right !important;
+}
+
+.revenue-row-free {
+  opacity: 0.7;
+}
+
+.revenue-row-free:hover {
+  opacity: 1;
+}
+
+.revenue-client-name {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.revenue-client-contact {
+  font-size: 0.75rem;
   color: #94a3b8;
+  margin-top: 2px;
+}
+
+.revenue-total-cell {
+  font-weight: 700;
+  color: #1e40af;
+}
+
+/* Badges */
+.revenue-account-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.revenue-badge-paid {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.revenue-badge-free {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.revenue-billing-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.revenue-billing-paid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.revenue-billing-free {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.revenue-billing-po-received {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.revenue-billing-invoiced {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.revenue-billing-pending {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* PDF Button */
+.revenue-pdf-btn {
+  padding: 0.35rem 0.75rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.revenue-pdf-btn:hover {
+  background: #1d4ed8;
+}
+
+/* Modal */
+.revenue-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.revenue-modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.revenue-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.revenue-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  color: #1e293b;
+}
+
+.revenue-modal-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.25rem;
+  font-weight: 700;
+}
+
+.revenue-modal-close:hover {
+  color: #475569;
+}
+
+.revenue-modal-body {
+  padding: 1.5rem;
+}
+
+.revenue-form-group {
+  margin-bottom: 1.25rem;
+}
+
+.revenue-form-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.375rem;
+}
+
+.revenue-form-group input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.revenue-form-group input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.revenue-config-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+.revenue-config-preview h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.revenue-config-preview p {
+  margin: 0.25rem 0;
+  font-size: 0.825rem;
+  color: #64748b;
+}
+
+.revenue-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.revenue-modal-save {
+  padding: 0.5rem 1.5rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.revenue-modal-save:hover {
+  background: #1d4ed8;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .revenue-placeholder {
-    padding: 2rem 1rem;
+  .revenue-container {
+    padding: 1rem;
   }
-  
-  .preview-cards {
+
+  .revenue-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .revenue-summary {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .revenue-rates {
+    flex-direction: column;
+  }
+
+  .revenue-table {
+    font-size: 0.8rem;
+  }
+
+  .revenue-table thead th,
+  .revenue-table tbody td,
+  .revenue-table tfoot td {
+    padding: 0.625rem 0.5rem;
   }
 }
