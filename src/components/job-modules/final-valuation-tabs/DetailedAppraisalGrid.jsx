@@ -1617,6 +1617,133 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       });
     }
 
+    // ==================== CHAPTER 123 TEST ====================
+    // Add Chapter 123 Analysis on a new page
+    doc.addPage();
+    addHeader(subjectBlockLot, true);
+
+    const ch123StartY = margin + 60;
+
+    doc.setFontSize(14);
+    doc.setTextColor(...lojikBlue);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Chapter 123 Test', margin, ch123StartY);
+
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.text('N.J.S.A. 54:51A-6 — Common Level Range Analysis', margin, ch123StartY + 16);
+
+    // Gather data for the Chapter 123 test
+    const currentAssessment = subject.values_mod4_total || subject.values_mod_total || subject.values_cama_total || 0;
+    const projectedValue = result.projectedAssessment || 0;
+
+    // Get comparable adjusted prices for the weighted average
+    const compAdjustedPrices = [];
+    for (let i = 0; i < 5; i++) {
+      const comp = comps[i];
+      const compKey = `comp_${i}`;
+      if (comp) {
+        const compData = editedAdjustments[compKey] || comp;
+        const adjPrice = compData.adjustedPrice || 0;
+        if (adjPrice > 0) compAdjustedPrices.push(adjPrice);
+      }
+    }
+
+    const avgAdjustedPrice = compAdjustedPrices.length > 0
+      ? compAdjustedPrices.reduce((a, b) => a + b, 0) / compAdjustedPrices.length
+      : 0;
+    const medianAdjustedPrice = compAdjustedPrices.length > 0
+      ? [...compAdjustedPrices].sort((a, b) => a - b)[Math.floor(compAdjustedPrices.length / 2)]
+      : 0;
+
+    // Calculate Assessment-to-Value ratio
+    const assessmentRatio = projectedValue > 0 ? (currentAssessment / projectedValue) : 0;
+
+    // Chapter 123 thresholds: Common Level Range is Director's Ratio +/- 15%
+    // Use job-level director_ratio if saved, otherwise default to 100%
+    const directorsRatio = jobData?.director_ratio ? parseFloat(jobData.director_ratio) : 1.0;
+    const upperLimit = directorsRatio * 1.15;
+    const lowerLimit = directorsRatio * 0.85;
+
+    const ch123Pass = assessmentRatio <= upperLimit;
+    const exceedsBy = assessmentRatio > upperLimit
+      ? ((assessmentRatio - upperLimit) * 100).toFixed(1)
+      : 0;
+
+    // Build Chapter 123 summary table
+    const ch123Rows = [
+      ['Current Assessment', currentAssessment > 0 ? `$${currentAssessment.toLocaleString()}` : 'N/A'],
+      ['CME Projected Value', projectedValue > 0 ? `$${Math.round(projectedValue).toLocaleString()}` : 'N/A'],
+      ['Avg. Adjusted Price (Comps)', avgAdjustedPrice > 0 ? `$${Math.round(avgAdjustedPrice).toLocaleString()}` : 'N/A'],
+      ['Median Adjusted Price (Comps)', medianAdjustedPrice > 0 ? `$${Math.round(medianAdjustedPrice).toLocaleString()}` : 'N/A'],
+      ['Assessment-to-Value Ratio', assessmentRatio > 0 ? `${(assessmentRatio * 100).toFixed(2)}%` : 'N/A'],
+      ["Director's Ratio", `${(directorsRatio * 100).toFixed(2)}%`],
+      ['Common Level Range (Upper)', `${(upperLimit * 100).toFixed(2)}%`],
+      ['Common Level Range (Lower)', `${(lowerLimit * 100).toFixed(2)}%`],
+      ['Chapter 123 Result', ch123Pass ? 'WITHIN RANGE' : `EXCEEDS by ${exceedsBy}%`]
+    ];
+
+    autoTable(doc, {
+      body: ch123Rows,
+      startY: ch123StartY + 28,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      styles: {
+        fontSize: 9,
+        cellPadding: 6,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.5
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 220, fillColor: [245, 247, 250] },
+        1: { halign: 'center', cellWidth: 180 }
+      },
+      didParseCell: function(data) {
+        // Highlight the result row
+        if (data.row.index === ch123Rows.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fontSize = 10;
+          if (data.column.index === 1) {
+            if (ch123Pass) {
+              data.cell.styles.textColor = [34, 139, 34];
+              data.cell.styles.fillColor = [230, 255, 230];
+            } else {
+              data.cell.styles.textColor = [220, 20, 60];
+              data.cell.styles.fillColor = [255, 230, 230];
+            }
+          }
+        }
+        // Highlight ratio row
+        if (data.row.index === 4 && data.column.index === 1) {
+          data.cell.styles.fontStyle = 'bold';
+          if (assessmentRatio > upperLimit) {
+            data.cell.styles.textColor = [220, 20, 60];
+          } else if (assessmentRatio < lowerLimit) {
+            data.cell.styles.textColor = [200, 150, 0];
+          } else {
+            data.cell.styles.textColor = [34, 139, 34];
+          }
+        }
+      }
+    });
+
+    // Add explanatory note
+    const ch123TableEndY = doc.lastAutoTable.finalY + 20;
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.setFont('helvetica', 'italic');
+    doc.text(
+      'Under N.J.S.A. 54:51A-6, a property assessment is presumed valid if it falls within the Common Level Range',
+      margin,
+      ch123TableEndY
+    );
+    doc.text(
+      "(Director's Ratio +/- 15%). If the ratio exceeds the upper limit, the taxpayer may have grounds for appeal.",
+      margin,
+      ch123TableEndY + 12
+    );
+
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const block = subject.property_block || '';
@@ -1625,7 +1752,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS, jobData]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">

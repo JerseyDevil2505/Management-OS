@@ -18,14 +18,13 @@ const TENANT_CONFIGS = {
   // PPA Inc - full reassessment/revaluation firm features
   internal: {
     orgType: 'internal',
-    productName: 'PPA Management OS',
+    productName: 'PPA Property Assessment Copilot',
 
     // Top-level nav modules (App.js)
     modules: {
       employees: true,
       billing: true,
       payroll: true,
-      appealCoverage: true,
       organizations: true,
       revenue: true,
     },
@@ -38,6 +37,7 @@ const TENANT_CONFIGS = {
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,
+      appealLog: true,
     },
 
     // UI labels / terminology
@@ -67,7 +67,6 @@ const TENANT_CONFIGS = {
       employees: false,               // No employee management
       billing: false,                  // No billing
       payroll: false,                  // No payroll
-      appealCoverage: true,
       organizations: false,            // Managed as "Municipalities" via dashboard
       revenue: true,
     },
@@ -79,6 +78,7 @@ const TENANT_CONFIGS = {
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,
+      appealLog: true,
     },
 
     labels: {

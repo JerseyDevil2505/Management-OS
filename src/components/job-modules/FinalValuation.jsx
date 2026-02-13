@@ -20,6 +20,13 @@ const FinalValuation = ({
   const [finalValuationData, setFinalValuationData] = useState({});
   const [isLoadingFinalData, setIsLoadingFinalData] = useState(true);
 
+  // CME navigation from external modules (e.g. Appeal Log)
+  useEffect(() => {
+    if (jobData?.navigateToCME) {
+      setActiveTab('sales-comparison');
+    }
+  }, [jobData?.navigateToCME]);
+
   const tabs = [
     { id: 'sales-review', label: 'Sales Review', icon: FileSpreadsheet },
     { id: 'market-data', label: 'Market Data', icon: Calculator },
@@ -132,6 +139,13 @@ const FinalValuation = ({
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
             tenantConfig={tenantConfig}
+            initialManualSubject={jobData?.navigateToCME || null}
+            onManualSubjectConsumed={() => {
+              // Clear the navigation target from jobData
+              if (jobData?.navigateToCME && jobData?._clearNavigateToCME) {
+                jobData._clearNavigateToCME();
+              }
+            }}
           />
         )}
 
@@ -142,6 +156,7 @@ const FinalValuation = ({
             finalValuationData={finalValuationData}
           />
         )}
+
       </div>
     </div>
   );
