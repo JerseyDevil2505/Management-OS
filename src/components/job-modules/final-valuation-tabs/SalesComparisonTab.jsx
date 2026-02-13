@@ -1124,7 +1124,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
 
-      // Auto-scroll to results after a short delay to allow rendering
+      // Auto-scroll to results after rendering completes
       setTimeout(() => {
         if (detailedResultsRef.current) {
           detailedResultsRef.current.scrollIntoView({
@@ -1132,7 +1132,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             block: 'start'
           });
         }
-      }, 100);
+      }, 300);
 
     } catch (error) {
       console.error('Error in manual evaluation:', error);

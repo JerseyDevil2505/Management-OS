@@ -1661,8 +1661,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const assessmentRatio = projectedValue > 0 ? (currentAssessment / projectedValue) : 0;
 
     // Chapter 123 thresholds: Common Level Range is Director's Ratio +/- 15%
-    // Default Director's Ratio = 100% (full value assessment)
-    const directorsRatio = 1.0;
+    // Use job-level director_ratio if saved, otherwise default to 100%
+    const directorsRatio = jobData?.director_ratio ? parseFloat(jobData.director_ratio) : 1.0;
     const upperLimit = directorsRatio * 1.15;
     const lowerLimit = directorsRatio * 0.85;
 
@@ -1678,9 +1678,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ['Avg. Adjusted Price (Comps)', avgAdjustedPrice > 0 ? `$${Math.round(avgAdjustedPrice).toLocaleString()}` : 'N/A'],
       ['Median Adjusted Price (Comps)', medianAdjustedPrice > 0 ? `$${Math.round(medianAdjustedPrice).toLocaleString()}` : 'N/A'],
       ['Assessment-to-Value Ratio', assessmentRatio > 0 ? `${(assessmentRatio * 100).toFixed(2)}%` : 'N/A'],
-      ["Director's Ratio", `${(directorsRatio * 100).toFixed(0)}%`],
-      ['Common Level Range (Upper)', `${(upperLimit * 100).toFixed(0)}%`],
-      ['Common Level Range (Lower)', `${(lowerLimit * 100).toFixed(0)}%`],
+      ["Director's Ratio", `${(directorsRatio * 100).toFixed(2)}%`],
+      ['Common Level Range (Upper)', `${(upperLimit * 100).toFixed(2)}%`],
+      ['Common Level Range (Lower)', `${(lowerLimit * 100).toFixed(2)}%`],
       ['Chapter 123 Result', ch123Pass ? 'WITHIN RANGE' : `EXCEEDS by ${exceedsBy}%`]
     ];
 
