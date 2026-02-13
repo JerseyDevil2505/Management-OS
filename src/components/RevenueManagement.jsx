@@ -178,17 +178,21 @@ const RevenueManagement = () => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(60, 60, 60);
+    let billToY = yPos + 34;
     if (org.primary_contact_name) {
-      doc.text(`Attn: ${org.primary_contact_name}`, margin, yPos + 34);
+      doc.text(`Attn: ${org.primary_contact_name}`, margin, billToY);
+      billToY += 14;
     }
     if (org.billing_address) {
       const addressLines = org.billing_address.split('\n');
-      addressLines.forEach((line, i) => {
-        doc.text(line, margin, yPos + 48 + (i * 14));
+      addressLines.forEach((line) => {
+        doc.text(line, margin, billToY);
+        billToY += 14;
       });
     }
     if (org.primary_contact_email) {
-      doc.text(org.primary_contact_email, margin, yPos + 76);
+      doc.text(org.primary_contact_email, margin, billToY);
+      billToY += 14;
     }
 
     // From section
