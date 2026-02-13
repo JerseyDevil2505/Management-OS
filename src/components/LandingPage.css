@@ -379,6 +379,88 @@
   margin: 0;
 }
 
+/* Features Heading */
+.features-heading {
+  text-align: center;
+  font-size: 1.75rem;
+  color: #1e293b;
+  margin: 0 0 2rem 0;
+  font-weight: 700;
+}
+
+/* About Me Section */
+.about-section {
+  margin-top: 4rem;
+  animation: fadeInUp 0.8s ease-out 0.6s both;
+}
+
+.about-content {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0;
+}
+
+.about-text {
+  padding: 2.5rem;
+}
+
+.about-text h3 {
+  font-size: 1.75rem;
+  color: #1e293b;
+  margin: 0 0 1.5rem 0;
+  font-weight: 700;
+}
+
+.about-accent {
+  color: #52B5E8;
+}
+
+.about-text p {
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  margin: 0 0 1rem 0;
+}
+
+.about-text p:last-child {
+  margin-bottom: 0;
+}
+
+.about-stats {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #52B5E8 100%);
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  min-width: 200px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: white;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
 /* Footer */
 .landing-footer {
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
@@ -421,5 +503,20 @@
 
   .feature-card {
     padding: 1.75rem;
+  }
+
+  .about-content {
+    grid-template-columns: 1fr;
+  }
+
+  .about-text {
+    padding: 2rem 1.5rem;
+  }
+
+  .about-stats {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 1.5rem;
+    min-width: unset;
   }
 }
