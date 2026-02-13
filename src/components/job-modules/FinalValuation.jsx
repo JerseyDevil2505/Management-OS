@@ -12,7 +12,8 @@ const FinalValuation = ({
   properties = [],
   marketLandData = {},
   hpiData = [],
-  onUpdateJobCache = () => {}
+  onUpdateJobCache = () => {},
+  tenantConfig = null
 }) => {
   const [activeTab, setActiveTab] = useState('sales-review');
   const [finalValuationData, setFinalValuationData] = useState({});
@@ -101,6 +102,7 @@ const FinalValuation = ({
             marketLandData={marketLandData}
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
+            tenantConfig={tenantConfig}
           />
         )}
 
@@ -128,6 +130,7 @@ const FinalValuation = ({
             properties={properties}
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
+            tenantConfig={tenantConfig}
           />
         )}
 

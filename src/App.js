@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
+import { PPA_ORG_ID, isPpaJob, getUserTenantConfig, getJobTenantConfig, getLabel } from './lib/tenantConfig';
 import './App.css'; 
 import AdminJobManagement from './components/AdminJobManagement';
 import EmployeeManagement from './components/EmployeeManagement';
@@ -12,6 +13,7 @@ import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
+import AssessorDashboard from './components/AssessorDashboard';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -63,7 +65,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users', 'organizations', 'revenue'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -82,7 +84,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users', 'organizations', 'revenue'];
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -151,6 +153,17 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
 
+  // Dev mode: "View As" impersonation state
+  const [viewingAs, setViewingAs] = useState(null);
+
+  // Change Password modal state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [cpCurrentPwd, setCpCurrentPwd] = useState('');
+  const [cpNewPwd, setCpNewPwd] = useState('');
+  const [cpConfirmPwd, setCpConfirmPwd] = useState('');
+  const [cpError, setCpError] = useState('');
+  const [cpSuccess, setCpSuccess] = useState('');
+
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
@@ -158,27 +171,127 @@ const App = () => {
   const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
   const canManageUsers = user?.id === PRIMARY_OWNER_ID;
 
+  // Tenant configuration - determines module visibility, terminology, behavior
+  const tenantConfig = getUserTenantConfig(user);
+  const userOrgId = user?.employeeData?.organization_id;
+  const isRealAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
+  // When dev is using "View As", treat them as an assessor user
+  const isAssessorUser = isRealAssessorUser || !!viewingAs;
+  // The effective user for the assessor dashboard (real user or impersonated)
+  const assessorUser = viewingAs ? {
+    ...user,
+    employeeData: viewingAs,
+    role: viewingAs.role
+  } : user;
+
+  // Centralized job visibility filter:
+  // - Admin (primary owner): all jobs
+  // - Assessor: only their org's jobs
+  // - PPA Owner/Manager: only PPA jobs (no LOJIK client jobs)
+  const filterJobsForUser = (jobList) => {
+    if (canManageUsers) return jobList; // Admin sees everything
+    if (isAssessorUser) {
+      const orgId = viewingAs?.organization_id || userOrgId;
+      return jobList.filter(j => j.organization_id === orgId);
+    }
+    // PPA users (owner, manager) - only PPA jobs
+    return jobList.filter(isPpaJob);
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setCpError('');
+    setCpSuccess('');
+
+    if (cpNewPwd.length < 6) {
+      setCpError('New password must be at least 6 characters');
+      return;
+    }
+    if (cpNewPwd !== cpConfirmPwd) {
+      setCpError('New passwords do not match');
+      return;
+    }
+
+    try {
+      // Verify current password by attempting sign-in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: cpCurrentPwd,
+      });
+      if (verifyError) {
+        setCpError('Current password is incorrect');
+        return;
+      }
+
+      // Update password via Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: cpNewPwd,
+      });
+      if (updateError) throw updateError;
+
+      // Update stored password on employee record for admin visibility
+      if (user.employeeData?.id) {
+        await supabase
+          .from('employees')
+          .update({ initial_password: cpNewPwd })
+          .eq('id', user.employeeData.id);
+      }
+
+      setCpSuccess('Password updated successfully');
+      setCpCurrentPwd('');
+      setCpNewPwd('');
+      setCpConfirmPwd('');
+      setTimeout(() => {
+        setShowChangePassword(false);
+        setCpSuccess('');
+      }, 1500);
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setCpError(err.message || 'Failed to change password');
+    }
+  };
+
+  const handleViewAs = (employee) => {
+    setViewingAs(employee);
+    setSelectedJob(null);
+    setActiveView('assessor-dashboard');
+    window.history.pushState({}, '', '/assessor-dashboard');
+  };
+
+  const handleExitViewAs = () => {
+    setViewingAs(null);
+    setActiveView('users');
+    window.history.pushState({}, '', '/users');
+  };
+
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
     // Prevent non-admins from navigating to billing/payroll
     const role = user?.role?.toString?.().toLowerCase?.() || '';
     const isAdminLocal = role === 'admin' || role === 'owner';
     if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
-      setActiveView('employees');
-      window.history.pushState({}, '', '/employees');
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
+      return;
+    }
+    // Block modules disabled by tenant config
+    const moduleMap = { billing: 'billing', payroll: 'payroll', employees: 'employees', organizations: 'organizations' };
+    if (moduleMap[view] && !tenantConfig.modules[moduleMap[view]]) {
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
       return;
     }
     // Only primary owner can access users, organizations, and revenue
     if ((view === 'users' || view === 'organizations' || view === 'revenue') && user?.id !== PRIMARY_OWNER_ID) {
-      setActiveView('employees');
-      window.history.pushState({}, '', '/employees');
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
       return;
     }
 
     setActiveView(view);
     // Update URL without page reload
     window.history.pushState({}, '', `/${view}`);
-  }, [user]);
+  }, [user, tenantConfig]);
 
   // ==========================================
   // JOB FRESHNESS CALCULATOR
@@ -207,9 +320,57 @@ const App = () => {
         freshnessData[job.id] = {
           lastFileUpload: fileData?.[0]?.updated_at || null,
           lastProductionRun: prodData?.[0]?.upload_date || null,
-          needsUpdate: prodData?.[0]?.upload_date && fileData?.[0]?.updated_at ? 
+          needsUpdate: prodData?.[0]?.upload_date && fileData?.[0]?.updated_at ?
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
+
+        // For non-PPA jobs, load lightweight summary stats from property_records
+        const isClientJob = job.organization_id && job.organization_id !== PPA_ORG_ID;
+        if (isClientJob) {
+          try {
+            const { data: summaryData } = await supabase
+              .from('property_records')
+              .select('sales_date, sales_price, inspection_measure_by, inspection_measure_date, asset_type_use')
+              .eq('job_id', job.id);
+
+            if (summaryData && summaryData.length > 0) {
+              const inspected = summaryData.filter(p =>
+                p.inspection_measure_by && p.inspection_measure_by.trim() && p.inspection_measure_date
+              );
+              const measureDates = inspected
+                .map(p => p.inspection_measure_date)
+                .filter(Boolean)
+                .map(d => new Date(d).getTime())
+                .filter(t => !isNaN(t));
+              const avgMeasureDate = measureDates.length > 0
+                ? new Date(measureDates.reduce((a, b) => a + b, 0) / measureDates.length).toISOString().split('T')[0]
+                : null;
+              const mostRecentMeasureDate = measureDates.length > 0
+                ? new Date(Math.max(...measureDates)).toISOString().split('T')[0]
+                : null;
+              const residential = summaryData.filter(p => {
+                const use = (p.asset_type_use || '').toString();
+                return use.startsWith('2') || use.startsWith('3A') || use === '1' || use.startsWith('1');
+              });
+              const commercial = summaryData.filter(p => {
+                const use = (p.asset_type_use || '').toString();
+                return use.startsWith('4') || use.startsWith('5');
+              });
+
+              freshnessData[job.id].clientSummary = {
+                totalRecords: summaryData.length,
+                inspectedCount: inspected.length,
+                entryRate: summaryData.length > 0 ? Math.round((inspected.length / summaryData.length) * 100) : 0,
+                avgMeasureDate,
+                mostRecentMeasureDate,
+                residentialCount: residential.length,
+                commercialCount: commercial.length
+              };
+            }
+          } catch (summaryError) {
+            console.error(`Error loading client summary for job ${job.id}:`, summaryError.message);
+          }
+        }
       } catch (error) {
         console.error(`Error loading freshness for job ${job.id}:`, error.message);
         freshnessData[job.id] = {
@@ -449,10 +610,12 @@ const App = () => {
           updates.distributions = distributionsData;
         }
 
-        // Calculate billing metrics
+        // Calculate billing metrics - only PPA jobs (exclude client/Lojik jobs)
+        const billingActiveJobs = (updates.activeJobs || appData.activeJobs)?.filter(isPpaJob);
+        const billingLegacyJobs = (updates.legacyJobs || appData.legacyJobs)?.filter(isPpaJob);
         updates.billingMetrics = calculateBillingMetrics(
-          updates.activeJobs || appData.activeJobs,
-          updates.legacyJobs || appData.legacyJobs,
+          billingActiveJobs,
+          billingLegacyJobs,
           updates.planningJobs || appData.planningJobs,
           updates.expenses || appData.expenses,
           updates.receivables || appData.receivables,
@@ -566,14 +729,14 @@ const App = () => {
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
-    setActiveView('admin-jobs');
-    // Reset URL when going back to jobs
-    window.history.pushState({}, '', '/admin-jobs');
-    
+    const backView = isAssessorUser ? 'assessor-dashboard' : 'admin-jobs';
+    setActiveView(backView);
+    window.history.pushState({}, '', `/${backView}`);
+
     // Refresh jobs data to show any updates made in modules
     console.log('🔄 Refreshing jobs data after returning from modules');
     loadLiveData(['jobs']);
-  }, [loadLiveData]);
+  }, [loadLiveData, isAssessorUser]);
 
   const handleFileProcessed = useCallback(() => {
     console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
@@ -797,12 +960,16 @@ const App = () => {
   const checkSession = async () => {
     try {
       // Development auto-login - expanded conditions
-      if (window.location.hostname.includes('production-black-seven') ||
+      if (process.env.NODE_ENV === 'development' ||
+          window.location.hostname.includes('production-black-seven') ||
           window.location.hostname === 'localhost' ||
           window.location.hostname.includes('github.dev') ||
           window.location.hostname.includes('preview') ||
           window.location.hostname.includes('fly.dev') ||
           window.location.hostname.includes('builder.io') ||
+          window.location.hostname.includes('0.0.0.0') ||
+          window.location.hostname.includes('127.0.0.1') ||
+          window.location.port === '3001' ||
           window.location.search.includes('dev=true')) {
         setUser({
           id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
@@ -846,7 +1013,11 @@ const App = () => {
   const handleLogin = (userData) => {
     setUser(userData);
     // Set default tab based on role
-    if (userData.role === 'manager') {
+    const loginOrgId = userData?.employeeData?.organization_id;
+    const loginIsAssessor = loginOrgId && loginOrgId !== '00000000-0000-0000-0000-000000000001';
+    if (loginIsAssessor) {
+      setActiveView('assessor-dashboard');
+    } else if (userData.role === 'manager') {
       setActiveView('employees');
     }
   };
@@ -854,11 +1025,17 @@ const App = () => {
   // If a non-admin user becomes active and the current view is restricted, redirect them
   useEffect(() => {
     if (!user) return;
+    // Only redirect REAL assessor users (not dev impersonation via "View As")
+    if (isRealAssessorUser && activeView !== 'assessor-dashboard' && activeView !== 'job-modules') {
+      setActiveView('assessor-dashboard');
+      window.history.pushState({}, '', '/assessor-dashboard');
+      return;
+    }
     if (!isAdmin && (activeView === 'billing' || activeView === 'payroll')) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
     }
-  }, [user, isAdmin, activeView]);
+  }, [user, isAdmin, isRealAssessorUser, activeView]);
 
   const handleLogout = async () => {
     try {
@@ -997,6 +1174,13 @@ const App = () => {
                 )}
               </button>
               <button
+                onClick={() => setShowChangePassword(true)}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                title="Change your password"
+              >
+                Change Password
+              </button>
+              <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
@@ -1006,7 +1190,7 @@ const App = () => {
           </div>
           
           {/* Only show main navigation when NOT in job-specific modules */}
-          {activeView !== 'job-modules' && (
+          {activeView !== 'job-modules' && !isAssessorUser && (
             <nav className="flex space-x-4">
               <button
                 onClick={() => handleViewChange('employees')}
@@ -1021,7 +1205,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                👥 Employees ({appData.employees.length})
+                👥 {getLabel(tenantConfig, 'employeesTab', 'Employees')} ({appData.employees.length})
               </button>
               <button
                 onClick={() => handleViewChange('admin-jobs')}
@@ -1036,7 +1220,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                📋 Jobs ({appData.jobs.length})
+                📋 Jobs ({filterJobsForUser(appData.jobs).length})
               </button>
               <button
                 onClick={() => handleViewChange('appeal-coverage')}
@@ -1053,7 +1237,7 @@ const App = () => {
               >
                 ⚖️ Appeal Coverage
               </button>
-              {isAdmin && (
+              {isAdmin && tenantConfig.modules.billing && (
                 <button
                   onClick={() => handleViewChange('billing')}
                   className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1070,7 +1254,7 @@ const App = () => {
                   💰 Billing
                 </button>
               )}
-              {isAdmin && (
+              {isAdmin && tenantConfig.modules.payroll && (
                 <button
                   onClick={() => handleViewChange('payroll')}
                   className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1118,7 +1302,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                🏢 Organizations
+                🏢 {getLabel(tenantConfig, 'organizationsTab', 'Organizations')}
               </button>
               )}
               {canManageUsers && (
@@ -1141,6 +1325,34 @@ const App = () => {
             </nav>
           )}
           
+          {/* Assessor user nav - simplified, only shows when on dashboard */}
+          {isAssessorUser && activeView !== 'job-modules' && (
+            <nav className="flex space-x-4">
+              <button
+                onClick={() => handleViewChange('assessor-dashboard')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'assessor-dashboard'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'assessor-dashboard' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
+              >
+                📋 Dashboard
+              </button>
+              <button
+                onClick={() => handleViewChange('admin-jobs')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'admin-jobs'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
+              >
+                📂 Job Management
+              </button>
+            </nav>
+          )}
+
           {/* Show job context when in job-specific modules */}
           {activeView === 'job-modules' && selectedJob && (
             <div className="flex items-center justify-between">
@@ -1150,24 +1362,34 @@ const App = () => {
                   <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
                 </div>
                 
-                {/* File Upload Controls - Code File Only */}
+                {/* File Upload Controls - Full for LOJIK users, Code-only for PPA */}
                 <div className="border-l border-white border-opacity-30 pl-6">
                   <FileUploadButton
                     job={selectedJob}
                     onFileProcessed={handleFileProcessed}
                     onDataRefresh={handleFileProcessed}
                     onUpdateJobCache={handleJobDataRefresh}
-                    codeFileOnly={true}
+                    codeFileOnly={!isAssessorUser && isPpaJob(selectedJob)}
                   />
                 </div>
               </div>
               
-              <button
-                onClick={handleBackToJobs}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-              >
-                ← Back to Jobs
-              </button>
+              <div className="flex items-center gap-2">
+                {viewingAs && (
+                  <button
+                    onClick={handleExitViewAs}
+                    className="px-4 py-2 bg-purple-500 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-lg text-white font-medium text-sm transition-all duration-200"
+                  >
+                    Exit View As
+                  </button>
+                )}
+                <button
+                  onClick={handleBackToJobs}
+                  className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                >
+                  ← Back to Jobs
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1188,10 +1410,11 @@ const App = () => {
         {/* Component Views */}
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
-            jobs={appData.jobs}
+            isAdmin={isAdmin}
+            jobs={filterJobsForUser(appData.jobs)}
             onJobSelect={handleJobSelect}
-            planningJobs={appData.planningJobs}
-            archivedJobs={appData.archivedJobs}
+            planningJobs={filterJobsForUser(appData.planningJobs)}
+            archivedJobs={filterJobsForUser(appData.archivedJobs)}
             managers={appData.managers}
             countyHpiData={appData.countyHpiData}
             jobResponsibilities={appData.jobResponsibilities}
@@ -1205,8 +1428,8 @@ const App = () => {
 
         {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
-            activeJobs={appData.activeJobs}
-            legacyJobs={appData.legacyJobs}
+            activeJobs={appData.activeJobs?.filter(isPpaJob)}
+            legacyJobs={appData.legacyJobs?.filter(isPpaJob)}
             planningJobs={appData.planningJobs}
             expenses={appData.expenses}
             receivables={appData.receivables}
@@ -1237,7 +1460,7 @@ const App = () => {
               ['active', 'part_time', 'full_time'].includes(e.employment_status) &&
               ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
             )}
-            jobs={appData.jobs}
+            jobs={appData.jobs?.filter(isPpaJob)}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
             onDataUpdate={updateDataSection}
@@ -1255,7 +1478,7 @@ const App = () => {
         )}
 
         {activeView === 'users' && (isAdmin ? (
-          <UserManagement />
+          <UserManagement onViewAs={handleViewAs} />
         ) : (
           <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
             <h3 className="text-lg font-semibold">Access Denied</h3>
@@ -1271,16 +1494,127 @@ const App = () => {
           <RevenueManagement />
         )}
 
+        {activeView === 'assessor-dashboard' && isAssessorUser && (
+          <>
+            {viewingAs && (
+              <div style={{
+                background: '#7c3aed', color: 'white', padding: '8px 16px',
+                borderRadius: '8px', marginBottom: '16px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                  Viewing as: {viewingAs.first_name} {viewingAs.last_name} ({viewingAs.email})
+                </span>
+                <button
+                  onClick={handleExitViewAs}
+                  style={{
+                    padding: '4px 14px', borderRadius: '6px', fontWeight: '600', fontSize: '0.8rem',
+                    background: 'white', color: '#7c3aed', border: 'none', cursor: 'pointer'
+                  }}
+                >
+                  Exit View As
+                </button>
+              </div>
+            )}
+            <AssessorDashboard
+              user={assessorUser}
+              onJobSelect={handleJobSelect}
+              onDataUpdate={updateDataSection}
+            />
+          </>
+        )}
+
         {activeView === 'job-modules' && selectedJob && (
           <div>
             <JobContainer
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
+              tenantConfig={getJobTenantConfig(selectedJob)}
             />
           </div>
         )}
       </main>
+
+      {/* Change Password Modal */}
+      {showChangePassword && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 9999
+        }} onClick={() => { setShowChangePassword(false); setCpError(''); setCpSuccess(''); }}>
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '2rem',
+            width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px rgba(0,0,0,0.15)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 1.25rem', fontSize: '1.25rem', color: '#1a202c' }}>Change Password</h3>
+            <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1.25rem' }}>
+              {user.employeeData?.name || user.email}
+            </p>
+            {cpError && (
+              <div style={{ padding: '8px 12px', background: '#fee', color: '#c53030', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '1rem', border: '1px solid #feb2b2' }}>
+                {cpError}
+              </div>
+            )}
+            {cpSuccess && (
+              <div style={{ padding: '8px 12px', background: '#f0fdf4', color: '#166534', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '1rem', border: '1px solid #bbf7d0' }}>
+                {cpSuccess}
+              </div>
+            )}
+            <form onSubmit={handleChangePassword}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>Current Password</label>
+                <input
+                  type="password"
+                  value={cpCurrentPwd}
+                  onChange={(e) => setCpCurrentPwd(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>New Password</label>
+                <input
+                  type="text"
+                  value={cpNewPwd}
+                  onChange={(e) => setCpNewPwd(e.target.value)}
+                  required
+                  placeholder="Min 6 characters"
+                  autoComplete="off"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>Confirm New Password</label>
+                <input
+                  type="text"
+                  value={cpConfirmPwd}
+                  onChange={(e) => setCpConfirmPwd(e.target.value)}
+                  required
+                  placeholder="Confirm new password"
+                  autoComplete="off"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowChangePassword(false); setCpError(''); setCpSuccess(''); setCpCurrentPwd(''); setCpNewPwd(''); setCpConfirmPwd(''); }}
+                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', background: '#f3f4f6', color: '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', background: 'linear-gradient(135deg, #2a5298, #1e3c72)', color: 'white', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle, LineChart } from 'lucide-react';
 import { supabase, interpretCodes } from '../../lib/supabaseClient';
+import { PPA_ORG_ID, getJobTenantConfig, getLabel } from '../../lib/tenantConfig';
 import DataVisualizations from './DataVisualizations';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
+import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 
@@ -13,9 +15,11 @@ const JobContainer = ({
   onBackToJobs,
   workflowStats,
   onUpdateWorkflowStats,
-  fileRefreshTrigger
+  fileRefreshTrigger,
+  tenantConfig: tenantConfigProp
 }) => {
-  const [activeModule, setActiveModule] = useState('checklist');
+  const jobTenantConfig = tenantConfigProp || getJobTenantConfig(selectedJob);
+  const [activeModule, setActiveModule] = useState(jobTenantConfig.behavior.defaultJobTab);
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
@@ -53,11 +57,14 @@ const JobContainer = ({
   const pendingRefreshRef = useRef(false);
 
   // Load latest file versions and properties
+  // Reset active module to tenant default when job changes
   useEffect(() => {
     if (selectedJob) {
+      const config = tenantConfigProp || getJobTenantConfig(selectedJob);
+      setActiveModule(config.behavior.defaultJobTab);
       loadLatestFileVersions();
     }
-  }, [selectedJob]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedJob?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NEW: Refresh when App.js signals file processing completion
   useEffect(() => {
@@ -699,13 +706,22 @@ const JobContainer = ({
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
+      // Filter by organization for non-PPA jobs to prevent initials collision
+      const jobOrgId = jobData?.organization_id;
+      const isAssessorJob = jobOrgId && jobOrgId !== PPA_ORG_ID;
       let employeesData = [];
       try {
+        let empQuery = supabase
+          .from('employees')
+          .select('*')
+          .order('last_name', { ascending: true });
+
+        if (isAssessorJob) {
+          empQuery = empQuery.eq('organization_id', jobOrgId);
+        }
+
         const { data, error } = await withTimeout(
-          supabase
-            .from('employees')
-            .select('*')
-            .order('last_name', { ascending: true }),
+          empQuery,
           10000,
           'employees query'
         );
@@ -916,6 +932,7 @@ const JobContainer = ({
       checklistItems,  // NEW: Pass checklist items
       checklistStatus,  // NEW: Pass checklist status
       employees,  // NEW: Pass employees data
+      tenantConfig: jobTenantConfig,  // Tenant configuration for module behavior
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
@@ -1051,43 +1068,60 @@ const JobContainer = ({
     );
   }
 
-  const modules = [
+  // Build module tabs based on tenant config
+  const allModules = [
     {
       id: 'visualizations',
       name: 'Data Visualizations',
       icon: LineChart,
       component: DataVisualizations,
-      description: 'Interactive charts and analytics'
+      description: 'Interactive charts and analytics',
+      configKey: 'dataVisualizations'
     },
     {
       id: 'checklist',
       name: 'Checklist',
       icon: Building,
       component: ManagementChecklist,
-      description: 'Project checklist and documentation'
+      description: 'Project checklist and documentation',
+      configKey: 'checklist'
     },
     {
       id: 'production',
-      name: 'ProductionTracker',
+      name: getLabel(jobTenantConfig, 'productionTab', 'ProductionTracker'),
       icon: Factory,
       component: ProductionTracker,
-      description: 'Analytics and validation engine'
+      description: 'Analytics and validation engine',
+      configKey: 'production'
+    },
+    {
+      id: 'inspection-info',
+      name: getLabel(jobTenantConfig, 'productionTab', 'Inspection Info'),
+      icon: Database,
+      component: InspectionInfo,
+      description: 'Property inspection metrics and status',
+      configKey: 'inspectionInfo'
     },
     {
       id: 'market-analysis',
       name: 'Market & Land Analysis',
       icon: TrendingUp,
       component: MarketAnalysis,
-      description: 'Market analysis and land valuation'
+      description: 'Market analysis and land valuation',
+      configKey: 'marketAnalysis'
     },
     {
       id: 'final-valuation',
       name: 'Final Valuation',
       icon: DollarSign,
       component: FinalValuation,
-      description: 'Final property valuations'
+      description: 'Final property valuations',
+      configKey: 'finalValuation'
     }
   ];
+
+  // Filter modules based on tenant config
+  const modules = allModules.filter(m => jobTenantConfig.jobModules[m.configKey]);
 
   const activeModuleData = modules.find(m => m.id === activeModule);
   const ActiveComponent = activeModuleData?.component;
@@ -1192,9 +1226,9 @@ const JobContainer = ({
                     Assigned Properties Only
                   </span>
                 )}
-                {!versionError && jobData?.source_file_uploaded_at && (
+                {!versionError && (jobData?.source_file_uploaded_at || jobData?.updated_at || jobData?.created_at) && (
                   <span className="text-sm text-blue-600">
-                    • Last Updated: {new Date(jobData.source_file_uploaded_at).toLocaleDateString('en-US', {
+                    • Last Updated: {new Date(jobData.source_file_uploaded_at || jobData.updated_at || jobData.created_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                       year: 'numeric',

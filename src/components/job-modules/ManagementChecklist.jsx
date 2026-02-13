@@ -11,9 +11,11 @@ import * as XLSX from 'xlsx-js-style';
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange, properties = [], inspectionData = [], onJobUpdate }) => {
   const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
   const [editableAssessorEmail, setEditableAssessorEmail] = useState(jobData?.assessor_email || '');
+  const [editableYearOfValue, setEditableYearOfValue] = useState(jobData?.year_of_value || '');
   const [hasAssessorNameChanges, setHasAssessorNameChanges] = useState(false);
   const [checklistType, setChecklistType] = useState(jobData?.project_type || 'revaluation');
   const [hasAssessorEmailChanges, setHasAssessorEmailChanges] = useState(false);
+  const [hasYearOfValueChanges, setHasYearOfValueChanges] = useState(false);
   const [checklistItems, setChecklistItems] = useState([]);
   const [filterCategory, setFilterCategory] = useState('all');
   const [showCompleted, setShowCompleted] = useState(true);
@@ -53,6 +55,7 @@ useEffect(() => {
       // Set values from the jobData prop
       setEditableAssessorName(jobData.assessor_name || '');
       setEditableAssessorEmail(jobData.assessor_email || '');
+      setEditableYearOfValue(jobData.year_of_value || '');
       setChecklistType(jobData.project_type || 'revaluation');
     }
   }, [jobData]);
@@ -291,6 +294,28 @@ useEffect(() => {
   useEffect(() => {
     setHasAssessorEmailChanges(editableAssessorEmail !== jobData?.assessor_email);
   }, [editableAssessorEmail, jobData?.assessor_email]);
+
+  useEffect(() => {
+    const currentVal = jobData?.year_of_value ? String(jobData.year_of_value) : '';
+    setHasYearOfValueChanges(String(editableYearOfValue) !== currentVal);
+  }, [editableYearOfValue, jobData?.year_of_value]);
+
+  const saveYearOfValue = async () => {
+    try {
+      const yearVal = editableYearOfValue ? parseInt(editableYearOfValue) : null;
+      if (onJobUpdate) {
+        await onJobUpdate({ year_of_value: yearVal });
+      } else {
+        await supabase
+          .from('jobs')
+          .update({ year_of_value: yearVal })
+          .eq('id', jobData.id);
+      }
+      setHasYearOfValueChanges(false);
+    } catch (err) {
+      console.error('Error saving year of value:', err);
+    }
+  };
 
   const getCategoryIcon = (category) => {
     switch (category) {
@@ -1247,6 +1272,30 @@ useEffect(() => {
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">For Tax Year:</label>
                 <span className="text-sm text-gray-600">{dueYear}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 w-32">Year of Value:</label>
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="number"
+                    value={editableYearOfValue}
+                    onChange={(e) => setEditableYearOfValue(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm w-28"
+                    placeholder={dueYear !== 'TBD' ? String(parseInt(dueYear) - 1) : 'e.g. 2024'}
+                    min="1990"
+                    max="2100"
+                  />
+                  {hasYearOfValueChanges && (
+                    <button
+                      onClick={saveYearOfValue}
+                      className="px-3 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 flex items-center gap-1"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save
+                    </button>
+                  )}
+                  <span className="text-xs text-gray-400">Used for sales period identification</span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 w-32">Municipality:</label>

@@ -2,8 +2,9 @@
 
 .user-management-container {
   padding: 2rem;
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
+  overflow-x: hidden;
 }
 
 .um-header {
@@ -92,14 +93,16 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Table */
 .um-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .um-table thead {
@@ -108,19 +111,23 @@
 }
 
 .um-table th {
-  padding: 1rem;
+  padding: 0.625rem 0.5rem;
   text-align: left;
   font-weight: 600;
   color: #4a5568;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .um-table td {
-  padding: 1rem;
+  padding: 0.625rem 0.5rem;
   border-bottom: 1px solid #e2e8f0;
   color: #2d3748;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .um-table tbody tr:last-child td {

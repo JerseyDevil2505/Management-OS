@@ -4,6 +4,7 @@ import {
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock, Download
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
+import { getJobTenantConfig } from '../lib/tenantConfig';
 import FileUploadButton from './job-modules/FileUploadButton';
 
 // Checklist template - must match ManagementChecklist.jsx
@@ -40,10 +41,10 @@ const CHECKLIST_TEMPLATE = [
 ];
 
 // Accept jobMetrics props for live metrics integration
-const AdminJobManagement = ({ 
-  onJobSelect, 
-  jobMetrics, 
-  isLoadingMetrics, 
+const AdminJobManagement = ({
+  onJobSelect,
+  jobMetrics,
+  isLoadingMetrics,
   onJobProcessingComplete,
   jobs: propsJobs,
   planningJobs: propsPlanningJobs,
@@ -54,14 +55,22 @@ const AdminJobManagement = ({
   workflowStats,
   jobFreshness,
   onDataUpdate,
-  onRefresh
+  onRefresh,
+  isAdmin
 }) => {
   const [activeTab, setActiveTab] = useState('jobs');
+  const [jobScope, setJobScope] = useState('ppa');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
-  
+
   const [jobs, setJobs] = useState(propsJobs || []);
   const [archivedJobs, setArchivedJobs] = useState(propsArchivedJobs || []);
   const [planningJobs, setPlanningJobs] = useState(propsPlanningJobs || []);
+
+  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+  const isPpaJob = (job) => !job.organization_id || job.organization_id === PPA_ORG_ID;
+  const scopedJobs = jobScope === 'ppa' ? jobs.filter(isPpaJob) : jobs.filter(j => !isPpaJob(j));
+  const scopedPlanning = jobScope === 'ppa' ? planningJobs.filter(isPpaJob) : planningJobs.filter(j => !isPpaJob(j));
+  const scopedArchived = jobScope === 'ppa' ? archivedJobs.filter(isPpaJob) : archivedJobs.filter(j => !isPpaJob(j));
   const [managers, setManagers] = useState(propsManagers || []);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showCreatePlanning, setShowCreatePlanning] = useState(false);
@@ -2406,27 +2415,41 @@ const AdminJobManagement = ({
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Management OS - Current Jobs List
-        </h1>
-        <p className="text-gray-600">
-          Manage appraisal jobs with source file integration and team assignments
-        </p>
-      </div>
+      {/* PPA / Client Toggle - Admin only */}
+      {isAdmin && <div className="mb-6 flex items-center gap-2">
+        <button
+          onClick={() => { setJobScope('ppa'); setActiveTab('jobs'); }}
+          className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            jobScope === 'ppa'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          PPA Jobs ({jobs.filter(isPpaJob).length})
+        </button>
+        <button
+          onClick={() => { setJobScope('client'); setActiveTab('jobs'); }}
+          className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            jobScope === 'client'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          LOJIK Clients ({jobs.filter(j => !isPpaJob(j)).length})
+        </button>
+      </div>}
 
       {/* Property Totals */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-center gap-6 text-sm">
           <span className="font-medium text-blue-700">
-            📊 Total Properties: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
+            📊 Total Properties: {scopedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
           </span>
           <span className="font-medium text-green-600">
-            🏠 Residential: {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
+            🏠 Residential: {scopedJobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
           </span>
           <span className="font-medium text-purple-600">
-            🏢 Commercial: {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
+            🏢 Commercial: {scopedJobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
           </span>
         </div>
       </div>
@@ -2443,27 +2466,27 @@ const AdminJobManagement = ({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              📋 Active Jobs ({jobs.length})
+              📋 Active Jobs ({scopedJobs.length})
             </button>
             <button
               onClick={() => setActiveTab('planning')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'planning' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'planning'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              📅 Planning Jobs ({planningJobs.length})
+              📅 Planning Jobs ({scopedPlanning.length})
             </button>
             <button
               onClick={() => setActiveTab('archived')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'archived' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'archived'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              🗄️ Archived Jobs ({archivedJobs.length})
+              🗄️ Archived Jobs ({scopedArchived.length})
             </button>
             <button
               onClick={() => setActiveTab('county-hpi')}
@@ -2500,7 +2523,7 @@ const AdminJobManagement = ({
                   <h2 className="text-2xl font-bold text-gray-800">📋 Active Job Management</h2>
                   <p className="text-gray-600 mt-1">
                     {dbConnected 
-                      ? `Connected to database with ${jobs.length} active jobs tracked`
+                      ? `Connected to database with ${scopedJobs.length} active jobs tracked`
                       : 'Manage appraisal jobs with source data and team assignments'
                     }
                   </p>
@@ -2517,14 +2540,14 @@ const AdminJobManagement = ({
 
             {/* Job Cards with LIVE METRICS */}
             <div className="space-y-3">
-              {jobs.length === 0 ? (
+              {scopedJobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">📋</div>
-                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
-                  <p className="text-sm">Create your first job to get started!</p>
+                  <h4 className="text-lg font-medium mb-2">No {jobScope === 'ppa' ? 'PPA' : 'Client'} Jobs Found</h4>
+                  <p className="text-sm">{jobScope === 'client' ? 'No client municipality jobs yet.' : 'Create your first job to get started!'}</p>
                 </div>
               ) : (
-                sortJobsByBilling(jobs).map(job => {
+                sortJobsByBilling(scopedJobs).map(job => {
                   const metrics = getMetricsDisplay(job);
                   const propertyDisplay = getPropertyCountDisplay(job);
                   
@@ -2553,9 +2576,11 @@ const AdminJobManagement = ({
                               <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm text-green-600 bg-green-100`}>
                                 Active
                               </span>
-                              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
-                                {((job.percentBilled || 0) * 100).toFixed(2)}% Billed
-                              </span>
+                              {isPpaJob(job) && (
+                                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                  {((job.percentBilled || 0) * 100).toFixed(2)}% Billed
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
@@ -2582,93 +2607,131 @@ const AdminJobManagement = ({
                             </div>
                           )}
 
-                          {/* Production Metrics with LIVE DATA */}
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-blue-600">
-                                {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
-                              </div>
-                              <div className="text-xs text-gray-600">{propertyDisplay.label}</div>
-                              <div className="text-sm text-gray-600">
-                                {propertyDisplay.inspected.toLocaleString()} of {propertyDisplay.total.toLocaleString()}
-                              </div>
-                            </div>
-                            
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-green-600">
-                                {metrics.entryRate}%
-                              </div>
-                              <div className="text-xs text-gray-600">Entry Rate</div>
-                            </div>
-                            
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-red-600">
-                                {metrics.refusalRate}%
-                              </div>
-                              <div className="text-xs text-gray-600">Refusal Rate</div>
-                            </div>
-
-                            <div className="text-center">
-                              <div className={`text-lg font-bold ${
-                                metrics.commercial === 'Residential Only' ? 'text-gray-600' : 'text-purple-600'
-                              }`}>
-                                {metrics.commercial}
-                              </div>
-                              <div className="text-xs text-gray-600">Commercial Complete</div>
-                            </div>
-
-                            <div className="text-center">
-                              <div className={`text-lg font-bold ${
-                                metrics.pricing === 'Residential Only' ? 'text-gray-600' : 'text-indigo-600'
-                              }`}>
-                                {metrics.pricing}
-                              </div>
-                              <div className="text-xs text-gray-600">Pricing Complete</div>
-                            </div>
-                          </div>
-
-                          {/* Freshness Indicator */}
-                          <div className="flex items-center justify-between mb-2 px-3">
-                            <div className="flex items-center space-x-3">
-                              {jobFreshness[job.id] && (
-                                job.percentBilled < 0.91 ? (
-                                  // Inspection Phase Freshness
-                                  <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${
-                                    getUpdateStatusColor(jobFreshness[job.id].lastProductionRun, job.percentBilled)
-                                  }`}>
-                                    <Clock className="w-3 h-3" />
-                                    <span>
-                                      Production: {formatTimeAgo(jobFreshness[job.id].lastProductionRun)}
-                                    </span>
-                                    {jobFreshness[job.id].needsUpdate && (
-                                      <AlertTriangle className="w-3 h-3" />
-                                    )}
+                          {/* Metrics: PPA gets production metrics, LOJIK clients get simplified summary */}
+                          {isPpaJob(job) ? (
+                            <>
+                              {/* PPA Production Metrics with LIVE DATA */}
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {propertyDisplay.total > 0 ? Math.round((propertyDisplay.inspected / propertyDisplay.total) * 100) : 0}% Complete
                                   </div>
-                                ) : (
-                                  // Valuation Phase Indicator
-                                  <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    <TrendingUp className="w-3 h-3" />
-                                    <span>Valuation Phase</span>
-                                    {jobFreshness[job.id].lastFileUpload && (
-                                      <span className="text-blue-600">
-                                        • Sales data: {formatTimeAgo(jobFreshness[job.id].lastFileUpload)}
-                                      </span>
-                                    )}
+                                  <div className="text-xs text-gray-600">{propertyDisplay.label}</div>
+                                  <div className="text-sm text-gray-600">
+                                    {propertyDisplay.inspected.toLocaleString()} of {propertyDisplay.total.toLocaleString()}
                                   </div>
-                                )
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-green-600">{metrics.entryRate}%</div>
+                                  <div className="text-xs text-gray-600">Entry Rate</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-red-600">{metrics.refusalRate}%</div>
+                                  <div className="text-xs text-gray-600">Refusal Rate</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className={`text-lg font-bold ${metrics.commercial === 'Residential Only' ? 'text-gray-600' : 'text-purple-600'}`}>
+                                    {metrics.commercial}
+                                  </div>
+                                  <div className="text-xs text-gray-600">Commercial Complete</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className={`text-lg font-bold ${metrics.pricing === 'Residential Only' ? 'text-gray-600' : 'text-indigo-600'}`}>
+                                    {metrics.pricing}
+                                  </div>
+                                  <div className="text-xs text-gray-600">Pricing Complete</div>
+                                </div>
+                              </div>
+
+                              {/* PPA Freshness Indicator */}
+                              <div className="flex items-center justify-between mb-2 px-3">
+                                <div className="flex items-center space-x-3">
+                                  {jobFreshness[job.id] && (
+                                    job.percentBilled < 0.91 ? (
+                                      <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${
+                                        getUpdateStatusColor(jobFreshness[job.id].lastProductionRun, job.percentBilled)
+                                      }`}>
+                                        <Clock className="w-3 h-3" />
+                                        <span>Production: {formatTimeAgo(jobFreshness[job.id].lastProductionRun)}</span>
+                                        {jobFreshness[job.id].needsUpdate && <AlertTriangle className="w-3 h-3" />}
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        <TrendingUp className="w-3 h-3" />
+                                        <span>Valuation Phase</span>
+                                        {jobFreshness[job.id].lastFileUpload && (
+                                          <span className="text-blue-600">• Sales data: {formatTimeAgo(jobFreshness[job.id].lastFileUpload)}</span>
+                                        )}
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                                {jobFreshness[job.id] &&
+                                 jobFreshness[job.id].lastFileUpload &&
+                                 jobFreshness[job.id].lastProductionRun &&
+                                 new Date(jobFreshness[job.id].lastFileUpload) > new Date(jobFreshness[job.id].lastProductionRun) && (
+                                  <div className="text-xs text-orange-600 font-medium">📁 New file data available</div>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {/* LOJIK Client Summary */}
+                              {(() => {
+                                const cs = jobFreshness[job.id]?.clientSummary;
+                                return (
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                    <div className="text-center">
+                                      <div className="text-lg font-bold text-blue-600">
+                                        {cs ? cs.totalRecords.toLocaleString() : (job.totalProperties || 0).toLocaleString()}
+                                      </div>
+                                      <div className="text-xs text-gray-600">Total Line Items</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-lg font-bold text-green-600">
+                                        {cs ? cs.inspectedCount.toLocaleString() : '—'}
+                                      </div>
+                                      <div className="text-xs text-gray-600">
+                                        Inspected {cs && cs.totalRecords > 0 ? `(${cs.entryRate}%)` : ''}
+                                      </div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-lg font-bold text-purple-600">
+                                        {cs ? `${cs.residentialCount.toLocaleString()} / ${cs.commercialCount.toLocaleString()}` : '—'}
+                                      </div>
+                                      <div className="text-xs text-gray-600">Residential / Commercial</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-sm font-bold text-orange-600">
+                                        {cs?.avgMeasureDate
+                                          ? new Date(cs.avgMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                          : '—'}
+                                      </div>
+                                      <div className="text-xs text-gray-600">Avg Measured Date</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-sm font-bold text-indigo-600">
+                                        {cs?.mostRecentMeasureDate
+                                          ? new Date(cs.mostRecentMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                          : '—'}
+                                      </div>
+                                      <div className="text-xs text-gray-600">Most Recent Measured</div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Client file upload indicator */}
+                              {jobFreshness[job.id]?.lastFileUpload && (
+                                <div className="flex items-center mb-2 px-3">
+                                  <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                    <Database className="w-3 h-3" />
+                                    <span>Last upload: {formatTimeAgo(jobFreshness[job.id].lastFileUpload)}</span>
+                                  </div>
+                                </div>
                               )}
-                            </div>
-                            
-                            {/* File Upload Indicator (if newer than production) */}
-                            {jobFreshness[job.id] && 
-                             jobFreshness[job.id].lastFileUpload && 
-                             jobFreshness[job.id].lastProductionRun &&
-                             new Date(jobFreshness[job.id].lastFileUpload) > new Date(jobFreshness[job.id].lastProductionRun) && (
-                              <div className="text-xs text-orange-600 font-medium">
-                                📁 New file data available
-                              </div>
-                            )}
-                          </div>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -2679,26 +2742,28 @@ const AdminJobManagement = ({
                             📍 {job.county} County
                           </span>
                           
-                          <button
-                            onClick={() => setShowAssignmentUpload(job)}
-                            className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
-                              job.has_property_assignments
-                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            {job.has_property_assignments ? (
-                              <>
-                                <CheckCircle className="w-4 h-4" />
-                                <span>✅ {job.assignedPropertyCount || 0} Assigned</span>
-                              </>
-                            ) : (
-                              <>
-                                <Target className="w-4 h-4" />
-                                <span>🎯 Assign Properties</span>
-                              </>
-                            )}
-                          </button>
+                          {isPpaJob(job) && (
+                            <button
+                              onClick={() => setShowAssignmentUpload(job)}
+                              className={`px-3 py-2 rounded-lg flex items-center space-x-1 text-sm font-medium transition-all ${
+                                job.has_property_assignments
+                                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {job.has_property_assignments ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4" />
+                                  <span>✅ {job.assignedPropertyCount || 0} Assigned</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Target className="w-4 h-4" />
+                                  <span>🎯 Assign Properties</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                         
                         <div className="flex space-x-2">
@@ -2792,14 +2857,14 @@ const AdminJobManagement = ({
             </div>
 
             <div className="space-y-3">
-              {planningJobs.length === 0 ? (
+              {scopedPlanning.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">📅</div>
                   <h4 className="text-lg font-medium mb-2">No Planning Jobs</h4>
                   <p className="text-sm">Add planning jobs to track your future project pipeline!</p>
                 </div>
               ) : (
-                planningJobs.map(planningJob => (
+                scopedPlanning.map(planningJob => (
                   <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-yellow-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -2887,14 +2952,14 @@ const AdminJobManagement = ({
             </div>
 
             <div className="space-y-3">
-              {archivedJobs.length === 0 ? (
+              {scopedArchived.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">🗄️</div>
                   <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
                   <p className="text-sm">Completed jobs will appear here for historical reference</p>
                 </div>
               ) : (
-                archivedJobs.map(job => (
+                scopedArchived.map(job => (
                   <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-purple-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -3138,6 +3203,7 @@ const AdminJobManagement = ({
                   }
                 }}
                 standalone={true}
+                tenantConfig={getJobTenantConfig(selectedJobForUpload)}
               />
             </div>
           </div>

@@ -6,7 +6,6 @@ import {
   Upload,
   ChevronDown,
   ChevronRight,
-  Check,
   X,
   ArrowUp,
   ArrowDown
@@ -41,12 +40,13 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US');
 }
 
-const SalesReviewTab = ({ 
-  jobData = {}, 
-  properties = [], 
+const SalesReviewTab = ({
+  jobData = {},
+  properties = [],
   marketLandData = {},
   hpiData = [],
-  onUpdateJobCache = () => {} 
+  onUpdateJobCache = () => {},
+  tenantConfig = null
 }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
@@ -304,13 +304,13 @@ const SalesReviewTab = ({
 
     // Default filter: Show only properties with sales data
     if (!showAllProperties) {
-      filtered = filtered.filter(p =>
-        p.sales_date !== null &&
-        p.sales_date !== undefined &&
-        p.values_norm_time !== null &&
-        p.values_norm_time !== undefined &&
-        p.values_norm_time > 0
-      );
+      filtered = filtered.filter(p => {
+        if (!p.sales_date) return false;
+        // For tenants with normalization, require norm values; otherwise just need a sale price
+        if (p.values_norm_time !== null && p.values_norm_time !== undefined && p.values_norm_time > 0) return true;
+        if (p.sales_price && p.sales_price > 0) return true;
+        return false;
+      });
     }
 
     // Sales NU filter (using normalized codes)
@@ -881,51 +881,6 @@ const SalesReviewTab = ({
     alert(`Settings "${settingsToDelete.name}" deleted`);
   };
 
-  // Handle include/exclude override
-  const handleIncludeToggle = async (property, value) => {
-    console.log('🔘 Toggle override:', {
-      property: property.property_location,
-      propertyId: property.id,
-      value,
-      currentOverrides: Object.keys(includeOverrides).length
-    });
-
-    // Update local state immediately
-    setIncludeOverrides(prev => {
-      const newState = {
-        ...prev,
-        [property.id]: value
-      };
-      console.log('📊 New overrides count:', Object.keys(newState).length);
-      return newState;
-    });
-
-    // Save to database (property_market_analysis table)
-    try {
-      const { error } = await supabase
-        .from('property_market_analysis')
-        .upsert({
-          job_id: jobData.id,
-          property_composite_key: property.property_composite_key,
-          cme_include_override: value,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'job_id,property_composite_key'
-        });
-
-      if (error) throw error;
-      console.log('✅ Override saved to database');
-    } catch (error) {
-      console.error('Error saving include override:', error);
-      alert(`Failed to save: ${error.message}`);
-      // Revert local state on error
-      setIncludeOverrides(prev => {
-        const newState = { ...prev };
-        delete newState[property.id];
-        return newState;
-      });
-    }
-  };
 
   // Auto-normalize using HPI data (matches PreValuation logic)
   const handleAutoNormalize = async (property) => {
@@ -1841,10 +1796,6 @@ const SalesReviewTab = ({
             </div>
           </div>
         </div>
-        <div className="text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded px-4 py-2">
-          <strong>Auto-Include Logic:</strong> CSP period sales (10/1 prior-prior year to 12/31 prior year) are automatically included.
-          Use ✓ and ✗ buttons to manually override.
-        </div>
       </div>
 
       {/* Main Data Table with Horizontal Scroll */}
@@ -1862,7 +1813,6 @@ const SalesReviewTab = ({
                     title="Select all properties with normalization"
                   />
                 </th>
-                <th className="px-3 py-3 text-center font-medium text-gray-700">Include</th>
                 <SortableHeader sortKey="property_vcs" label="VCS" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader sortKey="property_block" label="Block" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHeader sortKey="property_lot" label="Lot" align="left" sortConfig={sortConfig} onSort={handleSort} />
@@ -1896,7 +1846,7 @@ const SalesReviewTab = ({
               {sortedProperties.map((prop, idx) => (
                 <tr
                   key={prop.property_composite_key || prop.id || idx}
-                  className={`hover:bg-gray-50 ${prop.isIncluded ? 'bg-green-50' : ''}`}
+                  className="hover:bg-gray-50"
                 >
                   <td className="px-2 py-2 text-center">
                     {(prop.values_norm_time || prop.values_norm_size) ? (
@@ -1909,34 +1859,6 @@ const SalesReviewTab = ({
                     ) : (
                       <span className="text-gray-300">—</span>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => handleIncludeToggle(prop, true)}
-                        className={`p-1 rounded hover:bg-green-200 ${
-                          prop.includeOverride === true
-                            ? 'bg-green-500 text-white'
-                            : prop.isAutoIncluded && prop.includeOverride === null
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-400'
-                        }`}
-                        title="Include in CME analysis"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleIncludeToggle(prop, false)}
-                        className={`p-1 rounded hover:bg-red-200 ${
-                          prop.includeOverride === false
-                            ? 'bg-red-500 text-white'
-                            : 'bg-gray-100 text-gray-400'
-                        }`}
-                        title="Exclude from CME analysis"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
                   </td>
                   <td className="px-3 py-2">{prop.property_vcs || '-'}</td>
                   <td className="px-3 py-2">{prop.property_block || '-'}</td>

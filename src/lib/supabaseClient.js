@@ -3166,7 +3166,8 @@ export const jobService = {
         source_file_version_id: componentFields.source_file_version_id,
         source_file_uploaded_at: componentFields.source_file_uploaded_at,
         
-        created_by: componentFields.created_by || componentFields.createdBy
+        created_by: componentFields.created_by || componentFields.createdBy,
+        organization_id: componentFields.organization_id
       };
       
       const { data: job, error: jobError } = await supabase
