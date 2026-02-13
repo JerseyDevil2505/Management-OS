@@ -75,7 +75,7 @@ const LandingPage = ({ onLogin }) => {
           <section className="hero-section">
             <h2>Property Assessment Copilot</h2>
             <p className="hero-description">
-              Your AI-powered partner for property valuation, market analysis, and assessment management
+              Comprehensive tools to help guide you through mass appraisal
             </p>
           </section>
 
