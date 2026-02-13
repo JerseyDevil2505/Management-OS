@@ -8,7 +8,6 @@ import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
-import AppealCoverage from './components/job-modules/AppealCoverage';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
@@ -65,7 +64,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -84,7 +83,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -1227,21 +1226,6 @@ const App = () => {
               >
                 📋 Jobs ({filterJobsForUser(appData.jobs).length})
               </button>
-              <button
-                onClick={() => handleViewChange('appeal-coverage')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'appeal-coverage'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'appeal-coverage' ? {
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
-              >
-                ⚖️ Appeal Coverage
-              </button>
               {isAdmin && tenantConfig.modules.billing && (
                 <button
                   onClick={() => handleViewChange('billing')}
@@ -1478,9 +1462,6 @@ const App = () => {
           </div>
         ))}
 
-        {activeView === 'appeal-coverage' && (
-          <AppealCoverage />
-        )}
 
         {activeView === 'users' && (isAdmin ? (
           <UserManagement onViewAs={handleViewAs} />

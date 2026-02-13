@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, TrendingUp, BarChart3, FileSpreadsheet, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Calculator, TrendingUp, BarChart3, FileSpreadsheet, DollarSign, Scale } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import SalesReviewTab from './final-valuation-tabs/SalesReviewTab';
 import MarketDataTab from './final-valuation-tabs/MarketDataTab';
 import RatableComparisonTab from './final-valuation-tabs/RatableComparisonTab';
 import SalesComparisonTab from './final-valuation-tabs/SalesComparisonTab';
 import AnalyticsTab from './final-valuation-tabs/AnalyticsTab';
+import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 
 const FinalValuation = ({
   jobData = {},
@@ -20,12 +21,17 @@ const FinalValuation = ({
   const [finalValuationData, setFinalValuationData] = useState({});
   const [isLoadingFinalData, setIsLoadingFinalData] = useState(true);
 
+  // CME navigation: when set, switches to sales-comparison tab with this BLQ pre-loaded
+  const [cmeNavigationTarget, setCmeNavigationTarget] = useState(null);
+  const salesCompRef = useRef(null);
+
   const tabs = [
     { id: 'sales-review', label: 'Sales Review', icon: FileSpreadsheet },
     { id: 'market-data', label: 'Market Data', icon: Calculator },
     { id: 'ratable-comparison', label: 'Ratable Comparison', icon: DollarSign },
     { id: 'sales-comparison', label: 'Sales Comparison (CME)', icon: TrendingUp },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 }
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'appeal-log', label: 'Appeal Log', icon: Scale }
   ];
 
   // Load final valuation data for analytics
@@ -132,6 +138,8 @@ const FinalValuation = ({
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
             tenantConfig={tenantConfig}
+            initialManualSubject={cmeNavigationTarget}
+            onManualSubjectConsumed={() => setCmeNavigationTarget(null)}
           />
         )}
 
@@ -140,6 +148,17 @@ const FinalValuation = ({
             jobData={jobData}
             properties={properties}
             finalValuationData={finalValuationData}
+          />
+        )}
+
+        {activeTab === 'appeal-log' && (
+          <AppealLogTab
+            jobData={jobData}
+            properties={properties}
+            onNavigateToCME={(blq) => {
+              setCmeNavigationTarget(blq);
+              setActiveTab('sales-comparison');
+            }}
           />
         )}
       </div>

@@ -25,7 +25,6 @@ const TENANT_CONFIGS = {
       employees: true,
       billing: true,
       payroll: true,
-      appealCoverage: true,
       organizations: true,
       revenue: true,
     },
@@ -67,7 +66,6 @@ const TENANT_CONFIGS = {
       employees: false,               // No employee management
       billing: false,                  // No billing
       payroll: false,                  // No payroll
-      appealCoverage: true,
       organizations: false,            // Managed as "Municipalities" via dashboard
       revenue: true,
     },
