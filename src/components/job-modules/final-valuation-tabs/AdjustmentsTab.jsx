@@ -350,9 +350,9 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
   // ==================== SALES STATS FOR MAPPING HINTS ====================
   const isQualifyingSale = useCallback((p) => {
-    // Must have a sale price
-    const price = p.values_norm_time || p.sales_price;
-    if (!price || price <= 0) return false;
+    // Must have a sale price > $100
+    const price = p.sales_price;
+    if (!price || price <= 100) return false;
     // Must be residential (building class > 10)
     const buildingClass = parseInt(p.asset_building_class) || 0;
     if (buildingClass <= 10) return false;
@@ -368,7 +368,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     const byTypeUse = {};
     properties.forEach(p => {
       if (!isQualifyingSale(p)) return;
-      const price = p.values_norm_time || p.sales_price;
+      const price = p.sales_price;
       const vcs = p.property_vcs || 'Unknown';
       const tu = p.asset_type_use || 'Unknown';
       if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };

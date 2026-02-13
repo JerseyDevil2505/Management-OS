@@ -1006,9 +1006,9 @@ export class MicrosystemsUpdater {
         }
       }
 
-      // CRITICAL: Clean up normalized values for invalid sales after file update
-      console.log('🧹 Cleaning up normalized values for invalid sales...');
-      await this.cleanupInvalidNormalizedValues(jobId);
+      // NOTE: cleanupInvalidNormalizedValues removed - normalized values are set explicitly
+      // by the user via PreValuation and should not be automatically wiped during file updates.
+      // The CME tool uses sales_price directly and does not depend on values_norm_time.
 
       console.log('🚀 Enhanced Microsystems UPDATER (UPSERT) complete:', results);
       return results;

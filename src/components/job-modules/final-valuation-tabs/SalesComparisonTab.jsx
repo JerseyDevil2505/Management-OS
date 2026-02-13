@@ -623,13 +623,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       seen.add(baseKey);
 
       if (!p.sales_price || p.sales_price <= 100) return false;
-      if (isLojikTenant) {
-        const bc = parseInt(p.asset_building_class) || 0;
-        if (bc <= 10) return false;
-      }
+      // Building class must be > 10 (exclude null, empty, whitespace, zero, <=10)
+      const bc = parseInt(p.asset_building_class) || 0;
+      if (bc <= 10) return false;
       return true;
     });
-  }, [properties, isLojikTenant]);
+  }, [properties]);
 
   // Compute which sales are included in the pool based on filters + overrides
   const salesPoolEntries = useMemo(() => {

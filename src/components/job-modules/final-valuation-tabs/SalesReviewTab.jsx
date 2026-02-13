@@ -302,14 +302,16 @@ const SalesReviewTab = ({
   const filteredProperties = useMemo(() => {
     let filtered = enrichedProperties;
 
-    // Default filter: Show only properties with sales data
+    // Default filter: Show only properties with valid sales data
     if (!showAllProperties) {
       filtered = filtered.filter(p => {
         if (!p.sales_date) return false;
-        // For tenants with normalization, require norm values; otherwise just need a sale price
-        if (p.values_norm_time !== null && p.values_norm_time !== undefined && p.values_norm_time > 0) return true;
-        if (p.sales_price && p.sales_price > 0) return true;
-        return false;
+        // Must have a sale price greater than $100
+        if (!p.sales_price || p.sales_price <= 100) return false;
+        // Building class must be > 10 (exclude null, empty, whitespace, zero, <=10)
+        const bc = parseInt(p.asset_building_class) || 0;
+        if (bc <= 10) return false;
+        return true;
       });
     }
 
