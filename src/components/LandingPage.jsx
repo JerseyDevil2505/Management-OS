@@ -73,9 +73,9 @@ const LandingPage = ({ onLogin }) => {
       <main className="landing-main">
         <div className="content-wrapper">
           <section className="hero-section">
-            <h2>Management Operating System</h2>
+            <h2>Property Assessment Copilot</h2>
             <p className="hero-description">
-              Streamline your property appraisal workflow with our comprehensive management platform
+              Your AI-powered partner for property valuation, market analysis, and assessment management
             </p>
           </section>
 
