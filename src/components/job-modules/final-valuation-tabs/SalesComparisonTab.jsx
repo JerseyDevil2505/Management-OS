@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -104,6 +104,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   ]);
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+
+  // ==================== APPEAL LOG → CME NAVIGATION ====================
+  useEffect(() => {
+    if (initialManualSubject && initialManualSubject.block) {
+      setManualSubject({
+        block: initialManualSubject.block,
+        lot: initialManualSubject.lot || '',
+        qualifier: initialManualSubject.qualifier || ''
+      });
+      setActiveSubTab('detailed');
+      if (onManualSubjectConsumed) onManualSubjectConsumed();
+    }
+  }, [initialManualSubject]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ==================== SALES POOL STATE ====================
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
@@ -1111,7 +1124,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
 
-      // Auto-scroll to results after a short delay to allow rendering
+      // Auto-scroll to results after rendering completes
       setTimeout(() => {
         if (detailedResultsRef.current) {
           detailedResultsRef.current.scrollIntoView({
@@ -1119,7 +1132,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             block: 'start'
           });
         }
-      }, 100);
+      }, 300);
 
     } catch (error) {
       console.error('Error in manual evaluation:', error);
