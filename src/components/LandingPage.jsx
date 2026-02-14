@@ -113,20 +113,6 @@ const LandingPage = ({ onLogin }) => {
 
             <div className="login-footer">
               <p>Need help? Contact your system administrator</p>
-              <button
-                type="button"
-                onClick={() => onLogin({
-                  email: 'dev@lojik.com',
-                  role: 'admin',
-                  employeeData: {
-                    name: 'Development Mode',
-                    role: 'admin'
-                  }
-                })}
-                className="dev-bypass-button"
-              >
-                Development Access
-              </button>
             </div>
           </div>
 
