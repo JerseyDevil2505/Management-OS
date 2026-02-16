@@ -658,36 +658,34 @@ const UserManagement = ({ onViewAs }) => {
             <h3>Create User Account</h3>
             <form onSubmit={handleCreateUser}>
               <div className="um-form-group">
-                <label>User Type</label>
-                <select
-                  value={newUser.organizationId === PPA_ORG_ID ? 'ppa' : 'lojik'}
-                  onChange={(e) => {
-                    if (e.target.value === 'ppa') {
-                      setNewUser({...newUser, organizationId: PPA_ORG_ID, selectedOrgIds: [], role: 'Management'});
-                    } else {
-                      setNewUser({...newUser, organizationId: '', selectedOrgIds: [], role: 'Admin'});
-                    }
-                  }}
-                >
-                  <option value="lojik">LOJIK Client</option>
-                  <option value="ppa">PPA Internal</option>
-                </select>
+                <label>Account Type</label>
+                <div className="um-type-toggle">
+                  <button
+                    type="button"
+                    className={`um-type-btn ${newUser.organizationId !== PPA_ORG_ID ? 'active' : ''}`}
+                    onClick={() => setNewUser({...newUser, organizationId: '', selectedOrgIds: [], role: 'Admin'})}
+                  >
+                    LOJIK Client
+                  </button>
+                  <button
+                    type="button"
+                    className={`um-type-btn ${newUser.organizationId === PPA_ORG_ID ? 'active' : ''}`}
+                    onClick={() => setNewUser({...newUser, organizationId: PPA_ORG_ID, selectedOrgIds: [], role: 'Management'})}
+                  >
+                    PPA Internal
+                  </button>
+                </div>
               </div>
 
               {newUser.organizationId !== PPA_ORG_ID && (
                 <div className="um-form-group">
-                  <label>Organizations (select all towns for this user)</label>
-                  <div style={{
-                    border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px',
-                    maxHeight: '160px', overflowY: 'auto', background: '#f9fafb'
-                  }}>
+                  <label>Assigned Towns</label>
+                  <div className="um-org-checklist">
                     {orgList.filter(org => org.org_type !== 'internal').map(org => (
-                      <label key={org.id} style={{
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        padding: '6px 8px', cursor: 'pointer', borderRadius: '4px',
-                        background: newUser.selectedOrgIds.includes(org.id) ? '#dbeafe' : 'transparent',
-                        fontSize: '0.875rem'
-                      }}>
+                      <label
+                        key={org.id}
+                        className={`um-org-item ${newUser.selectedOrgIds.includes(org.id) ? 'selected' : ''}`}
+                      >
                         <input
                           type="checkbox"
                           checked={newUser.selectedOrgIds.includes(org.id)}
@@ -702,13 +700,14 @@ const UserManagement = ({ onViewAs }) => {
                             });
                           }}
                         />
-                        {org.name}
+                        <span className="um-org-name">{org.name}</span>
                       </label>
                     ))}
                   </div>
-                  {newUser.selectedOrgIds.length > 1 && (
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
-                      {newUser.selectedOrgIds.length} towns selected — user will see all towns on login
+                  {newUser.selectedOrgIds.length > 0 && (
+                    <div className="um-org-count">
+                      {newUser.selectedOrgIds.length} {newUser.selectedOrgIds.length === 1 ? 'town' : 'towns'} selected
+                      {newUser.selectedOrgIds.length > 1 && ' — user will see all towns on login'}
                     </div>
                   )}
                 </div>
