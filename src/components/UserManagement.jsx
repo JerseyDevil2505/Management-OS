@@ -12,6 +12,7 @@ const UserManagement = ({ onViewAs }) => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [employeeOrgLinks, setEmployeeOrgLinks] = useState({});
   
   // Form states
   const [newUser, setNewUser] = useState({
@@ -21,13 +22,15 @@ const UserManagement = ({ onViewAs }) => {
     password: '',
     confirmPassword: '',
     role: 'Admin',
-    organizationId: ''
+    organizationId: '',
+    selectedOrgIds: []
   });
   const [resetPassword, setResetPassword] = useState('');
 
   useEffect(() => {
     loadUsers();
     loadOrganizations();
+    loadEmployeeOrgLinks();
   }, []);
 
   const loadOrganizations = async () => {
@@ -41,6 +44,23 @@ const UserManagement = ({ onViewAs }) => {
       setOrganizations(orgMap);
     } catch (err) {
       console.error('Error loading organizations:', err);
+    }
+  };
+
+  const loadEmployeeOrgLinks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employee_organizations')
+        .select('employee_id, organization_id, is_primary');
+      if (error) throw error;
+      const linkMap = {};
+      (data || []).forEach(link => {
+        if (!linkMap[link.employee_id]) linkMap[link.employee_id] = [];
+        linkMap[link.employee_id].push(link);
+      });
+      setEmployeeOrgLinks(linkMap);
+    } catch (err) {
+      console.error('Error loading employee org links:', err);
     }
   };
 
@@ -105,15 +125,20 @@ const UserManagement = ({ onViewAs }) => {
       return;
     }
 
-    if (!newUser.organizationId) {
-      setError('Please select an organization');
+    // For LOJIK clients, require at least one org selected
+    const lojikOrgIds = newUser.selectedOrgIds.filter(id => id !== PPA_ORG_ID);
+    const isPpaUser = newUser.organizationId === PPA_ORG_ID;
+
+    if (!isPpaUser && lojikOrgIds.length === 0 && !newUser.organizationId) {
+      setError('Please select at least one organization');
       return;
     }
 
     try {
       const emailTrimmed = newUser.email.trim();
       const fullName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
-      const selectedOrgId = newUser.organizationId;
+      // Primary org: for PPA users use PPA, for LOJIK use first selected org
+      const selectedOrgId = isPpaUser ? PPA_ORG_ID : (lojikOrgIds[0] || newUser.organizationId);
 
       // Get current auth user for created_by
       const { data: { session } } = await supabase.auth.getSession();
@@ -190,9 +215,31 @@ const UserManagement = ({ onViewAs }) => {
         .update({ initial_password: newUser.password })
         .eq('id', employeeId);
 
+      // Save all organization links in junction table
+      const orgIdsToLink = isPpaUser ? [] : lojikOrgIds;
+      if (orgIdsToLink.length > 0) {
+        // Remove existing links for this employee
+        await supabase
+          .from('employee_organizations')
+          .delete()
+          .eq('employee_id', employeeId);
+
+        // Insert all org links
+        const orgLinks = orgIdsToLink.map((orgId, idx) => ({
+          employee_id: employeeId,
+          organization_id: orgId,
+          is_primary: orgId === selectedOrgId
+        }));
+        const { error: linkError } = await supabase
+          .from('employee_organizations')
+          .insert(orgLinks);
+        if (linkError) console.error('Error linking orgs:', linkError);
+      }
+
       setSuccessMessage(`Account created for ${fullName}. They should check their email to confirm.`);
+      loadEmployeeOrgLinks();
       setShowCreateModal(false);
-      setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Admin', organizationId: '' });
+      setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Admin', organizationId: '', selectedOrgIds: [] });
       loadUsers();
     } catch (err) {
       console.error('Error creating user:', err);
@@ -495,12 +542,22 @@ const UserManagement = ({ onViewAs }) => {
                         <td>{user.first_name} {user.last_name}</td>
                         <td>{user.email}</td>
                         <td>
-                          <span style={{
-                            padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600',
-                            background: '#dbeafe', color: '#1e40af'
-                          }}>
-                            {getOrgName(user.organization_id)}
-                          </span>
+                          {(() => {
+                            const links = employeeOrgLinks[user.id] || [];
+                            const orgIds = links.length > 0
+                              ? links.map(l => l.organization_id)
+                              : (user.organization_id ? [user.organization_id] : []);
+                            return orgIds.map(orgId => (
+                              <span key={orgId} style={{
+                                display: 'inline-block',
+                                padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600',
+                                background: '#dbeafe', color: '#1e40af',
+                                margin: '1px 2px'
+                              }}>
+                                {getOrgName(orgId)}
+                              </span>
+                            ));
+                          })()}
                         </td>
                         <td>
                           <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
@@ -601,23 +658,61 @@ const UserManagement = ({ onViewAs }) => {
             <h3>Create User Account</h3>
             <form onSubmit={handleCreateUser}>
               <div className="um-form-group">
-                <label>Organization</label>
+                <label>User Type</label>
                 <select
-                  value={newUser.organizationId}
+                  value={newUser.organizationId === PPA_ORG_ID ? 'ppa' : 'lojik'}
                   onChange={(e) => {
-                    const orgId = e.target.value;
-                    const isExternal = orgId && orgId !== PPA_ORG_ID && organizations[orgId]?.org_type !== 'internal';
-                    setNewUser({...newUser, organizationId: orgId, role: isExternal ? 'Admin' : newUser.role});
+                    if (e.target.value === 'ppa') {
+                      setNewUser({...newUser, organizationId: PPA_ORG_ID, selectedOrgIds: [], role: 'Management'});
+                    } else {
+                      setNewUser({...newUser, organizationId: '', selectedOrgIds: [], role: 'Admin'});
+                    }
                   }}
                 >
-                  <option value="">-- Select Organization --</option>
-                  {orgList.map(org => (
-                    <option key={org.id} value={org.id}>
-                      {org.org_type === 'internal' ? 'PPA Inc' : org.name}
-                    </option>
-                  ))}
+                  <option value="lojik">LOJIK Client</option>
+                  <option value="ppa">PPA Internal</option>
                 </select>
               </div>
+
+              {newUser.organizationId !== PPA_ORG_ID && (
+                <div className="um-form-group">
+                  <label>Organizations (select all towns for this user)</label>
+                  <div style={{
+                    border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px',
+                    maxHeight: '160px', overflowY: 'auto', background: '#f9fafb'
+                  }}>
+                    {orgList.filter(org => org.org_type !== 'internal').map(org => (
+                      <label key={org.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '6px 8px', cursor: 'pointer', borderRadius: '4px',
+                        background: newUser.selectedOrgIds.includes(org.id) ? '#dbeafe' : 'transparent',
+                        fontSize: '0.875rem'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={newUser.selectedOrgIds.includes(org.id)}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...newUser.selectedOrgIds, org.id]
+                              : newUser.selectedOrgIds.filter(id => id !== org.id);
+                            setNewUser({
+                              ...newUser,
+                              selectedOrgIds: updated,
+                              organizationId: updated[0] || ''
+                            });
+                          }}
+                        />
+                        {org.name}
+                      </label>
+                    ))}
+                  </div>
+                  {newUser.selectedOrgIds.length > 1 && (
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
+                      {newUser.selectedOrgIds.length} towns selected — user will see all towns on login
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div className="um-form-group" style={{ flex: 1 }}>
