@@ -4,6 +4,8 @@ import { supabase, jobService, propertyService } from '../lib/supabaseClient';
 const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
   const [orgJobs, setOrgJobs] = useState([]);
   const [organization, setOrganization] = useState(null);
+  const [allOrganizations, setAllOrganizations] = useState([]);
+  const [selectedSetupOrg, setSelectedSetupOrg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSetup, setShowSetup] = useState(false);
 
@@ -52,40 +54,60 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
   const loadAssessorData = async () => {
     try {
       setLoading(true);
-      const orgId = user?.employeeData?.organization_id;
-      if (!orgId) {
+      const employeeId = user?.employeeData?.id;
+      const primaryOrgId = user?.employeeData?.organization_id;
+      if (!primaryOrgId) {
         setLoading(false);
         return;
       }
 
-      // Load organization details
-      const { data: org } = await supabase
+      // Load all linked organization IDs from junction table
+      let orgIds = [primaryOrgId];
+      if (employeeId) {
+        const { data: links } = await supabase
+          .from('employee_organizations')
+          .select('organization_id')
+          .eq('employee_id', employeeId);
+        if (links && links.length > 0) {
+          orgIds = [...new Set(links.map(l => l.organization_id))];
+        }
+      }
+
+      // Load all linked organizations
+      const { data: orgs } = await supabase
         .from('organizations')
         .select('*')
-        .eq('id', orgId)
-        .single();
+        .in('id', orgIds)
+        .order('name');
 
-      if (org) {
-        setOrganization(org);
-        // Pre-fill form from org data
+      const orgsList = orgs || [];
+      setAllOrganizations(orgsList);
+
+      // Set primary org for header display
+      const primaryOrg = orgsList.find(o => o.id === primaryOrgId) || orgsList[0];
+      setOrganization(primaryOrg);
+
+      // Pre-fill form from first org
+      if (primaryOrg) {
+        setSelectedSetupOrg(primaryOrg);
         setJobForm(prev => ({
           ...prev,
-          municipality: org.name || '',
-          name: `${org.name} ${new Date().getFullYear()}`
+          municipality: primaryOrg.name || '',
+          name: `${primaryOrg.name} ${new Date().getFullYear()}`
         }));
       }
 
-      // Load jobs for this organization
+      // Load jobs for ALL linked organizations
       const { data: jobs } = await supabase
         .from('jobs')
         .select('*')
-        .eq('organization_id', orgId)
+        .in('organization_id', orgIds)
         .order('created_at', { ascending: false });
 
       setOrgJobs(jobs || []);
 
-      // If single_job_mode and has a job, go straight to it
-      if (org?.single_job_mode && jobs?.length > 0) {
+      // If single org, single_job_mode, and has a job, go straight to it
+      if (orgsList.length === 1 && primaryOrg?.single_job_mode && jobs?.length > 0) {
         const job = jobs[0];
         onJobSelect(job);
         return;
@@ -229,19 +251,20 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
           appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
         },
         created_by: user?.id,
-        organization_id: organization?.id || user?.employeeData?.organization_id
+        organization_id: selectedSetupOrg?.id || organization?.id || user?.employeeData?.organization_id
       };
 
       const createdJob = await jobService.create(jobData);
 
       // Pre-fill assessor contact info from org
-      if (organization?.id) {
+      const setupOrg = selectedSetupOrg || organization;
+      if (setupOrg?.id) {
         const jobUpdate = {};
-        if (organization.primary_contact_name) {
-          jobUpdate.assessor_name = organization.primary_contact_name;
+        if (setupOrg.primary_contact_name) {
+          jobUpdate.assessor_name = setupOrg.primary_contact_name;
         }
-        if (organization.primary_contact_email) {
-          jobUpdate.assessor_email = organization.primary_contact_email;
+        if (setupOrg.primary_contact_email) {
+          jobUpdate.assessor_email = setupOrg.primary_contact_email;
         }
         if (Object.keys(jobUpdate).length > 0) {
           await supabase
@@ -291,11 +314,11 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
       });
 
       // Update organization line_item_count
-      if (organization?.id && result.processed) {
+      if (setupOrg?.id && result.processed) {
         await supabase
           .from('organizations')
           .update({ line_item_count: result.processed })
-          .eq('id', organization.id);
+          .eq('id', setupOrg.id);
       }
 
       setProcessingStatus({ step: 'Complete!', progress: 100, logs: [] });
@@ -444,12 +467,16 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
       {/* Welcome Header */}
       <div style={{ marginBottom: '32px' }}>
         <h2 style={{ fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
-          {organization?.name || 'Your Dashboard'}
+          {allOrganizations.length > 1
+            ? `${user?.employeeData?.first_name || ''}'s Municipalities`
+            : (organization?.name || 'Your Dashboard')}
         </h2>
         <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>
-          {orgJobs.length > 0
-            ? `You have ${orgJobs.length} assessment job${orgJobs.length > 1 ? 's' : ''}.`
-            : 'Get started by uploading your property data.'}
+          {allOrganizations.length > 1
+            ? `${allOrganizations.length} municipalities · ${orgJobs.length} job${orgJobs.length !== 1 ? 's' : ''}`
+            : orgJobs.length > 0
+              ? `You have ${orgJobs.length} assessment job${orgJobs.length > 1 ? 's' : ''}.`
+              : 'Get started by uploading your property data.'}
         </p>
       </div>
 
@@ -488,6 +515,15 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
                     </div>
                     <div style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '4px' }}>
                       {job.municipality}{job.county ? `, ${job.county} County` : ''} &middot; {job.vendor_type || 'Unknown'} &middot; {(job.total_properties || 0).toLocaleString()} properties
+                      {allOrganizations.length > 1 && (() => {
+                        const org = allOrganizations.find(o => o.id === job.organization_id);
+                        return org ? (
+                          <span style={{
+                            marginLeft: '8px', padding: '1px 8px', background: '#dbeafe',
+                            color: '#1e40af', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '600'
+                          }}>{org.name}</span>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -520,9 +556,7 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
             <h3 style={{ fontSize: '1.35rem', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
               {orgJobs.length > 0
                 ? 'Create New Assessment Job'
-                : organization?.single_job_mode
-                  ? 'Set Up Your Municipality'
-                  : 'Set Up Your Assessment'}
+                : 'Set Up Your Municipality'}
             </h3>
             <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>
               Upload your property data and code definitions files to get started.
@@ -537,6 +571,39 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
             <h4 style={{ fontWeight: '600', color: '#92400e', marginBottom: '16px', fontSize: '0.95rem' }}>
               Job Information
             </h4>
+
+            {/* Org selector for multi-org users */}
+            {allOrganizations.length > 1 && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '500', color: '#374151', marginBottom: '6px' }}>
+                  Municipality *
+                </label>
+                <select
+                  value={selectedSetupOrg?.id || ''}
+                  onChange={e => {
+                    const org = allOrganizations.find(o => o.id === e.target.value);
+                    setSelectedSetupOrg(org);
+                    if (org) {
+                      setJobForm(prev => ({
+                        ...prev,
+                        municipality: org.name,
+                        name: `${org.name} ${new Date().getFullYear()}`
+                      }));
+                    }
+                  }}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: '6px',
+                    border: '2px solid #2563eb', fontSize: '0.95rem', boxSizing: 'border-box',
+                    fontWeight: '600', background: '#eff6ff', color: '#1e40af'
+                  }}
+                >
+                  {allOrganizations.map(org => (
+                    <option key={org.id} value={org.id}>{org.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '500', color: '#374151', marginBottom: '6px' }}>
