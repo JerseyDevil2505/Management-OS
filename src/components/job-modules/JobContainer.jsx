@@ -275,7 +275,7 @@ const JobContainer = ({
 
       // Use client-side pagination with batches
       if (count && count > 0) {
-        const batchSize = 100;
+        const batchSize = 500;
         const totalBatches = Math.ceil(count / batchSize);
         let retryCount = 0;
         const maxRetries = 3;
@@ -341,7 +341,7 @@ const JobContainer = ({
               console.error(`  Full Error Object:`, batchError);
 
               // Retry transient/network failures up to maxRetries
-              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout')));
+              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout') || batchError.message.toLowerCase().includes('schema cache')));
               if (transient && retryCount < maxRetries) {
                 retryCount++;
                 const backoff = 500 * retryCount;
@@ -477,7 +477,7 @@ const JobContainer = ({
 
             // Detect transient/network errors and retry the current batch up to maxRetries
             const transientMessage = (error.message || '').toString().toLowerCase();
-            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || error.name === 'TypeError';
+            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || transientMessage.includes('schema cache') || error.name === 'TypeError';
 
             if (isTransient && retryCount < maxRetries) {
               retryCount++;
