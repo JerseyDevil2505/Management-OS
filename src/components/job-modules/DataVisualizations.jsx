@@ -15,7 +15,7 @@ const DataVisualizations = ({ jobData, properties }) => {
 
   // Market History filter toggles
   const [marketFilters, setMarketFilters] = useState({
-    excludeHighBuildingClass: true, // Exclude building class > 10
+    requireHighBuildingClass: true, // Only include building class > 10 (exclude blank/empty/10)
     usableSalesOnly: true           // Only sales codes 0, 00, 7, 07, 32, 36
   });
 
@@ -103,10 +103,15 @@ const DataVisualizations = ({ jobData, properties }) => {
 
     // Apply optional market history filters
     const qualifiedProperties = filteredProperties.filter(prop => {
-      // Building Class filter: exclude > 10
-      if (marketFilters.excludeHighBuildingClass) {
-        const bc = parseInt(prop.asset_building_class, 10);
-        if (!isNaN(bc) && bc > 10) return false;
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return false;
+
+      // Building Class filter: only include class > 10 (exclude blank, empty, 0, and 10)
+      if (marketFilters.requireHighBuildingClass) {
+        const bcRaw = prop.asset_building_class;
+        if (!bcRaw || String(bcRaw).trim() === '') return false;
+        const bc = parseInt(bcRaw, 10);
+        if (isNaN(bc) || bc <= 10) return false;
       }
 
       // Sales Code filter: only usable codes
@@ -119,7 +124,7 @@ const DataVisualizations = ({ jobData, properties }) => {
     });
     
     qualifiedProperties.forEach(prop => {
-      if (prop.sales_date && prop.sales_price && prop.sales_price > 0) {
+      if (prop.sales_date && prop.sales_price && prop.sales_price > 100) {
         const year = new Date(prop.sales_date).getFullYear();
         if (!salesByYear[year]) {
           salesByYear[year] = {
@@ -159,6 +164,9 @@ const DataVisualizations = ({ jobData, properties }) => {
     const endDate = new Date(nuDateRange.end);
 
     filteredProperties.forEach(prop => {
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return;
+
       if (prop.sales_date) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
@@ -214,6 +222,9 @@ const DataVisualizations = ({ jobData, properties }) => {
     nonUsableCodes.push('33', '34', '35');
 
     filteredProperties.forEach(prop => {
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return;
+
       if (prop.sales_date && prop.sales_price) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
@@ -387,8 +398,8 @@ const DataVisualizations = ({ jobData, properties }) => {
           const vcs = prop.property_vcs || 'Unknown';
           const salePrice = parseFloat(prop.sales_price) || 0;
 
-          // Only include sales with valid prices
-          if (salePrice > 0) {
+          // Only include sales with valid prices (hard rule: exclude sales <= $100)
+          if (salePrice > 100) {
             if (!vcsTotals[vcs]) {
               vcsTotals[vcs] = {
                 vcs,
@@ -685,11 +696,11 @@ const DataVisualizations = ({ jobData, properties }) => {
               <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={marketFilters.excludeHighBuildingClass}
-                  onChange={(e) => setMarketFilters({ ...marketFilters, excludeHighBuildingClass: e.target.checked })}
+                  checked={marketFilters.requireHighBuildingClass}
+                  onChange={(e) => setMarketFilters({ ...marketFilters, requireHighBuildingClass: e.target.checked })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                Exclude Bldg Class &gt; 10
+                Bldg Class &gt; 10 Only
               </label>
               <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
                 <input

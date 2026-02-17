@@ -623,36 +623,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return desc && desc !== code ? `${code} - ${desc}` : code;
   }, [codeDescriptions]);
 
-  // Pre-build package sale lookup map ONCE (O(n) vs O(n²) from calling getPackageSaleData per property)
-  const packageLookup = useMemo(() => {
-    const groups = {};
-    properties.forEach(p => {
-      if (!p.sales_date || !p.sales_book || !p.sales_page) return;
-      const key = `${p.sales_date}|${p.sales_book}|${p.sales_page}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(p);
-    });
-    const lookup = {};
-    for (const [key, group] of Object.entries(groups)) {
-      if (group.length > 1) {
-        const hasFarm = group.some(p => p.property_m4_class === '3A');
-        // Calculate combined lot SF for farm package acre calculations
-        const combinedLotSF = group.reduce((sum, p) => {
-          const sf = parseFloat(p.asset_lot_sf) || 0;
-          const acres = parseFloat(p.asset_lot_acre) || 0;
-          return sum + sf + (acres * 43560);
-        }, 0);
-        const info = {
-          isPackage: true,
-          isFarmPackage: hasFarm,
-          combined_lot_acres: combinedLotSF / 43560,
-          package_count: group.length
-        };
-        group.forEach(p => { lookup[p.id] = info; });
-      }
-    }
-    return lookup;
-  }, [properties]);
 
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
@@ -697,10 +667,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       const included = override === true ? true : override === false ? false : autoIncluded;
 
-      // Detect farm/package sales using pre-built lookup (O(1))
-      const packageData = packageLookup[p.id];
-      const isFarm = packageData?.isFarmPackage || p.property_m4_class === '3A';
-      const isPackage = !!packageData?.isPackage;
+      // Detect farm/package sales using centralized _pkg (computed once in JobContainer)
+      const packageData = p._pkg;
+      const isFarm = packageData?.is_farm_package || p.property_m4_class === '3A';
+      const isPackage = !!packageData;
 
       return {
         ...p,
@@ -715,7 +685,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         _packageData: packageData,
       };
     });
-  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode, packageLookup]);
+  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
 
   const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
 
@@ -1592,14 +1562,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
-          // Farm sales filter - segregate farm and non-farm sales (using pre-built lookup)
-          const compPkgInfo = packageLookup[comp.id];
-          const compIsFarm = compPkgInfo?.isFarmPackage || comp.property_m4_class === '3A';
+          // Farm sales filter - segregate farm and non-farm sales (using centralized _pkg)
+          const compPkgInfo = comp._pkg;
+          const compIsFarm = compPkgInfo?.is_farm_package || comp.property_m4_class === '3A';
 
           if (compFilters.farmSalesMode) {
             // Farm Sales Mode ON: segregate farm and non-farm
-            const subjectPkgInfo = packageLookup[subject.id];
-            const subjectIsFarm = subjectPkgInfo?.isFarmPackage || subject.property_m4_class === '3A';
+            const subjectPkgInfo = subject._pkg;
+            const subjectIsFarm = subjectPkgInfo?.is_farm_package || subject.property_m4_class === '3A';
 
             if (subjectIsFarm) {
               if (!compIsFarm) {
@@ -2022,16 +1992,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       case 'lot_size_acre':
         // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
         if (compFilters?.farmSalesMode) {
-          const subjectPkgInfo = packageLookup[subject.id];
-          const compPkgInfo = packageLookup[comp.id];
+          const subjectPkgInfo = subject._pkg;
+          const compPkgInfo = comp._pkg;
 
-          if (subjectPkgInfo?.isFarmPackage && subjectPkgInfo.combined_lot_acres > 0) {
+          if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
             subjectValue = subjectPkgInfo.combined_lot_acres;
           } else {
             subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           }
 
-          if (compPkgInfo?.isFarmPackage && compPkgInfo.combined_lot_acres > 0) {
+          if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
             compValue = compPkgInfo.combined_lot_acres;
           } else {
             compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;

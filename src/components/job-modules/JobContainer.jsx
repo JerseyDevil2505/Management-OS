@@ -10,6 +10,60 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 
+// Centralized package detection - O(n) single pass
+// Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
+const enrichPropertiesWithPackageData = (properties) => {
+  const groups = {};
+  properties.forEach(p => {
+    if (!p.sales_date || !p.sales_book || !p.sales_page) return;
+    const key = `${p.sales_date}|${p.sales_book}|${p.sales_page}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+  for (const [, group] of Object.entries(groups)) {
+    if (group.length <= 1) continue;
+    const hasFarm = group.some(p => {
+      const propClass = p.property_m4_class || p.property_class;
+      return propClass === '3B';
+    });
+    const combinedLotSF = group.reduce((sum, p) => {
+      const sf = parseFloat(p.asset_lot_sf) || 0;
+      const acres = parseFloat(p.asset_lot_acre) || 0;
+      return sum + sf + (acres * 43560);
+    }, 0);
+    // Determine additional card vs multi-property package
+    const baseKeys = new Set();
+    const cardIds = new Set();
+    group.forEach(p => {
+      const block = (p.property_block || '').toString().trim();
+      const lot = (p.property_lot || '').toString().trim();
+      const qual = (p.property_qualifier || '').toString().trim();
+      baseKeys.add(`${block}-${lot}-${qual}`);
+      let card = p.property_card || p.property_addl_card || null;
+      if (!card && p.property_composite_key) {
+        const parts = p.property_composite_key.split('-').map(s => s.trim());
+        card = parts[4] || parts[3] || null;
+      }
+      if (card) cardIds.add(String(card).trim().toUpperCase());
+    });
+    let isAdditionalCard = false;
+    if (baseKeys.size === 1 && cardIds.size > 1) {
+      isAdditionalCard = true;
+    }
+    const info = {
+      is_package_sale: true,
+      is_farm_package: hasFarm,
+      is_additional_card: isAdditionalCard,
+      package_count: group.length,
+      combined_lot_sf: combinedLotSF,
+      combined_lot_acres: combinedLotSF / 43560,
+      package_id: `${group[0].sales_book}-${group[0].sales_page}-${group[0].sales_date}`,
+      package_properties: group.map(p => p.property_composite_key)
+    };
+    group.forEach(p => { p._pkg = info; });
+  }
+};
+
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
   selectedJob,
@@ -440,6 +494,7 @@ const JobContainer = ({
 
             // Set partial data and error - but ensure state is safe
             try {
+              enrichPropertiesWithPackageData(allProperties);
               setProperties(allProperties);
               const errorMsg = `Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message || 'Unknown database error'}`;
               setVersionError(errorMsg);
@@ -456,6 +511,9 @@ const JobContainer = ({
             return; // EXIT THE FUNCTION COMPLETELY
           }
         }
+
+        // Centralized package detection - compute once for all child components
+        enrichPropertiesWithPackageData(allProperties);
 
         setProperties(allProperties);
         setLoadingProgress(100);

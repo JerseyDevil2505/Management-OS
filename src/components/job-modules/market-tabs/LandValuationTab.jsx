@@ -1468,35 +1468,15 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Auto-categorize teardowns and pre-construction
       let category = saleCategories[prop.id];
-      // Determine additional-cards using centralized analyzer to avoid false positives
-      try {
-        const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
-        if (packageAnalysis && packageAnalysis.is_additional_card && !isPackage) {
-          prop.packageData = {
-            is_package: false,
-            package_type: 'additional_cards',
-            package_count: packageAnalysis.package_count || 2,
-            properties: packageAnalysis.package_properties ? packageAnalysis.package_properties.map(p => p.composite_key) : []
-          };
-        }
-      } catch (e) {
-        // Fallback: keep previous heuristic if analyzer fails
-        const hasAdditionalCards = properties.some(p =>
-          p.property_block === prop.property_block &&
-          p.property_lot === prop.property_lot &&
-          p.property_addl_card &&
-          p.property_addl_card !== 'NONE' &&
-          p.property_addl_card !== 'M' &&
-          p.sales_date === prop.sales_date
-        );
-
-        if (hasAdditionalCards && !isPackage) {
-          prop.packageData = {
-            is_package: true,
-            package_type: 'additional_cards',
-            package_count: 2
-          };
-        }
+      // Determine additional-cards using centralized _pkg (computed once in JobContainer)
+      const packageAnalysis = prop._pkg;
+      if (packageAnalysis && packageAnalysis.is_additional_card && !isPackage) {
+        prop.packageData = {
+          is_package: false,
+          package_type: 'additional_cards',
+          package_count: packageAnalysis.package_count || 2,
+          properties: packageAnalysis.package_properties || []
+        };
       }
       if (!category) {
         if (prop.property_m4_class === '2' && prop.values_mod_improvement < 10000) {
@@ -1528,8 +1508,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // Consolidate package sales using centralized analyzer
     Object.entries(packageGroups).forEach(([key, group]) => {
-      // Use centralized package analyzer to determine exact package type
-      const packageData = interpretCodes.getPackageSaleData(properties, group[0]);
+      // Use centralized _pkg data (computed once in JobContainer)
+      const packageData = group[0]._pkg;
 
       if (packageData) {
         // If packageData indicates an additional cards scenario
@@ -1540,7 +1520,7 @@ const getPricePerUnit = useCallback((price, size) => {
             is_package: false,
             package_type: 'additional_cards',
             package_count: packageData.package_count || group.length,
-            properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+            properties: packageData.package_properties || group.map(p => p.property_composite_key)
           };
           finalSales.push(enriched);
           if (enriched.autoCategory && !saleCategories[enriched.id]) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
@@ -1605,7 +1585,7 @@ const getPricePerUnit = useCallback((price, size) => {
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
-                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+                properties: packageData.package_properties || group.map(p => p.property_composite_key)
               },
               autoCategory: 'package'
             };
@@ -1628,7 +1608,7 @@ const getPricePerUnit = useCallback((price, size) => {
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
-                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+                properties: packageData.package_properties || group.map(p => p.property_composite_key)
               },
               autoCategory: 'package'
             };
