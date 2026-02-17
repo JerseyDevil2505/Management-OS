@@ -453,10 +453,45 @@ const App = () => {
       if (components.includes('jobs') || components.includes('all')) {
         console.log('📊 Loading jobs data...');
 
+        // LEAN QUERY: Exclude massive JSONB blobs (raw_file_content, parsed_code_definitions)
+        // Those are only needed when entering a specific job (JobContainer fetches them)
         const { data: jobsData } = await supabase
           .from('jobs')
           .select(`
-            *,
+            id,
+            job_name,
+            name,
+            municipality,
+            ccdd,
+            ccdd_code,
+            county,
+            vendor,
+            vendor_type,
+            vendor_source,
+            status,
+            job_type,
+            project_type,
+            start_date,
+            due_date,
+            end_date,
+            target_completion_date,
+            total_properties,
+            inspected_properties,
+            totalresidential,
+            totalcommercial,
+            percent_billed,
+            has_property_assignments,
+            assigned_has_commercial,
+            workflow_stats,
+            archived_at,
+            created_at,
+            organization_id,
+            year_created,
+            source_file_name,
+            source_file_uploaded_at,
+            unit_rate_config,
+            staged_unit_rate_config,
+            unit_rate_codes_applied,
             job_responsibilities(count),
             job_contracts(
               contract_amount,
@@ -479,7 +514,6 @@ const App = () => {
               billing_type,
               remaining_due
             ),
-            workflow_stats,
             job_assignments(
               employee_id,
               role,
