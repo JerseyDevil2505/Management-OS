@@ -185,13 +185,19 @@ const App = () => {
   } : user;
 
   // Centralized job visibility filter:
+  // - View As mode: only the impersonated org's jobs (so admin sees what assessor sees)
   // - Admin (primary owner): all jobs
   // - Assessor: only their org's jobs
   // - PPA Owner/Manager: only PPA jobs (no LOJIK client jobs)
   const filterJobsForUser = (jobList) => {
+    // View As takes priority — admin should see exactly what the assessor sees
+    if (viewingAs) {
+      const orgId = viewingAs.organization_id;
+      return jobList.filter(j => j.organization_id === orgId);
+    }
     if (canManageUsers) return jobList; // Admin sees everything
     if (isAssessorUser) {
-      const orgId = viewingAs?.organization_id || userOrgId;
+      const orgId = userOrgId;
       return jobList.filter(j => j.organization_id === orgId);
     }
     // PPA users (owner, manager) - only PPA jobs
@@ -1375,17 +1381,20 @@ const App = () => {
               >
                 📋 Dashboard
               </button>
-              <button
-                onClick={() => handleViewChange('admin-jobs')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'admin-jobs'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
-              >
-                📂 Job Management
-              </button>
+              {/* Only show Job Management for admins using View As mode, not real assessors */}
+              {viewingAs && canManageUsers && (
+                <button
+                  onClick={() => handleViewChange('admin-jobs')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'admin-jobs'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
+                >
+                  📂 Job Management
+                </button>
+              )}
             </nav>
           )}
 
@@ -1553,6 +1562,7 @@ const App = () => {
               user={assessorUser}
               onJobSelect={handleJobSelect}
               onDataUpdate={updateDataSection}
+              jobFreshness={appData.jobFreshness}
             />
           </>
         )}

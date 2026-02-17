@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, jobService, propertyService } from '../lib/supabaseClient';
 
-const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
+const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} }) => {
   const [orgJobs, setOrgJobs] = useState([]);
   const [organization, setOrganization] = useState(null);
   const [allOrganizations, setAllOrganizations] = useState([]);
@@ -422,11 +422,6 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
     onJobSelect(job);
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString();
-  };
-
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -607,53 +602,135 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
               + New Job
             </button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {orgJobs.map(job => (
-              <div
-                key={job.id}
-                onClick={() => handleJobClick(job)}
-                style={{
-                  background: 'white', borderRadius: '10px', padding: '20px',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: '1px solid #e5e7eb',
-                  cursor: 'pointer', transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(59,130,246,0.15)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)'; }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: '600', fontSize: '1.05rem', color: '#1f2937' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {orgJobs.map(job => {
+              const cs = jobFreshness[job.id]?.clientSummary;
+              const freshness = jobFreshness[job.id];
+              return (
+                <div
+                  key={job.id}
+                  style={{
+                    background: 'white', borderRadius: '12px', padding: '20px 24px',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                    border: '2px solid',
+                    borderColor: job.vendor_type === 'Microsystems' ? '#93c5fd' : '#fdba74',
+                    cursor: 'pointer', transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.15)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)'; }}
+                  onClick={() => handleJobClick(job)}
+                >
+                  {/* Header row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <h4 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#1f2937', margin: 0 }}>
                       {job.job_name}
-                    </div>
-                    <div style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '4px' }}>
-                      {job.municipality}{job.county ? `, ${job.county} County` : ''} &middot; {job.vendor_type || 'Unknown'} &middot; {(job.total_properties || 0).toLocaleString()} properties
-                      {allOrganizations.length > 1 && (() => {
-                        const org = allOrganizations.find(o => o.id === job.organization_id);
-                        return org ? (
-                          <span style={{
-                            marginLeft: '8px', padding: '1px 8px', background: '#dbeafe',
-                            color: '#1e40af', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '600'
-                          }}>{org.name}</span>
-                        ) : null;
-                      })()}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600',
+                        background: job.vendor_type === 'Microsystems' ? '#dbeafe' : '#fed7aa',
+                        color: job.vendor_type === 'Microsystems' ? '#1e40af' : '#9a3412',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      }}>
+                        {job.vendor_type || 'BRT'}
+                      </span>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600',
+                        background: job.status === 'active' ? '#dcfce7' : '#f3f4f6',
+                        color: job.status === 'active' ? '#166534' : '#6b7280',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      }}>
+                        {(job.status || 'active').charAt(0).toUpperCase() + (job.status || 'active').slice(1)}
+                      </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+                  {/* Subtitle */}
+                  <div style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: '600', color: '#2563eb' }}>{job.ccdd || ''}</span>
+                    {job.ccdd && <span>&middot;</span>}
+                    <span>{job.municipality}</span>
+                    <span>&middot;</span>
+                    <span>Due: {job.end_date ? new Date(job.end_date + 'T00:00:00').getFullYear() : 'TBD'}</span>
+                    {allOrganizations.length > 1 && (() => {
+                      const org = allOrganizations.find(o => o.id === job.organization_id);
+                      return org ? (
+                        <span style={{
+                          padding: '1px 8px', background: '#dbeafe',
+                          color: '#1e40af', borderRadius: '10px', fontSize: '0.72rem', fontWeight: '600'
+                        }}>{org.name}</span>
+                      ) : null;
+                    })()}
+                  </div>
+
+                  {/* Stats grid */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px',
+                    background: '#f9fafb', borderRadius: '8px', padding: '12px', marginBottom: '10px'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#2563eb' }}>
+                        {cs ? cs.totalRecords.toLocaleString() : (job.total_properties || 0).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Total Line Items</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#16a34a' }}>
+                        {cs ? cs.inspectedCount.toLocaleString() : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>
+                        Inspected {cs && cs.totalRecords > 0 ? `(${cs.entryRate}%)` : ''}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#9333ea' }}>
+                        {cs ? `${cs.residentialCount.toLocaleString()} / ${cs.commercialCount.toLocaleString()}` : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Residential / Commercial</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#ea580c' }}>
+                        {cs?.avgMeasureDate
+                          ? new Date(cs.avgMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Avg Measured Date</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#4f46e5' }}>
+                        {cs?.mostRecentMeasureDate
+                          ? new Date(cs.mostRecentMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Most Recent Measured</div>
+                    </div>
+                  </div>
+
+                  {/* Footer: county + last upload + open button */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{
+                        padding: '2px 10px', background: '#f3f4f6', color: '#374151',
+                        borderRadius: '20px', fontSize: '0.75rem', fontWeight: '500'
+                      }}>
+                        {job.county ? `${job.county} County` : ''}
+                      </span>
+                      {freshness?.lastFileUpload && (
+                        <span style={{ fontSize: '0.75rem', color: '#2563eb' }}>
+                          Last upload: {new Date(freshness.lastFileUpload).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
                     <span style={{
-                      padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '600',
-                      background: job.status === 'active' ? '#dcfce7' : '#f3f4f6',
-                      color: job.status === 'active' ? '#166534' : '#6b7280'
+                      padding: '6px 16px', background: '#2563eb', color: 'white',
+                      borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600'
                     }}>
-                      {(job.status || 'active').charAt(0).toUpperCase() + (job.status || 'active').slice(1)}
+                      Go to Job
                     </span>
-                    <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>
-                      Due: {formatDate(job.end_date)}
-                    </span>
-                    <span style={{ color: '#3b82f6', fontWeight: '600', fontSize: '0.9rem' }}>Open →</span>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
