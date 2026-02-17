@@ -218,12 +218,34 @@ const SalesReviewTab = ({
 
   // ==================== COMPUTED DATA ====================
   
+  // Pre-build package sale lookup map ONCE instead of scanning all properties per-property (O(n) vs O(n²))
+  const packageLookup = useMemo(() => {
+    const groups = {};
+    properties.forEach(p => {
+      if (!p.sales_date || !p.sales_book || !p.sales_page) return;
+      const key = `${p.sales_date}|${p.sales_book}|${p.sales_page}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+    // Only keep groups with multiple properties (actual packages)
+    const lookup = {};
+    for (const [key, group] of Object.entries(groups)) {
+      if (group.length > 1) {
+        const hasFarm = group.some(p => p.property_m4_class === '3A');
+        group.forEach(p => {
+          lookup[p.id] = { isPackage: true, isFarmPackage: hasFarm };
+        });
+      }
+    }
+    return lookup;
+  }, [properties]);
+
   const enrichedProperties = useMemo(() => {
     return properties.map(prop => {
-      // Package detection (do this first to check for farm)
-      const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
-      const isPackage = packageAnalysis && (packageAnalysis.is_additional_card || packageAnalysis.is_multi_property_package);
-      const isFarmSale = packageAnalysis?.is_farm_package || prop.property_m4_class === '3A';
+      // Package detection using pre-built lookup (O(1) per property)
+      const pkgInfo = packageLookup[prop.id];
+      const isPackage = !!pkgInfo?.isPackage;
+      const isFarmSale = pkgInfo?.isFarmPackage || prop.property_m4_class === '3A';
 
       // Period classification - override to FARM for farm sales
       let periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
@@ -296,7 +318,7 @@ const SalesReviewTab = ({
         isIncluded
       };
     });
-  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides]);
+  }, [properties, packageLookup, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides]);
 
   // Filtered properties
   const filteredProperties = useMemo(() => {
@@ -1690,16 +1712,10 @@ const SalesReviewTab = ({
 
       {/* Stats Bar */}
       <div className="mb-6">
-        <div className="grid grid-cols-7 gap-4 mb-3">
+        <div className="grid grid-cols-6 gap-4 mb-3">
           <div className="bg-white p-4 rounded border">
             <div className="text-sm text-gray-600">Total Properties</div>
             <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
-          </div>
-          <div className="bg-green-50 p-4 rounded border border-green-200">
-            <div className="text-sm text-green-700">Included (CME)</div>
-            <div className="text-2xl font-bold text-green-900">
-              {formatNumber(filteredProperties.filter(p => p.isIncluded).length)}
-            </div>
           </div>
           <div className="bg-green-50 p-4 rounded border border-green-200">
             <div className="text-sm text-green-700">CSP Sales</div>
