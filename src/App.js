@@ -324,47 +324,94 @@ const App = () => {
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
 
-        // For non-PPA jobs, load lightweight summary stats from property_records
+        // For non-PPA jobs, load lightweight summary stats using count queries
+        // (avoids Supabase default row limit that was capping results at ~5000)
         const isClientJob = job.organization_id && job.organization_id !== PPA_ORG_ID;
         if (isClientJob) {
           try {
-            const { data: summaryData } = await supabase
-              .from('property_records')
-              .select('sales_date, sales_price, inspection_measure_by, inspection_measure_date, asset_type_use')
-              .eq('job_id', job.id);
+            // Run count queries in parallel - no row limit issues
+            const [totalResult, inspectedResult, mostRecentResult] = await Promise.all([
+              // Total record count
+              supabase
+                .from('property_records')
+                .select('*', { count: 'exact', head: true })
+                .eq('job_id', job.id),
+              // Inspected count (has measure_by AND measure_date)
+              supabase
+                .from('property_records')
+                .select('*', { count: 'exact', head: true })
+                .eq('job_id', job.id)
+                .not('inspection_measure_by', 'is', null)
+                .neq('inspection_measure_by', '')
+                .not('inspection_measure_date', 'is', null),
+              // Most recent measure date
+              supabase
+                .from('property_records')
+                .select('inspection_measure_date')
+                .eq('job_id', job.id)
+                .not('inspection_measure_date', 'is', null)
+                .order('inspection_measure_date', { ascending: false })
+                .limit(1)
+            ]);
 
-            if (summaryData && summaryData.length > 0) {
-              const inspected = summaryData.filter(p =>
-                p.inspection_measure_by && p.inspection_measure_by.trim() && p.inspection_measure_date
-              );
-              const measureDates = inspected
-                .map(p => p.inspection_measure_date)
-                .filter(Boolean)
-                .map(d => new Date(d).getTime())
-                .filter(t => !isNaN(t));
+            const totalCount = totalResult.count || 0;
+            const inspectedCount = inspectedResult.count || 0;
+
+            if (totalCount > 0) {
+              // Get residential/commercial counts and avg measure date in parallel
+              const [resResult, comResult, avgResult] = await Promise.all([
+                // Residential: types starting with 1, 2, 3A
+                supabase
+                  .from('property_records')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('job_id', job.id)
+                  .or('asset_type_use.like.1%,asset_type_use.like.2%,asset_type_use.like.3A%'),
+                // Commercial: types starting with 4, 5
+                supabase
+                  .from('property_records')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('job_id', job.id)
+                  .or('asset_type_use.like.4%,asset_type_use.like.5%'),
+                // Avg measure date - fetch just dates for inspected records (paginated)
+                (async () => {
+                  const dates = [];
+                  let page = 0;
+                  let hasMore = true;
+                  while (hasMore) {
+                    const { data } = await supabase
+                      .from('property_records')
+                      .select('inspection_measure_date')
+                      .eq('job_id', job.id)
+                      .not('inspection_measure_date', 'is', null)
+                      .range(page * 1000, (page + 1) * 1000 - 1);
+                    if (data && data.length > 0) {
+                      dates.push(...data.map(d => new Date(d.inspection_measure_date).getTime()).filter(t => !isNaN(t)));
+                      page++;
+                      hasMore = data.length === 1000;
+                    } else {
+                      hasMore = false;
+                    }
+                  }
+                  return dates;
+                })()
+              ]);
+
+              const mostRecentMeasureDate = mostRecentResult.data?.[0]?.inspection_measure_date
+                ? new Date(mostRecentResult.data[0].inspection_measure_date + 'T00:00:00').toISOString().split('T')[0]
+                : null;
+              const measureDates = avgResult;
               const avgMeasureDate = measureDates.length > 0
                 ? new Date(measureDates.reduce((a, b) => a + b, 0) / measureDates.length).toISOString().split('T')[0]
                 : null;
-              const mostRecentMeasureDate = measureDates.length > 0
-                ? new Date(Math.max(...measureDates)).toISOString().split('T')[0]
-                : null;
-              const residential = summaryData.filter(p => {
-                const use = (p.asset_type_use || '').toString();
-                return use.startsWith('2') || use.startsWith('3A') || use === '1' || use.startsWith('1');
-              });
-              const commercial = summaryData.filter(p => {
-                const use = (p.asset_type_use || '').toString();
-                return use.startsWith('4') || use.startsWith('5');
-              });
 
               freshnessData[job.id].clientSummary = {
-                totalRecords: summaryData.length,
-                inspectedCount: inspected.length,
-                entryRate: summaryData.length > 0 ? Math.round((inspected.length / summaryData.length) * 100) : 0,
+                totalRecords: totalCount,
+                inspectedCount,
+                entryRate: totalCount > 0 ? Math.round((inspectedCount / totalCount) * 100) : 0,
                 avgMeasureDate,
                 mostRecentMeasureDate,
-                residentialCount: residential.length,
-                commercialCount: commercial.length
+                residentialCount: resResult.count || 0,
+                commercialCount: comResult.count || 0
               };
             }
           } catch (summaryError) {

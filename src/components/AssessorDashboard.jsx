@@ -36,7 +36,11 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
   const [processingStatus, setProcessingStatus] = useState({
     step: '',
     progress: 0,
-    logs: []
+    logs: [],
+    currentBatch: 0,
+    totalBatches: 0,
+    processedRecords: 0,
+    totalRecords: 0
   });
   const [processingComplete, setProcessingComplete] = useState(false);
   const [processingResult, setProcessingResult] = useState(null);
@@ -282,23 +286,93 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
 
       setProcessingStatus({
         step: `Processing ${fileAnalysis.detectedVendor} data (${fileAnalysis.propertyCount.toLocaleString()} records)...`,
-        progress: 50,
-        logs: []
+        progress: 20,
+        logs: [],
+        currentBatch: 0,
+        totalBatches: 0,
+        processedRecords: 0,
+        totalRecords: fileAnalysis.propertyCount
       });
 
-      const result = await propertyService.importCSVData(
-        sourceFileContent,
-        codeFileContent,
-        createdJob.id,
-        assessmentYear,
-        jobForm.ccddCode,
-        fileAnalysis.detectedVendor,
-        {
-          source_file_name: sourceFile.name,
-          source_file_version_id: createdJob.source_file_version_id,
-          source_file_uploaded_at: new Date().toISOString()
+      // Track batch inserts by intercepting console.log (mirrors FileUploadButton pattern)
+      const originalLog = console.log;
+      const originalError = console.error;
+      let batchProcessed = 0;
+
+      console.log = function(...args) {
+        const message = args.join(' ');
+
+        // Capture batch progress messages from BRT/Microsystems processor
+        if (message.includes('Processing batch') || message.includes('Batch')) {
+          const batchMatch = message.match(/batch (\d+) of (\d+)/i) ||
+                            message.match(/Batch (\d+)\/(\d+)/);
+          if (batchMatch) {
+            const currentBatch = parseInt(batchMatch[1]);
+            const totalBatches = parseInt(batchMatch[2]);
+            // Progress: 20% for setup, 20-90% for batches, 90-100% for finalize
+            const batchProgress = 20 + Math.round((currentBatch / totalBatches) * 70);
+            if (isMountedRef.current) {
+              setProcessingStatus(prev => ({
+                ...prev,
+                step: `Inserting batch ${currentBatch} of ${totalBatches}...`,
+                progress: batchProgress,
+                currentBatch,
+                totalBatches
+              }));
+            }
+          }
         }
-      );
+
+        // Capture completed batch counts
+        if (message.includes('completed successfully')) {
+          const countMatch = message.match(/(\d+)\/(\d+) total/);
+          if (countMatch && isMountedRef.current) {
+            batchProcessed = parseInt(countMatch[1]);
+            setProcessingStatus(prev => ({
+              ...prev,
+              processedRecords: batchProcessed,
+              totalRecords: parseInt(countMatch[2])
+            }));
+          }
+        }
+
+        originalLog.apply(console, args);
+      };
+
+      console.error = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('batch') || message.includes('Batch')) {
+          if (isMountedRef.current) {
+            setProcessingStatus(prev => ({
+              ...prev,
+              step: `Batch error - retrying...`,
+              logs: [...prev.logs, { message, type: 'error', time: new Date().toISOString() }]
+            }));
+          }
+        }
+        originalError.apply(console, args);
+      };
+
+      let result;
+      try {
+        result = await propertyService.importCSVData(
+          sourceFileContent,
+          codeFileContent,
+          createdJob.id,
+          assessmentYear,
+          jobForm.ccddCode,
+          fileAnalysis.detectedVendor,
+          {
+            source_file_name: sourceFile.name,
+            source_file_version_id: createdJob.source_file_version_id,
+            source_file_uploaded_at: new Date().toISOString()
+          }
+        );
+      } finally {
+        // Always restore console methods
+        console.log = originalLog;
+        console.error = originalError;
+      }
 
       if (result && result.error && (result.error.includes('cleaned up') || result.error.includes('Job creation failed'))) {
         try { await jobService.delete(createdJob.id); } catch (e) { /* */ }
@@ -321,7 +395,7 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
           .eq('id', setupOrg.id);
       }
 
-      setProcessingStatus({ step: 'Complete!', progress: 100, logs: [] });
+      setProcessingStatus({ step: 'Complete!', progress: 100, logs: [], currentBatch: 0, totalBatches: 0, processedRecords: result.processed || 0, totalRecords: result.processed || 0 });
       setProcessingResult({
         success: true,
         processed: result.processed || 0,
@@ -387,11 +461,49 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
               }}>
                 <div style={{
                   width: `${processingStatus.progress}%`, height: '100%',
-                  background: 'linear-gradient(90deg, #3b82f6, #2563eb)',
+                  background: processingStatus.progress > 90
+                    ? 'linear-gradient(90deg, #10b981, #059669)'
+                    : 'linear-gradient(90deg, #3b82f6, #2563eb)',
                   borderRadius: '6px', transition: 'width 0.5s ease'
                 }} />
               </div>
-              <p style={{ color: '#6b7280', fontSize: '0.95rem' }}>{processingStatus.step}</p>
+              <p style={{ color: '#374151', fontSize: '0.95rem', fontWeight: '500' }}>{processingStatus.step}</p>
+
+              {/* Batch details when actively inserting */}
+              {processingStatus.totalBatches > 0 && (
+                <div style={{
+                  marginTop: '12px', padding: '12px', background: '#f8fafc',
+                  borderRadius: '8px', border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b' }}>
+                    <span>Batch {processingStatus.currentBatch} of {processingStatus.totalBatches}</span>
+                    <span>{processingStatus.processedRecords.toLocaleString()} / {processingStatus.totalRecords.toLocaleString()} records</span>
+                  </div>
+                  <div style={{
+                    marginTop: '8px', width: '100%', height: '4px',
+                    background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${processingStatus.totalBatches > 0 ? Math.round((processingStatus.currentBatch / processingStatus.totalBatches) * 100) : 0}%`,
+                      height: '100%', background: '#3b82f6', borderRadius: '2px',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Error logs if any */}
+              {processingStatus.logs.length > 0 && (
+                <div style={{
+                  marginTop: '12px', maxHeight: '120px', overflowY: 'auto',
+                  padding: '8px', background: '#fef2f2', borderRadius: '6px',
+                  border: '1px solid #fecaca', fontSize: '0.8rem', color: '#991b1b'
+                }}>
+                  {processingStatus.logs.map((log, i) => (
+                    <div key={i} style={{ padding: '2px 0' }}>{log.message}</div>
+                  ))}
+                </div>
+              )}
             </>
           )}
 
