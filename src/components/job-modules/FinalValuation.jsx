@@ -13,7 +13,8 @@ const FinalValuation = ({
   marketLandData = {},
   hpiData = [],
   onUpdateJobCache = () => {},
-  tenantConfig = null
+  tenantConfig = null,
+  updateJobDataDirect = null
 }) => {
   const isAssessor = tenantConfig?.orgType === 'assessor';
   const [activeTab, setActiveTab] = useState(isAssessor ? 'sales-comparison' : 'sales-review');
@@ -129,6 +130,7 @@ const FinalValuation = ({
             jobData={jobData}
             properties={properties}
             onUpdateJobCache={handleCacheUpdate}
+            updateJobDataDirect={updateJobDataDirect}
           />
         )}
 
