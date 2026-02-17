@@ -707,39 +707,41 @@ const JobContainer = ({
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
-      // Filter by organization for non-PPA jobs to prevent initials collision
+      // Skip entirely for assessor jobs - assessors don't have employees
       const jobOrgId = jobData?.organization_id;
       const isAssessorJob = jobOrgId && jobOrgId !== PPA_ORG_ID;
       let employeesData = [];
-      try {
-        let empQuery = supabase
-          .from('employees')
-          .select('*')
-          .order('last_name', { ascending: true });
 
-        if (isAssessorJob) {
-          empQuery = empQuery.eq('organization_id', jobOrgId);
+      if (jobTenantConfig.jobModules.production) {
+        // Only load employees when ProductionTracker is enabled (PPA jobs)
+        try {
+          let empQuery = supabase
+            .from('employees')
+            .select('*')
+            .order('last_name', { ascending: true });
+
+          const { data, error } = await withTimeout(
+            empQuery,
+            10000,
+            'employees query'
+          );
+
+          if (error) {
+            console.error('❌ EMPLOYEES DATA LOADING ERROR:');
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Full Error:`, error);
+          } else {
+            employeesData = data || [];
+          }
+        } catch (employeesError) {
+          console.error('❌ EMPLOYEES DATA LOADING FAILED:');
+          console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
+          console.error(`  Error Type: ${employeesError.constructor.name}`);
+          console.error(`  Full Error:`, employeesError);
         }
-
-        const { data, error } = await withTimeout(
-          empQuery,
-          10000,
-          'employees query'
-        );
-
-        if (error) {
-          console.error('❌ EMPLOYEES DATA LOADING ERROR:');
-          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
-          console.error(`  Error Code: ${error.code || 'No code'}`);
-          console.error(`  Full Error:`, error);
-        } else {
-          employeesData = data || [];
-        }
-      } catch (employeesError) {
-        console.error('❌ EMPLOYEES DATA LOADING FAILED:');
-        console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
-        console.error(`  Error Type: ${employeesError.constructor.name}`);
-        console.error(`  Full Error:`, employeesError);
+      } else {
+        console.log('⏭️ Skipping employees query (not needed for assessor jobs)');
       }
 
       // SET ALL THE LOADED DATA TO STATE - with error boundaries
