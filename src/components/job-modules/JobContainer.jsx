@@ -275,10 +275,10 @@ const JobContainer = ({
 
       // Use client-side pagination with batches
       if (count && count > 0) {
-        const batchSize = 500;
+        const batchSize = 250; // Optimized for stability and error resilience (matches processor/updater pattern)
         const totalBatches = Math.ceil(count / batchSize);
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 10; // Match processor resilience - allow enough retries for transient pool issues
 
         console.log(`📥 Loading ${count} properties in ${totalBatches} batches...`);
 
@@ -341,11 +341,12 @@ const JobContainer = ({
               console.error(`  Full Error Object:`, batchError);
 
               // Retry transient/network failures up to maxRetries
-              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout') || batchError.message.toLowerCase().includes('schema cache')));
+              const isRetryableCode = batchError.code === '57014' || batchError.code === '08003' || batchError.code === '08006';
+              const transient = isRetryableCode || (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout') || batchError.message.toLowerCase().includes('schema cache')));
               if (transient && retryCount < maxRetries) {
                 retryCount++;
-                const backoff = 500 * retryCount;
-                console.warn(`Transient batch error detected. Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+                const backoff = 2000 * retryCount; // Match processor pattern: 2s exponential backoff
+                console.warn(`Transient batch error detected (code: ${batchError.code || 'none'}). Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
                 await new Promise(r => setTimeout(r, backoff));
                 // decrement batch to retry same batch in next loop iteration
                 batch--;
@@ -441,10 +442,9 @@ const JobContainer = ({
               retryCount = 0; // Reset retry count on success
             }
 
-            // Progressive delay - longer delay after more batches
-            const delay = Math.min(200 + (batch * 10), 1000);
+            // Steady inter-batch delay to avoid connection pool exhaustion (matches processor pattern)
             if (batch < totalBatches - 1) {
-              await new Promise(resolve => setTimeout(resolve, delay));
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
 
           } catch (error) {
@@ -477,12 +477,13 @@ const JobContainer = ({
 
             // Detect transient/network errors and retry the current batch up to maxRetries
             const transientMessage = (error.message || '').toString().toLowerCase();
-            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || transientMessage.includes('schema cache') || error.name === 'TypeError';
+            const isRetryableCode = error.code === '57014' || error.code === '08003' || error.code === '08006';
+            const isTransient = isRetryableCode || transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || transientMessage.includes('schema cache') || error.name === 'TypeError';
 
             if (isTransient && retryCount < maxRetries) {
               retryCount++;
-              const backoff = 500 * retryCount;
-              console.warn(`Transient network error detected on batch ${batch + 1}. Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+              const backoff = 2000 * retryCount; // Match processor pattern: 2s exponential backoff
+              console.warn(`Transient network error detected on batch ${batch + 1} (code: ${error.code || 'none'}). Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
               await new Promise(r => setTimeout(r, backoff));
               batch--; // retry the same batch index on next loop iteration
               continue;
