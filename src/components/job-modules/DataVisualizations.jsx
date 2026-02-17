@@ -901,16 +901,6 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
-              {usableSalesData.map(item => (
-                <div key={item.name} className="stat-item">
-                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
-                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
-                    {item.value.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Sales NU Distribution Pie with Date Range */}
@@ -967,16 +957,6 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="chart-stats mt-4 grid grid-cols-3 gap-3 text-center">
-              {salesNuData.map(item => (
-                <div key={item.name} className="stat-item">
-                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
-                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
-                    {item.value.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
