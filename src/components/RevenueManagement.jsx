@@ -132,23 +132,15 @@ const RevenueManagement = () => {
     return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount };
   }, [staffCounts, priceConfig]);
 
-  // Billing status helper
+  // Billing status helper — simple: free / open / paid
   const getBillingStatus = (org) => {
     if (org.is_free_account || org.subscription_status === 'free') return 'free';
     if (org.payment_received_date) return 'paid';
-    if (org.po_received_date) return 'po-received';
-    if (org.invoice_sent_date) return 'invoiced';
-    return 'pending';
+    return 'open';
   };
 
   const getBillingLabel = (status) => {
-    const labels = {
-      free: 'Free',
-      paid: 'Paid',
-      'po-received': 'PO Received',
-      invoiced: 'Invoiced',
-      pending: 'Pending'
-    };
+    const labels = { free: 'Free', paid: 'Paid', open: 'Open' };
     return labels[status] || 'Unknown';
   };
 
@@ -189,27 +181,11 @@ const RevenueManagement = () => {
       const updateData = {};
       const now = new Date().toISOString().split('T')[0];
 
-      // Set the appropriate date field based on status
-      switch (newStatus) {
-        case 'paid':
-          updateData.payment_received_date = now;
-          break;
-        case 'po-received':
-          updateData.po_received_date = now;
-          updateData.payment_received_date = null;
-          break;
-        case 'invoiced':
-          updateData.invoice_sent_date = now;
-          updateData.po_received_date = null;
-          updateData.payment_received_date = null;
-          break;
-        case 'pending':
-          updateData.invoice_sent_date = null;
-          updateData.po_received_date = null;
-          updateData.payment_received_date = null;
-          break;
-        default:
-          break;
+      // Set payment_received_date based on status
+      if (newStatus === 'paid') {
+        updateData.payment_received_date = now;
+      } else {
+        updateData.payment_received_date = null;
       }
 
       const { error: updateError } = await supabase
@@ -522,9 +498,7 @@ const RevenueManagement = () => {
   }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
 
   const billingStatusOptions = [
-    { value: 'pending', label: 'Pending', color: '#991b1b', bg: '#fee2e2' },
-    { value: 'invoiced', label: 'Invoiced', color: '#3730a3', bg: '#e0e7ff' },
-    { value: 'po-received', label: 'PO Received', color: '#92400e', bg: '#fef3c7' },
+    { value: 'open', label: 'Open', color: '#991b1b', bg: '#fee2e2' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
   ];
 
@@ -637,8 +611,7 @@ const RevenueManagement = () => {
               <th className="revenue-col-right">Line Item Fee</th>
               <th>Users</th>
               <th className="revenue-col-right">User Fees</th>
-              <th>Account Type</th>
-              <th>Billing Status</th>
+              <th>Status</th>
               <th className="revenue-col-right">Annual Total</th>
               <th>Actions</th>
             </tr>
@@ -664,11 +637,6 @@ const RevenueManagement = () => {
                   <td className="revenue-col-right">
                     {fees.isFree ? '-' : fees.isOverride ? '-' : `$${(fees.primaryFee + fees.staffFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
-                  <td>
-                    <span className={`revenue-account-badge ${fees.isFree ? 'revenue-badge-free' : 'revenue-badge-paid'}`}>
-                      {fees.isFree ? 'Free' : 'Paid'}
-                    </span>
-                  </td>
                   <td style={{ position: 'relative' }}>
                     {billingStatus === 'free' ? (
                       <span className="revenue-billing-badge revenue-billing-free">Free</span>
@@ -677,7 +645,7 @@ const RevenueManagement = () => {
                         <button
                           className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
                           onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
-                          title="Click to change billing status"
+                          title="Click to change status"
                         >
                           {getBillingLabel(billingStatus)}
                           <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
@@ -761,7 +729,6 @@ const RevenueManagement = () => {
               <td className="revenue-col-right">
                 ${organizations.reduce((sum, o) => { const f = calculateFees(o); return sum + (f.isOverride ? 0 : f.primaryFee + f.staffFee); }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </td>
-              <td></td>
               <td></td>
               <td className="revenue-col-right revenue-total-cell">
                 ${revenueSummary.totalAnnual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
