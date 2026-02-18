@@ -13,6 +13,12 @@ const DataVisualizations = ({ jobData, properties }) => {
     yearRange: 'all'
   });
 
+  // Market History filter toggles
+  const [marketFilters, setMarketFilters] = useState({
+    requireHighBuildingClass: true, // Only include building class > 10 (exclude blank/empty/10)
+    usableSalesOnly: true           // Only sales codes 0, 00, 7, 07, 32, 36
+  });
+
   // Sales NU date range state - default to October 1st prior year to current date
   const [nuDateRange, setNuDateRange] = useState(() => {
     const now = new Date();
@@ -88,17 +94,37 @@ const DataVisualizations = ({ jobData, properties }) => {
     });
   }, [properties, filters, jobData.end_date]);
 
-  // Market History - Properties with values_norm_time
+  // Market History - with optional Building Class and Sales Code filters
   const marketHistoryData = useMemo(() => {
     const salesByYear = {};
 
-    // Filter for properties with values_norm_time (normalized/adjusted sales)
+    // Usable sales codes
+    const usableSalesCodes = ['', '0', '00', '7', '07', '32', '36'];
+
+    // Apply optional market history filters
     const qualifiedProperties = filteredProperties.filter(prop => {
-      return prop.values_norm_time && prop.values_norm_time > 0;
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return false;
+
+      // Building Class filter: only include class > 10 (exclude blank, empty, 0, and 10)
+      if (marketFilters.requireHighBuildingClass) {
+        const bcRaw = prop.asset_building_class;
+        if (!bcRaw || String(bcRaw).trim() === '') return false;
+        const bc = parseInt(bcRaw, 10);
+        if (isNaN(bc) || bc <= 10) return false;
+      }
+
+      // Sales Code filter: only usable codes
+      if (marketFilters.usableSalesOnly) {
+        const code = (prop.sales_nu || '').trim();
+        if (!usableSalesCodes.includes(code)) return false;
+      }
+
+      return true;
     });
     
     qualifiedProperties.forEach(prop => {
-      if (prop.sales_date && prop.sales_price && prop.sales_price > 0) {
+      if (prop.sales_date && prop.sales_price && prop.sales_price > 100) {
         const year = new Date(prop.sales_date).getFullYear();
         if (!salesByYear[year]) {
           salesByYear[year] = {
@@ -126,7 +152,7 @@ const DataVisualizations = ({ jobData, properties }) => {
         maxPrice: Math.max(...yearData.sales)
       }))
       .sort((a, b) => a.year - b.year);
-  }, [filteredProperties]);
+  }, [filteredProperties, marketFilters]);
 
   // Sales NU Distribution - filtered by date range
   // Break out individual codes, with 36 as separate, treat 00 and blank as same
@@ -138,6 +164,9 @@ const DataVisualizations = ({ jobData, properties }) => {
     const endDate = new Date(nuDateRange.end);
 
     filteredProperties.forEach(prop => {
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return;
+
       if (prop.sales_date) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
@@ -193,6 +222,9 @@ const DataVisualizations = ({ jobData, properties }) => {
     nonUsableCodes.push('33', '34', '35');
 
     filteredProperties.forEach(prop => {
+      // Hard rule: always exclude sales <= $100
+      if (prop.sales_price != null && prop.sales_price <= 100) return;
+
       if (prop.sales_date && prop.sales_price) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
@@ -366,8 +398,8 @@ const DataVisualizations = ({ jobData, properties }) => {
           const vcs = prop.property_vcs || 'Unknown';
           const salePrice = parseFloat(prop.sales_price) || 0;
 
-          // Only include sales with valid prices
-          if (salePrice > 0) {
+          // Only include sales with valid prices (hard rule: exclude sales <= $100)
+          if (salePrice > 100) {
             if (!vcsTotals[vcs]) {
               vcsTotals[vcs] = {
                 vcs,
@@ -659,10 +691,26 @@ const DataVisualizations = ({ jobData, properties }) => {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">Market History</h3>
-              <span className="text-xs text-gray-500 ml-2">(Properties with Norm Time)</span>
             </div>
-            <div className="text-xs text-gray-600">
-              Using Sale Price • Normalized Sales Only
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={marketFilters.requireHighBuildingClass}
+                  onChange={(e) => setMarketFilters({ ...marketFilters, requireHighBuildingClass: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Bldg Class &gt; 10 Only
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={marketFilters.usableSalesOnly}
+                  onChange={(e) => setMarketFilters({ ...marketFilters, usableSalesOnly: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Usable Sales Only (0, 7, 32, 36)
+              </label>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={350}>
@@ -853,16 +901,6 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
-              {usableSalesData.map(item => (
-                <div key={item.name} className="stat-item">
-                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
-                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
-                    {item.value.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Sales NU Distribution Pie with Date Range */}
@@ -919,16 +957,6 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="chart-stats mt-4 grid grid-cols-3 gap-3 text-center">
-              {salesNuData.map(item => (
-                <div key={item.name} className="stat-item">
-                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
-                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
-                    {item.value.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

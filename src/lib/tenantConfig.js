@@ -72,7 +72,7 @@ const TENANT_CONFIGS = {
     },
 
     jobModules: {
-      checklist: false,                // Not needed unless reassessment
+      checklist: true,                 // Available for in-house reassessment/revaluation
       production: false,               // Replaced by inspectionInfo
       inspectionInfo: true,            // Simplified inspection view with staff hints
       dataVisualizations: true,

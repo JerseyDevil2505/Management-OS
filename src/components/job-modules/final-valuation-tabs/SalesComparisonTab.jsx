@@ -623,6 +623,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return desc && desc !== code ? `${code} - ${desc}` : code;
   }, [codeDescriptions]);
 
+
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
@@ -666,10 +667,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       const included = override === true ? true : override === false ? false : autoIncluded;
 
-      // Detect farm/package sales
-      const packageData = interpretCodes.getPackageSaleData(properties, p);
+      // Detect farm/package sales using centralized _pkg (computed once in JobContainer)
+      const packageData = p._pkg;
       const isFarm = packageData?.is_farm_package || p.property_m4_class === '3A';
-      const isPackage = packageData && (packageData.is_additional_card || packageData.is_multi_property_package);
+      const isPackage = !!packageData;
 
       return {
         ...p,
@@ -684,7 +685,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         _packageData: packageData,
       };
     });
-  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode, properties]);
+  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
 
   const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
 
@@ -1561,14 +1562,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
-          // Farm sales filter - segregate farm and non-farm sales
-          const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
-          const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
+          // Farm sales filter - segregate farm and non-farm sales (using centralized _pkg)
+          const compPkgInfo = comp._pkg;
+          const compIsFarm = compPkgInfo?.is_farm_package || comp.property_m4_class === '3A';
 
           if (compFilters.farmSalesMode) {
             // Farm Sales Mode ON: segregate farm and non-farm
-            const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
-            const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
+            const subjectPkgInfo = subject._pkg;
+            const subjectIsFarm = subjectPkgInfo?.is_farm_package || subject.property_m4_class === '3A';
 
             if (subjectIsFarm) {
               if (!compIsFarm) {
@@ -1991,17 +1992,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       case 'lot_size_acre':
         // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
         if (compFilters?.farmSalesMode) {
-          const subjectPkgData = interpretCodes.getPackageSaleData(properties, subject);
-          const compPkgData = interpretCodes.getPackageSaleData(properties, comp);
+          const subjectPkgInfo = subject._pkg;
+          const compPkgInfo = comp._pkg;
 
-          if (subjectPkgData?.is_farm_package && subjectPkgData.combined_lot_acres > 0) {
-            subjectValue = subjectPkgData.combined_lot_acres;
+          if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
+            subjectValue = subjectPkgInfo.combined_lot_acres;
           } else {
             subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           }
 
-          if (compPkgData?.is_farm_package && compPkgData.combined_lot_acres > 0) {
-            compValue = compPkgData.combined_lot_acres;
+          if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
+            compValue = compPkgInfo.combined_lot_acres;
           } else {
             compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
           }

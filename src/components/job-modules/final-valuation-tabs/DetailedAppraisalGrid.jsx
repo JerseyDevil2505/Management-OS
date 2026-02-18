@@ -507,7 +507,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
         if (compFilters?.farmSalesMode && allProperties?.length > 0) {
-          const pkgData = interpretCodes.getPackageSaleData(allProperties, prop);
+          const pkgData = prop._pkg;
           if (pkgData?.is_farm_package && pkgData.combined_lot_acres > 0) {
             return `${pkgData.combined_lot_acres.toFixed(2)} (Farm)`;
           }
