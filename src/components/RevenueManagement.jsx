@@ -498,7 +498,7 @@ const RevenueManagement = () => {
   }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
 
   const billingStatusOptions = [
-    { value: 'open', label: 'Open', color: '#991b1b', bg: '#fee2e2' },
+    { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
   ];
 
