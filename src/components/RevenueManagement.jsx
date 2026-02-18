@@ -132,6 +132,26 @@ const RevenueManagement = () => {
     return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount };
   }, [staffCounts, priceConfig]);
 
+  // Billing status helper
+  const getBillingStatus = (org) => {
+    if (org.is_free_account || org.subscription_status === 'free') return 'free';
+    if (org.payment_received_date) return 'paid';
+    if (org.po_received_date) return 'po-received';
+    if (org.invoice_sent_date) return 'invoiced';
+    return 'pending';
+  };
+
+  const getBillingLabel = (status) => {
+    const labels = {
+      free: 'Free',
+      paid: 'Paid',
+      'po-received': 'PO Received',
+      invoiced: 'Invoiced',
+      pending: 'Pending'
+    };
+    return labels[status] || 'Unknown';
+  };
+
   // Revenue summary calculations
   const revenueSummary = useMemo(() => {
     let totalAnnual = 0;
@@ -500,26 +520,6 @@ const RevenueManagement = () => {
     setSuccessMessage(`Invoice generated: ${fileName}`);
     setTimeout(() => setSuccessMessage(''), 3000);
   }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
-
-  // Billing status helper
-  const getBillingStatus = (org) => {
-    if (org.is_free_account || org.subscription_status === 'free') return 'free';
-    if (org.payment_received_date) return 'paid';
-    if (org.po_received_date) return 'po-received';
-    if (org.invoice_sent_date) return 'invoiced';
-    return 'pending';
-  };
-
-  const getBillingLabel = (status) => {
-    const labels = {
-      free: 'Free',
-      paid: 'Paid',
-      'po-received': 'PO Received',
-      invoiced: 'Invoiced',
-      pending: 'Pending'
-    };
-    return labels[status] || 'Unknown';
-  };
 
   const billingStatusOptions = [
     { value: 'pending', label: 'Pending', color: '#991b1b', bg: '#fee2e2' },
