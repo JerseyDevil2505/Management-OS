@@ -185,13 +185,19 @@ const App = () => {
   } : user;
 
   // Centralized job visibility filter:
+  // - View As mode: only the impersonated org's jobs (so admin sees what assessor sees)
   // - Admin (primary owner): all jobs
   // - Assessor: only their org's jobs
   // - PPA Owner/Manager: only PPA jobs (no LOJIK client jobs)
   const filterJobsForUser = (jobList) => {
+    // View As takes priority — admin should see exactly what the assessor sees
+    if (viewingAs) {
+      const orgId = viewingAs.organization_id;
+      return jobList.filter(j => j.organization_id === orgId);
+    }
     if (canManageUsers) return jobList; // Admin sees everything
     if (isAssessorUser) {
-      const orgId = viewingAs?.organization_id || userOrgId;
+      const orgId = userOrgId;
       return jobList.filter(j => j.organization_id === orgId);
     }
     // PPA users (owner, manager) - only PPA jobs
@@ -324,47 +330,94 @@ const App = () => {
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
 
-        // For non-PPA jobs, load lightweight summary stats from property_records
+        // For non-PPA jobs, load lightweight summary stats using count queries
+        // (avoids Supabase default row limit that was capping results at ~5000)
         const isClientJob = job.organization_id && job.organization_id !== PPA_ORG_ID;
         if (isClientJob) {
           try {
-            const { data: summaryData } = await supabase
-              .from('property_records')
-              .select('sales_date, sales_price, inspection_measure_by, inspection_measure_date, asset_type_use')
-              .eq('job_id', job.id);
+            // Run count queries in parallel - no row limit issues
+            const [totalResult, inspectedResult, mostRecentResult] = await Promise.all([
+              // Total record count
+              supabase
+                .from('property_records')
+                .select('*', { count: 'exact', head: true })
+                .eq('job_id', job.id),
+              // Inspected count (has measure_by AND measure_date)
+              supabase
+                .from('property_records')
+                .select('*', { count: 'exact', head: true })
+                .eq('job_id', job.id)
+                .not('inspection_measure_by', 'is', null)
+                .neq('inspection_measure_by', '')
+                .not('inspection_measure_date', 'is', null),
+              // Most recent measure date
+              supabase
+                .from('property_records')
+                .select('inspection_measure_date')
+                .eq('job_id', job.id)
+                .not('inspection_measure_date', 'is', null)
+                .order('inspection_measure_date', { ascending: false })
+                .limit(1)
+            ]);
 
-            if (summaryData && summaryData.length > 0) {
-              const inspected = summaryData.filter(p =>
-                p.inspection_measure_by && p.inspection_measure_by.trim() && p.inspection_measure_date
-              );
-              const measureDates = inspected
-                .map(p => p.inspection_measure_date)
-                .filter(Boolean)
-                .map(d => new Date(d).getTime())
-                .filter(t => !isNaN(t));
+            const totalCount = totalResult.count || 0;
+            const inspectedCount = inspectedResult.count || 0;
+
+            if (totalCount > 0) {
+              // Get residential/commercial counts and avg measure date in parallel
+              const [resResult, comResult, avgResult] = await Promise.all([
+                // Residential: types starting with 1, 2, 3A
+                supabase
+                  .from('property_records')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('job_id', job.id)
+                  .or('asset_type_use.like.1%,asset_type_use.like.2%,asset_type_use.like.3A%'),
+                // Commercial: types starting with 4, 5
+                supabase
+                  .from('property_records')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('job_id', job.id)
+                  .or('asset_type_use.like.4%,asset_type_use.like.5%'),
+                // Avg measure date - fetch just dates for inspected records (paginated)
+                (async () => {
+                  const dates = [];
+                  let page = 0;
+                  let hasMore = true;
+                  while (hasMore) {
+                    const { data } = await supabase
+                      .from('property_records')
+                      .select('inspection_measure_date')
+                      .eq('job_id', job.id)
+                      .not('inspection_measure_date', 'is', null)
+                      .range(page * 1000, (page + 1) * 1000 - 1);
+                    if (data && data.length > 0) {
+                      dates.push(...data.map(d => new Date(d.inspection_measure_date).getTime()).filter(t => !isNaN(t)));
+                      page++;
+                      hasMore = data.length === 1000;
+                    } else {
+                      hasMore = false;
+                    }
+                  }
+                  return dates;
+                })()
+              ]);
+
+              const mostRecentMeasureDate = mostRecentResult.data?.[0]?.inspection_measure_date
+                ? new Date(mostRecentResult.data[0].inspection_measure_date + 'T00:00:00').toISOString().split('T')[0]
+                : null;
+              const measureDates = avgResult;
               const avgMeasureDate = measureDates.length > 0
                 ? new Date(measureDates.reduce((a, b) => a + b, 0) / measureDates.length).toISOString().split('T')[0]
                 : null;
-              const mostRecentMeasureDate = measureDates.length > 0
-                ? new Date(Math.max(...measureDates)).toISOString().split('T')[0]
-                : null;
-              const residential = summaryData.filter(p => {
-                const use = (p.asset_type_use || '').toString();
-                return use.startsWith('2') || use.startsWith('3A') || use === '1' || use.startsWith('1');
-              });
-              const commercial = summaryData.filter(p => {
-                const use = (p.asset_type_use || '').toString();
-                return use.startsWith('4') || use.startsWith('5');
-              });
 
               freshnessData[job.id].clientSummary = {
-                totalRecords: summaryData.length,
-                inspectedCount: inspected.length,
-                entryRate: summaryData.length > 0 ? Math.round((inspected.length / summaryData.length) * 100) : 0,
+                totalRecords: totalCount,
+                inspectedCount,
+                entryRate: totalCount > 0 ? Math.round((inspectedCount / totalCount) * 100) : 0,
                 avgMeasureDate,
                 mostRecentMeasureDate,
-                residentialCount: residential.length,
-                commercialCount: commercial.length
+                residentialCount: resResult.count || 0,
+                commercialCount: comResult.count || 0
               };
             }
           } catch (summaryError) {
@@ -400,10 +453,39 @@ const App = () => {
       if (components.includes('jobs') || components.includes('all')) {
         console.log('📊 Loading jobs data...');
 
+        // LEAN QUERY: Exclude massive JSONB blobs (raw_file_content, parsed_code_definitions)
+        // Those are only needed when entering a specific job (JobContainer fetches them)
         const { data: jobsData } = await supabase
           .from('jobs')
           .select(`
-            *,
+            id,
+            job_name,
+            municipality,
+            ccdd_code,
+            county,
+            vendor_type,
+            status,
+            job_type,
+            project_type,
+            start_date,
+            end_date,
+            target_completion_date,
+            total_properties,
+            totalresidential,
+            totalcommercial,
+            percent_billed,
+            has_property_assignments,
+            assigned_has_commercial,
+            workflow_stats,
+            archived_at,
+            archived_by,
+            created_at,
+            organization_id,
+            year_of_value,
+            source_file_name,
+            source_file_uploaded_at,
+            unit_rate_config,
+            staged_unit_rate_config,
             job_responsibilities(count),
             job_contracts(
               contract_amount,
@@ -426,7 +508,6 @@ const App = () => {
               billing_type,
               remaining_due
             ),
-            workflow_stats,
             job_assignments(
               employee_id,
               role,
@@ -1328,17 +1409,20 @@ const App = () => {
               >
                 📋 Dashboard
               </button>
-              <button
-                onClick={() => handleViewChange('admin-jobs')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'admin-jobs'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
-              >
-                📂 Job Management
-              </button>
+              {/* Only show Job Management for admins using View As mode, not real assessors */}
+              {viewingAs && canManageUsers && (
+                <button
+                  onClick={() => handleViewChange('admin-jobs')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'admin-jobs'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
+                >
+                  📂 Job Management
+                </button>
+              )}
             </nav>
           )}
 
@@ -1506,6 +1590,7 @@ const App = () => {
               user={assessorUser}
               onJobSelect={handleJobSelect}
               onDataUpdate={updateDataSection}
+              jobFreshness={appData.jobFreshness}
             />
           </>
         )}

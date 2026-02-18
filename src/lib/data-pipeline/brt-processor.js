@@ -197,11 +197,23 @@ export class BRTProcessor {
         if (line.startsWith('{') || inJsonBlock) {
           inJsonBlock = true;
           jsonBuffer += line;
-          
-          const openBrackets = (jsonBuffer.match(/\{/g) || []).length;
-          const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
-          
-          if (openBrackets === closeBrackets && openBrackets > 0) {
+
+          // Count brackets outside of string values to avoid false matches
+          let depth = 0;
+          let inString = false;
+          let escaped = false;
+          for (let c = 0; c < jsonBuffer.length; c++) {
+            const ch = jsonBuffer[c];
+            if (escaped) { escaped = false; continue; }
+            if (ch === '\\') { escaped = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (!inString) {
+              if (ch === '{') depth++;
+              else if (ch === '}') depth--;
+            }
+          }
+
+          if (depth === 0 && jsonBuffer.includes('{')) {
             if (currentSection) {
               this.parseJsonSection(jsonBuffer, currentSection);
             }

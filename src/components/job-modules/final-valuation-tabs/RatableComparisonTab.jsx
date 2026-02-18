@@ -3,7 +3,7 @@ import { Calculator, Download, FileSpreadsheet, Save, Edit } from 'lucide-react'
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
-const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
+const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJobDataDirect }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
   const [saveStatus, setSaveStatus] = useState(''); // 'saving' or 'saved'
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -266,7 +266,8 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       if (!isTaxable) return;
 
       const camaTotal = property.values_cama_total || 0;
-      const propertyClass = property.property_cama_class || '';
+      // Use property_m4_class (works for both BRT and Microsystems)
+      const propertyClass = property.property_m4_class || property.property_cama_class || '';
 
       if (propertyClass === '1') {
         summary['1'].count++;
@@ -395,7 +396,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       setHasUnsavedChanges(false);
       setTimeout(() => setSaveStatus(''), 2000);
 
-      if (onUpdateJobCache) onUpdateJobCache();
+      // Update in-memory jobData so values persist on tab navigation
+      if (updateJobDataDirect) {
+        updateJobDataDirect(updateData);
+      }
     } catch (error) {
       console.error('Error saving data:', error);
       setSaveStatus('');
@@ -1042,7 +1046,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {properties
-                    .filter(p => ['6A', '6B'].includes(p.property_cama_class) && p.property_facility !== 'EXEMPT')
+                    .filter(p => ['6A', '6B'].includes(p.property_m4_class || p.property_cama_class) && p.property_facility !== 'EXEMPT')
                     .map((property) => {
                       const land = property.values_cama_land || 0;
                       const imp = property.values_cama_improvement || 0;

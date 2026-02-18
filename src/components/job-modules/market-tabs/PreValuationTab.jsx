@@ -1549,7 +1549,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         sales_nu: s.sales_nu,
         values_mod_total: s.values_mod_total,
         sales_ratio: s.sales_ratio,
-        has_package_data: !!interpretCodes.getPackageSaleData(properties, s)
+        has_package_data: !!s._pkg
       })));
 
       // Calculate excluded count (properties that didn't meet criteria)
@@ -1749,7 +1749,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     const exportData = properties.map(prop => {
       const parsed = parseCompositeKey(prop.property_composite_key);
       const normalizedData = normalizedSalesMap.get(prop.id);
-      const packageData = interpretCodes.getPackageSaleData(properties, prop);
+      const packageData = prop._pkg;
 
       let packageInfo = '';
       if (packageData) {
@@ -3846,7 +3846,7 @@ const analyzeImportFile = async (file) => {
                                   </td>
                                   <td className="px-4 py-3 text-sm text-center">
                                     {(() => {
-                                      const packageData = interpretCodes.getPackageSaleData(properties, sale);
+                                      const packageData = sale._pkg;
                                       if (!packageData) return '-';
 
                                       // DEBUG: Log package detection for 3A properties

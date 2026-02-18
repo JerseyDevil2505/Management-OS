@@ -220,10 +220,10 @@ const SalesReviewTab = ({
   
   const enrichedProperties = useMemo(() => {
     return properties.map(prop => {
-      // Package detection (do this first to check for farm)
-      const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
-      const isPackage = packageAnalysis && (packageAnalysis.is_additional_card || packageAnalysis.is_multi_property_package);
-      const isFarmSale = packageAnalysis?.is_farm_package || prop.property_m4_class === '3A';
+      // Package detection using centralized _pkg (computed once in JobContainer)
+      const pkgInfo = prop._pkg;
+      const isPackage = !!pkgInfo;
+      const isFarmSale = pkgInfo?.is_farm_package || prop.property_m4_class === '3A';
 
       // Period classification - override to FARM for farm sales
       let periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
@@ -1690,16 +1690,10 @@ const SalesReviewTab = ({
 
       {/* Stats Bar */}
       <div className="mb-6">
-        <div className="grid grid-cols-7 gap-4 mb-3">
+        <div className="grid grid-cols-6 gap-4 mb-3">
           <div className="bg-white p-4 rounded border">
             <div className="text-sm text-gray-600">Total Properties</div>
             <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
-          </div>
-          <div className="bg-green-50 p-4 rounded border border-green-200">
-            <div className="text-sm text-green-700">Included (CME)</div>
-            <div className="text-2xl font-bold text-green-900">
-              {formatNumber(filteredProperties.filter(p => p.isIncluded).length)}
-            </div>
           </div>
           <div className="bg-green-50 p-4 rounded border border-green-200">
             <div className="text-sm text-green-700">CSP Sales</div>

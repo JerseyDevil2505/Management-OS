@@ -10,6 +10,60 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 
+// Centralized package detection - O(n) single pass
+// Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
+const enrichPropertiesWithPackageData = (properties) => {
+  const groups = {};
+  properties.forEach(p => {
+    if (!p.sales_date || !p.sales_book || !p.sales_page) return;
+    const key = `${p.sales_date}|${p.sales_book}|${p.sales_page}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+  for (const [, group] of Object.entries(groups)) {
+    if (group.length <= 1) continue;
+    const hasFarm = group.some(p => {
+      const propClass = p.property_m4_class || p.property_class;
+      return propClass === '3B';
+    });
+    const combinedLotSF = group.reduce((sum, p) => {
+      const sf = parseFloat(p.asset_lot_sf) || 0;
+      const acres = parseFloat(p.asset_lot_acre) || 0;
+      return sum + sf + (acres * 43560);
+    }, 0);
+    // Determine additional card vs multi-property package
+    const baseKeys = new Set();
+    const cardIds = new Set();
+    group.forEach(p => {
+      const block = (p.property_block || '').toString().trim();
+      const lot = (p.property_lot || '').toString().trim();
+      const qual = (p.property_qualifier || '').toString().trim();
+      baseKeys.add(`${block}-${lot}-${qual}`);
+      let card = p.property_card || p.property_addl_card || null;
+      if (!card && p.property_composite_key) {
+        const parts = p.property_composite_key.split('-').map(s => s.trim());
+        card = parts[4] || parts[3] || null;
+      }
+      if (card) cardIds.add(String(card).trim().toUpperCase());
+    });
+    let isAdditionalCard = false;
+    if (baseKeys.size === 1 && cardIds.size > 1) {
+      isAdditionalCard = true;
+    }
+    const info = {
+      is_package_sale: true,
+      is_farm_package: hasFarm,
+      is_additional_card: isAdditionalCard,
+      package_count: group.length,
+      combined_lot_sf: combinedLotSF,
+      combined_lot_acres: combinedLotSF / 43560,
+      package_id: `${group[0].sales_book}-${group[0].sales_page}-${group[0].sales_date}`,
+      package_properties: group.map(p => p.property_composite_key)
+    };
+    group.forEach(p => { p._pkg = info; });
+  }
+};
+
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
   selectedJob,
@@ -221,10 +275,10 @@ const JobContainer = ({
 
       // Use client-side pagination with batches
       if (count && count > 0) {
-        const batchSize = 100;
+        const batchSize = 100; // Sweet spot for property loading - gentler on connection pool with multiple users
         const totalBatches = Math.ceil(count / batchSize);
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 10; // Match processor resilience - allow enough retries for transient pool issues
 
         console.log(`📥 Loading ${count} properties in ${totalBatches} batches...`);
 
@@ -287,11 +341,12 @@ const JobContainer = ({
               console.error(`  Full Error Object:`, batchError);
 
               // Retry transient/network failures up to maxRetries
-              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout')));
+              const isRetryableCode = batchError.code === '57014' || batchError.code === '08003' || batchError.code === '08006';
+              const transient = isRetryableCode || (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout') || batchError.message.toLowerCase().includes('schema cache')));
               if (transient && retryCount < maxRetries) {
                 retryCount++;
-                const backoff = 500 * retryCount;
-                console.warn(`Transient batch error detected. Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+                const backoff = 2000 * retryCount; // Match processor pattern: 2s exponential backoff
+                console.warn(`Transient batch error detected (code: ${batchError.code || 'none'}). Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
                 await new Promise(r => setTimeout(r, backoff));
                 // decrement batch to retry same batch in next loop iteration
                 batch--;
@@ -387,10 +442,9 @@ const JobContainer = ({
               retryCount = 0; // Reset retry count on success
             }
 
-            // Progressive delay - longer delay after more batches
-            const delay = Math.min(200 + (batch * 10), 1000);
+            // Steady inter-batch delay to avoid connection pool exhaustion (matches processor pattern)
             if (batch < totalBatches - 1) {
-              await new Promise(resolve => setTimeout(resolve, delay));
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
 
           } catch (error) {
@@ -423,12 +477,13 @@ const JobContainer = ({
 
             // Detect transient/network errors and retry the current batch up to maxRetries
             const transientMessage = (error.message || '').toString().toLowerCase();
-            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || error.name === 'TypeError';
+            const isRetryableCode = error.code === '57014' || error.code === '08003' || error.code === '08006';
+            const isTransient = isRetryableCode || transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || transientMessage.includes('schema cache') || error.name === 'TypeError';
 
             if (isTransient && retryCount < maxRetries) {
               retryCount++;
-              const backoff = 500 * retryCount;
-              console.warn(`Transient network error detected on batch ${batch + 1}. Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+              const backoff = 2000 * retryCount; // Match processor pattern: 2s exponential backoff
+              console.warn(`Transient network error detected on batch ${batch + 1} (code: ${error.code || 'none'}). Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
               await new Promise(r => setTimeout(r, backoff));
               batch--; // retry the same batch index on next loop iteration
               continue;
@@ -440,6 +495,7 @@ const JobContainer = ({
 
             // Set partial data and error - but ensure state is safe
             try {
+              enrichPropertiesWithPackageData(allProperties);
               setProperties(allProperties);
               const errorMsg = `Failed loading batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records. Error: ${error.message || 'Unknown database error'}`;
               setVersionError(errorMsg);
@@ -456,6 +512,9 @@ const JobContainer = ({
             return; // EXIT THE FUNCTION COMPLETELY
           }
         }
+
+        // Centralized package detection - compute once for all child components
+        enrichPropertiesWithPackageData(allProperties);
 
         setProperties(allProperties);
         setLoadingProgress(100);
@@ -707,39 +766,41 @@ const JobContainer = ({
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
-      // Filter by organization for non-PPA jobs to prevent initials collision
+      // Skip entirely for assessor jobs - assessors don't have employees
       const jobOrgId = jobData?.organization_id;
       const isAssessorJob = jobOrgId && jobOrgId !== PPA_ORG_ID;
       let employeesData = [];
-      try {
-        let empQuery = supabase
-          .from('employees')
-          .select('*')
-          .order('last_name', { ascending: true });
 
-        if (isAssessorJob) {
-          empQuery = empQuery.eq('organization_id', jobOrgId);
+      if (jobTenantConfig.jobModules.production) {
+        // Only load employees when ProductionTracker is enabled (PPA jobs)
+        try {
+          let empQuery = supabase
+            .from('employees')
+            .select('*')
+            .order('last_name', { ascending: true });
+
+          const { data, error } = await withTimeout(
+            empQuery,
+            10000,
+            'employees query'
+          );
+
+          if (error) {
+            console.error('❌ EMPLOYEES DATA LOADING ERROR:');
+            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
+            console.error(`  Error Code: ${error.code || 'No code'}`);
+            console.error(`  Full Error:`, error);
+          } else {
+            employeesData = data || [];
+          }
+        } catch (employeesError) {
+          console.error('❌ EMPLOYEES DATA LOADING FAILED:');
+          console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
+          console.error(`  Error Type: ${employeesError.constructor.name}`);
+          console.error(`  Full Error:`, employeesError);
         }
-
-        const { data, error } = await withTimeout(
-          empQuery,
-          10000,
-          'employees query'
-        );
-
-        if (error) {
-          console.error('❌ EMPLOYEES DATA LOADING ERROR:');
-          console.error(`  Error Message: ${error.message || 'Unknown error'}`);
-          console.error(`  Error Code: ${error.code || 'No code'}`);
-          console.error(`  Full Error:`, error);
-        } else {
-          employeesData = data || [];
-        }
-      } catch (employeesError) {
-        console.error('❌ EMPLOYEES DATA LOADING FAILED:');
-        console.error(`  Error Message: ${employeesError.message || 'Unknown error'}`);
-        console.error(`  Error Type: ${employeesError.constructor.name}`);
-        console.error(`  Full Error:`, employeesError);
+      } else {
+        console.log('⏭️ Skipping employees query (not needed for assessor jobs)');
       }
 
       // SET ALL THE LOADED DATA TO STATE - with error boundaries
