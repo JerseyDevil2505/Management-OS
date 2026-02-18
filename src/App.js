@@ -486,7 +486,6 @@ const App = () => {
             source_file_uploaded_at,
             unit_rate_config,
             staged_unit_rate_config,
-            unit_rate_codes_applied,
             job_responsibilities(count),
             job_contracts(
               contract_amount,
