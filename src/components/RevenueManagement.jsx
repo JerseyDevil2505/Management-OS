@@ -13,12 +13,31 @@ const RevenueManagement = () => {
   // Billing year (resets 12/31)
   const [billingYear, setBillingYear] = useState(new Date().getFullYear());
 
-  // Price configuration
+  // Tiered price configuration
   const [priceConfig, setPriceConfig] = useState({
-    pricePerLine: 0.10,
+    tiers: [
+      { maxLines: 1000, rate: 0.24 },
+      { maxLines: 5000, rate: 0.12 },
+      { maxLines: 15000, rate: 0.10 },
+      { maxLines: Infinity, rate: 0.10 }
+    ],
     primaryUserFee: 500,
     additionalUserFee: 250
   });
+
+  // Get the per-line rate for a given count based on tier
+  const getEffectiveRate = useCallback((lineCount) => {
+    if (lineCount <= 0) return priceConfig.tiers[0]?.rate || 0;
+    for (const tier of priceConfig.tiers) {
+      if (lineCount <= tier.maxLines) return tier.rate;
+    }
+    return priceConfig.tiers[priceConfig.tiers.length - 1]?.rate || 0;
+  }, [priceConfig.tiers]);
+
+  // Calculate line item fee using flat tier (all lines at the rate for their tier)
+  const calculateTieredLineItemFee = useCallback((lineCount) => {
+    return lineCount * getEffectiveRate(lineCount);
+  }, [getEffectiveRate]);
 
   // Selected client for detail view
   const [selectedClient, setSelectedClient] = useState(null);
@@ -42,6 +61,8 @@ const RevenueManagement = () => {
     assessor_name: '',
     address: '',
     email: '',
+    line_items: '',
+    users: '1',
     proposed_price: '',
     notes: ''
   });
@@ -146,13 +167,14 @@ const RevenueManagement = () => {
     const lineItems = org.line_item_count || 0;
     const userCount = staffCounts[org.id] || 0;
 
-    const lineItemFee = lineItems * priceConfig.pricePerLine;
+    const lineItemFee = calculateTieredLineItemFee(lineItems);
     const primaryFee = priceConfig.primaryUserFee;
     const staffFee = Math.max(0, userCount - 1) * priceConfig.additionalUserFee;
     const total = lineItemFee + primaryFee + staffFee;
+    const effectiveRate = getEffectiveRate(lineItems);
 
-    return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount };
-  }, [staffCounts, priceConfig]);
+    return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount, effectiveRate };
+  }, [staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
 
   // Billing status helper — simple: free / open / paid
   const getBillingStatus = (org) => {
@@ -521,7 +543,7 @@ const RevenueManagement = () => {
 
   // --- Proposal handlers ---
   const resetProposalForm = () => {
-    setProposalForm({ town_name: '', assessor_name: '', address: '', email: '', proposed_price: '', notes: '' });
+    setProposalForm({ town_name: '', assessor_name: '', address: '', email: '', line_items: '', users: '1', proposed_price: '', notes: '' });
     setEditingProposal(null);
   };
 
@@ -859,9 +881,17 @@ const RevenueManagement = () => {
 
       {/* Pricing Rate Display */}
       <div className="revenue-rates">
-        <span className="rate-chip">
-          ${priceConfig.pricePerLine.toFixed(2)}/line item
-        </span>
+        {priceConfig.tiers.map((tier, i) => {
+          const prevMax = i === 0 ? 0 : priceConfig.tiers[i - 1].maxLines;
+          const label = tier.maxLines === Infinity
+            ? `${(prevMax + 1).toLocaleString()}+`
+            : `${(prevMax + 1).toLocaleString()}-${tier.maxLines.toLocaleString()}`;
+          return (
+            <span key={i} className="rate-chip">
+              ${tier.rate.toFixed(2)}/line ({label})
+            </span>
+          );
+        })}
         <span className="rate-chip">
           ${priceConfig.primaryUserFee.toLocaleString()} primary user
         </span>
@@ -1073,8 +1103,9 @@ const RevenueManagement = () => {
                             setEditingProposal(p);
                             setProposalForm({
                               town_name: p.town_name, assessor_name: p.assessor_name || '',
-                              address: p.address || '', email: p.email || '',
-                              proposed_price: p.proposed_price, notes: p.notes || ''
+                      address: p.address || '', email: p.email || '',
+                      line_items: '', users: '1',
+                      proposed_price: p.proposed_price, notes: p.notes || ''
                             });
                             setShowProposalModal(true);
                           }}
@@ -1137,8 +1168,38 @@ const RevenueManagement = () => {
                 <label>Email Address</label>
                 <input type="email" value={proposalForm.email} onChange={e => setProposalForm(prev => ({ ...prev, email: e.target.value }))} placeholder="assessor@township.gov" />
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="revenue-form-group">
+                  <label>Est. Line Items</label>
+                  <input type="number" min="0" value={proposalForm.line_items || ''} onChange={e => {
+                    const lines = parseInt(e.target.value) || 0;
+                    const users = parseInt(proposalForm.users) || 1;
+                    const lineFee = calculateTieredLineItemFee(lines);
+                    const userFee = priceConfig.primaryUserFee + Math.max(0, users - 1) * priceConfig.additionalUserFee;
+                    setProposalForm(prev => ({ ...prev, line_items: e.target.value, proposed_price: (lineFee + userFee).toFixed(2) }));
+                  }} placeholder="e.g. 5000" />
+                </div>
+                <div className="revenue-form-group">
+                  <label>Users</label>
+                  <input type="number" min="1" value={proposalForm.users || ''} onChange={e => {
+                    const users = parseInt(e.target.value) || 1;
+                    const lines = parseInt(proposalForm.line_items) || 0;
+                    const lineFee = calculateTieredLineItemFee(lines);
+                    const userFee = priceConfig.primaryUserFee + Math.max(0, users - 1) * priceConfig.additionalUserFee;
+                    setProposalForm(prev => ({ ...prev, users: e.target.value, proposed_price: (lineFee + userFee).toFixed(2) }));
+                  }} placeholder="1" />
+                </div>
+              </div>
+              {(parseInt(proposalForm.line_items) > 0) && (
+                <div className="revenue-config-preview" style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ margin: '0 0 6px 0' }}>Price Breakdown</h4>
+                  <p style={{ margin: '2px 0' }}>Line items: {parseInt(proposalForm.line_items).toLocaleString()} x ${getEffectiveRate(parseInt(proposalForm.line_items)).toFixed(2)} = ${calculateTieredLineItemFee(parseInt(proposalForm.line_items)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <p style={{ margin: '2px 0' }}>Primary user: ${priceConfig.primaryUserFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  {parseInt(proposalForm.users) > 1 && <p style={{ margin: '2px 0' }}>Add'l users ({parseInt(proposalForm.users) - 1}): ${(Math.max(0, (parseInt(proposalForm.users) || 1) - 1) * priceConfig.additionalUserFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>}
+                </div>
+              )}
               <div className="revenue-form-group">
-                <label>Proposed Price ($) *</label>
+                <label>Proposed Price ($) * {parseInt(proposalForm.line_items) > 0 ? '(auto-calculated, editable)' : ''}</label>
                 <input type="number" step="0.01" min="0" value={proposalForm.proposed_price} onChange={e => setProposalForm(prev => ({ ...prev, proposed_price: e.target.value }))} placeholder="500.00" />
               </div>
               <div className="revenue-form-group">
@@ -1165,22 +1226,45 @@ const RevenueManagement = () => {
               <button className="revenue-modal-close" onClick={() => setShowInvoiceModal(false)}>X</button>
             </div>
             <div className="revenue-modal-body">
-              <div className="revenue-form-group">
-                <label>Price Per Line Item ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={priceConfig.pricePerLine}
-                  onChange={e => setPriceConfig(prev => ({ ...prev, pricePerLine: parseFloat(e.target.value) || 0 }))}
-                />
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>Line Item Tiers</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.85rem', color: '#475569', fontWeight: '600', marginBottom: '4px' }}>
+                  <span>Up To (lines)</span><span>Rate ($/line)</span>
+                </div>
+                {priceConfig.tiers.map((tier, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                    <input
+                      type="text"
+                      value={tier.maxLines === Infinity ? 'Unlimited' : tier.maxLines}
+                      onChange={e => {
+                        const val = e.target.value.toLowerCase() === 'unlimited' ? Infinity : parseInt(e.target.value) || 0;
+                        setPriceConfig(prev => {
+                          const tiers = [...prev.tiers];
+                          tiers[i] = { ...tiers[i], maxLines: val };
+                          return { ...prev, tiers };
+                        });
+                      }}
+                      style={{ padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
+                    />
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={tier.rate}
+                      onChange={e => {
+                        setPriceConfig(prev => {
+                          const tiers = [...prev.tiers];
+                          tiers[i] = { ...tiers[i], rate: parseFloat(e.target.value) || 0 };
+                          return { ...prev, tiers };
+                        });
+                      }}
+                      style={{ padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+                ))}
               </div>
               <div className="revenue-form-group">
                 <label>Primary User Fee ($)</label>
                 <input
-                  type="number"
-                  step="1"
-                  min="0"
+                  type="number" step="1" min="0"
                   value={priceConfig.primaryUserFee}
                   onChange={e => setPriceConfig(prev => ({ ...prev, primaryUserFee: parseFloat(e.target.value) || 0 }))}
                 />
@@ -1188,18 +1272,16 @@ const RevenueManagement = () => {
               <div className="revenue-form-group">
                 <label>Additional User Fee ($)</label>
                 <input
-                  type="number"
-                  step="1"
-                  min="0"
+                  type="number" step="1" min="0"
                   value={priceConfig.additionalUserFee}
                   onChange={e => setPriceConfig(prev => ({ ...prev, additionalUserFee: parseFloat(e.target.value) || 0 }))}
                 />
               </div>
               <div className="revenue-config-preview">
-                <h4>Fee Structure Preview</h4>
-                <p>Line Items: ${priceConfig.pricePerLine.toFixed(2)} x count</p>
-                <p>Primary User: ${priceConfig.primaryUserFee.toLocaleString()}</p>
-                <p>Each Add'l User: ${priceConfig.additionalUserFee.toLocaleString()}</p>
+                <h4>Example Pricing</h4>
+                <p>1,000 lines + 1 user: ${(calculateTieredLineItemFee(1000) + priceConfig.primaryUserFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <p>5,000 lines + 1 user: ${(calculateTieredLineItemFee(5000) + priceConfig.primaryUserFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <p>15,000 lines + 1 user: ${(calculateTieredLineItemFee(15000) + priceConfig.primaryUserFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
             <div className="revenue-modal-footer">
