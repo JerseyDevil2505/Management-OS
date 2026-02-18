@@ -275,7 +275,7 @@ const JobContainer = ({
 
       // Use client-side pagination with batches
       if (count && count > 0) {
-        const batchSize = 250; // Optimized for stability and error resilience (matches processor/updater pattern)
+        const batchSize = 100; // Sweet spot for property loading - gentler on connection pool with multiple users
         const totalBatches = Math.ceil(count / batchSize);
         let retryCount = 0;
         const maxRetries = 10; // Match processor resilience - allow enough retries for transient pool issues
