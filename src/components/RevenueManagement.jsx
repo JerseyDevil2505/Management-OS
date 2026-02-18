@@ -33,6 +33,19 @@ const RevenueManagement = () => {
   const [overrideValue, setOverrideValue] = useState('');
   const overrideInputRef = useRef(null);
 
+  // Proposals
+  const [proposals, setProposals] = useState([]);
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [editingProposal, setEditingProposal] = useState(null);
+  const [proposalForm, setProposalForm] = useState({
+    town_name: '',
+    assessor_name: '',
+    address: '',
+    email: '',
+    proposed_price: '',
+    notes: ''
+  });
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -98,9 +111,18 @@ const RevenueManagement = () => {
         }
       });
 
+      // Load proposals
+      const { data: proposalData, error: proposalError } = await supabase
+        .from('proposals')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (proposalError) console.error('Error loading proposals:', proposalError);
+
       setOrganizations(orgs || []);
       setStaffCounts(counts);
       setOrgCcddCodes(ccddMap);
+      setProposals(proposalData || []);
     } catch (err) {
       console.error('Error loading revenue data:', err);
       setError('Failed to load revenue data');
@@ -497,6 +519,253 @@ const RevenueManagement = () => {
     setTimeout(() => setSuccessMessage(''), 3000);
   }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
 
+  // --- Proposal handlers ---
+  const resetProposalForm = () => {
+    setProposalForm({ town_name: '', assessor_name: '', address: '', email: '', proposed_price: '', notes: '' });
+    setEditingProposal(null);
+  };
+
+  const handleSaveProposal = async () => {
+    if (!proposalForm.town_name || !proposalForm.proposed_price) {
+      setError('Town name and price are required');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    try {
+      const data = {
+        town_name: proposalForm.town_name,
+        assessor_name: proposalForm.assessor_name || null,
+        address: proposalForm.address || null,
+        email: proposalForm.email || null,
+        proposed_price: parseFloat(proposalForm.proposed_price) || 0,
+        notes: proposalForm.notes || null
+      };
+
+      if (editingProposal) {
+        const { error: updateErr } = await supabase
+          .from('proposals').update(data).eq('id', editingProposal.id);
+        if (updateErr) throw updateErr;
+        setProposals(prev => prev.map(p => p.id === editingProposal.id ? { ...p, ...data } : p));
+      } else {
+        const { data: newRow, error: insertErr } = await supabase
+          .from('proposals').insert(data).select().single();
+        if (insertErr) throw insertErr;
+        setProposals(prev => [newRow, ...prev]);
+      }
+      setShowProposalModal(false);
+      resetProposalForm();
+      setSuccessMessage(editingProposal ? 'Proposal updated' : 'Proposal created');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err) {
+      console.error('Error saving proposal:', err);
+      setError('Failed to save proposal');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  const handleDeleteProposal = async (id) => {
+    if (!window.confirm('Delete this proposal?')) return;
+    try {
+      const { error: delErr } = await supabase.from('proposals').delete().eq('id', id);
+      if (delErr) throw delErr;
+      setProposals(prev => prev.filter(p => p.id !== id));
+      setSuccessMessage('Proposal deleted');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err) {
+      console.error('Error deleting proposal:', err);
+    }
+  };
+
+  const handleProposalStatusChange = async (id, newStatus) => {
+    try {
+      const { error: updateErr } = await supabase
+        .from('proposals').update({ status: newStatus }).eq('id', id);
+      if (updateErr) throw updateErr;
+      setProposals(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+    } catch (err) {
+      console.error('Error updating proposal status:', err);
+    }
+  };
+
+  const handleRolloverProposal = async (proposal) => {
+    if (!window.confirm(`Onboard "${proposal.town_name}" as a new client? This will create an organization and mark the proposal as accepted.`)) return;
+    try {
+      // Create organization
+      const orgData = {
+        name: proposal.town_name,
+        org_type: 'assessor',
+        primary_contact_name: proposal.assessor_name || null,
+        primary_contact_email: proposal.email || null,
+        billing_address: proposal.address || null,
+        annual_fee: proposal.proposed_price || 0,
+        subscription_status: 'active',
+        is_free_account: false
+      };
+      const { data: newOrg, error: orgErr } = await supabase
+        .from('organizations').insert(orgData).select().single();
+      if (orgErr) throw orgErr;
+
+      // Update proposal
+      const { error: propErr } = await supabase
+        .from('proposals')
+        .update({ status: 'accepted', converted_org_id: newOrg.id })
+        .eq('id', proposal.id);
+      if (propErr) throw propErr;
+
+      setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, status: 'accepted', converted_org_id: newOrg.id } : p));
+      setOrganizations(prev => [...prev, newOrg].sort((a, b) => a.name.localeCompare(b.name)));
+
+      setSuccessMessage(`${proposal.town_name} onboarded successfully!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error rolling over proposal:', err);
+      setError('Failed to onboard client');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  // Generate Proposal PDF (mirrors invoice format)
+  const generateProposalPDF = useCallback(async (proposal) => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    const lojikBlue = [0, 102, 204];
+
+    // Load logo
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // Header
+    if (logoDataUrl) {
+      try { doc.addImage(logoDataUrl, 'PNG', margin, margin, 100, 44); }
+      catch { doc.setTextColor(...lojikBlue); doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.text('LOJIK', margin, margin + 30); }
+    } else {
+      doc.setTextColor(...lojikBlue); doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.text('LOJIK', margin, margin + 30);
+    }
+
+    // PROPOSAL title
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PROPOSAL', pageWidth - margin, margin + 20, { align: 'right' });
+
+    const today = new Date();
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Date: ${today.toLocaleDateString()}`, pageWidth - margin, margin + 36, { align: 'right' });
+    const refNum = `P-${billingYear}-${proposal.town_name.replace(/\s+/g, '').substring(0, 6).toUpperCase()}`;
+    doc.text(`Ref #: ${refNum}`, pageWidth - margin, margin + 50, { align: 'right' });
+
+    // Divider
+    doc.setDrawColor(...lojikBlue);
+    doc.setLineWidth(2);
+    doc.line(margin, margin + 65, pageWidth - margin, margin + 65);
+
+    // Prepared For
+    let yPos = margin + 90;
+    doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'bold');
+    doc.text('PREPARED FOR:', margin, yPos);
+    doc.setFontSize(12); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold');
+    doc.text(proposal.town_name, margin, yPos + 18);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+    let contactY = yPos + 34;
+    if (proposal.assessor_name) { doc.text(`Attn: ${proposal.assessor_name}`, margin, contactY); contactY += 14; }
+    if (proposal.address) {
+      proposal.address.split('\n').forEach(line => { doc.text(line, margin, contactY); contactY += 14; });
+    }
+    if (proposal.email) { doc.text(proposal.email, margin, contactY); contactY += 14; }
+
+    // From
+    doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'bold');
+    doc.text('FROM:', pageWidth - margin - 200, yPos);
+    doc.setFontSize(11); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold');
+    doc.text('LOJIK', pageWidth - margin - 200, yPos + 18);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+    doc.text('PO BOX 1225', pageWidth - margin - 200, yPos + 32);
+    doc.text('DELRAN, NJ 08075', pageWidth - margin - 200, yPos + 44);
+
+    // Services table
+    const invoiceStartY = yPos + 110;
+    const rows = [
+      ['1', 'Property Assessment Copilot - Annual License\nFull platform access: data quality, market analysis, land valuation, final valuation, appeal tracking', '1',
+        `$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        `$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`]
+    ];
+
+    autoTable(doc, {
+      head: [['#', 'Description', 'Qty', 'Unit Price', 'Amount']],
+      body: rows,
+      startY: invoiceStartY,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9, cellPadding: 8, lineColor: [220, 220, 220], lineWidth: 0.5 },
+      headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: {
+        0: { cellWidth: 30, halign: 'center' },
+        1: { cellWidth: 260 },
+        2: { cellWidth: 50, halign: 'center' },
+        3: { cellWidth: 80, halign: 'right' },
+        4: { cellWidth: 80, halign: 'right', fontStyle: 'bold' }
+      }
+    });
+
+    const totalY = doc.lastAutoTable.finalY + 15;
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.5);
+    doc.line(pageWidth - margin - 200, totalY, pageWidth - margin, totalY);
+    doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(...lojikBlue);
+    doc.text('PROPOSED TOTAL:', pageWidth - margin - 160, totalY + 20);
+    doc.text(`$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, pageWidth - margin, totalY + 20, { align: 'right' });
+
+    // What's included section
+    const featuresY = totalY + 55;
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+    doc.text('What\'s Included:', margin, featuresY);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(60, 60, 60);
+    const features = [
+      'Works with BRT and Microsystems CAMA Software',
+      'Automated data quality and error checking',
+      'Market normalization with HPI data and outlier detection',
+      'Land valuation: vacant sales, allocation, depth tables, VCS sheets',
+      'Cost conversion analysis with new construction comparables',
+      'Sales comparison engine with adjustment grid',
+      'Ratable comparison and rate calculator',
+      'Page-by-page worksheet for property-level review',
+      'Export to Excel at every step'
+    ];
+    features.forEach((feat, i) => {
+      doc.text(`\u2022  ${feat}`, margin + 10, featuresY + 18 + (i * 14));
+    });
+
+    // Footer
+    doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(140, 140, 140);
+    const footerNoteY = featuresY + 18 + (features.length * 14) + 20;
+    doc.text('This proposal is valid for 60 days from the date above.', margin, footerNoteY);
+    doc.text('Contact us to schedule a live demo with your own data.', margin, footerNoteY + 12);
+
+    doc.setDrawColor(...lojikBlue); doc.setLineWidth(1);
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.line(margin, pageHeight - 40, pageWidth - margin, pageHeight - 40);
+    doc.setFontSize(8); doc.setTextColor(140, 140, 140); doc.setFont('helvetica', 'normal');
+    doc.text(`LOJIK | Generated ${today.toLocaleDateString()}`, pageWidth / 2, pageHeight - 25, { align: 'center' });
+
+    doc.save(`Proposal_${proposal.town_name.replace(/\s+/g, '_')}_${billingYear}.pdf`);
+    setSuccessMessage('Proposal PDF generated');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  }, [billingYear]);
+
   const billingStatusOptions = [
     { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
@@ -738,6 +1007,154 @@ const RevenueManagement = () => {
           </tfoot>
         </table>
       </div>
+
+      {/* Proposals Section */}
+      <div className="revenue-proposals-section">
+        <div className="revenue-proposals-header">
+          <h3>Proposals</h3>
+          <button
+            className="revenue-create-proposal-btn"
+            onClick={() => { resetProposalForm(); setShowProposalModal(true); }}
+          >
+            + New Proposal
+          </button>
+        </div>
+
+        {proposals.length === 0 ? (
+          <div className="revenue-proposals-empty">No proposals yet. Click "+ New Proposal" to create one.</div>
+        ) : (
+          <div className="revenue-table-wrapper">
+            <table className="revenue-table">
+              <thead>
+                <tr>
+                  <th>Town</th>
+                  <th>Assessor</th>
+                  <th>Email</th>
+                  <th className="revenue-col-right">Proposed Price</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposals.map(p => (
+                  <tr key={p.id} className={p.status === 'accepted' ? 'revenue-row-accepted' : ''}>
+                    <td>
+                      <div className="revenue-client-name">{p.town_name}</div>
+                    </td>
+                    <td>{p.assessor_name || '-'}</td>
+                    <td>{p.email || '-'}</td>
+                    <td className="revenue-col-right revenue-total-cell">
+                      ${parseFloat(p.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td>
+                      <select
+                        className={`revenue-proposal-status revenue-proposal-${p.status}`}
+                        value={p.status}
+                        onChange={(e) => handleProposalStatusChange(p.id, e.target.value)}
+                        disabled={p.status === 'accepted'}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="sent">Sent</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                      </select>
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button className="revenue-pdf-btn" onClick={() => generateProposalPDF(p)} title="Generate Proposal PDF">PDF</button>
+                        <button
+                          className="revenue-pdf-btn"
+                          style={{ background: '#6b7280' }}
+                          onClick={() => {
+                            setEditingProposal(p);
+                            setProposalForm({
+                              town_name: p.town_name, assessor_name: p.assessor_name || '',
+                              address: p.address || '', email: p.email || '',
+                              proposed_price: p.proposed_price, notes: p.notes || ''
+                            });
+                            setShowProposalModal(true);
+                          }}
+                          title="Edit proposal"
+                        >Edit</button>
+                        {p.status !== 'accepted' && (
+                          <button
+                            className="revenue-pdf-btn"
+                            style={{ background: '#16a34a' }}
+                            onClick={() => handleRolloverProposal(p)}
+                            title="Onboard as client"
+                          >Onboard</button>
+                        )}
+                        {p.status !== 'accepted' && (
+                          <button
+                            className="revenue-pdf-btn"
+                            style={{ background: '#dc2626' }}
+                            onClick={() => handleDeleteProposal(p.id)}
+                            title="Delete proposal"
+                          >Del</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit Proposal Modal */}
+      {showProposalModal && (
+        <div className="revenue-modal-overlay" onClick={() => { setShowProposalModal(false); resetProposalForm(); }}>
+          <div className="revenue-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="revenue-modal-header">
+              <h3>{editingProposal ? 'Edit Proposal' : 'New Proposal'}</h3>
+              <button className="revenue-modal-close" onClick={() => { setShowProposalModal(false); resetProposalForm(); }}>X</button>
+            </div>
+            <div className="revenue-modal-body">
+              <div className="revenue-form-group">
+                <label>Town Name *</label>
+                <input type="text" value={proposalForm.town_name} onChange={e => setProposalForm(prev => ({ ...prev, town_name: e.target.value }))} placeholder="e.g. Borough of Riverside" />
+              </div>
+              <div className="revenue-form-group">
+                <label>Assessor Name</label>
+                <input type="text" value={proposalForm.assessor_name} onChange={e => setProposalForm(prev => ({ ...prev, assessor_name: e.target.value }))} placeholder="e.g. John Smith" />
+              </div>
+              <div className="revenue-form-group">
+                <label>Address</label>
+                <textarea
+                  value={proposalForm.address}
+                  onChange={e => setProposalForm(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="123 Main St\nTownship, NJ 08000"
+                  rows={3}
+                  style={{ width: '100%', padding: '0.625rem 0.875rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.95rem', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+              <div className="revenue-form-group">
+                <label>Email Address</label>
+                <input type="email" value={proposalForm.email} onChange={e => setProposalForm(prev => ({ ...prev, email: e.target.value }))} placeholder="assessor@township.gov" />
+              </div>
+              <div className="revenue-form-group">
+                <label>Proposed Price ($) *</label>
+                <input type="number" step="0.01" min="0" value={proposalForm.proposed_price} onChange={e => setProposalForm(prev => ({ ...prev, proposed_price: e.target.value }))} placeholder="500.00" />
+              </div>
+              <div className="revenue-form-group">
+                <label>Notes</label>
+                <input type="text" value={proposalForm.notes} onChange={e => setProposalForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+            </div>
+            <div className="revenue-modal-footer">
+              <button className="revenue-modal-save" style={{ background: '#6b7280', marginRight: '8px' }} onClick={() => { setShowProposalModal(false); resetProposalForm(); }}>Cancel</button>
+              <button className="revenue-modal-save" onClick={handleSaveProposal}>
+                {editingProposal ? 'Update' : 'Create Proposal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pricing Configuration Modal */}
       {showInvoiceModal && (
