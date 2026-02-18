@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import './RevenueManagement.css';
 
@@ -23,6 +23,34 @@ const RevenueManagement = () => {
   // Selected client for detail view
   const [selectedClient, setSelectedClient] = useState(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+
+  // Billing status dropdown
+  const [openStatusDropdown, setOpenStatusDropdown] = useState(null);
+  const statusDropdownRef = useRef(null);
+
+  // Price override editing
+  const [editingOverride, setEditingOverride] = useState(null);
+  const [overrideValue, setOverrideValue] = useState('');
+  const overrideInputRef = useRef(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target)) {
+        setOpenStatusDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Focus override input when editing
+  useEffect(() => {
+    if (editingOverride && overrideInputRef.current) {
+      overrideInputRef.current.focus();
+      overrideInputRef.current.select();
+    }
+  }, [editingOverride]);
 
   useEffect(() => {
     loadData();
@@ -87,6 +115,12 @@ const RevenueManagement = () => {
       return { lineItemFee: 0, primaryFee: 0, staffFee: 0, total: 0, isFree: true };
     }
 
+    // If annual_fee override is set, use it
+    if (org.annual_fee && parseFloat(org.annual_fee) > 0) {
+      const overrideTotal = parseFloat(org.annual_fee);
+      return { lineItemFee: 0, primaryFee: overrideTotal, staffFee: 0, total: overrideTotal, isFree: false, isOverride: true };
+    }
+
     const lineItems = org.line_item_count || 0;
     const userCount = staffCounts[org.id] || 0;
 
@@ -95,7 +129,7 @@ const RevenueManagement = () => {
     const staffFee = Math.max(0, userCount - 1) * priceConfig.additionalUserFee;
     const total = lineItemFee + primaryFee + staffFee;
 
-    return { lineItemFee, primaryFee, staffFee, total, isFree: false, lineItems, userCount };
+    return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount };
   }, [staffCounts, priceConfig]);
 
   // Revenue summary calculations
@@ -105,9 +139,12 @@ const RevenueManagement = () => {
     let freeAccounts = 0;
     let paidAccounts = 0;
     let totalUsers = 0;
+    let collectedRevenue = 0;
+    let outstandingRevenue = 0;
 
     organizations.forEach(org => {
       const fees = calculateFees(org);
+      const billingStatus = getBillingStatus(org);
       totalAnnual += fees.total;
       totalLineItems += org.line_item_count || 0;
       totalUsers += staffCounts[org.id] || 0;
@@ -115,11 +152,101 @@ const RevenueManagement = () => {
         freeAccounts++;
       } else {
         paidAccounts++;
+        if (billingStatus === 'paid') {
+          collectedRevenue += fees.total;
+        } else {
+          outstandingRevenue += fees.total;
+        }
       }
     });
 
-    return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers };
+    return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers, collectedRevenue, outstandingRevenue };
   }, [organizations, calculateFees, staffCounts]);
+
+  // Update billing status on org
+  const handleBillingStatusChange = async (orgId, newStatus) => {
+    try {
+      const updateData = {};
+      const now = new Date().toISOString().split('T')[0];
+
+      // Set the appropriate date field based on status
+      switch (newStatus) {
+        case 'paid':
+          updateData.payment_received_date = now;
+          break;
+        case 'po-received':
+          updateData.po_received_date = now;
+          updateData.payment_received_date = null;
+          break;
+        case 'invoiced':
+          updateData.invoice_sent_date = now;
+          updateData.po_received_date = null;
+          updateData.payment_received_date = null;
+          break;
+        case 'pending':
+          updateData.invoice_sent_date = null;
+          updateData.po_received_date = null;
+          updateData.payment_received_date = null;
+          break;
+        default:
+          break;
+      }
+
+      const { error: updateError } = await supabase
+        .from('organizations')
+        .update(updateData)
+        .eq('id', orgId);
+
+      if (updateError) throw updateError;
+
+      // Optimistic update
+      setOrganizations(prev => prev.map(org => {
+        if (org.id === orgId) {
+          return { ...org, ...updateData };
+        }
+        return org;
+      }));
+
+      setOpenStatusDropdown(null);
+      setSuccessMessage('Billing status updated');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err) {
+      console.error('Error updating billing status:', err);
+      setError('Failed to update billing status');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  // Save price override
+  const handleSaveOverride = async (orgId) => {
+    try {
+      const parsedValue = overrideValue === '' ? 0 : parseFloat(overrideValue.replace(/[^0-9.]/g, ''));
+
+      const { error: updateError } = await supabase
+        .from('organizations')
+        .update({ annual_fee: parsedValue })
+        .eq('id', orgId);
+
+      if (updateError) throw updateError;
+
+      // Optimistic update
+      setOrganizations(prev => prev.map(org => {
+        if (org.id === orgId) {
+          return { ...org, annual_fee: parsedValue };
+        }
+        return org;
+      }));
+
+      setEditingOverride(null);
+      setOverrideValue('');
+      setSuccessMessage('Price override saved');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err) {
+      console.error('Error saving override:', err);
+      setError('Failed to save price override');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
 
   // Generate PDF invoice for a client
   const generateInvoicePDF = useCallback(async (org) => {
@@ -243,6 +370,15 @@ const RevenueManagement = () => {
 
     if (fees.isFree) {
       rows.push(['1', 'Free Account - Property Assessment Copilot', '1', '$0.00', '$0.00']);
+    } else if (fees.isOverride) {
+      // Override: single line item with the fixed amount
+      rows.push([
+        '1',
+        `Property Assessment Copilot - Annual License (${lineItems.toLocaleString()} line items, ${userCount} user${userCount !== 1 ? 's' : ''})`,
+        '1',
+        `$${fees.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        `$${fees.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      ]);
     } else {
       // Line item fee
       rows.push([
@@ -385,6 +521,13 @@ const RevenueManagement = () => {
     return labels[status] || 'Unknown';
   };
 
+  const billingStatusOptions = [
+    { value: 'pending', label: 'Pending', color: '#991b1b', bg: '#fee2e2' },
+    { value: 'invoiced', label: 'Invoiced', color: '#3730a3', bg: '#e0e7ff' },
+    { value: 'po-received', label: 'PO Received', color: '#92400e', bg: '#fef3c7' },
+    { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
+  ];
+
   if (loading) {
     return (
       <div className="revenue-container">
@@ -441,6 +584,18 @@ const RevenueManagement = () => {
             ${revenueSummary.totalAnnual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
+        <div className="revenue-card revenue-card-collected">
+          <div className="revenue-card-label">Collected</div>
+          <div className="revenue-card-value" style={{ color: '#166534' }}>
+            ${revenueSummary.collectedRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div className="revenue-card revenue-card-outstanding">
+          <div className="revenue-card-label">Outstanding</div>
+          <div className="revenue-card-value" style={{ color: '#dc2626' }}>
+            ${revenueSummary.outstandingRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
         <div className="revenue-card">
           <div className="revenue-card-label">Paid Clients</div>
           <div className="revenue-card-value">{revenueSummary.paidAccounts}</div>
@@ -493,6 +648,7 @@ const RevenueManagement = () => {
               const fees = calculateFees(org);
               const userCount = staffCounts[org.id] || 0;
               const billingStatus = getBillingStatus(org);
+              const isDropdownOpen = openStatusDropdown === org.id;
 
               return (
                 <tr key={org.id} className={fees.isFree ? 'revenue-row-free' : ''}>
@@ -502,24 +658,84 @@ const RevenueManagement = () => {
                   </td>
                   <td>{(org.line_item_count || 0).toLocaleString()}</td>
                   <td className="revenue-col-right">
-                    {fees.isFree ? '-' : `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    {fees.isFree ? '-' : fees.isOverride ? '-' : `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
                   <td>{userCount}</td>
                   <td className="revenue-col-right">
-                    {fees.isFree ? '-' : `$${(fees.primaryFee + fees.staffFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    {fees.isFree ? '-' : fees.isOverride ? '-' : `$${(fees.primaryFee + fees.staffFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
                   <td>
                     <span className={`revenue-account-badge ${fees.isFree ? 'revenue-badge-free' : 'revenue-badge-paid'}`}>
                       {fees.isFree ? 'Free' : 'Paid'}
                     </span>
                   </td>
-                  <td>
-                    <span className={`revenue-billing-badge revenue-billing-${billingStatus}`}>
-                      {getBillingLabel(billingStatus)}
-                    </span>
+                  <td style={{ position: 'relative' }}>
+                    {billingStatus === 'free' ? (
+                      <span className="revenue-billing-badge revenue-billing-free">Free</span>
+                    ) : (
+                      <div style={{ position: 'relative', display: 'inline-block' }} ref={isDropdownOpen ? statusDropdownRef : null}>
+                        <button
+                          className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
+                          onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
+                          title="Click to change billing status"
+                        >
+                          {getBillingLabel(billingStatus)}
+                          <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
+                        </button>
+                        {isDropdownOpen && (
+                          <div className="revenue-status-dropdown">
+                            {billingStatusOptions.map(opt => (
+                              <button
+                                key={opt.value}
+                                className={`revenue-status-option ${billingStatus === opt.value ? 'revenue-status-active' : ''}`}
+                                style={{ '--opt-bg': opt.bg, '--opt-color': opt.color }}
+                                onClick={() => handleBillingStatusChange(org.id, opt.value)}
+                              >
+                                <span className="revenue-status-dot" style={{ background: opt.color }}></span>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="revenue-col-right revenue-total-cell">
-                    ${fees.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {editingOverride === org.id ? (
+                      <div className="revenue-override-edit">
+                        <span style={{ color: '#64748b', fontSize: '0.8rem' }}>$</span>
+                        <input
+                          ref={overrideInputRef}
+                          type="text"
+                          className="revenue-override-input"
+                          value={overrideValue}
+                          onChange={(e) => setOverrideValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveOverride(org.id);
+                            if (e.key === 'Escape') { setEditingOverride(null); setOverrideValue(''); }
+                          }}
+                          onBlur={() => handleSaveOverride(org.id)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="revenue-total-editable"
+                        onClick={() => {
+                          if (!fees.isFree) {
+                            setEditingOverride(org.id);
+                            setOverrideValue(org.annual_fee && parseFloat(org.annual_fee) > 0 ? parseFloat(org.annual_fee).toFixed(2) : fees.total.toFixed(2));
+                          }
+                        }}
+                        title={fees.isFree ? '' : `Click to set price override${fees.isOverride ? ' (currently overridden)' : ''}`}
+                      >
+                        <span>
+                          ${fees.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        {fees.isOverride && <span className="revenue-override-indicator">*</span>}
+                        {!fees.isFree && <span className="revenue-edit-icon">&#9998;</span>}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <button
@@ -539,11 +755,11 @@ const RevenueManagement = () => {
               <td>Totals</td>
               <td>{revenueSummary.totalLineItems.toLocaleString()}</td>
               <td className="revenue-col-right">
-                ${organizations.reduce((sum, o) => sum + calculateFees(o).lineItemFee, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${organizations.reduce((sum, o) => { const f = calculateFees(o); return sum + (f.isOverride ? 0 : f.lineItemFee); }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </td>
               <td>{revenueSummary.totalUsers}</td>
               <td className="revenue-col-right">
-                ${organizations.reduce((sum, o) => { const f = calculateFees(o); return sum + f.primaryFee + f.staffFee; }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${organizations.reduce((sum, o) => { const f = calculateFees(o); return sum + (f.isOverride ? 0 : f.primaryFee + f.staffFee); }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </td>
               <td></td>
               <td></td>
