@@ -125,6 +125,7 @@ const SalesReviewTab = ({
   
   const [showAllProperties, setShowAllProperties] = useState(false);
   const [showAllNormalizedSales, setShowAllNormalizedSales] = useState(false);
+  const [showAllSales, setShowAllSales] = useState(false); // false = only show sales with normalized price
   const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
   const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
@@ -337,8 +338,13 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => designFilter.includes(p.asset_design_style));
     }
 
+    // Default: only show sales with a normalized price
+    if (!showAllSales && !showAllProperties) {
+      filtered = filtered.filter(p => p.values_norm_time && p.values_norm_time > 0);
+    }
+
     // Period filter - show CSP, PSP, HSP by default unless "Show All Normalized Sales" is checked
-    if (!showAllNormalizedSales && !showAllProperties) {
+    if (!showAllNormalizedSales && !showAllProperties && showAllSales) {
       filtered = filtered.filter(p => p.periodCode === 'CSP' || p.periodCode === 'PSP' || p.periodCode === 'HSP');
     }
 
@@ -362,7 +368,7 @@ const SalesReviewTab = ({
     }
 
     return filtered;
-  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter, viewFilter]);
+  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, showAllSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter, viewFilter]);
 
   // Get unique normalized Sales NU codes for dropdown
   const uniqueSalesNuCodes = useMemo(() => {
@@ -1247,8 +1253,21 @@ const SalesReviewTab = ({
             <span className="text-sm font-medium text-gray-700">Show Codes (not definitions)</span>
           </label>
 
-          {/* Show All Normalized Sales Toggle */}
+          {/* Show All Sales Toggle (includes non-normalized) */}
           {!showAllProperties && (
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllSales}
+                onChange={(e) => setShowAllSales(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm font-medium text-gray-700">Show All Sales</span>
+            </label>
+          )}
+
+          {/* Show All Normalized Sales Toggle (all periods) */}
+          {!showAllProperties && showAllSales && (
             <label className="inline-flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1256,7 +1275,7 @@ const SalesReviewTab = ({
                 onChange={(e) => setShowAllNormalizedSales(e.target.checked)}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm font-medium text-gray-700">Show All Normalized Sales</span>
+              <span className="text-sm font-medium text-gray-700">Show All Periods</span>
             </label>
           )}
 
