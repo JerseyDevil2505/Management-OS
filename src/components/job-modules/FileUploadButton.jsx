@@ -1793,8 +1793,35 @@ const handleCodeFileUpdate = async () => {
         if (salesReverted > 0) {
           addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
+
+        // Clear values_norm_time for changed sales (Keep New / Keep Both)
+        // These sales have new price/date so old normalization is invalid
+        const dirtyKeys = [];
+        for (const [compositeKey, decision] of salesDecisions.entries()) {
+          if (decision !== 'Keep Old') {
+            dirtyKeys.push(compositeKey);
+          }
+        }
+
+        if (dirtyKeys.length > 0) {
+          addBatchLog(`🧹 Clearing stale normalized values for ${dirtyKeys.length} changed sales...`, 'info');
+          try {
+            for (let i = 0; i < dirtyKeys.length; i += 500) {
+              const batch = dirtyKeys.slice(i, i + 500);
+              await supabase
+                .from('property_market_analysis')
+                .update({ values_norm_time: null, updated_at: new Date().toISOString() })
+                .eq('job_id', job.id)
+                .in('property_composite_key', batch);
+            }
+            addBatchLog(`✅ Cleared stale values_norm_time for ${dirtyKeys.length} changed sales`, 'success');
+          } catch (cleanupError) {
+            console.error('Failed to clear stale normalized values:', cleanupError);
+            addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
+          }
+        }
       }
-      
+
        // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
@@ -1812,7 +1839,7 @@ const handleCodeFileUpdate = async () => {
         addNotification('Data processed but job update failed', 'warning');
       }
 
-      // Set flag for ProductionTracker to know data is stale
+      // Set flags for ProductionTracker (stale analytics) and size normalization (stale)
       try {
         const { data: currentJob } = await supabase
           .from('jobs')
@@ -1820,22 +1847,21 @@ const handleCodeFileUpdate = async () => {
           .eq('id', job.id)
           .single();
 
-        if (currentJob?.workflow_stats) {
-          const updatedWorkflowStats = {
-            ...currentJob.workflow_stats,
-            needsRefresh: true,
-            lastFileUpdate: new Date().toISOString()
-          };
-          
-          await supabase
-            .from('jobs')
-            .update({ 
-              workflow_stats: updatedWorkflowStats 
-            })
-            .eq('id', job.id);
-          
-          addBatchLog('🔄 Marked production analytics as needing refresh', 'info');
-        }
+        const updatedWorkflowStats = {
+          ...(currentJob?.workflow_stats || {}),
+          needsRefresh: true,
+          sizeNormStale: true,
+          lastFileUpdate: new Date().toISOString()
+        };
+
+        await supabase
+          .from('jobs')
+          .update({
+            workflow_stats: updatedWorkflowStats
+          })
+          .eq('id', job.id);
+
+        addBatchLog('🔄 Marked production analytics and size normalization as needing refresh', 'info');
       } catch (statsError) {
         console.error('Error updating workflow stats flag:', statsError);
       }      
@@ -1859,22 +1885,23 @@ const handleCodeFileUpdate = async () => {
 
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+        }
 
-          // Auto-normalize for LOJIK/assessor jobs if tenant config says so
-          if (tenantConfig?.behavior?.autoNormalize) {
-            addBatchLog('🔄 Auto-normalizing sales data...', 'info');
-            try {
-              const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county);
-              addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
-              addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
-            } catch (normError) {
-              console.error('Auto-normalization failed:', normError);
-              addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
-              addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
-            }
-          } else {
-            addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to process these sales changes`, 'warning');
+        // Auto-normalize for LOJIK/assessor jobs after every file update
+        // This handles: new sales normalization + re-normalization of changed sales
+        if (tenantConfig?.behavior?.autoNormalize) {
+          addBatchLog('🔄 Auto-normalizing sales data (time normalization)...', 'info');
+          try {
+            const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county);
+            addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
+            addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
+          } catch (normError) {
+            console.error('Auto-normalization failed:', normError);
+            addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
+            addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
           }
+        } else {
+          addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to update normalized values`, 'warning');
         }
       }
       // Check if rollback occurred

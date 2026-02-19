@@ -239,6 +239,35 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
   await worksheetService.saveNormalizationConfig(jobId, updatedConfig);
   await worksheetService.saveTimeNormalizedSales(jobId, normalized, stats);
 
+  // 9. Sync values_norm_time to property_market_analysis so SalesReviewTab sees them
+  try {
+    const pmaUpdates = normalized
+      .filter(s => s.time_normalized_price && s.keep_reject !== 'reject')
+      .map(s => ({
+        job_id: jobId,
+        property_composite_key: s.property_composite_key,
+        values_norm_time: s.time_normalized_price,
+        updated_at: new Date().toISOString()
+      }));
+
+    if (pmaUpdates.length > 0) {
+      // Batch upsert in chunks of 500
+      for (let i = 0; i < pmaUpdates.length; i += 500) {
+        const batch = pmaUpdates.slice(i, i + 500);
+        const { error: pmaError } = await supabase
+          .from('property_market_analysis')
+          .upsert(batch, { onConflict: 'job_id,property_composite_key' });
+
+        if (pmaError) {
+          console.warn('⚠️ Failed to sync values_norm_time to property_market_analysis:', pmaError);
+        }
+      }
+      console.log(`✅ Synced values_norm_time to property_market_analysis for ${pmaUpdates.length} sales`);
+    }
+  } catch (syncError) {
+    console.warn('⚠️ Non-critical: Could not sync values_norm_time to property_market_analysis:', syncError);
+  }
+
   console.log(`✅ Auto-normalization complete: ${normalized.length} sales normalized out of ${properties.length} properties`);
   return { normalized: normalized.length, total: properties.length };
 }
