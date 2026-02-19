@@ -21,9 +21,12 @@ import { supabase, worksheetService } from './supabaseClient';
  * @param {string} jobId - The job ID
  * @param {string} vendorType - 'BRT' or 'Microsystems'
  * @param {string} county - County name for HPI lookup
+ * @param {Object} [options] - Optional settings
+ * @param {string[]} [options.rejectedKeys] - Composite keys rejected by user in comparison modal
  * @returns {{ normalized: number, total: number }} count of normalized sales
  */
-export async function autoNormalizeJob(jobId, vendorType, county) {
+export async function autoNormalizeJob(jobId, vendorType, county, options = {}) {
+  const rejectedKeysSet = new Set(options.rejectedKeys || []);
   console.log(`🔄 Auto-normalization starting for job ${jobId} (${vendorType}, ${county})`);
 
   // 1. Load existing normalization config (if any) for saved settings
@@ -106,6 +109,8 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
 
   // 5. Filter valid residential sales
   const validSales = properties.filter(p => {
+    // Skip sales explicitly rejected by user in comparison modal
+    if (rejectedKeysSet.has(p.property_composite_key)) return false;
     if (!p.sales_price || p.sales_price <= minSalePrice) return false;
     if (!p.sales_date) return false;
     if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;

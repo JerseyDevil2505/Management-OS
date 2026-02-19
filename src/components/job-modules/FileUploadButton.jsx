@@ -1764,8 +1764,26 @@ const handleCodeFileUpdate = async () => {
                 }
               };
               salesBothStored++;
+
+            } else if (decision === 'Reject') {
+              // Keep new values but mark sale as rejected for normalization
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Sale rejected - excluded from normalization'
+                  }
+                }
+              };
             }
-            
+
             const { error } = await supabase
               .from('property_records')
               .update(updateData)
@@ -1794,27 +1812,32 @@ const handleCodeFileUpdate = async () => {
           addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
 
-        // Clear values_norm_time for changed sales (Keep New / Keep Both)
-        // These sales have new price/date so old normalization is invalid
+        // Clear values_norm_time for changed sales (Keep New / Keep Both) and rejected sales
+        // Changed sales have new price/date so old normalization is invalid
+        // Rejected sales should not have normalized values
         const dirtyKeys = [];
+        const rejectedKeys = [];
         for (const [compositeKey, decision] of salesDecisions.entries()) {
-          if (decision !== 'Keep Old') {
+          if (decision === 'Reject') {
+            rejectedKeys.push(compositeKey);
+          } else if (decision !== 'Keep Old') {
             dirtyKeys.push(compositeKey);
           }
         }
 
-        if (dirtyKeys.length > 0) {
-          addBatchLog(`🧹 Clearing stale normalized values for ${dirtyKeys.length} changed sales...`, 'info');
+        const allKeysToClean = [...dirtyKeys, ...rejectedKeys];
+        if (allKeysToClean.length > 0) {
+          addBatchLog(`🧹 Clearing normalized values: ${dirtyKeys.length} changed + ${rejectedKeys.length} rejected...`, 'info');
           try {
-            for (let i = 0; i < dirtyKeys.length; i += 500) {
-              const batch = dirtyKeys.slice(i, i + 500);
+            for (let i = 0; i < allKeysToClean.length; i += 500) {
+              const batch = allKeysToClean.slice(i, i + 500);
               await supabase
                 .from('property_market_analysis')
                 .update({ values_norm_time: null, updated_at: new Date().toISOString() })
                 .eq('job_id', job.id)
                 .in('property_composite_key', batch);
             }
-            addBatchLog(`✅ Cleared stale values_norm_time for ${dirtyKeys.length} changed sales`, 'success');
+            addBatchLog(`✅ Cleared values_norm_time for ${allKeysToClean.length} sales`, 'success');
           } catch (cleanupError) {
             console.error('Failed to clear stale normalized values:', cleanupError);
             addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
@@ -1892,7 +1915,12 @@ const handleCodeFileUpdate = async () => {
         if (tenantConfig?.behavior?.autoNormalize) {
           addBatchLog('🔄 Auto-normalizing sales data (time normalization)...', 'info');
           try {
-            const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county);
+            // Collect rejected keys from sales decisions to exclude from normalization
+            const rejectedKeys = [];
+            for (const [key, dec] of salesDecisions.entries()) {
+              if (dec === 'Reject') rejectedKeys.push(key);
+            }
+            const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county, { rejectedKeys });
             addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
             addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
           } catch (normError) {
@@ -2767,6 +2795,17 @@ const handleCodeFileUpdate = async () => {
                                 }`}
                               >
                                 Keep Both
+                              </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Reject')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Reject'
+                                    ? 'bg-gray-700 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                Reject
                               </button>
                             </div>
 
