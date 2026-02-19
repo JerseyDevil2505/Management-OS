@@ -133,56 +133,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         Inspection Info
       </h2>
 
-      {/* Summary Cards - Row 1: Overall */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <div className="bg-white p-5 rounded-lg border-2 border-blue-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Properties</p>
-              <p className="text-3xl font-bold text-blue-600">{metrics.totalProperties.toLocaleString()}</p>
-            </div>
-            <FileText className="w-8 h-8 text-blue-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg border-2 border-green-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Entries</p>
-              <p className="text-3xl font-bold text-green-600">{metrics.inspected.toLocaleString()}</p>
-            </div>
-            <CheckCircle className="w-8 h-8 text-green-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg border-2 border-amber-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">No Entry</p>
-              <p className="text-3xl font-bold text-amber-600">{metrics.notInspected.toLocaleString()}</p>
-            </div>
-            <AlertCircle className="w-8 h-8 text-amber-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-lg border-2 border-purple-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Overall Entry Rate</p>
-              <p className="text-3xl font-bold text-purple-600">{metrics.entryRate}%</p>
-            </div>
-            <TrendingUp className="w-8 h-8 text-purple-400" />
-          </div>
-          <div className="mt-2 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-purple-500 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(metrics.entryRate, 100)}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Cards - Row 2: Improved Properties */}
+      {/* Summary Cards - Improved Properties (entry rate only matters for improved) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-5 rounded-lg border-2 border-indigo-200 shadow-sm">
           <div className="flex items-center justify-between">
