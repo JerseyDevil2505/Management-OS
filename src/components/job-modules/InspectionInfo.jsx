@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
 
@@ -10,6 +10,10 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         inspected: 0,
         notInspected: 0,
         entryRate: 0,
+        improvedTotal: 0,
+        improvedInspected: 0,
+        improvedNotInspected: 0,
+        improvedEntryRate: 0,
         byClass: {},
         missingInspections: [],
         inspectorBreakdown: {}
@@ -18,6 +22,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
 
     let inspected = 0;
     let notInspected = 0;
+    let improvedTotal = 0;
+    let improvedInspected = 0;
+    let improvedNotInspected = 0;
     const byClass = {};
     const missingInspections = [];
     const inspectorBreakdown = {};
@@ -25,25 +32,44 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     properties.forEach(prop => {
       const propertyClass = prop.property_m4_class || 'Unknown';
       if (!byClass[propertyClass]) {
-        byClass[propertyClass] = { total: 0, inspected: 0 };
+        byClass[propertyClass] = { total: 0, inspected: 0, improvedTotal: 0, improvedInspected: 0 };
       }
       byClass[propertyClass].total++;
 
-      const hasMeasureBy = prop.inspection_measure_by && prop.inspection_measure_by.trim();
-      const hasMeasureDate = prop.inspection_measure_date;
+      // Entry = has list_by + list_date (BRT: LISTBY/LISTDT, Microsystems: Insp By/Insp Date)
+      const hasListBy = prop.inspection_list_by && prop.inspection_list_by.trim();
+      const hasListDate = prop.inspection_list_date;
+      const hasEntry = hasListBy && hasListDate;
 
-      if (hasMeasureBy && hasMeasureDate) {
+      // Improved property = has improvement value > 0
+      const improvementValue = parseFloat(prop.values_cama_improvement || prop.values_mod_improvement || 0);
+      const isImproved = improvementValue > 0;
+
+      if (isImproved) {
+        improvedTotal++;
+        byClass[propertyClass].improvedTotal++;
+      }
+
+      if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
 
-        // Track inspector
-        const inspector = prop.inspection_measure_by.trim();
+        if (isImproved) {
+          improvedInspected++;
+          byClass[propertyClass].improvedInspected++;
+        }
+
+        // Track inspector by list_by
+        const inspector = prop.inspection_list_by.trim();
         if (!inspectorBreakdown[inspector]) {
           inspectorBreakdown[inspector] = 0;
         }
         inspectorBreakdown[inspector]++;
       } else {
         notInspected++;
+        if (isImproved) {
+          improvedNotInspected++;
+        }
         // Track missing - limit to first 500 for display
         if (missingInspections.length < 500) {
           missingInspections.push({
@@ -52,7 +78,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
             qualifier: prop.property_qualifier || '',
             location: prop.property_location || '',
             class: propertyClass,
-            owner: prop.owner_name || ''
+            owner: prop.owner_name || '',
+            isImproved
           });
         }
       }
@@ -62,11 +89,19 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       ? ((inspected / properties.length) * 100).toFixed(1)
       : 0;
 
+    const improvedEntryRate = improvedTotal > 0
+      ? ((improvedInspected / improvedTotal) * 100).toFixed(1)
+      : 0;
+
     return {
       totalProperties: properties.length,
       inspected,
       notInspected,
       entryRate: parseFloat(entryRate),
+      improvedTotal,
+      improvedInspected,
+      improvedNotInspected,
+      improvedEntryRate: parseFloat(improvedEntryRate),
       byClass,
       missingInspections,
       inspectorBreakdown
@@ -98,23 +133,23 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         Inspection Info
       </h2>
 
-      {/* Summary Cards */}
+      {/* Summary Cards - Improved Properties (entry rate only matters for improved) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-5 rounded-lg border-2 border-blue-200 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border-2 border-indigo-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Total Properties</p>
-              <p className="text-3xl font-bold text-blue-600">{metrics.totalProperties.toLocaleString()}</p>
+              <p className="text-sm text-gray-500">Improved Properties</p>
+              <p className="text-3xl font-bold text-indigo-600">{metrics.improvedTotal.toLocaleString()}</p>
             </div>
-            <FileText className="w-8 h-8 text-blue-400" />
+            <Home className="w-8 h-8 text-indigo-400" />
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-lg border-2 border-green-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Inspected</p>
-              <p className="text-3xl font-bold text-green-600">{metrics.inspected.toLocaleString()}</p>
+              <p className="text-sm text-gray-500">Improved Entries</p>
+              <p className="text-3xl font-bold text-green-600">{metrics.improvedInspected.toLocaleString()}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-green-400" />
           </div>
@@ -123,25 +158,25 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         <div className="bg-white p-5 rounded-lg border-2 border-amber-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Not Inspected</p>
-              <p className="text-3xl font-bold text-amber-600">{metrics.notInspected.toLocaleString()}</p>
+              <p className="text-sm text-gray-500">Improved No Entry</p>
+              <p className="text-3xl font-bold text-amber-600">{metrics.improvedNotInspected.toLocaleString()}</p>
             </div>
             <AlertCircle className="w-8 h-8 text-amber-400" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-lg border-2 border-purple-200 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border-2 border-teal-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Entry Rate</p>
-              <p className="text-3xl font-bold text-purple-600">{metrics.entryRate}%</p>
+              <p className="text-sm text-gray-500">Improved Entry Rate</p>
+              <p className="text-3xl font-bold text-teal-600">{metrics.improvedEntryRate}%</p>
             </div>
-            <TrendingUp className="w-8 h-8 text-purple-400" />
+            <TrendingUp className="w-8 h-8 text-teal-400" />
           </div>
           <div className="mt-2 bg-gray-200 rounded-full h-2">
             <div
-              className="bg-purple-500 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(metrics.entryRate, 100)}%` }}
+              className="bg-teal-500 h-2 rounded-full transition-all"
+              style={{ width: `${Math.min(metrics.improvedEntryRate, 100)}%` }}
             />
           </div>
         </div>
@@ -158,29 +193,47 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               <tr className="border-b">
                 <th className="text-left py-2 text-gray-500">Class</th>
                 <th className="text-right py-2 text-gray-500">Total</th>
-                <th className="text-right py-2 text-gray-500">Inspected</th>
+                <th className="text-right py-2 text-gray-500">Entries</th>
                 <th className="text-right py-2 text-gray-500">Rate</th>
+                <th className="text-right py-2 text-gray-500">Impr</th>
+                <th className="text-right py-2 text-gray-500">Impr Rate</th>
               </tr>
             </thead>
             <tbody>
-              {sortedClasses.map(([cls, data]) => (
-                <tr key={cls} className="border-b border-gray-100">
-                  <td className="py-2 font-medium">{cls}</td>
-                  <td className="text-right py-2">{data.total.toLocaleString()}</td>
-                  <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
-                  <td className="text-right py-2">
-                    <span className={`font-medium ${
-                      data.total > 0 && (data.inspected / data.total) >= 0.9
-                        ? 'text-green-600'
-                        : data.total > 0 && (data.inspected / data.total) >= 0.5
-                        ? 'text-amber-600'
+              {sortedClasses.map(([cls, data]) => {
+                const classRate = data.total > 0 ? (data.inspected / data.total) * 100 : 0;
+                const imprRate = data.improvedTotal > 0 ? (data.improvedInspected / data.improvedTotal) * 100 : 0;
+                return (
+                  <tr key={cls} className="border-b border-gray-100">
+                    <td className="py-2 font-medium">{cls}</td>
+                    <td className="text-right py-2">{data.total.toLocaleString()}</td>
+                    <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
+                    <td className="text-right py-2">
+                      <span className={`font-medium ${
+                        classRate >= 90 ? 'text-green-600'
+                        : classRate >= 50 ? 'text-amber-600'
                         : 'text-red-600'
-                    }`}>
-                      {data.total > 0 ? ((data.inspected / data.total) * 100).toFixed(1) : 0}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
+                      }`}>
+                        {classRate.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="text-right py-2 text-indigo-600">{data.improvedTotal.toLocaleString()}</td>
+                    <td className="text-right py-2">
+                      {data.improvedTotal > 0 ? (
+                        <span className={`font-medium ${
+                          imprRate >= 90 ? 'text-green-600'
+                          : imprRate >= 50 ? 'text-amber-600'
+                          : 'text-red-600'
+                        }`}>
+                          {imprRate.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -198,7 +251,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-2 text-gray-500">Inspector</th>
-                  <th className="text-right py-2 text-gray-500">Inspected</th>
+                  <th className="text-right py-2 text-gray-500">Entries</th>
                   <th className="text-right py-2 text-gray-500">% of Total</th>
                 </tr>
               </thead>
@@ -222,7 +275,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       <div className="bg-white rounded-lg border p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-amber-500" />
-          Missing Inspections
+          Missing Entries
           <span className="text-xs font-normal text-gray-400 ml-2">
             ({metrics.notInspected.toLocaleString()} total
             {metrics.missingInspections.length < metrics.notInspected ? `, showing first ${metrics.missingInspections.length}` : ''})
@@ -231,7 +284,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         {metrics.missingInspections.length === 0 ? (
           <div className="text-center py-8 text-green-600">
             <CheckCircle className="w-10 h-10 mx-auto mb-2" />
-            <p className="font-medium">All properties have been inspected!</p>
+            <p className="font-medium">All properties have entries!</p>
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto">
@@ -244,6 +297,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                   <th className="text-left py-2 text-gray-500">Class</th>
                   <th className="text-left py-2 text-gray-500">Location</th>
                   <th className="text-left py-2 text-gray-500">Owner</th>
+                  <th className="text-center py-2 text-gray-500">Impr</th>
                 </tr>
               </thead>
               <tbody>
@@ -255,6 +309,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                     <td className="py-1.5">{prop.class}</td>
                     <td className="py-1.5 text-gray-600">{prop.location}</td>
                     <td className="py-1.5 text-gray-600">{prop.owner}</td>
+                    <td className="py-1.5 text-center">
+                      {prop.isImproved ? (
+                        <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" title="Improved"></span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

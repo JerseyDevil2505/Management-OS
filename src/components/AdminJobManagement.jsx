@@ -1083,7 +1083,8 @@ const AdminJobManagement = ({
           rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
           appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
         },
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+        organization_id: PPA_ORG_ID
       };
 
       const createdJob = await jobService.create(jobData);

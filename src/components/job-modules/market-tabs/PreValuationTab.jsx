@@ -2103,6 +2103,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await worksheetService.saveNormalizationConfig(jobData.id, {
         lastSizeNormalizationRun: runDate
       });
+
+      // Clear sizeNormStale flag since we just ran size normalization
+      try {
+        const { data: currentJob } = await supabase
+          .from('jobs')
+          .select('workflow_stats')
+          .eq('id', jobData.id)
+          .single();
+        if (currentJob?.workflow_stats?.sizeNormStale) {
+          const updatedStats = { ...currentJob.workflow_stats, sizeNormStale: false };
+          await supabase.from('jobs').update({ workflow_stats: updatedStats }).eq('id', jobData.id);
+        }
+      } catch (e) {
+        console.warn('Could not clear sizeNormStale flag:', e);
+      }
       
       if (false) console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
       
@@ -4068,6 +4083,15 @@ const analyzeImportFile = async (file) => {
                   </button>
                   </div>
                 </div>
+
+                {jobData?.workflow_stats?.sizeNormStale && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded mb-4 flex items-center gap-2">
+                    <span className="text-amber-600 font-bold text-lg">!</span>
+                    <p className="text-sm text-amber-800">
+                      <strong>File Updated:</strong> Property data has changed since the last size normalization. Re-run size normalization to ensure values are current.
+                    </p>
+                  </div>
+                )}
 
                 <div className="p-4 bg-blue-50 rounded mb-4">
                   <p className="text-sm">
