@@ -176,16 +176,40 @@ const RevenueManagement = () => {
     return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount, effectiveRate };
   }, [staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
 
-  // Billing status helper — simple: free / open / paid
+  // View Open Invoices filter
+  const [showOpenOnly, setShowOpenOnly] = useState(false);
+
+  // Billing status helper — free / open / sent / paid
   const getBillingStatus = (org) => {
     if (org.is_free_account || org.subscription_status === 'free') return 'free';
     if (org.payment_received_date) return 'paid';
+    if (org.invoice_sent_date) return 'sent';
     return 'open';
   };
 
   const getBillingLabel = (status) => {
-    const labels = { free: 'Free', paid: 'Paid', open: 'Open' };
+    const labels = { free: 'Free', paid: 'Paid', open: 'Open', sent: 'Sent' };
     return labels[status] || 'Unknown';
+  };
+
+  // Invoice aging — days since Jan 1 of billing year (or sent date if available)
+  const getInvoiceAge = (org) => {
+    const status = getBillingStatus(org);
+    if (status === 'free' || status === 'paid') return null;
+    const refDate = org.invoice_sent_date
+      ? new Date(org.invoice_sent_date)
+      : new Date(billingYear, 0, 1);
+    const today = new Date();
+    const diffDays = Math.floor((today - refDate) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  };
+
+  const getAgingColor = (days) => {
+    if (days === null) return '';
+    if (days < 30) return '#6b7280';
+    if (days < 60) return '#ca8a04';
+    if (days < 90) return '#ea580c';
+    return '#dc2626';
   };
 
   // Revenue summary calculations
@@ -197,6 +221,9 @@ const RevenueManagement = () => {
     let totalUsers = 0;
     let collectedRevenue = 0;
     let outstandingRevenue = 0;
+
+    let sentCount = 0;
+    let openCount = 0;
 
     organizations.forEach(org => {
       const fees = calculateFees(org);
@@ -212,11 +239,13 @@ const RevenueManagement = () => {
           collectedRevenue += fees.total;
         } else {
           outstandingRevenue += fees.total;
+          if (billingStatus === 'sent') sentCount++;
+          else openCount++;
         }
       }
     });
 
-    return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers, collectedRevenue, outstandingRevenue };
+    return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers, collectedRevenue, outstandingRevenue, sentCount, openCount };
   }, [organizations, calculateFees, staffCounts]);
 
   // Update billing status on org
@@ -225,11 +254,16 @@ const RevenueManagement = () => {
       const updateData = {};
       const now = new Date().toISOString().split('T')[0];
 
-      // Set payment_received_date based on status
+      // Set dates based on status
       if (newStatus === 'paid') {
         updateData.payment_received_date = now;
-      } else {
+      } else if (newStatus === 'sent') {
         updateData.payment_received_date = null;
+        updateData.invoice_sent_date = now;
+      } else {
+        // open
+        updateData.payment_received_date = null;
+        updateData.invoice_sent_date = null;
       }
 
       const { error: updateError } = await supabase
@@ -790,8 +824,18 @@ const RevenueManagement = () => {
 
   const billingStatusOptions = [
     { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
+    { value: 'sent', label: 'Sent', color: '#1e40af', bg: '#dbeafe' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
   ];
+
+  // Filtered organizations for display
+  const displayOrganizations = useMemo(() => {
+    if (!showOpenOnly) return organizations;
+    return organizations.filter(org => {
+      const status = getBillingStatus(org);
+      return status === 'open' || status === 'sent';
+    });
+  }, [organizations, showOpenOnly]);
 
   if (loading) {
     return (
@@ -879,25 +923,14 @@ const RevenueManagement = () => {
         </div>
       </div>
 
-      {/* Pricing Rate Display */}
-      <div className="revenue-rates">
-        {priceConfig.tiers.map((tier, i) => {
-          const prevMax = i === 0 ? 0 : priceConfig.tiers[i - 1].maxLines;
-          const label = tier.maxLines === Infinity
-            ? `${(prevMax + 1).toLocaleString()}+`
-            : `${(prevMax + 1).toLocaleString()}-${tier.maxLines.toLocaleString()}`;
-          return (
-            <span key={i} className="rate-chip">
-              ${tier.rate.toFixed(2)}/line ({label})
-            </span>
-          );
-        })}
-        <span className="rate-chip">
-          ${priceConfig.primaryUserFee.toLocaleString()} primary user
-        </span>
-        <span className="rate-chip">
-          ${priceConfig.additionalUserFee.toLocaleString()}/additional user
-        </span>
+      {/* View Open Invoices Toggle */}
+      <div className="revenue-open-filter">
+        <button
+          className={`revenue-open-filter-btn ${showOpenOnly ? 'revenue-open-filter-active' : ''}`}
+          onClick={() => setShowOpenOnly(prev => !prev)}
+        >
+          {showOpenOnly ? 'Show All Clients' : `View Open Invoices (${revenueSummary.openCount + revenueSummary.sentCount})`}
+        </button>
       </div>
 
       {/* Client Revenue Table */}
@@ -911,12 +944,13 @@ const RevenueManagement = () => {
               <th>Users</th>
               <th className="revenue-col-right">User Fees</th>
               <th>Status</th>
+              <th>Age</th>
               <th className="revenue-col-right">Annual Total</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {organizations.map(org => {
+            {displayOrganizations.map(org => {
               const fees = calculateFees(org);
               const userCount = staffCounts[org.id] || 0;
               const billingStatus = getBillingStatus(org);
@@ -966,6 +1000,17 @@ const RevenueManagement = () => {
                         )}
                       </div>
                     )}
+                  </td>
+                  <td>
+                    {(() => {
+                      const age = getInvoiceAge(org);
+                      if (age === null) return <span style={{ color: '#94a3b8' }}>-</span>;
+                      return (
+                        <span style={{ color: getAgingColor(age), fontWeight: age >= 60 ? '700' : '500', fontSize: '0.85rem' }}>
+                          {age}d
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="revenue-col-right revenue-total-cell">
                     {editingOverride === org.id ? (
@@ -1028,6 +1073,7 @@ const RevenueManagement = () => {
               <td className="revenue-col-right">
                 ${organizations.reduce((sum, o) => { const f = calculateFees(o); return sum + (f.isOverride ? 0 : f.primaryFee + f.staffFee); }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </td>
+              <td></td>
               <td></td>
               <td className="revenue-col-right revenue-total-cell">
                 ${revenueSummary.totalAnnual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

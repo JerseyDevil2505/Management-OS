@@ -248,6 +248,11 @@
   color: #854d0e;
 }
 
+.revenue-billing-sent {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 /* PDF Button */
 .revenue-pdf-btn {
   padding: 0.35rem 0.75rem;
@@ -516,6 +521,36 @@
 
 .revenue-override-input:focus {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Open Invoices Filter */
+.revenue-open-filter {
+  margin-bottom: 1.25rem;
+}
+
+.revenue-open-filter-btn {
+  padding: 0.5rem 1rem;
+  background: #1f2937;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.revenue-open-filter-btn:hover {
+  background: #111827;
+}
+
+.revenue-open-filter-active {
+  background: #dc2626;
+}
+
+.revenue-open-filter-active:hover {
+  background: #b91c1c;
 }
 
 /* Proposals Section */
