@@ -680,11 +680,13 @@ const RevenueManagement = () => {
     }
   };
 
-  // Generate Proposal PDF (mirrors invoice format)
+  // Generate Proposal PDF: pamphlet pages + proposal pricing page
   const generateProposalPDF = useCallback(async (proposal) => {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
+    const { PDFDocument } = await import('pdf-lib');
 
+    // --- Step 1: Generate the proposal pricing page with jsPDF ---
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 40;
@@ -723,16 +725,14 @@ const RevenueManagement = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
     doc.text(`Date: ${today.toLocaleDateString()}`, pageWidth - margin, margin + 36, { align: 'right' });
-    const refNum = `P-${billingYear}-${proposal.town_name.replace(/\s+/g, '').substring(0, 6).toUpperCase()}`;
-    doc.text(`Ref #: ${refNum}`, pageWidth - margin, margin + 50, { align: 'right' });
 
     // Divider
     doc.setDrawColor(...lojikBlue);
     doc.setLineWidth(2);
-    doc.line(margin, margin + 65, pageWidth - margin, margin + 65);
+    doc.line(margin, margin + 55, pageWidth - margin, margin + 55);
 
     // Prepared For
-    let yPos = margin + 90;
+    let yPos = margin + 80;
     doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'bold');
     doc.text('PREPARED FOR:', margin, yPos);
     doc.setFontSize(12); doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold');
@@ -755,7 +755,7 @@ const RevenueManagement = () => {
     doc.text('DELRAN, NJ 08075', pageWidth - margin - 200, yPos + 44);
 
     // Services table
-    const invoiceStartY = yPos + 110;
+    const invoiceStartY = yPos + 100;
     const rows = [
       ['1', 'Property Assessment Copilot - Annual License\nFull platform access: data quality, market analysis, land valuation, final valuation, appeal tracking', '1',
         `$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
@@ -817,7 +817,43 @@ const RevenueManagement = () => {
     doc.setFontSize(8); doc.setTextColor(140, 140, 140); doc.setFont('helvetica', 'normal');
     doc.text(`LOJIK | Generated ${today.toLocaleDateString()}`, pageWidth / 2, pageHeight - 25, { align: 'center' });
 
-    doc.save(`Proposal_${proposal.town_name.replace(/\s+/g, '_')}_${billingYear}.pdf`);
+    // --- Step 2: Merge pamphlet + proposal page using pdf-lib ---
+    const proposalBytes = doc.output('arraybuffer');
+    const fileName = `Proposal_${proposal.town_name.replace(/\s+/g, '_')}_${billingYear}.pdf`;
+
+    try {
+      // Try to load the pamphlet PDF
+      const pamphletResponse = await fetch('/lojik-pamphlet.pdf');
+      if (!pamphletResponse.ok) throw new Error('Pamphlet not found');
+      const pamphletBytes = await pamphletResponse.arrayBuffer();
+
+      // Create merged PDF: pamphlet pages first, then proposal page
+      const mergedPdf = await PDFDocument.create();
+      const pamphletDoc = await PDFDocument.load(pamphletBytes);
+      const proposalDoc = await PDFDocument.load(proposalBytes);
+
+      // Copy all pamphlet pages
+      const pamphletPages = await mergedPdf.copyPages(pamphletDoc, pamphletDoc.getPageIndices());
+      pamphletPages.forEach(page => mergedPdf.addPage(page));
+
+      // Copy the proposal page
+      const proposalPages = await mergedPdf.copyPages(proposalDoc, proposalDoc.getPageIndices());
+      proposalPages.forEach(page => mergedPdf.addPage(page));
+
+      // Save merged PDF
+      const mergedBytes = await mergedPdf.save();
+      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (pamphletErr) {
+      console.warn('Could not load pamphlet, saving proposal page only:', pamphletErr);
+      doc.save(fileName);
+    }
+
     setSuccessMessage('Proposal PDF generated');
     setTimeout(() => setSuccessMessage(''), 3000);
   }, [billingYear]);
