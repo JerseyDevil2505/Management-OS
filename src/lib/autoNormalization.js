@@ -182,14 +182,17 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
       ? Math.abs((salesRatio * 100) - eqRatio) > outThreshold
       : false;
 
-    // Preserve existing decisions if sale data hasn't changed
-    let finalDecision = 'pending';
+    // Preserve existing reject decisions; default new/changed sales to 'keep'
+    // Sales already passed validation (price > min, valid date, etc.)
+    // so they should be kept unless the assessor explicitly rejects them
+    let finalDecision = 'keep';
     const existing = existingDecisions[prop.id];
-    if (existing) {
+    if (existing && existing.decision === 'reject') {
+      // Only preserve 'reject' if the sale data hasn't changed
       const dataChanged = existing.sales_price !== prop.sales_price ||
         existing.sales_date !== prop.sales_date ||
         existing.sales_nu !== prop.sales_nu;
-      finalDecision = dataChanged ? 'pending' : existing.decision;
+      finalDecision = dataChanged ? 'keep' : 'reject';
     }
 
     return {
