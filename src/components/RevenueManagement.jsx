@@ -782,8 +782,10 @@ const RevenueManagement = () => {
     doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.5);
     doc.line(pageWidth - margin - 200, totalY, pageWidth - margin, totalY);
     doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(...lojikBlue);
-    doc.text('PROPOSED TOTAL:', pageWidth - margin - 160, totalY + 20);
-    doc.text(`$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, pageWidth - margin, totalY + 20, { align: 'right' });
+    const totalPrice = `$${parseFloat(proposal.proposed_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    const priceWidth = doc.getTextWidth(totalPrice);
+    doc.text('PROPOSED TOTAL:', pageWidth - margin - priceWidth - 15, totalY + 20, { align: 'right' });
+    doc.text(totalPrice, pageWidth - margin, totalY + 20, { align: 'right' });
 
     // What's included section
     const featuresY = totalY + 55;
