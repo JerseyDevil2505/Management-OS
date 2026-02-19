@@ -16,6 +16,7 @@ const OrganizationManagement = () => {
 
   // Form state for editing organization
   const [editOrg, setEditOrg] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // org to confirm delete
 
   // Form state for new organization
   const [newOrg, setNewOrg] = useState({
@@ -230,6 +231,24 @@ const OrganizationManagement = () => {
     }
   };
 
+  const handleDeleteOrg = async (org) => {
+    try {
+      setError('');
+      setDeleteConfirm(null);
+
+      const { error: rpcError } = await supabase.rpc('delete_organization_cascade', { org_id: org.id });
+      if (rpcError) throw rpcError;
+
+      setSuccessMessage(`"${org.name}" and all related data deleted successfully`);
+      setTimeout(() => setSuccessMessage(''), 4000);
+      loadOrganizations();
+    } catch (err) {
+      console.error('Error deleting organization:', err);
+      setError(err.message || 'Failed to delete organization');
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   const handleViewStaff = (org) => {
     setSelectedOrg(org);
     setShowStaffModal(true);
@@ -359,12 +378,48 @@ const OrganizationManagement = () => {
                         Staff
                       </button>
                       <button className="edit-btn" onClick={() => handleEditOrg(org)}>Edit</button>
+                      <button
+                        className="edit-btn"
+                        style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#fca5a5' }}
+                        onClick={() => setDeleteConfirm(org)}
+                      >Del</button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="org-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="org-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <h3 style={{ color: '#dc2626' }}>Delete Organization</h3>
+            <p style={{ margin: '1rem 0', color: '#334155', lineHeight: '1.6' }}>
+              Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This will permanently remove:
+            </p>
+            <ul style={{ margin: '0.5rem 0 1rem 1.25rem', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.8' }}>
+              <li>All jobs and property records</li>
+              <li>All staff/employee records</li>
+              <li>All checklist items, billing events, and analytics</li>
+              <li>All inspection and valuation data</li>
+            </ul>
+            <p style={{ margin: '0 0 1rem', color: '#dc2626', fontWeight: '600', fontSize: '0.85rem' }}>
+              This action cannot be undone.
+            </p>
+            <div className="org-modal-actions">
+              <button type="button" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button
+                type="button"
+                style={{ background: '#dc2626', color: 'white', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                onClick={() => handleDeleteOrg(deleteConfirm)}
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
