@@ -823,7 +823,7 @@ const RevenueManagement = () => {
 
     try {
       // Try to load the pamphlet PDF
-      const pamphletResponse = await fetch('/lojik-pamphlet.pdf');
+      const pamphletResponse = await fetch('/Property Assessment Copilot.pdf');
       if (!pamphletResponse.ok) throw new Error('Pamphlet not found');
       const pamphletBytes = await pamphletResponse.arrayBuffer();
 
