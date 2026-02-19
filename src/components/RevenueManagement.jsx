@@ -1186,12 +1186,12 @@ const RevenueManagement = () => {
       {/* Create/Edit Proposal Modal */}
       {showProposalModal && (
         <div className="revenue-modal-overlay" onClick={() => { setShowProposalModal(false); resetProposalForm(); }}>
-          <div className="revenue-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+          <div className="revenue-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
             <div className="revenue-modal-header">
               <h3>{editingProposal ? 'Edit Proposal' : 'New Proposal'}</h3>
               <button className="revenue-modal-close" onClick={() => { setShowProposalModal(false); resetProposalForm(); }}>X</button>
             </div>
-            <div className="revenue-modal-body">
+            <div className="revenue-modal-body" style={{ overflowY: 'auto', flex: 1 }}>
               <div className="revenue-form-group">
                 <label>Town Name *</label>
                 <input type="text" value={proposalForm.town_name} onChange={e => setProposalForm(prev => ({ ...prev, town_name: e.target.value }))} placeholder="e.g. Borough of Riverside" />
@@ -1206,7 +1206,7 @@ const RevenueManagement = () => {
                   value={proposalForm.address}
                   onChange={e => setProposalForm(prev => ({ ...prev, address: e.target.value }))}
                   placeholder="123 Main St\nTownship, NJ 08000"
-                  rows={3}
+                  rows={2}
                   style={{ width: '100%', padding: '0.625rem 0.875rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.95rem', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
                 />
               </div>
