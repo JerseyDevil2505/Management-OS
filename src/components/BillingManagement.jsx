@@ -412,9 +412,15 @@ const calculateDistributionMetrics = async () => {
       const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
         .select(`
-          *,
-          job_contracts(*),
-          billing_events(*)
+          id,
+          job_name,
+          end_date,
+          total_properties,
+          totalresidential,
+          totalcommercial,
+          workflow_stats,
+          job_contracts(contract_amount),
+          billing_events(percentage_billed)
         `)
         .eq('job_type', 'standard');
 
@@ -425,7 +431,7 @@ const calculateDistributionMetrics = async () => {
 
       const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
-        .select('*')
+        .select('id, municipality, job_name, end_date, contract_amount, manual_parcel_count, total_properties, residential_properties, commercial_properties, is_archived')
         .gt('contract_amount', 0);
 
       if (planningError) {
