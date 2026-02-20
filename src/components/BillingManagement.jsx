@@ -431,7 +431,7 @@ const calculateDistributionMetrics = async () => {
 
       const { data: planningJobsData, error: planningError } = await supabase
         .from('planning_jobs')
-        .select('id, municipality, job_name, end_date, contract_amount, manual_parcel_count, total_properties, residential_properties, commercial_properties, is_archived')
+        .select('*')
         .gt('contract_amount', 0);
 
       if (planningError) {
