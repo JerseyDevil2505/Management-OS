@@ -1560,7 +1560,38 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await worksheetService.saveNormalizationConfig(jobData.id, config);
 
       // IMPORTANT: Save the normalized sales immediately to persist them
-      await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
+      // Trim to only fields needed for restore/display to avoid massive JSON payloads on large towns
+      const trimmedForSave = normalized.map(s => ({
+        id: s.id,
+        property_composite_key: s.property_composite_key,
+        property_location: s.property_location,
+        property_m4_class: s.property_m4_class,
+        property_class: s.property_class,
+        asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use,
+        asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla,
+        original_sfla: s.original_sfla,
+        has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built,
+        values_mod_total: s.values_mod_total,
+        values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price,
+        sales_date: s.sales_date,
+        sales_nu: s.sales_nu,
+        sales_book: s.sales_book,
+        sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price,
+        hpi_multiplier: s.hpi_multiplier,
+        sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier,
+        keep_reject: s.keep_reject,
+        sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price,
+        size_adjustment: s.size_adjustment,
+        _pkg: s._pkg
+      }));
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedForSave, newStats);
 
       // After time normalization save - use callRefresh to ensure forceRefresh is passed
       if (onUpdateJobCache) {
@@ -2038,8 +2069,19 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Update the state
       setNormalizationStats(newStats);
 
-      // Save the stats to market_land_valuation
-      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, newStats);
+      // Save the stats to market_land_valuation (trimmed payload for large towns)
+      const trimmedSizeNormSales = timeNormalizedSales.map(s => ({
+        id: s.id, property_composite_key: s.property_composite_key, property_location: s.property_location,
+        property_m4_class: s.property_m4_class, property_class: s.property_class, asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use, asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla, original_sfla: s.original_sfla, has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built, values_mod_total: s.values_mod_total, values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price, sales_date: s.sales_date, sales_nu: s.sales_nu, sales_book: s.sales_book, sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price, hpi_multiplier: s.hpi_multiplier, sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier, keep_reject: s.keep_reject, sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price, size_adjustment: s.size_adjustment, _pkg: s._pkg
+      }));
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedSizeNormSales, newStats);
 
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
@@ -2371,8 +2413,19 @@ const handleSalesDecision = (saleId, decision) => {
     try {
       if (false) console.log(`💾 Batch saving ${keeps.length} keeps and ${rejects.length} rejects...`);
 
-      // FIRST: Save all decisions to market_land_valuation for persistence
-      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+      // FIRST: Save all decisions to market_land_valuation for persistence (trimmed payload for large towns)
+      const trimmedDecisionSales = timeNormalizedSales.map(s => ({
+        id: s.id, property_composite_key: s.property_composite_key, property_location: s.property_location,
+        property_m4_class: s.property_m4_class, property_class: s.property_class, asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use, asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla, original_sfla: s.original_sfla, has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built, values_mod_total: s.values_mod_total, values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price, sales_date: s.sales_date, sales_nu: s.sales_nu, sales_book: s.sales_book, sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price, hpi_multiplier: s.hpi_multiplier, sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier, keep_reject: s.keep_reject, sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price, size_adjustment: s.size_adjustment, _pkg: s._pkg
+      }));
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedDecisionSales, normalizationStats);
       if (false) console.log('✅ Saved all decisions to market_land_valuation');
 
       // SECOND: Batch update keeps in chunks of 500
