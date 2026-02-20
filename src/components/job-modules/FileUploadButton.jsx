@@ -52,6 +52,18 @@ const FileUploadButton = ({
     height: 600
   });
   
+  // Ref for sales changes scroll container
+  const salesContainerRef = React.useRef(null);
+  const pendingScrollRestore = React.useRef(null);
+
+  // Restore scroll position after React re-renders from sales decision
+  React.useEffect(() => {
+    if (pendingScrollRestore.current !== null && salesContainerRef.current) {
+      salesContainerRef.current.scrollTop = pendingScrollRestore.current;
+      pendingScrollRestore.current = null;
+    }
+  }, [salesDecisions]);
+
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchLogs, setBatchLogs] = useState([]);
@@ -1183,32 +1195,14 @@ const handleCodeFileUpdate = async () => {
   };
 
   const handleSalesDecision = (propertyKey, decision) => {
-    // Save current scroll position of BOTH containers
-    const salesContainer = document.getElementById('sales-changes-container');
-    const modalBody = document.querySelector('.fixed .overflow-y-auto');
-    
-    const salesScrollPos = salesContainer ? salesContainer.scrollTop : 0;
-    const modalScrollPos = modalBody ? modalBody.scrollTop : 0;
-    
-    // Update the decision
+    // Save scroll position in ref BEFORE state update triggers re-render
+    const container = salesContainerRef.current;
+    if (container) {
+      pendingScrollRestore.current = container.scrollTop;
+    }
+
+    // Update the decision (triggers re-render)
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
-    
-    // Force restore scroll position with multiple attempts
-    const restoreScroll = () => {
-      if (salesContainer) salesContainer.scrollTop = salesScrollPos;
-      if (modalBody) modalBody.scrollTop = modalScrollPos;
-    };
-    
-    // Try immediately
-    restoreScroll();
-    
-    // Try after React renders
-    requestAnimationFrame(restoreScroll);
-    
-    // Try after a short delay
-    setTimeout(restoreScroll, 10);
-    setTimeout(restoreScroll, 50);
-    setTimeout(restoreScroll, 100);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -2700,7 +2694,7 @@ const handleCodeFileUpdate = async () => {
                         ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
                       </span>
                     </h3>
-                    <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                    <div ref={salesContainerRef} id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                       {details.salesChanges.map((change, idx) => {
                         const currentDecision = salesDecisions.get(change.property_composite_key);
 
