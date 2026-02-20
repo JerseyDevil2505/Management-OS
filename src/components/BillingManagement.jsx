@@ -421,7 +421,7 @@ const calculateDistributionMetrics = async () => {
           totalresidential,
           totalcommercial,
           workflow_stats,
-          job_contracts(contract_amount)
+          job_contracts(contract_amount, retainer_percentage)
         `)
         .eq('job_type', 'standard');
 
@@ -480,6 +480,9 @@ const calculateDistributionMetrics = async () => {
           if (contract && parcels > 0) {
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear();
 
+            const retainerPct = parseFloat(contract.retainer_percentage || 0);
+            const retainerHeld = retainerPct > 0 ? Math.round(contract.contract_amount * retainerPct) : 0;
+
             const jobEntry = {
               municipality: job.job_name,
               dueYear: dueYear,
@@ -490,7 +493,9 @@ const calculateDistributionMetrics = async () => {
               percentComplete: percentComplete,
               percentBilled: percentBilled,
               isPending: false,
-              turnoverDate: job.turnover_date || null
+              turnoverDate: job.turnover_date || null,
+              retainerPct: retainerPct,
+              retainerHeld: retainerHeld
             };
 
             if (isFullyBilled) {
@@ -522,7 +527,9 @@ const calculateDistributionMetrics = async () => {
               percentComplete: '0.0',
               percentBilled: '0.0',
               isPending: true,
-              turnoverDate: null
+              turnoverDate: null,
+              retainerPct: 0,
+              retainerHeld: 0
             });
           }
         });
@@ -644,33 +651,33 @@ const calculateDistributionMetrics = async () => {
         y = 40;
         doc.setFontSize(9);
         doc.setFont(undefined, 'bold');
-        doc.text('Municipality', 10, y);
-        doc.text('Year Complete', 65, y);
-        doc.text('Parcels', 105, y);
-        doc.text('Contract Amount', 130, y);
-        doc.text('$/Parcel', 170, y);
-        doc.text('Billed %', 200, y);
-        doc.setFont(undefined, 'normal');
-        y += 8;
+        // Helper: draw completed jobs headers
+        const drawCompletedHeaders = (doc, yPos) => {
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'bold');
+          doc.text('Municipality', 10, yPos);
+          doc.text('Year Complete', 65, yPos);
+          doc.text('Parcels', 105, yPos);
+          doc.text('Contract Amount', 130, yPos);
+          doc.text('$/Parcel', 170, yPos);
+          doc.text('Retainer %', 200, yPos);
+          doc.text('Retainer Held', 240, yPos);
+          doc.setFont(undefined, 'normal');
+          return yPos + 8;
+        };
+
+        y = drawCompletedHeaders(doc, y);
         doc.setFontSize(8);
 
         const completedTotalParcels = completedJobs.reduce((sum, job) => sum + job.parcels, 0);
         const completedTotalAmount = completedJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+        const completedTotalRetainerHeld = completedJobs.reduce((sum, job) => sum + job.retainerHeld, 0);
 
         completedJobs.forEach(job => {
           if (y > 185) {
             doc.addPage();
             y = 20;
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'bold');
-            doc.text('Municipality', 10, y);
-            doc.text('Year Complete', 65, y);
-            doc.text('Parcels', 105, y);
-            doc.text('Contract Amount', 130, y);
-            doc.text('$/Parcel', 170, y);
-            doc.text('Billed %', 200, y);
-            doc.setFont(undefined, 'normal');
-            y += 8;
+            y = drawCompletedHeaders(doc, y);
             doc.setFontSize(8);
           }
 
@@ -685,7 +692,17 @@ const calculateDistributionMetrics = async () => {
           doc.text(job.parcels.toLocaleString(), 115, y, { align: 'right' });
           doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 160, y, { align: 'right' });
           doc.text(`$${job.pricePerParcel}`, 180, y, { align: 'right' });
-          doc.text(`${job.percentBilled}%`, 210, y, { align: 'right' });
+
+          // Retainer info
+          if (job.retainerPct > 0) {
+            doc.text(`${(job.retainerPct * 100).toFixed(0)}%`, 210, y, { align: 'right' });
+            doc.text(`$${job.retainerHeld.toLocaleString()}`, 255, y, { align: 'right' });
+          } else {
+            doc.setTextColor(150, 150, 150);
+            doc.text('None', 210, y, { align: 'right' });
+            doc.text('\u2014', 255, y, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+          }
 
           y += 6;
         });
@@ -699,6 +716,8 @@ const calculateDistributionMetrics = async () => {
         doc.text(`Total Parcels: ${completedTotalParcels.toLocaleString()}`, 10, y);
         y += 5;
         doc.text(`Total Amount: $${completedTotalAmount.toLocaleString()}`, 10, y);
+        y += 5;
+        doc.text(`Total Retainer Held: $${completedTotalRetainerHeld.toLocaleString()}`, 10, y);
         doc.setFont(undefined, 'normal');
       }
       
