@@ -1063,7 +1063,7 @@ const handleCodeFileUpdate = async () => {
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
 
         // ADD: Get sales_nu values
-        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NUC' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
         const sourceSalesBook = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
