@@ -162,7 +162,7 @@ export async function getRawDataForJob(jobId) {
 
     // Determine vendor type and year
     const vendorType = job.vendor_type || detectVendorTypeFromContent(job.raw_file_content);
-    const yearCreated = new Date(job.start_date).getFullYear();
+    const yearCreated = parseInt(String(job.start_date).substring(0, 4), 10);
     const ccddCode = job.ccdd_code;
 
     // Parse the source file
@@ -3084,7 +3084,7 @@ export const jobService = {
         ccdd: job.ccdd_code, // ADDED: Alternative accessor for backward compatibility
         municipality: job.municipality || job.client_name,
         job_number: job.job_number,
-        year_created: job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear(),
+        year_created: job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear(),
         county: job.county,
         state: job.state,
         vendor: job.vendor_type,
