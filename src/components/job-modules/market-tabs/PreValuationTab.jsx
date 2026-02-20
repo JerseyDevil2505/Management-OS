@@ -306,7 +306,6 @@ const PreValuationTab = ({
     try {
       const { error } = await supabase.from('jobs').update({ staged_unit_rate_config: newStaged }).eq('id', jobData.id);
       if (error) throw error;
-      alert(`Staged mapping for VCS ${mappingVcsKey}`);
     } catch (e) {
       console.error('Failed persisting staged mapping', e);
       alert('Failed staging mapping: ' + (e.message || e));
