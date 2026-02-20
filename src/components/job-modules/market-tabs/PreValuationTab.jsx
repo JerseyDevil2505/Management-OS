@@ -1278,50 +1278,42 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
   const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
-    setTimeNormProgress({ current: 0, total: properties.length, message: 'Analyzing properties...' });
+    setTimeNormProgress({ current: 0, total: properties.length, message: 'Building property index...' });
+
+    // Yield helper - lets React render between chunks so the progress modal stays visible
+    const yieldToUI = () => new Promise(r => setTimeout(r, 0));
 
     try {
-      // DEBUG: Check initial properties data structure
-      if (false) console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
-      if (properties.length > 0) {
-        if (false) console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
+      // 1. Pre-build lookup maps in a single O(n) pass over all properties.
+      //    - cardMap: keyed by "block-lot_qualifier", groups all cards with their parsed info + SFLA
+      //    - mCardSet: (Microsystems only) tracks which base keys have an M card
+      const cardMap = new Map();      // key -> [{ card, sfla, property }]
+      const mCardSet = new Set();     // base keys that have an M card
 
-        const firstProp = properties[0];
-        if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
-        if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
-        if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
-        if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
-        if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
-        if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
+      for (let i = 0; i < properties.length; i++) {
+        const p = properties[i];
+        const parsed = parseCompositeKey(p.property_composite_key);
+        const card = parsed.card?.toUpperCase() || '';
+        const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
 
-        // Check if the problem is that the fields exist but are being overwritten
-        if (false) console.log('🔍 FULL PROPERTY OBJECT INSPECTION:');
-        if (false) console.log('  property_composite_key:', firstProp.property_composite_key);
-        if (false) console.log('  ALL KEYS:', Object.keys(firstProp));
+        if (!cardMap.has(baseKey)) cardMap.set(baseKey, []);
+        cardMap.get(baseKey).push({ card, sfla: p.asset_sfla || 0, property: p });
 
-        // If the fields are undefined, let's see what properties DO have values
-        if (!firstProp.property_m4_class) {
-          console.error('❌ property_m4_class is undefined in properties array!');
-          if (false) console.log('  🔍 Checking for similar fields...');
-          Object.keys(firstProp).forEach(key => {
-            if (key.includes('class') || key.includes('m4')) {
-              if (false) console.log(`    ${key}:`, firstProp[key]);
-            }
-          });
+        if (vendorType === 'Microsystems' && card === 'M') {
+          mCardSet.add(baseKey);
         }
 
-        if (!firstProp.values_mod_total) {
-          console.error('❌ values_mod_total is undefined in properties array!');
-          if (false) console.log('  🔍 Checking for similar fields...');
-          Object.keys(firstProp).forEach(key => {
-            if (key.includes('value') || key.includes('total') || key.includes('assess') || key.includes('mod')) {
-              if (false) console.log(`    ${key}:`, firstProp[key]);
-            }
-          });
+        // Yield every 2000 properties so the modal can render
+        if (i % 2000 === 0 && i > 0) {
+          setTimeNormProgress({ current: i, total: properties.length, message: 'Building property index...' });
+          await yieldToUI();
         }
       }
 
-      // Create a map of existing keep/reject decisions with sale data
+      setTimeNormProgress({ current: properties.length, total: properties.length, message: 'Preparing decisions...' });
+      await yieldToUI();
+
+      // 2. Create a map of existing keep/reject decisions with sale data
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
         if (sale.keep_reject) {
@@ -1333,227 +1325,189 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           };
         }
       });
-      
-      // Filter for VALID residential sales only
-      const validSales = properties.filter(p => {
-        // Check for valid sales price (ensure minSalePrice is valid number)
-        const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
-        if (!p.sales_price || p.sales_price <= minPrice) return false;
-        
-        // Check for valid sales date
-        if (!p.sales_date) return false;
 
-        // Check for minimum improvement value (exclude tear-downs)
-        if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;
-        
-        const saleYear = new Date(p.sales_date).getFullYear();
-        if (saleYear < salesFromYear) return false;
+      // 3. Filter for VALID residential sales only (chunked with yields)
+      const validSales = [];
+      const CHUNK = 500;
+      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
 
-        // Check that house existed at time of sale (year built <= sale year)
-        if (p.asset_year_built && p.asset_year_built > saleYear) return false;
-        
-        // Parse composite key for card filtering
-        const parsed = parseCompositeKey(p.property_composite_key);
-        const card = parsed.card?.toUpperCase();
+      for (let i = 0; i < properties.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, properties.length);
+        for (let j = i; j < end; j++) {
+          const p = properties[j];
+          if (!p.sales_price || p.sales_price <= minPrice) continue;
+          if (!p.sales_date) continue;
+          if (!p.values_mod_improvement || p.values_mod_improvement < 10000) continue;
 
-        // Card filter based on vendor
-        if (vendorType === 'Microsystems') {
-          // For Microsystems: Include M cards, and A cards only if no M card exists for same property
-          if (card === 'M') {
-            return true; // Always include M cards
-          } else if (card === 'A') {
-            // Check if there's an M card for the same block/lot/qualifier
+          const saleYear = new Date(p.sales_date).getFullYear();
+          if (saleYear < salesFromYear) continue;
+          if (p.asset_year_built && p.asset_year_built > saleYear) continue;
+
+          const parsed = parseCompositeKey(p.property_composite_key);
+          const card = parsed.card?.toUpperCase();
+
+          // Card filter based on vendor
+          if (vendorType === 'Microsystems') {
+            if (card === 'M') { /* include */ }
+            else if (card === 'A') {
+              const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
+              if (mCardSet.has(baseKey)) continue; // M card exists, skip this A card
+            } else {
+              continue;
+            }
+          } else { // BRT
+            if (card !== '1') continue;
+          }
+
+          const buildingClass = p.asset_building_class?.toString().trim();
+          const typeUse = p.asset_type_use?.toString().trim();
+          const designStyle = p.asset_design_style?.toString().trim();
+          if (!buildingClass || parseInt(buildingClass) <= 10) continue;
+          if (!typeUse) continue;
+          if (!designStyle) continue;
+          if (!p.asset_sfla || p.asset_sfla <= 0) continue;
+
+          validSales.push(p);
+        }
+
+        setTimeNormProgress({
+          current: end,
+          total: properties.length,
+          message: `Filtering properties... ${end.toLocaleString()} / ${properties.length.toLocaleString()}`
+        });
+        await yieldToUI();
+      }
+
+      setTimeNormProgress({
+        current: properties.length,
+        total: properties.length,
+        message: `Found ${validSales.length} valid sales to normalize...`
+      });
+      await yieldToUI();
+
+      // 4. Enhance valid sales with combined SFLA from additional cards (using pre-built cardMap)
+      const enhancedSales = [];
+      for (let i = 0; i < validSales.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, validSales.length);
+        for (let j = i; j < end; j++) {
+          const prop = validSales[j];
+          const parsed = parseCompositeKey(prop.property_composite_key);
+          let enhancedProp = { ...prop };
+
+          // If this is a main card, aggregate SFLA from additional cards via the map
+          if ((vendorType === 'Microsystems' && parsed.card?.toUpperCase() === 'M') ||
+              (vendorType === 'BRT' && parsed.card === '1')) {
+
             const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
-            const hasMCard = properties.some(other => {
-              const otherParsed = parseCompositeKey(other.property_composite_key);
-              const otherBaseKey = `${otherParsed.block}-${otherParsed.lot}_${otherParsed.qualifier}`;
-              return otherBaseKey === baseKey && otherParsed.card?.toUpperCase() === 'M';
-            });
-            return !hasMCard; // Include A card only if no M card exists
+            const siblings = cardMap.get(baseKey) || [];
+            let additionalSFLA = 0;
+            let hasAdditional = false;
+            for (const sib of siblings) {
+              if (sib.card !== parsed.card?.toUpperCase() && sib.sfla > 0) {
+                additionalSFLA += sib.sfla;
+                hasAdditional = true;
+              }
+            }
+
+            enhancedProp = {
+              ...enhancedProp,
+              original_sfla: enhancedProp.asset_sfla,
+              asset_sfla: (enhancedProp.asset_sfla || 0) + additionalSFLA,
+              has_additional_cards: hasAdditional
+            };
           }
-          return false; // Exclude all other cards
-        } else { // BRT
-          if (card !== '1') return false;
-        }
-        
-        // Check for required fields
-        const buildingClass = p.asset_building_class?.toString().trim();
-        const typeUse = p.asset_type_use?.toString().trim();
-        const designStyle = p.asset_design_style?.toString().trim();
-        
-        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
-        if (!typeUse) return false;
-        if (!designStyle) return false;
-        
-        // Check for valid living area
-        if (!p.asset_sfla || p.asset_sfla <= 0) return false;
-        
-        return true;
-      });
 
-      setTimeNormProgress({ 
-        current: properties.length, 
-        total: properties.length, 
-        message: `Found ${validSales.length} valid sales to normalize...` 
-      });
+          // Ensure property_class is present but do not overwrite if already set
+          if (!enhancedProp.property_class && prop.property_m4_class) {
+            enhancedProp.property_class = prop.property_m4_class;
+          }
 
-      // Enhance valid sales with combined SFLA from additional cards
-      const enhancedSales = validSales.map(prop => {
-        const parsed = parseCompositeKey(prop.property_composite_key);
+          // Ensure key sales/assessment fields exist without overwriting existing values
+          if (!enhancedProp.sales_nu && prop.sales_nu) {
+            enhancedProp.sales_nu = prop.sales_nu;
+          }
+          if ((enhancedProp.values_mod_total === undefined || enhancedProp.values_mod_total === null) && (prop.values_mod_total !== undefined && prop.values_mod_total !== null)) {
+            enhancedProp.values_mod_total = prop.values_mod_total;
+          }
 
-        // Start with a shallow copy of the incoming property to preserve all existing fields
-        let enhancedProp = { ...prop };
-
-        // If this is a main card, check for additional cards and aggregate SFLA
-        if ((vendorType === 'Microsystems' && parsed.card === 'M') ||
-            (vendorType === 'BRT' && parsed.card === '1')) {
-
-          // Find additional cards for this property
-          const additionalCards = properties.filter(p => {
-            const pParsed = parseCompositeKey(p.property_composite_key);
-            return pParsed.block === parsed.block &&
-                   pParsed.lot === parsed.lot &&
-                   pParsed.qualifier === parsed.qualifier &&
-                   pParsed.card !== parsed.card &&
-                   p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
-          });
-
-          // Sum additional SFLA
-          const additionalSFLA = additionalCards.reduce((sum, card) => sum + (card.asset_sfla || 0), 0);
-
-          // Only augment the SFLA fields; do NOT overwrite other existing fields with possibly undefined values
-          enhancedProp = {
-            ...enhancedProp,
-            original_sfla: enhancedProp.asset_sfla,
-            asset_sfla: (enhancedProp.asset_sfla || 0) + additionalSFLA,
-            has_additional_cards: additionalCards.length > 0
-          };
+          enhancedSales.push(enhancedProp);
         }
 
-        // Ensure property_class is present but do not overwrite if already set
-        if (!enhancedProp.property_class && prop.property_m4_class) {
-          enhancedProp.property_class = prop.property_m4_class;
-        }
-
-        // Ensure key sales/assessment fields exist without overwriting existing values
-        if (!enhancedProp.sales_nu && prop.sales_nu) {
-          enhancedProp.sales_nu = prop.sales_nu;
-        }
-        if ((enhancedProp.values_mod_total === undefined || enhancedProp.values_mod_total === null) && (prop.values_mod_total !== undefined && prop.values_mod_total !== null)) {
-          enhancedProp.values_mod_total = prop.values_mod_total;
-        }
-
-        return enhancedProp;
-      });      
+        setTimeNormProgress({
+          current: end,
+          total: validSales.length,
+          message: `Enhancing sales... ${end} / ${validSales.length}`
+        });
+        await yieldToUI();
+      }      
       
-      // Process each valid sale
-      const normalized = enhancedSales.map((prop, index) => {
-        const saleYear = new Date(prop.sales_date).getFullYear();
-        const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
-        const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
+      // 5. Compute HPI-normalized prices (chunked with yields)
+      const eqRatio = parseFloat(equalizationRatio);
+      const outThreshold = parseFloat(outlierThreshold);
+      const normalized = [];
 
-        // Calculate sales ratio
-        const assessedValue = prop.values_mod_total || 0;
-        const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0
-          ? assessedValue / timeNormalizedPrice
-          : 0;
+      for (let i = 0; i < enhancedSales.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, enhancedSales.length);
+        for (let j = i; j < end; j++) {
+          const prop = enhancedSales[j];
+          const saleYear = new Date(prop.sales_date).getFullYear();
+          const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
+          const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
 
-        // DEBUG: Log first few sales to check data and available fields
-        if (index < 3) {
-          if (false) console.log(`🔍 Sale ${index + 1} FULL PROPERTY DATA:`, prop);
-          if (false) console.log(`🔍 Sale ${index + 1} SPECIFIC FIELDS:`, {
-            id: prop.id,
-            // Check all possible class field names
-            property_class: prop.property_class,
-            property_m4_class: prop.property_m4_class,
-            asset_building_class: prop.asset_building_class,
-            building_class: prop.building_class,
-            // Check all possible sales NU field names
-            sales_nu: prop.sales_nu,
-            sales_instrument: prop.sales_instrument,
-            nu: prop.nu,
-            sale_nu: prop.sale_nu,
-            // Check all possible assessed value field names
-            values_mod_total: prop.values_mod_total,
-            assessed_value: prop.assessed_value,
-            total_assessed: prop.total_assessed,
-            mod_total: prop.mod_total,
-            sales_price: prop.sales_price,
-            assessedValue,
-            salesRatio: salesRatio.toFixed(3)
-          });
+          const assessedValue = prop.values_mod_total || 0;
+          const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0
+            ? assessedValue / timeNormalizedPrice
+            : 0;
 
-          // Also log all property keys to see what's available
-          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
-        }
-        
-        // Determine if outlier based on equalization ratio
-        const eqRatio = parseFloat(equalizationRatio);
-        const outThreshold = parseFloat(outlierThreshold);
-        const isOutlier = eqRatio && outThreshold ?
-          Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
+          const isOutlier = eqRatio && outThreshold ?
+            Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
 
-        // Check if we have an existing decision for this property
-        const existingDecisionData = existingDecisions[prop.id];
-        let finalDecision = 'pending';
-        let saleDataChanged = false;
+          // Check if we have an existing decision for this property
+          const existingDecisionData = existingDecisions[prop.id];
+          let finalDecision = 'pending';
+          let saleDataChanged = false;
 
-        if (existingDecisionData) {
-          // Check if sale data changed since the decision was made
-          const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
-          const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
-          const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
+          if (existingDecisionData) {
+            const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
+            const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
+            const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
 
-          saleDataChanged = priceChanged || dateChanged || nuChanged;
+            saleDataChanged = priceChanged || dateChanged || nuChanged;
 
-          if (saleDataChanged) {
-            // Sale data changed - reset to pending and log the change
-            finalDecision = 'pending';
-            console.log(`⚠️ Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
-              old: {
-                price: existingDecisionData.sales_price,
-                date: existingDecisionData.sales_date,
-                nu: existingDecisionData.sales_nu
-              },
-              new: {
-                price: prop.sales_price,
-                date: prop.sales_date,
-                nu: prop.sales_nu
-              },
-              previousDecision: existingDecisionData.decision
-            });
-          } else {
-            // Sale data unchanged - preserve existing decision
-            finalDecision = existingDecisionData.decision;
+            if (saleDataChanged) {
+              finalDecision = 'pending';
+              console.log(`Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
+                old: { price: existingDecisionData.sales_price, date: existingDecisionData.sales_date, nu: existingDecisionData.sales_nu },
+                new: { price: prop.sales_price, date: prop.sales_date, nu: prop.sales_nu },
+                previousDecision: existingDecisionData.decision
+              });
+            } else {
+              finalDecision = existingDecisionData.decision;
+            }
           }
+
+          normalized.push({
+            ...prop,
+            time_normalized_price: timeNormalizedPrice,
+            hpi_multiplier: hpiMultiplier,
+            sales_ratio: salesRatio,
+            is_outlier: isOutlier,
+            keep_reject: finalDecision,
+            sale_data_changed: saleDataChanged
+          });
         }
 
-        return {
-          ...prop,
-          time_normalized_price: timeNormalizedPrice,
-          hpi_multiplier: hpiMultiplier,
-          sales_ratio: salesRatio,
-          is_outlier: isOutlier,
-          keep_reject: finalDecision,
-          sale_data_changed: saleDataChanged // Track if data changed for UI indication
-        };
-      });
+        setTimeNormProgress({
+          current: end,
+          total: enhancedSales.length,
+          message: `Normalizing prices... ${end} / ${enhancedSales.length}`
+        });
+        await yieldToUI();
+      }
 
       setTimeNormalizedSales(normalized);
 
-      // DEBUG: Final data check
-      if (false) console.log(`�� Time normalization complete: ${normalized.length} sales processed`);
-      if (false) console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
-        id: s.id,
-        property_m4_class: s.property_m4_class,
-        sales_nu: s.sales_nu,
-        values_mod_total: s.values_mod_total,
-        sales_ratio: s.sales_ratio,
-        has_package_data: !!s._pkg
-      })));
-
-      // Calculate excluded count (properties that didn't meet criteria)
-      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
+      // 6. Calculate excluded count (properties that didn't meet criteria)
       const excludedCount = properties.filter(p => {
         if (!p.sales_price || p.sales_price <= minPrice) return true;
         if (!p.sales_date) return true;
@@ -1588,7 +1542,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       };
       
       setNormalizationStats(newStats);
-      
+
+      setTimeNormProgress({ current: normalized.length, total: normalized.length, message: 'Saving results...' });
+      await yieldToUI();
+
       // Save configuration to database (ensure valid minSalePrice)
       const config = {
         equalizationRatio: equalizationRatio || '',
@@ -6166,30 +6123,34 @@ const analyzeImportFile = async (file) => {
       )}
 
       {/* Time Normalization Progress Modal */}
-      {isProcessingTime && timeNormProgress.total > 0 && (
+      {isProcessingTime && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold mb-4">Time Normalization Progress</h3>
-            
+
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>{timeNormProgress.message}</span>
-                <span>{timeNormProgress.current} / {timeNormProgress.total}</span>
+                <span>{timeNormProgress.message || 'Starting...'}</span>
+                {timeNormProgress.total > 0 && (
+                  <span>{timeNormProgress.current.toLocaleString()} / {timeNormProgress.total.toLocaleString()}</span>
+                )}
               </div>
-              
+
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(timeNormProgress.current / timeNormProgress.total * 100)}%`
+                    width: timeNormProgress.total > 0
+                      ? `${(timeNormProgress.current / timeNormProgress.total * 100)}%`
+                      : '0%'
                   }}
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center justify-center">
               <RefreshCw className="animate-spin text-blue-600" size={20} />
-              <span className="ml-2 text-sm text-gray-600">Analyzing sales...</span>
+              <span className="ml-2 text-sm text-gray-600">Please wait, do not close this page</span>
             </div>
           </div>
         </div>
