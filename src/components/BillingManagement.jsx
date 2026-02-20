@@ -461,13 +461,14 @@ const calculateDistributionMetrics = async () => {
             parcels = job.total_properties || (job.totalresidential + job.totalcommercial) || 0;
           }
 
-          // Calculate % complete from workflow_stats
+          // Calculate % complete from workflow_stats (inspected / total) — matches Admin Jobs
           let percentComplete = '0.0';
           if (job.workflow_stats) {
-            const billable = job.workflow_stats.billingAnalytics?.totalBillable || 0;
-            const total = job.workflow_stats.totalRecords || 0;
-            if (total > 0 && billable > 0) {
-              percentComplete = ((billable / total) * 100).toFixed(1);
+            const ws = typeof job.workflow_stats === 'string' ? JSON.parse(job.workflow_stats) : job.workflow_stats;
+            const inspected = ws.validInspections || 0;
+            const total = ws.totalRecords || job.total_properties || 0;
+            if (total > 0 && inspected > 0) {
+              percentComplete = (Math.round((inspected / total) * 100)).toFixed(1);
             }
           }
 
