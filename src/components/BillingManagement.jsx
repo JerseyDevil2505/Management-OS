@@ -414,14 +414,13 @@ const calculateDistributionMetrics = async () => {
         .select(`
           *,
           job_contracts(*),
-          workflow_stats,
           billing_events(*)
         `)
         .eq('job_type', 'standard');
 
       if (activeError) {
         console.error('Error fetching active jobs:', activeError);
-        throw activeError;
+        throw new Error(activeError.message || JSON.stringify(activeError));
       }
 
       const { data: planningJobsData, error: planningError } = await supabase
@@ -431,7 +430,7 @@ const calculateDistributionMetrics = async () => {
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
-        throw planningError;
+        throw new Error(planningError.message || JSON.stringify(planningError));
       }
 
       devLog('Active jobs fetched:', activeJobsData?.length || 0);
@@ -643,7 +642,7 @@ const calculateDistributionMetrics = async () => {
       alert('Bonding report PDF generated successfully!');
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Error generating report: ' + error.message);
+      alert('Error generating report: ' + (error.message || JSON.stringify(error)));
     }
   };
 
