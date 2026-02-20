@@ -1675,19 +1675,27 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
   const saveSizeNormalizedValues = async (normalizedSales) => {
     try {
-      // Save size normalized values to database
-      for (const sale of normalizedSales) {
-        if (sale.size_normalized_price) {
-          const { error } = await safeUpsertPropertyMarket([{
-            job_id: jobData.id,
-            property_composite_key: sale.property_composite_key,
-            values_norm_size: sale.size_normalized_price
-          }]);
-          if (error) throw error;
-        }
-      }
-      if (false) console.log('✅ Size normalized values saved to database');
+      // Build batch of records to save
+      const records = normalizedSales
+        .filter(sale => sale.size_normalized_price)
+        .map(sale => ({
+          job_id: jobData.id,
+          property_composite_key: sale.property_composite_key,
+          values_norm_size: sale.size_normalized_price
+        }));
 
+      // Save in chunks of 500
+      for (let i = 0; i < records.length; i += 500) {
+        const batch = records.slice(i, i + 500);
+        const { error } = await safeUpsertPropertyMarket(batch);
+        if (error) throw error;
+
+        setSizeNormProgress({
+          current: Math.min(i + 500, records.length),
+          total: records.length,
+          message: `Saving to database... ${Math.min(i + 500, records.length)} / ${records.length}`
+        });
+      }
     } catch (error) {
       console.error('Error saving size normalized values:', error);
     }
@@ -1950,7 +1958,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     setIsProcessingSize(true);
     setSizeNormProgress({ current: 0, total: 0, message: 'Preparing size normalization...' });
 
+    // Yield helper - lets React render between chunks so the progress modal stays visible
+    const yieldToUI = () => new Promise(r => setTimeout(r, 0));
+
     try {
+      await yieldToUI(); // Let the modal render immediately
+
       // Create a map of existing size-normalized values
       const existingSizeNorm = {};
       timeNormalizedSales.forEach(sale => {
@@ -1961,7 +1974,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           };
         }
       });
-      
+
       // Only use sales that were kept after time normalization review
       const acceptedSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep').map(s => ({
         ...s,
@@ -1969,25 +1982,28 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         size_normalized_price: existingSizeNorm[s.id]?.size_normalized_price || null,
         size_adjustment: existingSizeNorm[s.id]?.size_adjustment || null
       }));
-      
+
+      setSizeNormProgress({ current: 0, total: acceptedSales.length, message: 'Grouping by property type...' });
+      await yieldToUI();
+
       // Group by type/use codes using "starts with" pattern
       const groups = {
-        singleFamily: acceptedSales.filter(s => 
+        singleFamily: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('1')
         ),
-        semiDetached: acceptedSales.filter(s => 
+        semiDetached: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('2')
         ),
-        townhouses: acceptedSales.filter(s => 
+        townhouses: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('3')
         ),
-        multifamily: acceptedSales.filter(s => 
+        multifamily: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('4')
         ),
-        conversions: acceptedSales.filter(s => 
+        conversions: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('5')
         ),
-        condominiums: acceptedSales.filter(s => 
+        condominiums: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('6')
         )
       };
@@ -1996,20 +2012,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       let totalAdjustment = 0;
       let preservedCount = 0;
 
-      // Process each group
-      Object.entries(groups).forEach(([groupName, groupSales]) => {
-        if (groupSales.length === 0) return;
-        
-        setSizeNormProgress({ 
-          current: totalSizeNormalized, 
-          total: acceptedSales.length, 
-          message: `Processing ${groupName} properties...` 
+      // Process each group (with yields between groups)
+      for (const [groupName, groupSales] of Object.entries(groups)) {
+        if (groupSales.length === 0) continue;
+
+        setSizeNormProgress({
+          current: totalSizeNormalized,
+          total: acceptedSales.length,
+          message: `Processing ${groupName} (${groupSales.length} properties)...`
         });
-        
+        await yieldToUI();
+
         // Calculate average LIVING size for the group
         const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
         const avgSize = totalSize / groupSales.length;
-        
+
         // Apply 50% method to each sale
         groupSales.forEach(sale => {
           // Check if we already have a size normalization for this property
@@ -2019,32 +2036,32 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             totalAdjustment += Math.abs(existingSizeNorm[sale.id].size_adjustment);
             return; // Skip recalculation, keep existing values
           }
-          
+
           const currentSize = sale.asset_sfla || 0;
-          
+
           // Skip if no living size data
           if (currentSize <= 0) {
             console.warn(`Skipping property ${sale.id} - no living_sf: ${currentSize}`);
             return;
           }
-          
+
           const sizeDiff = avgSize - currentSize;
           const pricePerSf = sale.time_normalized_price / currentSize;
           const adjustment = sizeDiff * pricePerSf * 0.5;
-          
+
           // Check for NaN
           if (isNaN(adjustment)) {
             console.error(`NaN adjustment for property ${sale.id}`);
             return;
           }
-          
+
           sale.size_normalized_price = Math.round(sale.time_normalized_price + adjustment);
           sale.size_adjustment = adjustment;
-          
+
           totalSizeNormalized++;
           totalAdjustment += Math.abs(adjustment);
         });
-      });
+      }
 
       // Update stats
       const avgAdjustment = totalSizeNormalized > 0 ? Math.round(totalAdjustment / totalSizeNormalized) : 0;
@@ -2081,9 +2098,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         is_outlier: s.is_outlier, keep_reject: s.keep_reject, sale_data_changed: s.sale_data_changed,
         size_normalized_price: s.size_normalized_price, size_adjustment: s.size_adjustment, _pkg: s._pkg
       }));
+      setSizeNormProgress({ current: totalSizeNormalized, total: acceptedSales.length, message: 'Saving normalization data...' });
+      await yieldToUI();
+
       await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedSizeNormSales, newStats);
 
-      // Save to database
+      // Save to database (batched in chunks of 500)
       await saveSizeNormalizedValues(acceptedSales);
 
       // After size normalization save - use callRefresh to ensure forceRefresh is passed
@@ -6146,22 +6166,26 @@ const analyzeImportFile = async (file) => {
       )}
 
       {/* Size Normalization Progress Modal */}
-      {isProcessingSize && sizeNormProgress.total > 0 && (
+      {isProcessingSize && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold mb-4">Size Normalization Progress</h3>
             
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>{sizeNormProgress.message}</span>
-                <span>{sizeNormProgress.current} / {sizeNormProgress.total}</span>
+                <span>{sizeNormProgress.message || 'Starting...'}</span>
+                {sizeNormProgress.total > 0 && (
+                  <span>{sizeNormProgress.current.toLocaleString()} / {sizeNormProgress.total.toLocaleString()}</span>
+                )}
               </div>
-              
+
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-green-600 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(sizeNormProgress.current / sizeNormProgress.total * 100)}%`
+                    width: sizeNormProgress.total > 0
+                      ? `${(sizeNormProgress.current / sizeNormProgress.total * 100)}%`
+                      : '0%'
                   }}
                 />
               </div>
@@ -6169,7 +6193,7 @@ const analyzeImportFile = async (file) => {
             
             <div className="flex items-center justify-center">
               <RefreshCw className="animate-spin text-green-600" size={20} />
-              <span className="ml-2 text-sm text-gray-600">Normalizing sizes...</span>
+              <span className="ml-2 text-sm text-gray-600">Please wait, do not close this page</span>
             </div>
           </div>
         </div>
