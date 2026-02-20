@@ -186,6 +186,7 @@ const PreValuationTab = ({
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [isExportingLotSizes, setIsExportingLotSizes] = useState(false);
+  const [isAutoPopulating, setIsAutoPopulating] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Unit rate mappings editor state
@@ -963,6 +964,203 @@ useEffect(() => {
       alert(`Calculation failed: ${formatError(e)}`);
     } finally {
       setIsCalculatingUnitSizes(false);
+    }
+  };
+
+  const autoPopulatePageByPage = async () => {
+    if (!jobData?.id) return;
+    setIsAutoPopulating(true);
+    try {
+      // 1. Build code-to-description lookup from parsed_code_definitions
+      const codeLookup = {};
+      if (vendorType === 'BRT' && codeDefinitions?.sections) {
+        const sections = codeDefinitions.sections;
+        const residentialSection = sections.Residential || sections.residential || {};
+        Object.keys(residentialSection).forEach(parentKey => {
+          const parentSection = residentialSection[parentKey];
+          const categoryKey = parentSection?.KEY || parentSection?.key;
+          if (categoryKey === '62' || categoryKey === '63') {
+            const categoryMap = parentSection.MAP || parentSection.map || {};
+            Object.keys(categoryMap).forEach(codeKey => {
+              if (codeKey === 'KEY' || codeKey === 'DATA' || codeKey === 'MAP') return;
+              const codeItem = categoryMap[codeKey];
+              let description = codeItem?.DATA?.VALUE || codeItem?.VALUE || (typeof codeItem === 'string' ? codeItem : '');
+              if (description) {
+                codeLookup[String(codeKey).trim().toUpperCase()] = {
+                  description: description.trim(),
+                  type: categoryKey === '62' ? '+' : '-'
+                };
+              }
+            });
+          }
+        });
+      } else if (vendorType === 'Microsystems' && codeDefinitions?.field_codes) {
+        const landCodes = codeDefinitions.field_codes['220'] || {};
+        Object.entries(landCodes).forEach(([code, data]) => {
+          if (data.description) {
+            codeLookup[String(code).trim().toUpperCase()] = {
+              description: data.description.trim(),
+              type: null // Microsystems determines +/- from percent fields
+            };
+          }
+        });
+      }
+
+      // 2. Load properties with adjustment fields + zoning/map page from property_records
+      const adjustFields = vendorType === 'BRT'
+        ? 'property_composite_key,property_zoning,property_tax_map_page,' +
+          Array.from({length: 6}, (_, i) => `landffcond_${i+1},landurcond_${i+1},landffinfl_${i+1},landurinfl_${i+1}`).join(',')
+        : 'property_composite_key,property_zoning,property_tax_map_page,' +
+          Array.from({length: 4}, (_, i) => `overall_adj_reason${i+1},overall_adj_percent${i+1}`).join(',');
+
+      const batchSize = 1000;
+      let allRecords = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const query = vendorType === 'BRT'
+          ? supabase.from('property_records').select(adjustFields).eq('job_id', jobData.id).range(from, from + batchSize - 1)
+          : supabase.from('property_records').select('*').eq('job_id', jobData.id).range(from, from + batchSize - 1);
+        const { data, error } = await query;
+        if (error) throw error;
+        if (data) allRecords = allRecords.concat(data);
+        hasMore = data && data.length === batchSize;
+        from += batchSize;
+      }
+
+      // 3. Load existing property_market_analysis to check what's already populated
+      let existingPMA = [];
+      from = 0;
+      hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key,location_analysis,asset_zoning,asset_map_page')
+          .eq('job_id', jobData.id)
+          .range(from, from + batchSize - 1);
+        if (error) throw error;
+        if (data) existingPMA = existingPMA.concat(data);
+        hasMore = data && data.length === batchSize;
+        from += batchSize;
+      }
+
+      const existingMap = {};
+      existingPMA.forEach(r => { existingMap[r.property_composite_key] = r; });
+
+      // 4. Process each property
+      const updates = [];
+      let locPopulated = 0;
+      let zoningPopulated = 0;
+      let mapPopulated = 0;
+
+      for (const prop of allRecords) {
+        const key = prop.property_composite_key;
+        const existing = existingMap[key] || {};
+        const update = { job_id: jobData.id, property_composite_key: key };
+        let hasUpdate = false;
+
+        // Auto-populate location_analysis if empty
+        const existingLoc = existing.location_analysis;
+        if (!existingLoc || existingLoc.trim() === '') {
+          const reasons = new Map(); // description -> sign
+
+          if (vendorType === 'BRT') {
+            for (let i = 1; i <= 6; i++) {
+              // Positive: landffcond and landurcond
+              [prop[`landffcond_${i}`], prop[`landurcond_${i}`]].forEach(code => {
+                if (code && String(code).trim()) {
+                  const normalized = String(code).trim().toUpperCase();
+                  const def = codeLookup[normalized];
+                  if (def && !reasons.has(def.description)) {
+                    reasons.set(def.description, '+');
+                  }
+                }
+              });
+              // Negative: landffinfl and landurinfl
+              [prop[`landffinfl_${i}`], prop[`landurinfl_${i}`]].forEach(code => {
+                if (code && String(code).trim()) {
+                  const normalized = String(code).trim().toUpperCase();
+                  const def = codeLookup[normalized];
+                  if (def && !reasons.has(def.description)) {
+                    reasons.set(def.description, '-');
+                  }
+                }
+              });
+            }
+          } else if (vendorType === 'Microsystems') {
+            for (let i = 1; i <= 4; i++) {
+              const reasonCode = prop[`overall_adj_reason${i}`] || prop[`Overall Adj Reason${i}`];
+              if (reasonCode && String(reasonCode).trim()) {
+                const normalized = String(reasonCode).trim().toUpperCase();
+                const def = codeLookup[normalized];
+                if (def && !reasons.has(def.description)) {
+                  // Determine +/- from percent field
+                  const pct = parseFloat(prop[`overall_adj_percent${i}`] || prop[`Overall Adj Percent${i}`]) || 100;
+                  const sign = pct > 100 ? '+' : pct < 100 ? '-' : '';
+                  reasons.set(def.description, sign);
+                }
+              }
+            }
+          }
+
+          if (reasons.size > 0) {
+            const parts = [];
+            reasons.forEach((sign, desc) => {
+              parts.push(sign ? `${desc} (${sign})` : desc);
+            });
+            update.location_analysis = parts.join(', ');
+            hasUpdate = true;
+            locPopulated++;
+          }
+        }
+
+        // Auto-populate zoning if empty
+        const existingZoning = existing.asset_zoning;
+        if ((!existingZoning || existingZoning.trim() === '') && prop.property_zoning && prop.property_zoning.trim()) {
+          update.asset_zoning = prop.property_zoning.trim();
+          hasUpdate = true;
+          zoningPopulated++;
+        }
+
+        // Auto-populate map page if empty
+        const existingMap_ = existing.asset_map_page;
+        if ((!existingMap_ || existingMap_.trim() === '') && prop.property_tax_map_page && prop.property_tax_map_page.trim()) {
+          update.asset_map_page = prop.property_tax_map_page.trim();
+          hasUpdate = true;
+          mapPopulated++;
+        }
+
+        if (hasUpdate) {
+          updates.push(update);
+        }
+      }
+
+      // 5. Batch upsert in chunks of 500
+      let totalUpserted = 0;
+      for (let i = 0; i < updates.length; i += 500) {
+        const chunk = updates.slice(i, i + 500);
+        const { error } = await safeUpsertPropertyMarket(chunk);
+        if (error) {
+          console.error('Error upserting PBP batch:', error);
+          throw error;
+        }
+        totalUpserted += chunk.length;
+      }
+
+      const summary = [];
+      if (locPopulated > 0) summary.push(`Location Analysis: ${locPopulated}`);
+      if (zoningPopulated > 0) summary.push(`Zoning: ${zoningPopulated}`);
+      if (mapPopulated > 0) summary.push(`Map Page: ${mapPopulated}`);
+
+      alert(summary.length > 0
+        ? `Auto-populate complete!\n\nProperties updated (empty fields only):\n${summary.join('\n')}\n\nTotal records written: ${totalUpserted}`
+        : 'No empty fields found to populate. All properties already have values or no source data available.');
+
+    } catch (e) {
+      console.error('Error auto-populating PBP:', e);
+      alert(`Auto-populate failed: ${e.message || e}`);
+    } finally {
+      setIsAutoPopulating(false);
     }
   };
 
@@ -4241,6 +4439,14 @@ const analyzeImportFile = async (file) => {
                 >
                   <Download size={16} />
                   {isExportingLotSizes ? 'Exporting...' : 'Export Report'}
+                </button>
+                <button
+                  onClick={autoPopulatePageByPage}
+                  disabled={isAutoPopulating}
+                  className="flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+                  title="Auto-populate Location Analysis from land adjustment codes, plus Zoning and Map Page from source data (empty fields only)"
+                >
+                  {isAutoPopulating ? 'Populating...' : 'Auto-Populate PBP'}
                 </button>
               </div>
             </div>
