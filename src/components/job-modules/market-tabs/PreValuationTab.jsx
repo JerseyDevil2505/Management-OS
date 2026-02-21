@@ -4443,7 +4443,7 @@ const analyzeImportFile = async (file) => {
                 <button
                   onClick={autoPopulatePageByPage}
                   disabled={isAutoPopulating}
-                  className="flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
                   title="Auto-populate Location Analysis from land adjustment codes, plus Zoning and Map Page from source data (empty fields only)"
                 >
                   {isAutoPopulating ? 'Populating...' : 'Auto-Populate PBP'}

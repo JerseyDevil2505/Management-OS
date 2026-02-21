@@ -1806,36 +1806,43 @@ const handleCodeFileUpdate = async () => {
           addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
 
-        // Clear values_norm_time for changed sales (Keep New / Keep Both) and rejected sales
-        // Changed sales have new price/date so old normalization is invalid
-        // Rejected sales should not have normalized values
-        const dirtyKeys = [];
+        // Clear values_norm_time for changed sales with explicit decisions
         const rejectedKeys = [];
         for (const [compositeKey, decision] of salesDecisions.entries()) {
           if (decision === 'Reject') {
             rejectedKeys.push(compositeKey);
-          } else if (decision !== 'Keep Old') {
-            dirtyKeys.push(compositeKey);
           }
         }
+      }
 
-        const allKeysToClean = [...dirtyKeys, ...rejectedKeys];
-        if (allKeysToClean.length > 0) {
-          addBatchLog(`🧹 Clearing normalized values: ${dirtyKeys.length} changed + ${rejectedKeys.length} rejected...`, 'info');
-          try {
-            for (let i = 0; i < allKeysToClean.length; i += 500) {
-              const batch = allKeysToClean.slice(i, i + 500);
-              await supabase
-                .from('property_market_analysis')
-                .update({ values_norm_time: null, updated_at: new Date().toISOString() })
-                .eq('job_id', job.id)
-                .in('property_composite_key', batch);
-            }
-            addBatchLog(`✅ Cleared values_norm_time for ${allKeysToClean.length} sales`, 'success');
-          } catch (cleanupError) {
-            console.error('Failed to clear stale normalized values:', cleanupError);
-            addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
+      // Clear values_norm_time for ALL sales changes (decided or not)
+      // Any sale that changed price/date has stale normalization that must be wiped
+      // This runs regardless of whether user made explicit decisions
+      const allChangedSalesKeys = (comparisonResults?.details?.salesChanges || [])
+        .filter(sc => {
+          // Don't clear if user chose "Keep Old" - they reverted to old sale, normalization is still valid
+          const decision = salesDecisions.get(sc.property_composite_key);
+          return decision !== 'Keep Old';
+        })
+        .map(sc => sc.property_composite_key);
+
+      if (allChangedSalesKeys.length > 0) {
+        const rejectedCount = allChangedSalesKeys.filter(k => salesDecisions.get(k) === 'Reject').length;
+        const changedCount = allChangedSalesKeys.length - rejectedCount;
+        addBatchLog(`🧹 Clearing normalized values: ${changedCount} changed + ${rejectedCount} rejected...`, 'info');
+        try {
+          for (let i = 0; i < allChangedSalesKeys.length; i += 500) {
+            const batch = allChangedSalesKeys.slice(i, i + 500);
+            await supabase
+              .from('property_market_analysis')
+              .update({ values_norm_time: null, updated_at: new Date().toISOString() })
+              .eq('job_id', job.id)
+              .in('property_composite_key', batch);
           }
+          addBatchLog(`✅ Cleared values_norm_time for ${allChangedSalesKeys.length} sales`, 'success');
+        } catch (cleanupError) {
+          console.error('Failed to clear stale normalized values:', cleanupError);
+          addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
         }
       }
 
