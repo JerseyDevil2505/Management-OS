@@ -844,6 +844,10 @@ export class BRTUpdater {
       landffinfl_6: this.preserveStringValue(rawRecord.LANDFFINFL_6),
       landurinfl_6: this.preserveStringValue(rawRecord.LANDURINFL_6),
 
+      // Zoning and map page
+      property_zoning: this.preserveStringValue(rawRecord.PROPERTY_ZONING),
+      property_tax_map_page: this.preserveStringValue(rawRecord.PROPERTY_TAXMAPPAGE),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: false, // CHANGED: false for updates

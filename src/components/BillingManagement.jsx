@@ -412,16 +412,22 @@ const calculateDistributionMetrics = async () => {
       const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
         .select(`
-          *,
-          job_contracts(*),
+          id,
+          job_name,
+          end_date,
+          percent_billed,
+          turnover_date,
+          total_properties,
+          totalresidential,
+          totalcommercial,
           workflow_stats,
-          billing_events(*)
+          job_contracts(contract_amount, retainer_percentage)
         `)
         .eq('job_type', 'standard');
 
       if (activeError) {
         console.error('Error fetching active jobs:', activeError);
-        throw activeError;
+        throw new Error(activeError.message || JSON.stringify(activeError));
       }
 
       const { data: planningJobsData, error: planningError } = await supabase
@@ -431,19 +437,20 @@ const calculateDistributionMetrics = async () => {
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
-        throw planningError;
+        throw new Error(planningError.message || JSON.stringify(planningError));
       }
 
       devLog('Active jobs fetched:', activeJobsData?.length || 0);
       devLog('Planning jobs fetched:', planningJobsData?.length || 0);
 
-      const allJobs = [];
-      
+      const activeBondJobs = [];
+      const completedJobs = [];
+
       // Process active jobs
       if (activeJobsData && activeJobsData.length > 0) {
         activeJobsData.forEach(job => {
           const contract = job.job_contracts?.[0];
-          
+
           // Get parcels from workflow_stats or job properties
           let parcels = 0;
           if (job.workflow_stats?.totalRecords) {
@@ -453,30 +460,30 @@ const calculateDistributionMetrics = async () => {
           } else {
             parcels = job.total_properties || (job.totalresidential + job.totalcommercial) || 0;
           }
-          
-          // Calculate % complete from workflow_stats
+
+          // Calculate % complete from workflow_stats (inspected / total) — matches Admin Jobs
           let percentComplete = '0.0';
           if (job.workflow_stats) {
-            const billable = job.workflow_stats.billingAnalytics?.totalBillable || 0;
-            const total = job.workflow_stats.totalRecords || 0;
-            if (total > 0 && billable > 0) {
-              percentComplete = ((billable / total) * 100).toFixed(1);
+            const ws = typeof job.workflow_stats === 'string' ? JSON.parse(job.workflow_stats) : job.workflow_stats;
+            const inspected = ws.validInspections || 0;
+            const total = ws.totalRecords || job.total_properties || 0;
+            if (total > 0 && inspected > 0) {
+              percentComplete = (Math.round((inspected / total) * 100)).toFixed(1);
             }
           }
-          
-          // Calculate % billed from billing events
-          let percentBilled = '0.0';
-          if (job.billing_events && job.billing_events.length > 0) {
-            const totalBilled = job.billing_events.reduce((sum, event) => 
-              sum + parseFloat(event.percentage_billed || 0), 0);
-            percentBilled = (totalBilled * 100).toFixed(1);
-          }
-          
+
+          // Use percent_billed from jobs table (stored as decimal, e.g. 1.0 = 100%)
+          const rawPercentBilled = parseFloat(job.percent_billed || 0);
+          const percentBilled = (rawPercentBilled * 100).toFixed(1);
+          const isFullyBilled = rawPercentBilled >= 1.0;
+
           if (contract && parcels > 0) {
-            // Fix timezone issue - parse date string directly
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear();
-            
-            allJobs.push({
+
+            const retainerPct = parseFloat(contract.retainer_percentage || 0);
+            const retainerHeld = retainerPct > 0 ? Math.round(contract.contract_amount * retainerPct) : 0;
+
+            const jobEntry = {
               municipality: job.job_name,
               dueYear: dueYear,
               contractStatus: 'YES',
@@ -485,25 +492,33 @@ const calculateDistributionMetrics = async () => {
               pricePerParcel: (contract.contract_amount / parcels).toFixed(2),
               percentComplete: percentComplete,
               percentBilled: percentBilled,
-              isPending: false
-            });
+              isPending: false,
+              turnoverDate: job.turnover_date || null,
+              retainerPct: retainerPct,
+              retainerHeld: retainerHeld
+            };
+
+            if (isFullyBilled) {
+              completedJobs.push(jobEntry);
+            } else {
+              activeBondJobs.push(jobEntry);
+            }
           }
         });
       }
-      
-      // Process planning jobs
+
+      // Process planning jobs (always active - never 100% billed)
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
           if (job.contract_amount > 0) {
             const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
                            ? parseInt(job.manual_parcel_count, 10)
                            : (job.total_properties || ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 0);
-            
-            // Fix timezone issue for planning jobs too
+
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
-            
-            allJobs.push({
-              municipality: (job.municipality || job.job_name || 'Unknown') + '*', // Add asterisk for pending
+
+            activeBondJobs.push({
+              municipality: (job.municipality || job.job_name || 'Unknown') + '*',
               dueYear: dueYear,
               contractStatus: 'PENDING',
               parcels: parcels,
@@ -511,119 +526,106 @@ const calculateDistributionMetrics = async () => {
               pricePerParcel: parcels > 0 ? (job.contract_amount / parcels).toFixed(2) : '0.00',
               percentComplete: '0.0',
               percentBilled: '0.0',
-              isPending: true
+              isPending: true,
+              turnoverDate: null,
+              retainerPct: 0,
+              retainerHeld: 0
             });
           }
         });
       }
-      
-      // Sort by percent billed (highest to lowest)
-      allJobs.sort((a, b) => parseFloat(b.percentBilled) - parseFloat(a.percentBilled));
-      
-      // Calculate totals - exclude jobs with 0 parcels from average calculation
-      const totalParcels = allJobs.reduce((sum, job) => sum + job.parcels, 0);
-      const totalAmount = allJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
-      
-      // Calculate average only for jobs WITH parcels
-      const jobsWithParcels = allJobs.filter(job => job.parcels > 0);
+
+      // Sort active jobs by percent billed (highest to lowest)
+      activeBondJobs.sort((a, b) => parseFloat(b.percentBilled) - parseFloat(a.percentBilled));
+      // Sort completed jobs by turnover date (most recent first), then by name
+      completedJobs.sort((a, b) => {
+        if (a.turnoverDate && b.turnoverDate) return new Date(b.turnoverDate) - new Date(a.turnoverDate);
+        if (a.turnoverDate) return -1;
+        if (b.turnoverDate) return 1;
+        return a.municipality.localeCompare(b.municipality);
+      });
+
+      // Calculate totals for ACTIVE jobs only (these are the bonding obligations)
+      const totalParcels = activeBondJobs.reduce((sum, job) => sum + job.parcels, 0);
+      const totalAmount = activeBondJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+
+      const jobsWithParcels = activeBondJobs.filter(job => job.parcels > 0);
       const parcelsForAvg = jobsWithParcels.reduce((sum, job) => sum + job.parcels, 0);
       const amountForAvg = jobsWithParcels.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = parcelsForAvg > 0 ? (amountForAvg / parcelsForAvg).toFixed(2) : '0.00';
-      
-      devLog('Total jobs in report:', allJobs.length);
-      devLog('Total amount:', totalAmount);
-      devLog('Total parcels:', totalParcels);
-      
-      // Generate PDF using jsPDF - LANDSCAPE orientation
+
+      devLog('Active bond jobs:', activeBondJobs.length);
+      devLog('Completed jobs:', completedJobs.length);
+
+      // ==================== PDF GENERATION ====================
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
         format: 'letter'
       });
-      
-      // Add content with adjusted positions for landscape
+
+      // Helper: draw active jobs table headers
+      const drawActiveHeaders = (doc, yPos) => {
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.text('Municipality', 10, yPos);
+        doc.text('Due Year', 65, yPos);
+        doc.text('Contract Status', 85, yPos);
+        doc.text('Parcels', 115, yPos);
+        doc.text('Amount', 135, yPos);
+        doc.text('$/Parcel', 165, yPos);
+        doc.text('Complete %', 185, yPos);
+        doc.text('Billed %', 215, yPos);
+        doc.setFont(undefined, 'normal');
+        return yPos + 8;
+      };
+
+      // ===== PAGE 1+: ACTIVE BONDING OBLIGATIONS =====
       doc.setFontSize(14);
       doc.text('PROFESSIONAL PROPERTY APPRAISERS', 140, 15, { align: 'center' });
       doc.setFontSize(11);
       doc.text('Bonding Status Report', 140, 22, { align: 'center' });
       doc.text(new Date().toLocaleDateString(), 140, 28, { align: 'center' });
-      
-      // Add table headers with better spacing for landscape
+
       let y = 40;
-      doc.setFontSize(9);
-      doc.text('Municipality', 10, y);
-      doc.text('Due Year', 65, y);
-      doc.text('Contract Status', 85, y);
-      doc.text('Parcels', 115, y);
-      doc.text('Amount', 135, y);
-      doc.text('$/Parcel', 165, y);
-      doc.text('Complete %', 185, y);
-      doc.text('Billed %', 215, y);
-      
-      // Add jobs with adjusted spacing
-      y += 8;
+      y = drawActiveHeaders(doc, y);
       doc.setFontSize(8);
-      
-      let currentPage = 1;
-      allJobs.forEach(job => {
-        if (y > 185) { // New page if needed
+
+      activeBondJobs.forEach(job => {
+        if (y > 185) {
           doc.addPage();
-          currentPage++;
           y = 20;
-          // Repeat headers on new page
-          doc.setFontSize(9);
-          doc.text('Municipality', 10, y);
-          doc.text('Due Year', 65, y);
-          doc.text('Contract Status', 85, y);
-          doc.text('Parcels', 115, y);
-          doc.text('Amount', 135, y);
-          doc.text('$/Parcel', 165, y);
-          doc.text('Complete %', 185, y);
-          doc.text('Billed %', 215, y);
-          y += 8;
+          y = drawActiveHeaders(doc, y);
           doc.setFontSize(8);
         }
-        
-        // Municipality name
+
         doc.text(job.municipality.substring(0, 35), 10, y);
-        
-        // Due Year
         doc.text(job.dueYear.toString(), 65, y);
-        
-        // Contract Status with color
+
         if (job.contractStatus === 'YES') {
-          doc.setTextColor(6, 95, 70); // Green for Fully Executed
+          doc.setTextColor(6, 95, 70);
           doc.text('Fully Executed', 85, y);
         } else {
-          doc.setTextColor(146, 64, 14); // Amber for Awarded
+          doc.setTextColor(146, 64, 14);
           doc.text('Awarded', 85, y);
         }
-        doc.setTextColor(0, 0, 0); // Back to black
-        
-        // Parcels (right-aligned)
+        doc.setTextColor(0, 0, 0);
+
         doc.text(job.parcels.toLocaleString(), 125, y, { align: 'right' });
-        
-        // Amount (right-aligned)
         doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 155, y, { align: 'right' });
-        
-        // $/Parcel (right-aligned)
         doc.text(`$${job.pricePerParcel}`, 175, y, { align: 'right' });
-        
-        // Complete % (right-aligned)
         doc.text(`${job.percentComplete}%`, 205, y, { align: 'right' });
-        
-        // Billed % (right-aligned)
         doc.text(`${job.percentBilled}%`, 235, y, { align: 'right' });
-        
+
         y += 6;
       });
-      
-      // Add totals - left aligned, all bold, no spacing
+
+      // Active jobs totals
       y += 10;
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
-      doc.text(`Total Contracts: ${allJobs.length}`, 10, y);
+      doc.text(`Active Contracts: ${activeBondJobs.length}`, 10, y);
       y += 5;
       doc.text(`Total Parcels: ${totalParcels.toLocaleString()}`, 10, y);
       y += 5;
@@ -632,10 +634,92 @@ const calculateDistributionMetrics = async () => {
       doc.setFontSize(11);
       doc.text(`Overall Avg $/Parcel: $${avgPricePerParcel}`, 10, y);
       doc.setFont(undefined, 'normal');
-      
-      // Add footnote centered at bottom
+
       doc.setFontSize(8);
       doc.text('*Awarded jobs have been awarded but not yet moved to active jobs', 140, 195, { align: 'center' });
+
+      // ===== COMPLETED JOBS PAGE =====
+      if (completedJobs.length > 0) {
+        doc.addPage();
+
+        doc.setFontSize(14);
+        doc.text('PROFESSIONAL PROPERTY APPRAISERS', 140, 15, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text('Completed Jobs - 100% Billed (Retainer Phase)', 140, 22, { align: 'center' });
+        doc.text(new Date().toLocaleDateString(), 140, 28, { align: 'center' });
+
+        y = 40;
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        // Helper: draw completed jobs headers
+        const drawCompletedHeaders = (doc, yPos) => {
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'bold');
+          doc.text('Municipality', 10, yPos);
+          doc.text('Year Complete', 65, yPos);
+          doc.text('Parcels', 105, yPos);
+          doc.text('Contract Amount', 130, yPos);
+          doc.text('$/Parcel', 170, yPos);
+          doc.text('Retainer %', 200, yPos);
+          doc.text('Retainer Held', 240, yPos);
+          doc.setFont(undefined, 'normal');
+          return yPos + 8;
+        };
+
+        y = drawCompletedHeaders(doc, y);
+        doc.setFontSize(8);
+
+        const completedTotalParcels = completedJobs.reduce((sum, job) => sum + job.parcels, 0);
+        const completedTotalAmount = completedJobs.reduce((sum, job) => sum + parseFloat(job.amount), 0);
+        const completedTotalRetainerHeld = completedJobs.reduce((sum, job) => sum + job.retainerHeld, 0);
+
+        completedJobs.forEach(job => {
+          if (y > 185) {
+            doc.addPage();
+            y = 20;
+            y = drawCompletedHeaders(doc, y);
+            doc.setFontSize(8);
+          }
+
+          doc.text(job.municipality.substring(0, 35), 10, y);
+
+          // Year complete from turnover_date, fall back to due year
+          const yearComplete = job.turnoverDate
+            ? parseInt(job.turnoverDate.substring(0, 4))
+            : job.dueYear;
+          doc.text(yearComplete.toString(), 75, y);
+
+          doc.text(job.parcels.toLocaleString(), 115, y, { align: 'right' });
+          doc.text(`$${parseFloat(job.amount).toLocaleString()}`, 160, y, { align: 'right' });
+          doc.text(`$${job.pricePerParcel}`, 180, y, { align: 'right' });
+
+          // Retainer info
+          if (job.retainerPct > 0) {
+            doc.text(`${(job.retainerPct * 100).toFixed(0)}%`, 210, y, { align: 'right' });
+            doc.text(`$${job.retainerHeld.toLocaleString()}`, 255, y, { align: 'right' });
+          } else {
+            doc.setTextColor(150, 150, 150);
+            doc.text('None', 210, y, { align: 'right' });
+            doc.text('\u2014', 255, y, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+          }
+
+          y += 6;
+        });
+
+        // Completed totals
+        y += 10;
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(`Completed Contracts: ${completedJobs.length}`, 10, y);
+        y += 5;
+        doc.text(`Total Parcels: ${completedTotalParcels.toLocaleString()}`, 10, y);
+        y += 5;
+        doc.text(`Total Amount: $${completedTotalAmount.toLocaleString()}`, 10, y);
+        y += 5;
+        doc.text(`Total Retainer Held: $${completedTotalRetainerHeld.toLocaleString()}`, 10, y);
+        doc.setFont(undefined, 'normal');
+      }
       
       // Save PDF
       doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -643,7 +727,7 @@ const calculateDistributionMetrics = async () => {
       alert('Bonding report PDF generated successfully!');
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Error generating report: ' + error.message);
+      alert('Error generating report: ' + (error.message || JSON.stringify(error)));
     }
   };
 
