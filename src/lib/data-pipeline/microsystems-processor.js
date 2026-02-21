@@ -457,6 +457,10 @@ export class MicrosystemsProcessor {
       special_tax_code_3: null, // Not available in Microsystems
       special_tax_code_4: null, // Not available in Microsystems
 
+      // Zoning and map page (stored on property_records for auto-population into PBP)
+      property_zoning: rawRecord['Zone'] || null,
+      property_tax_map_page: rawRecord['Map Page'] || null,
+
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
       //          asset_zoning, values_norm_size, values_norm_time

@@ -390,13 +390,12 @@ const UserManagement = ({ onViewAs }) => {
             <div className="um-table-container">
               <table className="um-table">
                 <colgroup>
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '24%' }} />
                   <col style={{ width: '14%' }} />
-                  <col style={{ width: '22%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '9%' }} />
-                  <col style={{ width: '8%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '25%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '26%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -405,7 +404,6 @@ const UserManagement = ({ onViewAs }) => {
                     <th>Role</th>
                     <th>Status</th>
                     <th>Account</th>
-                    <th>Password</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -434,18 +432,6 @@ const UserManagement = ({ onViewAs }) => {
                         <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
                           {user.has_account ? 'Yes' : 'No'}
                         </span>
-                      </td>
-                      <td>
-                        {user.initial_password ? (
-                          <code style={{
-                            padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
-                            background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
-                          }}>
-                            {user.initial_password}
-                          </code>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
-                        )}
                       </td>
                       <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <button
@@ -532,7 +518,6 @@ const UserManagement = ({ onViewAs }) => {
                       <th>Organization</th>
                       <th>Status</th>
                       <th>Account</th>
-                      <th>Password</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -568,18 +553,6 @@ const UserManagement = ({ onViewAs }) => {
                           <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
                             {user.has_account ? 'Yes' : 'No'}
                           </span>
-                        </td>
-                        <td>
-                          {user.initial_password ? (
-                            <code style={{
-                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
-                              background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
-                            }}>
-                              {user.initial_password}
-                            </code>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
-                          )}
                         </td>
                         <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                           <button
@@ -807,11 +780,6 @@ const UserManagement = ({ onViewAs }) => {
             <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
               Set a new password for {selectedUser.email}
             </p>
-            {selectedUser.initial_password && (
-              <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '1rem' }}>
-                Current stored password: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{selectedUser.initial_password}</code>
-              </p>
-            )}
             <form onSubmit={handleResetPassword}>
               <div className="um-form-group">
                 <label>New Password *</label>

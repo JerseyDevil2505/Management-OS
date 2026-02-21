@@ -15,7 +15,7 @@ const CHECKLIST_TEMPLATE = [
   { id: 'tax-map-upload', item_text: 'Tax Map Upload', category: 'setup' },
   { id: 'zoning-map-upload', item_text: 'Zoning Map Upload', category: 'setup' },
   { id: 'zoning-regulations-upload', item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup' },
-  { id: 'ppa-website-updated', item_text: 'PPA Website Updated', category: 'setup' },
+  { id: 'ppa-website-updated', item_text: 'Website Updated', category: 'setup' },
   { id: 'data-collection-params', item_text: 'Data Collection Parameters', category: 'setup' },
   { id: 'initial-mailing-list', item_text: 'Initial Mailing List', category: 'inspection' },
   { id: 'initial-letter-brochure', item_text: 'Initial Letter and Brochure', category: 'inspection' },
@@ -1083,7 +1083,8 @@ const AdminJobManagement = ({
           rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
           appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
         },
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+        organization_id: PPA_ORG_ID
       };
 
       const createdJob = await jobService.create(jobData);

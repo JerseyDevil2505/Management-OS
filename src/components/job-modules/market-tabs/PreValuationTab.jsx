@@ -186,6 +186,7 @@ const PreValuationTab = ({
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [isExportingLotSizes, setIsExportingLotSizes] = useState(false);
+  const [isAutoPopulating, setIsAutoPopulating] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Unit rate mappings editor state
@@ -306,7 +307,6 @@ const PreValuationTab = ({
     try {
       const { error } = await supabase.from('jobs').update({ staged_unit_rate_config: newStaged }).eq('id', jobData.id);
       if (error) throw error;
-      alert(`Staged mapping for VCS ${mappingVcsKey}`);
     } catch (e) {
       console.error('Failed persisting staged mapping', e);
       alert('Failed staging mapping: ' + (e.message || e));
@@ -967,6 +967,203 @@ useEffect(() => {
     }
   };
 
+  const autoPopulatePageByPage = async () => {
+    if (!jobData?.id) return;
+    setIsAutoPopulating(true);
+    try {
+      // 1. Build code-to-description lookup from parsed_code_definitions
+      const codeLookup = {};
+      if (vendorType === 'BRT' && codeDefinitions?.sections) {
+        const sections = codeDefinitions.sections;
+        const residentialSection = sections.Residential || sections.residential || {};
+        Object.keys(residentialSection).forEach(parentKey => {
+          const parentSection = residentialSection[parentKey];
+          const categoryKey = parentSection?.KEY || parentSection?.key;
+          if (categoryKey === '62' || categoryKey === '63') {
+            const categoryMap = parentSection.MAP || parentSection.map || {};
+            Object.keys(categoryMap).forEach(codeKey => {
+              if (codeKey === 'KEY' || codeKey === 'DATA' || codeKey === 'MAP') return;
+              const codeItem = categoryMap[codeKey];
+              let description = codeItem?.DATA?.VALUE || codeItem?.VALUE || (typeof codeItem === 'string' ? codeItem : '');
+              if (description) {
+                codeLookup[String(codeKey).trim().toUpperCase()] = {
+                  description: description.trim(),
+                  type: categoryKey === '62' ? '+' : '-'
+                };
+              }
+            });
+          }
+        });
+      } else if (vendorType === 'Microsystems' && codeDefinitions?.field_codes) {
+        const landCodes = codeDefinitions.field_codes['220'] || {};
+        Object.entries(landCodes).forEach(([code, data]) => {
+          if (data.description) {
+            codeLookup[String(code).trim().toUpperCase()] = {
+              description: data.description.trim(),
+              type: null // Microsystems determines +/- from percent fields
+            };
+          }
+        });
+      }
+
+      // 2. Load properties with adjustment fields + zoning/map page from property_records
+      const adjustFields = vendorType === 'BRT'
+        ? 'property_composite_key,property_zoning,property_tax_map_page,' +
+          Array.from({length: 6}, (_, i) => `landffcond_${i+1},landurcond_${i+1},landffinfl_${i+1},landurinfl_${i+1}`).join(',')
+        : 'property_composite_key,property_zoning,property_tax_map_page,' +
+          Array.from({length: 4}, (_, i) => `overall_adj_reason${i+1},overall_adj_percent${i+1}`).join(',');
+
+      const batchSize = 1000;
+      let allRecords = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const query = vendorType === 'BRT'
+          ? supabase.from('property_records').select(adjustFields).eq('job_id', jobData.id).range(from, from + batchSize - 1)
+          : supabase.from('property_records').select('*').eq('job_id', jobData.id).range(from, from + batchSize - 1);
+        const { data, error } = await query;
+        if (error) throw error;
+        if (data) allRecords = allRecords.concat(data);
+        hasMore = data && data.length === batchSize;
+        from += batchSize;
+      }
+
+      // 3. Load existing property_market_analysis to check what's already populated
+      let existingPMA = [];
+      from = 0;
+      hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key,location_analysis,asset_zoning,asset_map_page')
+          .eq('job_id', jobData.id)
+          .range(from, from + batchSize - 1);
+        if (error) throw error;
+        if (data) existingPMA = existingPMA.concat(data);
+        hasMore = data && data.length === batchSize;
+        from += batchSize;
+      }
+
+      const existingMap = {};
+      existingPMA.forEach(r => { existingMap[r.property_composite_key] = r; });
+
+      // 4. Process each property
+      const updates = [];
+      let locPopulated = 0;
+      let zoningPopulated = 0;
+      let mapPopulated = 0;
+
+      for (const prop of allRecords) {
+        const key = prop.property_composite_key;
+        const existing = existingMap[key] || {};
+        const update = { job_id: jobData.id, property_composite_key: key };
+        let hasUpdate = false;
+
+        // Auto-populate location_analysis if empty
+        const existingLoc = existing.location_analysis;
+        if (!existingLoc || existingLoc.trim() === '') {
+          const reasons = new Map(); // description -> sign
+
+          if (vendorType === 'BRT') {
+            for (let i = 1; i <= 6; i++) {
+              // Positive: landffcond and landurcond
+              [prop[`landffcond_${i}`], prop[`landurcond_${i}`]].forEach(code => {
+                if (code && String(code).trim()) {
+                  const normalized = String(code).trim().toUpperCase();
+                  const def = codeLookup[normalized];
+                  if (def && !reasons.has(def.description)) {
+                    reasons.set(def.description, '+');
+                  }
+                }
+              });
+              // Negative: landffinfl and landurinfl
+              [prop[`landffinfl_${i}`], prop[`landurinfl_${i}`]].forEach(code => {
+                if (code && String(code).trim()) {
+                  const normalized = String(code).trim().toUpperCase();
+                  const def = codeLookup[normalized];
+                  if (def && !reasons.has(def.description)) {
+                    reasons.set(def.description, '-');
+                  }
+                }
+              });
+            }
+          } else if (vendorType === 'Microsystems') {
+            for (let i = 1; i <= 4; i++) {
+              const reasonCode = prop[`overall_adj_reason${i}`] || prop[`Overall Adj Reason${i}`];
+              if (reasonCode && String(reasonCode).trim()) {
+                const normalized = String(reasonCode).trim().toUpperCase();
+                const def = codeLookup[normalized];
+                if (def && !reasons.has(def.description)) {
+                  // Determine +/- from percent field
+                  const pct = parseFloat(prop[`overall_adj_percent${i}`] || prop[`Overall Adj Percent${i}`]) || 100;
+                  const sign = pct > 100 ? '+' : pct < 100 ? '-' : '';
+                  reasons.set(def.description, sign);
+                }
+              }
+            }
+          }
+
+          if (reasons.size > 0) {
+            const parts = [];
+            reasons.forEach((sign, desc) => {
+              parts.push(sign ? `${desc} (${sign})` : desc);
+            });
+            update.location_analysis = parts.join(', ');
+            hasUpdate = true;
+            locPopulated++;
+          }
+        }
+
+        // Auto-populate zoning if empty
+        const existingZoning = existing.asset_zoning;
+        if ((!existingZoning || existingZoning.trim() === '') && prop.property_zoning && prop.property_zoning.trim()) {
+          update.asset_zoning = prop.property_zoning.trim();
+          hasUpdate = true;
+          zoningPopulated++;
+        }
+
+        // Auto-populate map page if empty
+        const existingMap_ = existing.asset_map_page;
+        if ((!existingMap_ || existingMap_.trim() === '') && prop.property_tax_map_page && prop.property_tax_map_page.trim()) {
+          update.asset_map_page = prop.property_tax_map_page.trim();
+          hasUpdate = true;
+          mapPopulated++;
+        }
+
+        if (hasUpdate) {
+          updates.push(update);
+        }
+      }
+
+      // 5. Batch upsert in chunks of 500
+      let totalUpserted = 0;
+      for (let i = 0; i < updates.length; i += 500) {
+        const chunk = updates.slice(i, i + 500);
+        const { error } = await safeUpsertPropertyMarket(chunk);
+        if (error) {
+          console.error('Error upserting PBP batch:', error);
+          throw error;
+        }
+        totalUpserted += chunk.length;
+      }
+
+      const summary = [];
+      if (locPopulated > 0) summary.push(`Location Analysis: ${locPopulated}`);
+      if (zoningPopulated > 0) summary.push(`Zoning: ${zoningPopulated}`);
+      if (mapPopulated > 0) summary.push(`Map Page: ${mapPopulated}`);
+
+      alert(summary.length > 0
+        ? `Auto-populate complete!\n\nProperties updated (empty fields only):\n${summary.join('\n')}\n\nTotal records written: ${totalUpserted}`
+        : 'No empty fields found to populate. All properties already have values or no source data available.');
+
+    } catch (e) {
+      console.error('Error auto-populating PBP:', e);
+      alert(`Auto-populate failed: ${e.message || e}`);
+    } finally {
+      setIsAutoPopulating(false);
+    }
+  };
+
   const exportLotSizeReport = async () => {
     if (!jobData?.id) return;
     setIsExportingLotSizes(true);
@@ -1278,50 +1475,42 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
   const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
-    setTimeNormProgress({ current: 0, total: properties.length, message: 'Analyzing properties...' });
+    setTimeNormProgress({ current: 0, total: properties.length, message: 'Building property index...' });
+
+    // Yield helper - lets React render between chunks so the progress modal stays visible
+    const yieldToUI = () => new Promise(r => setTimeout(r, 0));
 
     try {
-      // DEBUG: Check initial properties data structure
-      if (false) console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
-      if (properties.length > 0) {
-        if (false) console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
+      // 1. Pre-build lookup maps in a single O(n) pass over all properties.
+      //    - cardMap: keyed by "block-lot_qualifier", groups all cards with their parsed info + SFLA
+      //    - mCardSet: (Microsystems only) tracks which base keys have an M card
+      const cardMap = new Map();      // key -> [{ card, sfla, property }]
+      const mCardSet = new Set();     // base keys that have an M card
 
-        const firstProp = properties[0];
-        if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
-        if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
-        if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
-        if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
-        if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
-        if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
+      for (let i = 0; i < properties.length; i++) {
+        const p = properties[i];
+        const parsed = parseCompositeKey(p.property_composite_key);
+        const card = parsed.card?.toUpperCase() || '';
+        const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
 
-        // Check if the problem is that the fields exist but are being overwritten
-        if (false) console.log('🔍 FULL PROPERTY OBJECT INSPECTION:');
-        if (false) console.log('  property_composite_key:', firstProp.property_composite_key);
-        if (false) console.log('  ALL KEYS:', Object.keys(firstProp));
+        if (!cardMap.has(baseKey)) cardMap.set(baseKey, []);
+        cardMap.get(baseKey).push({ card, sfla: p.asset_sfla || 0, property: p });
 
-        // If the fields are undefined, let's see what properties DO have values
-        if (!firstProp.property_m4_class) {
-          console.error('❌ property_m4_class is undefined in properties array!');
-          if (false) console.log('  🔍 Checking for similar fields...');
-          Object.keys(firstProp).forEach(key => {
-            if (key.includes('class') || key.includes('m4')) {
-              if (false) console.log(`    ${key}:`, firstProp[key]);
-            }
-          });
+        if (vendorType === 'Microsystems' && card === 'M') {
+          mCardSet.add(baseKey);
         }
 
-        if (!firstProp.values_mod_total) {
-          console.error('❌ values_mod_total is undefined in properties array!');
-          if (false) console.log('  🔍 Checking for similar fields...');
-          Object.keys(firstProp).forEach(key => {
-            if (key.includes('value') || key.includes('total') || key.includes('assess') || key.includes('mod')) {
-              if (false) console.log(`    ${key}:`, firstProp[key]);
-            }
-          });
+        // Yield every 2000 properties so the modal can render
+        if (i % 2000 === 0 && i > 0) {
+          setTimeNormProgress({ current: i, total: properties.length, message: 'Building property index...' });
+          await yieldToUI();
         }
       }
 
-      // Create a map of existing keep/reject decisions with sale data
+      setTimeNormProgress({ current: properties.length, total: properties.length, message: 'Preparing decisions...' });
+      await yieldToUI();
+
+      // 2. Create a map of existing keep/reject decisions with sale data
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
         if (sale.keep_reject) {
@@ -1333,227 +1522,189 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           };
         }
       });
-      
-      // Filter for VALID residential sales only
-      const validSales = properties.filter(p => {
-        // Check for valid sales price (ensure minSalePrice is valid number)
-        const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
-        if (!p.sales_price || p.sales_price <= minPrice) return false;
-        
-        // Check for valid sales date
-        if (!p.sales_date) return false;
 
-        // Check for minimum improvement value (exclude tear-downs)
-        if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;
-        
-        const saleYear = new Date(p.sales_date).getFullYear();
-        if (saleYear < salesFromYear) return false;
+      // 3. Filter for VALID residential sales only (chunked with yields)
+      const validSales = [];
+      const CHUNK = 500;
+      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
 
-        // Check that house existed at time of sale (year built <= sale year)
-        if (p.asset_year_built && p.asset_year_built > saleYear) return false;
-        
-        // Parse composite key for card filtering
-        const parsed = parseCompositeKey(p.property_composite_key);
-        const card = parsed.card?.toUpperCase();
+      for (let i = 0; i < properties.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, properties.length);
+        for (let j = i; j < end; j++) {
+          const p = properties[j];
+          if (!p.sales_price || p.sales_price <= minPrice) continue;
+          if (!p.sales_date) continue;
+          if (!p.values_mod_improvement || p.values_mod_improvement < 10000) continue;
 
-        // Card filter based on vendor
-        if (vendorType === 'Microsystems') {
-          // For Microsystems: Include M cards, and A cards only if no M card exists for same property
-          if (card === 'M') {
-            return true; // Always include M cards
-          } else if (card === 'A') {
-            // Check if there's an M card for the same block/lot/qualifier
+          const saleYear = new Date(p.sales_date).getFullYear();
+          if (saleYear < salesFromYear) continue;
+          if (p.asset_year_built && p.asset_year_built > saleYear) continue;
+
+          const parsed = parseCompositeKey(p.property_composite_key);
+          const card = parsed.card?.toUpperCase();
+
+          // Card filter based on vendor
+          if (vendorType === 'Microsystems') {
+            if (card === 'M') { /* include */ }
+            else if (card === 'A') {
+              const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
+              if (mCardSet.has(baseKey)) continue; // M card exists, skip this A card
+            } else {
+              continue;
+            }
+          } else { // BRT
+            if (card !== '1') continue;
+          }
+
+          const buildingClass = p.asset_building_class?.toString().trim();
+          const typeUse = p.asset_type_use?.toString().trim();
+          const designStyle = p.asset_design_style?.toString().trim();
+          if (!buildingClass || parseInt(buildingClass) <= 10) continue;
+          if (!typeUse) continue;
+          if (!designStyle) continue;
+          if (!p.asset_sfla || p.asset_sfla <= 0) continue;
+
+          validSales.push(p);
+        }
+
+        setTimeNormProgress({
+          current: end,
+          total: properties.length,
+          message: `Filtering properties... ${end.toLocaleString()} / ${properties.length.toLocaleString()}`
+        });
+        await yieldToUI();
+      }
+
+      setTimeNormProgress({
+        current: properties.length,
+        total: properties.length,
+        message: `Found ${validSales.length} valid sales to normalize...`
+      });
+      await yieldToUI();
+
+      // 4. Enhance valid sales with combined SFLA from additional cards (using pre-built cardMap)
+      const enhancedSales = [];
+      for (let i = 0; i < validSales.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, validSales.length);
+        for (let j = i; j < end; j++) {
+          const prop = validSales[j];
+          const parsed = parseCompositeKey(prop.property_composite_key);
+          let enhancedProp = { ...prop };
+
+          // If this is a main card, aggregate SFLA from additional cards via the map
+          if ((vendorType === 'Microsystems' && parsed.card?.toUpperCase() === 'M') ||
+              (vendorType === 'BRT' && parsed.card === '1')) {
+
             const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
-            const hasMCard = properties.some(other => {
-              const otherParsed = parseCompositeKey(other.property_composite_key);
-              const otherBaseKey = `${otherParsed.block}-${otherParsed.lot}_${otherParsed.qualifier}`;
-              return otherBaseKey === baseKey && otherParsed.card?.toUpperCase() === 'M';
-            });
-            return !hasMCard; // Include A card only if no M card exists
+            const siblings = cardMap.get(baseKey) || [];
+            let additionalSFLA = 0;
+            let hasAdditional = false;
+            for (const sib of siblings) {
+              if (sib.card !== parsed.card?.toUpperCase() && sib.sfla > 0) {
+                additionalSFLA += sib.sfla;
+                hasAdditional = true;
+              }
+            }
+
+            enhancedProp = {
+              ...enhancedProp,
+              original_sfla: enhancedProp.asset_sfla,
+              asset_sfla: (enhancedProp.asset_sfla || 0) + additionalSFLA,
+              has_additional_cards: hasAdditional
+            };
           }
-          return false; // Exclude all other cards
-        } else { // BRT
-          if (card !== '1') return false;
-        }
-        
-        // Check for required fields
-        const buildingClass = p.asset_building_class?.toString().trim();
-        const typeUse = p.asset_type_use?.toString().trim();
-        const designStyle = p.asset_design_style?.toString().trim();
-        
-        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
-        if (!typeUse) return false;
-        if (!designStyle) return false;
-        
-        // Check for valid living area
-        if (!p.asset_sfla || p.asset_sfla <= 0) return false;
-        
-        return true;
-      });
 
-      setTimeNormProgress({ 
-        current: properties.length, 
-        total: properties.length, 
-        message: `Found ${validSales.length} valid sales to normalize...` 
-      });
+          // Ensure property_class is present but do not overwrite if already set
+          if (!enhancedProp.property_class && prop.property_m4_class) {
+            enhancedProp.property_class = prop.property_m4_class;
+          }
 
-      // Enhance valid sales with combined SFLA from additional cards
-      const enhancedSales = validSales.map(prop => {
-        const parsed = parseCompositeKey(prop.property_composite_key);
+          // Ensure key sales/assessment fields exist without overwriting existing values
+          if (!enhancedProp.sales_nu && prop.sales_nu) {
+            enhancedProp.sales_nu = prop.sales_nu;
+          }
+          if ((enhancedProp.values_mod_total === undefined || enhancedProp.values_mod_total === null) && (prop.values_mod_total !== undefined && prop.values_mod_total !== null)) {
+            enhancedProp.values_mod_total = prop.values_mod_total;
+          }
 
-        // Start with a shallow copy of the incoming property to preserve all existing fields
-        let enhancedProp = { ...prop };
-
-        // If this is a main card, check for additional cards and aggregate SFLA
-        if ((vendorType === 'Microsystems' && parsed.card === 'M') ||
-            (vendorType === 'BRT' && parsed.card === '1')) {
-
-          // Find additional cards for this property
-          const additionalCards = properties.filter(p => {
-            const pParsed = parseCompositeKey(p.property_composite_key);
-            return pParsed.block === parsed.block &&
-                   pParsed.lot === parsed.lot &&
-                   pParsed.qualifier === parsed.qualifier &&
-                   pParsed.card !== parsed.card &&
-                   p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
-          });
-
-          // Sum additional SFLA
-          const additionalSFLA = additionalCards.reduce((sum, card) => sum + (card.asset_sfla || 0), 0);
-
-          // Only augment the SFLA fields; do NOT overwrite other existing fields with possibly undefined values
-          enhancedProp = {
-            ...enhancedProp,
-            original_sfla: enhancedProp.asset_sfla,
-            asset_sfla: (enhancedProp.asset_sfla || 0) + additionalSFLA,
-            has_additional_cards: additionalCards.length > 0
-          };
+          enhancedSales.push(enhancedProp);
         }
 
-        // Ensure property_class is present but do not overwrite if already set
-        if (!enhancedProp.property_class && prop.property_m4_class) {
-          enhancedProp.property_class = prop.property_m4_class;
-        }
-
-        // Ensure key sales/assessment fields exist without overwriting existing values
-        if (!enhancedProp.sales_nu && prop.sales_nu) {
-          enhancedProp.sales_nu = prop.sales_nu;
-        }
-        if ((enhancedProp.values_mod_total === undefined || enhancedProp.values_mod_total === null) && (prop.values_mod_total !== undefined && prop.values_mod_total !== null)) {
-          enhancedProp.values_mod_total = prop.values_mod_total;
-        }
-
-        return enhancedProp;
-      });      
+        setTimeNormProgress({
+          current: end,
+          total: validSales.length,
+          message: `Enhancing sales... ${end} / ${validSales.length}`
+        });
+        await yieldToUI();
+      }      
       
-      // Process each valid sale
-      const normalized = enhancedSales.map((prop, index) => {
-        const saleYear = new Date(prop.sales_date).getFullYear();
-        const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
-        const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
+      // 5. Compute HPI-normalized prices (chunked with yields)
+      const eqRatio = parseFloat(equalizationRatio);
+      const outThreshold = parseFloat(outlierThreshold);
+      const normalized = [];
 
-        // Calculate sales ratio
-        const assessedValue = prop.values_mod_total || 0;
-        const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0
-          ? assessedValue / timeNormalizedPrice
-          : 0;
+      for (let i = 0; i < enhancedSales.length; i += CHUNK) {
+        const end = Math.min(i + CHUNK, enhancedSales.length);
+        for (let j = i; j < end; j++) {
+          const prop = enhancedSales[j];
+          const saleYear = new Date(prop.sales_date).getFullYear();
+          const hpiMultiplier = getHPIMultiplier(saleYear, normalizeToYear);
+          const timeNormalizedPrice = Math.round(prop.sales_price * hpiMultiplier);
 
-        // DEBUG: Log first few sales to check data and available fields
-        if (index < 3) {
-          if (false) console.log(`🔍 Sale ${index + 1} FULL PROPERTY DATA:`, prop);
-          if (false) console.log(`🔍 Sale ${index + 1} SPECIFIC FIELDS:`, {
-            id: prop.id,
-            // Check all possible class field names
-            property_class: prop.property_class,
-            property_m4_class: prop.property_m4_class,
-            asset_building_class: prop.asset_building_class,
-            building_class: prop.building_class,
-            // Check all possible sales NU field names
-            sales_nu: prop.sales_nu,
-            sales_instrument: prop.sales_instrument,
-            nu: prop.nu,
-            sale_nu: prop.sale_nu,
-            // Check all possible assessed value field names
-            values_mod_total: prop.values_mod_total,
-            assessed_value: prop.assessed_value,
-            total_assessed: prop.total_assessed,
-            mod_total: prop.mod_total,
-            sales_price: prop.sales_price,
-            assessedValue,
-            salesRatio: salesRatio.toFixed(3)
-          });
+          const assessedValue = prop.values_mod_total || 0;
+          const salesRatio = assessedValue > 0 && timeNormalizedPrice > 0
+            ? assessedValue / timeNormalizedPrice
+            : 0;
 
-          // Also log all property keys to see what's available
-          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
-        }
-        
-        // Determine if outlier based on equalization ratio
-        const eqRatio = parseFloat(equalizationRatio);
-        const outThreshold = parseFloat(outlierThreshold);
-        const isOutlier = eqRatio && outThreshold ?
-          Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
+          const isOutlier = eqRatio && outThreshold ?
+            Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
 
-        // Check if we have an existing decision for this property
-        const existingDecisionData = existingDecisions[prop.id];
-        let finalDecision = 'pending';
-        let saleDataChanged = false;
+          // Check if we have an existing decision for this property
+          const existingDecisionData = existingDecisions[prop.id];
+          let finalDecision = 'pending';
+          let saleDataChanged = false;
 
-        if (existingDecisionData) {
-          // Check if sale data changed since the decision was made
-          const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
-          const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
-          const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
+          if (existingDecisionData) {
+            const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
+            const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
+            const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
 
-          saleDataChanged = priceChanged || dateChanged || nuChanged;
+            saleDataChanged = priceChanged || dateChanged || nuChanged;
 
-          if (saleDataChanged) {
-            // Sale data changed - reset to pending and log the change
-            finalDecision = 'pending';
-            console.log(`⚠️ Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
-              old: {
-                price: existingDecisionData.sales_price,
-                date: existingDecisionData.sales_date,
-                nu: existingDecisionData.sales_nu
-              },
-              new: {
-                price: prop.sales_price,
-                date: prop.sales_date,
-                nu: prop.sales_nu
-              },
-              previousDecision: existingDecisionData.decision
-            });
-          } else {
-            // Sale data unchanged - preserve existing decision
-            finalDecision = existingDecisionData.decision;
+            if (saleDataChanged) {
+              finalDecision = 'pending';
+              console.log(`Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
+                old: { price: existingDecisionData.sales_price, date: existingDecisionData.sales_date, nu: existingDecisionData.sales_nu },
+                new: { price: prop.sales_price, date: prop.sales_date, nu: prop.sales_nu },
+                previousDecision: existingDecisionData.decision
+              });
+            } else {
+              finalDecision = existingDecisionData.decision;
+            }
           }
+
+          normalized.push({
+            ...prop,
+            time_normalized_price: timeNormalizedPrice,
+            hpi_multiplier: hpiMultiplier,
+            sales_ratio: salesRatio,
+            is_outlier: isOutlier,
+            keep_reject: finalDecision,
+            sale_data_changed: saleDataChanged
+          });
         }
 
-        return {
-          ...prop,
-          time_normalized_price: timeNormalizedPrice,
-          hpi_multiplier: hpiMultiplier,
-          sales_ratio: salesRatio,
-          is_outlier: isOutlier,
-          keep_reject: finalDecision,
-          sale_data_changed: saleDataChanged // Track if data changed for UI indication
-        };
-      });
+        setTimeNormProgress({
+          current: end,
+          total: enhancedSales.length,
+          message: `Normalizing prices... ${end} / ${enhancedSales.length}`
+        });
+        await yieldToUI();
+      }
 
       setTimeNormalizedSales(normalized);
 
-      // DEBUG: Final data check
-      if (false) console.log(`�� Time normalization complete: ${normalized.length} sales processed`);
-      if (false) console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
-        id: s.id,
-        property_m4_class: s.property_m4_class,
-        sales_nu: s.sales_nu,
-        values_mod_total: s.values_mod_total,
-        sales_ratio: s.sales_ratio,
-        has_package_data: !!s._pkg
-      })));
-
-      // Calculate excluded count (properties that didn't meet criteria)
-      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
+      // 6. Calculate excluded count (properties that didn't meet criteria)
       const excludedCount = properties.filter(p => {
         if (!p.sales_price || p.sales_price <= minPrice) return true;
         if (!p.sales_date) return true;
@@ -1588,7 +1739,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       };
       
       setNormalizationStats(newStats);
-      
+
+      setTimeNormProgress({ current: normalized.length, total: normalized.length, message: 'Saving results...' });
+      await yieldToUI();
+
       // Save configuration to database (ensure valid minSalePrice)
       const config = {
         equalizationRatio: equalizationRatio || '',
@@ -1603,7 +1757,38 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await worksheetService.saveNormalizationConfig(jobData.id, config);
 
       // IMPORTANT: Save the normalized sales immediately to persist them
-      await worksheetService.saveTimeNormalizedSales(jobData.id, normalized, newStats);
+      // Trim to only fields needed for restore/display to avoid massive JSON payloads on large towns
+      const trimmedForSave = normalized.map(s => ({
+        id: s.id,
+        property_composite_key: s.property_composite_key,
+        property_location: s.property_location,
+        property_m4_class: s.property_m4_class,
+        property_class: s.property_class,
+        asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use,
+        asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla,
+        original_sfla: s.original_sfla,
+        has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built,
+        values_mod_total: s.values_mod_total,
+        values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price,
+        sales_date: s.sales_date,
+        sales_nu: s.sales_nu,
+        sales_book: s.sales_book,
+        sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price,
+        hpi_multiplier: s.hpi_multiplier,
+        sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier,
+        keep_reject: s.keep_reject,
+        sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price,
+        size_adjustment: s.size_adjustment,
+        _pkg: s._pkg
+      }));
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedForSave, newStats);
 
       // After time normalization save - use callRefresh to ensure forceRefresh is passed
       if (onUpdateJobCache) {
@@ -1687,19 +1872,27 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
   const saveSizeNormalizedValues = async (normalizedSales) => {
     try {
-      // Save size normalized values to database
-      for (const sale of normalizedSales) {
-        if (sale.size_normalized_price) {
-          const { error } = await safeUpsertPropertyMarket([{
-            job_id: jobData.id,
-            property_composite_key: sale.property_composite_key,
-            values_norm_size: sale.size_normalized_price
-          }]);
-          if (error) throw error;
-        }
-      }
-      if (false) console.log('✅ Size normalized values saved to database');
+      // Build batch of records to save
+      const records = normalizedSales
+        .filter(sale => sale.size_normalized_price)
+        .map(sale => ({
+          job_id: jobData.id,
+          property_composite_key: sale.property_composite_key,
+          values_norm_size: sale.size_normalized_price
+        }));
 
+      // Save in chunks of 500
+      for (let i = 0; i < records.length; i += 500) {
+        const batch = records.slice(i, i + 500);
+        const { error } = await safeUpsertPropertyMarket(batch);
+        if (error) throw error;
+
+        setSizeNormProgress({
+          current: Math.min(i + 500, records.length),
+          total: records.length,
+          message: `Saving to database... ${Math.min(i + 500, records.length)} / ${records.length}`
+        });
+      }
     } catch (error) {
       console.error('Error saving size normalized values:', error);
     }
@@ -1962,7 +2155,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     setIsProcessingSize(true);
     setSizeNormProgress({ current: 0, total: 0, message: 'Preparing size normalization...' });
 
+    // Yield helper - lets React render between chunks so the progress modal stays visible
+    const yieldToUI = () => new Promise(r => setTimeout(r, 0));
+
     try {
+      await yieldToUI(); // Let the modal render immediately
+
       // Create a map of existing size-normalized values
       const existingSizeNorm = {};
       timeNormalizedSales.forEach(sale => {
@@ -1973,7 +2171,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           };
         }
       });
-      
+
       // Only use sales that were kept after time normalization review
       const acceptedSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep').map(s => ({
         ...s,
@@ -1981,25 +2179,28 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         size_normalized_price: existingSizeNorm[s.id]?.size_normalized_price || null,
         size_adjustment: existingSizeNorm[s.id]?.size_adjustment || null
       }));
-      
+
+      setSizeNormProgress({ current: 0, total: acceptedSales.length, message: 'Grouping by property type...' });
+      await yieldToUI();
+
       // Group by type/use codes using "starts with" pattern
       const groups = {
-        singleFamily: acceptedSales.filter(s => 
+        singleFamily: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('1')
         ),
-        semiDetached: acceptedSales.filter(s => 
+        semiDetached: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('2')
         ),
-        townhouses: acceptedSales.filter(s => 
+        townhouses: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('3')
         ),
-        multifamily: acceptedSales.filter(s => 
+        multifamily: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('4')
         ),
-        conversions: acceptedSales.filter(s => 
+        conversions: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('5')
         ),
-        condominiums: acceptedSales.filter(s => 
+        condominiums: acceptedSales.filter(s =>
           s.asset_type_use?.toString().trim().startsWith('6')
         )
       };
@@ -2008,20 +2209,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       let totalAdjustment = 0;
       let preservedCount = 0;
 
-      // Process each group
-      Object.entries(groups).forEach(([groupName, groupSales]) => {
-        if (groupSales.length === 0) return;
-        
-        setSizeNormProgress({ 
-          current: totalSizeNormalized, 
-          total: acceptedSales.length, 
-          message: `Processing ${groupName} properties...` 
+      // Process each group (with yields between groups)
+      for (const [groupName, groupSales] of Object.entries(groups)) {
+        if (groupSales.length === 0) continue;
+
+        setSizeNormProgress({
+          current: totalSizeNormalized,
+          total: acceptedSales.length,
+          message: `Processing ${groupName} (${groupSales.length} properties)...`
         });
-        
+        await yieldToUI();
+
         // Calculate average LIVING size for the group
         const totalSize = groupSales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
         const avgSize = totalSize / groupSales.length;
-        
+
         // Apply 50% method to each sale
         groupSales.forEach(sale => {
           // Check if we already have a size normalization for this property
@@ -2031,32 +2233,32 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             totalAdjustment += Math.abs(existingSizeNorm[sale.id].size_adjustment);
             return; // Skip recalculation, keep existing values
           }
-          
+
           const currentSize = sale.asset_sfla || 0;
-          
+
           // Skip if no living size data
           if (currentSize <= 0) {
             console.warn(`Skipping property ${sale.id} - no living_sf: ${currentSize}`);
             return;
           }
-          
+
           const sizeDiff = avgSize - currentSize;
           const pricePerSf = sale.time_normalized_price / currentSize;
           const adjustment = sizeDiff * pricePerSf * 0.5;
-          
+
           // Check for NaN
           if (isNaN(adjustment)) {
             console.error(`NaN adjustment for property ${sale.id}`);
             return;
           }
-          
+
           sale.size_normalized_price = Math.round(sale.time_normalized_price + adjustment);
           sale.size_adjustment = adjustment;
-          
+
           totalSizeNormalized++;
           totalAdjustment += Math.abs(adjustment);
         });
-      });
+      }
 
       // Update stats
       const avgAdjustment = totalSizeNormalized > 0 ? Math.round(totalAdjustment / totalSizeNormalized) : 0;
@@ -2081,10 +2283,24 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Update the state
       setNormalizationStats(newStats);
 
-      // Save the stats to market_land_valuation
-      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, newStats);
+      // Save the stats to market_land_valuation (trimmed payload for large towns)
+      const trimmedSizeNormSales = timeNormalizedSales.map(s => ({
+        id: s.id, property_composite_key: s.property_composite_key, property_location: s.property_location,
+        property_m4_class: s.property_m4_class, property_class: s.property_class, asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use, asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla, original_sfla: s.original_sfla, has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built, values_mod_total: s.values_mod_total, values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price, sales_date: s.sales_date, sales_nu: s.sales_nu, sales_book: s.sales_book, sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price, hpi_multiplier: s.hpi_multiplier, sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier, keep_reject: s.keep_reject, sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price, size_adjustment: s.size_adjustment, _pkg: s._pkg
+      }));
+      setSizeNormProgress({ current: totalSizeNormalized, total: acceptedSales.length, message: 'Saving normalization data...' });
+      await yieldToUI();
 
-      // Save to database
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedSizeNormSales, newStats);
+
+      // Save to database (batched in chunks of 500)
       await saveSizeNormalizedValues(acceptedSales);
 
       // After size normalization save - use callRefresh to ensure forceRefresh is passed
@@ -2103,6 +2319,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await worksheetService.saveNormalizationConfig(jobData.id, {
         lastSizeNormalizationRun: runDate
       });
+
+      // Clear sizeNormStale flag since we just ran size normalization
+      try {
+        const { data: currentJob } = await supabase
+          .from('jobs')
+          .select('workflow_stats')
+          .eq('id', jobData.id)
+          .single();
+        if (currentJob?.workflow_stats?.sizeNormStale) {
+          const updatedStats = { ...currentJob.workflow_stats, sizeNormStale: false };
+          await supabase.from('jobs').update({ workflow_stats: updatedStats }).eq('id', jobData.id);
+        }
+      } catch (e) {
+        console.warn('Could not clear sizeNormStale flag:', e);
+      }
       
       if (false) console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
       
@@ -2399,8 +2630,19 @@ const handleSalesDecision = (saleId, decision) => {
     try {
       if (false) console.log(`💾 Batch saving ${keeps.length} keeps and ${rejects.length} rejects...`);
 
-      // FIRST: Save all decisions to market_land_valuation for persistence
-      await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
+      // FIRST: Save all decisions to market_land_valuation for persistence (trimmed payload for large towns)
+      const trimmedDecisionSales = timeNormalizedSales.map(s => ({
+        id: s.id, property_composite_key: s.property_composite_key, property_location: s.property_location,
+        property_m4_class: s.property_m4_class, property_class: s.property_class, asset_building_class: s.asset_building_class,
+        asset_type_use: s.asset_type_use, asset_design_style: s.asset_design_style,
+        asset_sfla: s.asset_sfla, original_sfla: s.original_sfla, has_additional_cards: s.has_additional_cards,
+        asset_year_built: s.asset_year_built, values_mod_total: s.values_mod_total, values_mod_improvement: s.values_mod_improvement,
+        sales_price: s.sales_price, sales_date: s.sales_date, sales_nu: s.sales_nu, sales_book: s.sales_book, sales_page: s.sales_page,
+        time_normalized_price: s.time_normalized_price, hpi_multiplier: s.hpi_multiplier, sales_ratio: s.sales_ratio,
+        is_outlier: s.is_outlier, keep_reject: s.keep_reject, sale_data_changed: s.sale_data_changed,
+        size_normalized_price: s.size_normalized_price, size_adjustment: s.size_adjustment, _pkg: s._pkg
+      }));
+      await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedDecisionSales, normalizationStats);
       if (false) console.log('✅ Saved all decisions to market_land_valuation');
 
       // SECOND: Batch update keeps in chunks of 500
@@ -4069,6 +4311,15 @@ const analyzeImportFile = async (file) => {
                   </div>
                 </div>
 
+                {jobData?.workflow_stats?.sizeNormStale && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded mb-4 flex items-center gap-2">
+                    <span className="text-amber-600 font-bold text-lg">!</span>
+                    <p className="text-sm text-amber-800">
+                      <strong>File Updated:</strong> Property data has changed since the last size normalization. Re-run size normalization to ensure values are current.
+                    </p>
+                  </div>
+                )}
+
                 <div className="p-4 bg-blue-50 rounded mb-4">
                   <p className="text-sm">
                     <strong>Process:</strong> After reviewing time normalization results, run size normalization on accepted sales. 
@@ -4188,6 +4439,14 @@ const analyzeImportFile = async (file) => {
                 >
                   <Download size={16} />
                   {isExportingLotSizes ? 'Exporting...' : 'Export Report'}
+                </button>
+                <button
+                  onClick={autoPopulatePageByPage}
+                  disabled={isAutoPopulating}
+                  className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+                  title="Auto-populate Location Analysis from land adjustment codes, plus Zoning and Map Page from source data (empty fields only)"
+                >
+                  {isAutoPopulating ? 'Populating...' : 'Auto-Populate PBP'}
                 </button>
               </div>
             </div>
@@ -6112,22 +6371,26 @@ const analyzeImportFile = async (file) => {
       )}
 
       {/* Size Normalization Progress Modal */}
-      {isProcessingSize && sizeNormProgress.total > 0 && (
+      {isProcessingSize && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold mb-4">Size Normalization Progress</h3>
             
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>{sizeNormProgress.message}</span>
-                <span>{sizeNormProgress.current} / {sizeNormProgress.total}</span>
+                <span>{sizeNormProgress.message || 'Starting...'}</span>
+                {sizeNormProgress.total > 0 && (
+                  <span>{sizeNormProgress.current.toLocaleString()} / {sizeNormProgress.total.toLocaleString()}</span>
+                )}
               </div>
-              
+
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-green-600 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(sizeNormProgress.current / sizeNormProgress.total * 100)}%`
+                    width: sizeNormProgress.total > 0
+                      ? `${(sizeNormProgress.current / sizeNormProgress.total * 100)}%`
+                      : '0%'
                   }}
                 />
               </div>
@@ -6135,37 +6398,41 @@ const analyzeImportFile = async (file) => {
             
             <div className="flex items-center justify-center">
               <RefreshCw className="animate-spin text-green-600" size={20} />
-              <span className="ml-2 text-sm text-gray-600">Normalizing sizes...</span>
+              <span className="ml-2 text-sm text-gray-600">Please wait, do not close this page</span>
             </div>
           </div>
         </div>
       )}
 
       {/* Time Normalization Progress Modal */}
-      {isProcessingTime && timeNormProgress.total > 0 && (
+      {isProcessingTime && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold mb-4">Time Normalization Progress</h3>
-            
+
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>{timeNormProgress.message}</span>
-                <span>{timeNormProgress.current} / {timeNormProgress.total}</span>
+                <span>{timeNormProgress.message || 'Starting...'}</span>
+                {timeNormProgress.total > 0 && (
+                  <span>{timeNormProgress.current.toLocaleString()} / {timeNormProgress.total.toLocaleString()}</span>
+                )}
               </div>
-              
+
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{
-                    width: `${(timeNormProgress.current / timeNormProgress.total * 100)}%`
+                    width: timeNormProgress.total > 0
+                      ? `${(timeNormProgress.current / timeNormProgress.total * 100)}%`
+                      : '0%'
                   }}
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center justify-center">
               <RefreshCw className="animate-spin text-blue-600" size={20} />
-              <span className="ml-2 text-sm text-gray-600">Analyzing sales...</span>
+              <span className="ml-2 text-sm text-gray-600">Please wait, do not close this page</span>
             </div>
           </div>
         </div>

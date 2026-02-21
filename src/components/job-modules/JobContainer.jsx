@@ -833,6 +833,7 @@ const JobContainer = ({
       // Prepare enriched job data with all the fetched info
       const enrichedJobData = {
         ...selectedJob,
+        ...jobData,
         updated_at: jobData?.updated_at || selectedJob.updated_at,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
         due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',

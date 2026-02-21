@@ -52,6 +52,18 @@ const FileUploadButton = ({
     height: 600
   });
   
+  // Ref for sales changes scroll container
+  const salesContainerRef = React.useRef(null);
+  const pendingScrollRestore = React.useRef(null);
+
+  // Restore scroll position after React re-renders from sales decision
+  React.useEffect(() => {
+    if (pendingScrollRestore.current !== null && salesContainerRef.current) {
+      salesContainerRef.current.scrollTop = pendingScrollRestore.current;
+      pendingScrollRestore.current = null;
+    }
+  }, [salesDecisions]);
+
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchLogs, setBatchLogs] = useState([]);
@@ -614,7 +626,7 @@ const handleCodeFileUpdate = async () => {
           const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
           // Construct composite key using generateCompositeKey to ensure normalization matches processors
-          const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+          const year = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
           const ccddCode = job.ccdd_code || '';
           const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode);
           if (compositeKey) propertiesAdded.push(compositeKey);
@@ -729,7 +741,7 @@ const handleCodeFileUpdate = async () => {
         const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
-        const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+        const year = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
         const ccddCode = job.ccdd_code || '';
         const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode) || '';
 
@@ -932,7 +944,7 @@ const handleCodeFileUpdate = async () => {
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
       // CRITICAL: Use start_date year to match what processors use, not current year!
-      const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+      const yearCreated = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
       const ccddCode = job.ccdd_code || job.ccddCode;
 
       const sourceKeys = new Set();
@@ -1051,7 +1063,7 @@ const handleCodeFileUpdate = async () => {
         const dbSalesPrice = parseFloat(dbRecord.sales_price || 0);
 
         // ADD: Get sales_nu values
-        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NU' : 'Sale Nu'] || '';
+        const sourceSalesNu = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_NUC' : 'Sale Nu'] || '';
         const dbSalesNu = dbRecord.sales_nu || '';
         const sourceSalesBook = sourceRecord[job.vendor_type === 'BRT' ? 'CURRENTSALE_DEEDBOOK' : 'Sale Book'] || '';
         const dbSalesBook = dbRecord.sales_book || '';
@@ -1183,32 +1195,14 @@ const handleCodeFileUpdate = async () => {
   };
 
   const handleSalesDecision = (propertyKey, decision) => {
-    // Save current scroll position of BOTH containers
-    const salesContainer = document.getElementById('sales-changes-container');
-    const modalBody = document.querySelector('.fixed .overflow-y-auto');
-    
-    const salesScrollPos = salesContainer ? salesContainer.scrollTop : 0;
-    const modalScrollPos = modalBody ? modalBody.scrollTop : 0;
-    
-    // Update the decision
+    // Save scroll position in ref BEFORE state update triggers re-render
+    const container = salesContainerRef.current;
+    if (container) {
+      pendingScrollRestore.current = container.scrollTop;
+    }
+
+    // Update the decision (triggers re-render)
     setSalesDecisions(prev => new Map(prev.set(propertyKey, decision)));
-    
-    // Force restore scroll position with multiple attempts
-    const restoreScroll = () => {
-      if (salesContainer) salesContainer.scrollTop = salesScrollPos;
-      if (modalBody) modalBody.scrollTop = modalScrollPos;
-    };
-    
-    // Try immediately
-    restoreScroll();
-    
-    // Try after React renders
-    requestAnimationFrame(restoreScroll);
-    
-    // Try after a short delay
-    setTimeout(restoreScroll, 10);
-    setTimeout(restoreScroll, 50);
-    setTimeout(restoreScroll, 100);
   };
 
   // FIXED: Compare only (don't process yet) - show modal for review
@@ -1590,7 +1584,7 @@ const handleCodeFileUpdate = async () => {
           // Prefer Year/CCDD from CSV when present, otherwise fall back to job values
           const parsedForYear = parseSourceFile(sourceFileContent, job.vendor_type);
           // CRITICAL: Use start_date year to match processors
-          let csvYear = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+          let csvYear = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
           let csvCcdd = job.ccdd_code || job.ccddCode || '';
           if (parsedForYear && parsedForYear.length > 0) {
             const firstRow = parsedForYear[0];
@@ -1764,8 +1758,26 @@ const handleCodeFileUpdate = async () => {
                 }
               };
               salesBothStored++;
+
+            } else if (decision === 'Reject') {
+              // Keep new values but mark sale as rejected for normalization
+              updateData = {
+                sales_history: {
+                  comparison_date: new Date().toISOString().split('T')[0],
+                  sales_decision: {
+                    decision_type: decision,
+                    old_price: salesChange.differences.sales_price.old,
+                    new_price: salesChange.differences.sales_price.new,
+                    old_date: salesChange.differences.sales_date.old,
+                    new_date: salesChange.differences.sales_date.new,
+                    decided_by: 'user',
+                    decided_at: new Date().toISOString(),
+                    action_taken: 'Sale rejected - excluded from normalization'
+                  }
+                }
+              };
             }
-            
+
             const { error } = await supabase
               .from('property_records')
               .update(updateData)
@@ -1793,8 +1805,47 @@ const handleCodeFileUpdate = async () => {
         if (salesReverted > 0) {
           addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
+
+        // Clear values_norm_time for changed sales with explicit decisions
+        const rejectedKeys = [];
+        for (const [compositeKey, decision] of salesDecisions.entries()) {
+          if (decision === 'Reject') {
+            rejectedKeys.push(compositeKey);
+          }
+        }
       }
-      
+
+      // Clear values_norm_time for ALL sales changes (decided or not)
+      // Any sale that changed price/date has stale normalization that must be wiped
+      // This runs regardless of whether user made explicit decisions
+      const allChangedSalesKeys = (comparisonResults?.details?.salesChanges || [])
+        .filter(sc => {
+          // Don't clear if user chose "Keep Old" - they reverted to old sale, normalization is still valid
+          const decision = salesDecisions.get(sc.property_composite_key);
+          return decision !== 'Keep Old';
+        })
+        .map(sc => sc.property_composite_key);
+
+      if (allChangedSalesKeys.length > 0) {
+        const rejectedCount = allChangedSalesKeys.filter(k => salesDecisions.get(k) === 'Reject').length;
+        const changedCount = allChangedSalesKeys.length - rejectedCount;
+        addBatchLog(`🧹 Clearing normalized values: ${changedCount} changed + ${rejectedCount} rejected...`, 'info');
+        try {
+          for (let i = 0; i < allChangedSalesKeys.length; i += 500) {
+            const batch = allChangedSalesKeys.slice(i, i + 500);
+            await supabase
+              .from('property_market_analysis')
+              .update({ values_norm_time: null, updated_at: new Date().toISOString() })
+              .eq('job_id', job.id)
+              .in('property_composite_key', batch);
+          }
+          addBatchLog(`✅ Cleared values_norm_time for ${allChangedSalesKeys.length} sales`, 'success');
+        } catch (cleanupError) {
+          console.error('Failed to clear stale normalized values:', cleanupError);
+          addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
+        }
+      }
+
        // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
       try {
@@ -1812,7 +1863,7 @@ const handleCodeFileUpdate = async () => {
         addNotification('Data processed but job update failed', 'warning');
       }
 
-      // Set flag for ProductionTracker to know data is stale
+      // Set flags for ProductionTracker (stale analytics) and size normalization (stale)
       try {
         const { data: currentJob } = await supabase
           .from('jobs')
@@ -1820,22 +1871,21 @@ const handleCodeFileUpdate = async () => {
           .eq('id', job.id)
           .single();
 
-        if (currentJob?.workflow_stats) {
-          const updatedWorkflowStats = {
-            ...currentJob.workflow_stats,
-            needsRefresh: true,
-            lastFileUpdate: new Date().toISOString()
-          };
-          
-          await supabase
-            .from('jobs')
-            .update({ 
-              workflow_stats: updatedWorkflowStats 
-            })
-            .eq('id', job.id);
-          
-          addBatchLog('🔄 Marked production analytics as needing refresh', 'info');
-        }
+        const updatedWorkflowStats = {
+          ...(currentJob?.workflow_stats || {}),
+          needsRefresh: true,
+          sizeNormStale: true,
+          lastFileUpdate: new Date().toISOString()
+        };
+
+        await supabase
+          .from('jobs')
+          .update({
+            workflow_stats: updatedWorkflowStats
+          })
+          .eq('id', job.id);
+
+        addBatchLog('🔄 Marked production analytics and size normalization as needing refresh', 'info');
       } catch (statsError) {
         console.error('Error updating workflow stats flag:', statsError);
       }      
@@ -1859,22 +1909,28 @@ const handleCodeFileUpdate = async () => {
 
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+        }
 
-          // Auto-normalize for LOJIK/assessor jobs if tenant config says so
-          if (tenantConfig?.behavior?.autoNormalize) {
-            addBatchLog('🔄 Auto-normalizing sales data...', 'info');
-            try {
-              const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county);
-              addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
-              addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
-            } catch (normError) {
-              console.error('Auto-normalization failed:', normError);
-              addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
-              addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
+        // Auto-normalize for LOJIK/assessor jobs after every file update
+        // This handles: new sales normalization + re-normalization of changed sales
+        if (tenantConfig?.behavior?.autoNormalize) {
+          addBatchLog('🔄 Auto-normalizing sales data (time normalization)...', 'info');
+          try {
+            // Collect rejected keys from sales decisions to exclude from normalization
+            const rejectedKeys = [];
+            for (const [key, dec] of salesDecisions.entries()) {
+              if (dec === 'Reject') rejectedKeys.push(key);
             }
-          } else {
-            addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to process these sales changes`, 'warning');
+            const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county, { rejectedKeys });
+            addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
+            addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
+          } catch (normError) {
+            console.error('Auto-normalization failed:', normError);
+            addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
+            addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
           }
+        } else {
+          addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to update normalized values`, 'warning');
         }
       }
       // Check if rollback occurred
@@ -2569,7 +2625,7 @@ const handleCodeFileUpdate = async () => {
                             const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
                             const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
                             // CRITICAL: Use start_date year to match processors
-                            const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+                            const yearCreated = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
                             const ccddCode = job.ccdd_code || job.ccddCode;
                             const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
 
@@ -2645,7 +2701,7 @@ const handleCodeFileUpdate = async () => {
                         ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
                       </span>
                     </h3>
-                    <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                    <div ref={salesContainerRef} id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                       {details.salesChanges.map((change, idx) => {
                         const currentDecision = salesDecisions.get(change.property_composite_key);
 
@@ -2741,6 +2797,17 @@ const handleCodeFileUpdate = async () => {
                               >
                                 Keep Both
                               </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Reject')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Reject'
+                                    ? 'bg-gray-700 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                Reject
+                              </button>
                             </div>
 
                             {currentDecision && (
@@ -2822,7 +2889,7 @@ const handleCodeFileUpdate = async () => {
                     <div className="font-medium text-yellow-800 mb-1">Sample "New" Record Keys:</div>
                     {details.missing.slice(0, 3).map((record, idx) => {
                       // CRITICAL: Use start_date year to match processors
-                      const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+                      const yearCreated = job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear();
                       const ccddCode = job.ccdd_code || job.ccddCode;
                       const generatedKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
                       
@@ -2930,7 +2997,7 @@ const handleCodeFileUpdate = async () => {
                         codeFileContent,
                         job.id,
                         // CRITICAL: Use start_date year to match processors
-                        job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear(),
+                        job.start_date ? parseInt(String(job.start_date).substring(0, 4), 10) : new Date().getFullYear(),
                         job.ccdd_code || job.ccddCode,
                         job.vendor_type,
                         {

@@ -21,9 +21,12 @@ import { supabase, worksheetService } from './supabaseClient';
  * @param {string} jobId - The job ID
  * @param {string} vendorType - 'BRT' or 'Microsystems'
  * @param {string} county - County name for HPI lookup
+ * @param {Object} [options] - Optional settings
+ * @param {string[]} [options.rejectedKeys] - Composite keys rejected by user in comparison modal
  * @returns {{ normalized: number, total: number }} count of normalized sales
  */
-export async function autoNormalizeJob(jobId, vendorType, county) {
+export async function autoNormalizeJob(jobId, vendorType, county, options = {}) {
+  const rejectedKeysSet = new Set(options.rejectedKeys || []);
   console.log(`🔄 Auto-normalization starting for job ${jobId} (${vendorType}, ${county})`);
 
   // 1. Load existing normalization config (if any) for saved settings
@@ -106,6 +109,8 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
 
   // 5. Filter valid residential sales
   const validSales = properties.filter(p => {
+    // Skip sales explicitly rejected by user in comparison modal
+    if (rejectedKeysSet.has(p.property_composite_key)) return false;
     if (!p.sales_price || p.sales_price <= minSalePrice) return false;
     if (!p.sales_date) return false;
     if (!p.values_mod_improvement || p.values_mod_improvement < 10000) return false;
@@ -182,14 +187,17 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
       ? Math.abs((salesRatio * 100) - eqRatio) > outThreshold
       : false;
 
-    // Preserve existing decisions if sale data hasn't changed
-    let finalDecision = 'pending';
+    // Preserve existing reject decisions; default new/changed sales to 'keep'
+    // Sales already passed validation (price > min, valid date, etc.)
+    // so they should be kept unless the assessor explicitly rejects them
+    let finalDecision = 'keep';
     const existing = existingDecisions[prop.id];
-    if (existing) {
+    if (existing && existing.decision === 'reject') {
+      // Only preserve 'reject' if the sale data hasn't changed
       const dataChanged = existing.sales_price !== prop.sales_price ||
         existing.sales_date !== prop.sales_date ||
         existing.sales_nu !== prop.sales_nu;
-      finalDecision = dataChanged ? 'pending' : existing.decision;
+      finalDecision = dataChanged ? 'keep' : 'reject';
     }
 
     return {
@@ -238,6 +246,35 @@ export async function autoNormalizeJob(jobId, vendorType, county) {
 
   await worksheetService.saveNormalizationConfig(jobId, updatedConfig);
   await worksheetService.saveTimeNormalizedSales(jobId, normalized, stats);
+
+  // 9. Sync values_norm_time to property_market_analysis so SalesReviewTab sees them
+  try {
+    const pmaUpdates = normalized
+      .filter(s => s.time_normalized_price && s.keep_reject !== 'reject')
+      .map(s => ({
+        job_id: jobId,
+        property_composite_key: s.property_composite_key,
+        values_norm_time: s.time_normalized_price,
+        updated_at: new Date().toISOString()
+      }));
+
+    if (pmaUpdates.length > 0) {
+      // Batch upsert in chunks of 500
+      for (let i = 0; i < pmaUpdates.length; i += 500) {
+        const batch = pmaUpdates.slice(i, i + 500);
+        const { error: pmaError } = await supabase
+          .from('property_market_analysis')
+          .upsert(batch, { onConflict: 'job_id,property_composite_key' });
+
+        if (pmaError) {
+          console.warn('⚠️ Failed to sync values_norm_time to property_market_analysis:', pmaError);
+        }
+      }
+      console.log(`✅ Synced values_norm_time to property_market_analysis for ${pmaUpdates.length} sales`);
+    }
+  } catch (syncError) {
+    console.warn('⚠️ Non-critical: Could not sync values_norm_time to property_market_analysis:', syncError);
+  }
 
   console.log(`✅ Auto-normalization complete: ${normalized.length} sales normalized out of ${properties.length} properties`);
   return { normalized: normalized.length, total: properties.length };
