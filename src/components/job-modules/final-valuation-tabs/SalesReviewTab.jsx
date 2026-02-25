@@ -343,8 +343,8 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => p.values_norm_time && p.values_norm_time > 0);
     }
 
-    // Period filter - show CSP, PSP, HSP by default unless "Show All Normalized Sales" is checked
-    if (!showAllNormalizedSales && !showAllProperties && showAllSales) {
+    // Period filter - default to CSP/PSP/HSP unless "Show All Normalized Sales" is checked
+    if (!showAllNormalizedSales && !showAllProperties) {
       filtered = filtered.filter(p => p.periodCode === 'CSP' || p.periodCode === 'PSP' || p.periodCode === 'HSP');
     }
 
@@ -1267,7 +1267,7 @@ const SalesReviewTab = ({
           )}
 
           {/* Show All Normalized Sales Toggle (all periods) */}
-          {!showAllProperties && showAllSales && (
+          {!showAllProperties && (
             <label className="inline-flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1275,7 +1275,7 @@ const SalesReviewTab = ({
                 onChange={(e) => setShowAllNormalizedSales(e.target.checked)}
                 className="rounded border-gray-300"
               />
-              <span className="text-sm font-medium text-gray-700">Show All Periods</span>
+              <span className="text-sm font-medium text-gray-700">Show All Normalized Sales</span>
             </label>
           )}
 
