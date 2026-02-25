@@ -51,7 +51,7 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
 
   // 2. Load HPI data
   const { data: hpiData, error: hpiError } = await supabase
-    .from('county_hpi')
+    .from('county_hpi_data')
     .select('observation_year, hpi_index')
     .ilike('county_name', county || 'Bergen')
     .order('observation_year');

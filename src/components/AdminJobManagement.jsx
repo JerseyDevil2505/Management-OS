@@ -789,7 +789,8 @@ const AdminJobManagement = ({
         return;
       }
 
-      const hpiRecords = [];
+      // Parse CSV and deduplicate by year (take latest/last value per year)
+      const yearMap = new Map();
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',');
         if (values.length >= 2) {
@@ -798,28 +799,38 @@ const AdminJobManagement = ({
 
           if (dateStr && !isNaN(hpiValue)) {
             const year = parseInt(dateStr.split('-')[0]);
-            hpiRecords.push({
-              county_name: county,
-              observation_year: year,
-              hpi_index: hpiValue,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
+            // Keep the latest value per year (last row wins)
+            yearMap.set(year, hpiValue);
           }
         }
       }
 
-// Database integration
-      const { data, error } = await supabase
+      const hpiRecords = Array.from(yearMap.entries()).map(([year, hpiValue]) => ({
+        county_name: county,
+        observation_year: year,
+        hpi_index: hpiValue,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      // Delete existing records for this county first, then insert
+      await supabase
         .from('county_hpi_data')
         .delete()
         .eq('county_name', county);
 
-      // Alert about import HPI error but don't log details
-
-      const { data: insertData, error: insertError } = await supabase
-        .from('county_hpi_data')
-        .insert(hpiRecords);
+      // Insert deduplicated records in batches to avoid conflicts
+      let insertError = null;
+      for (let i = 0; i < hpiRecords.length; i += 500) {
+        const batch = hpiRecords.slice(i, i + 500);
+        const { error: batchError } = await supabase
+          .from('county_hpi_data')
+          .upsert(batch, { onConflict: 'county_name,observation_year' });
+        if (batchError) {
+          insertError = batchError;
+          break;
+        }
+      }
 
       if (insertError) {
         throw new Error('Database insert failed: ' + insertError.message);
