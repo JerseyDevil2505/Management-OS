@@ -1921,14 +1921,8 @@ const handleCodeFileUpdate = async () => {
             setExistingNormSales(normComputed.existing);
             setRemovedNormKeys([...deletedKeys, ...(normComputed.removedKeys || [])]);
 
-            // Pre-populate decisions: auto-reject flagged items, leave rest undecided
-            const initialDecisions = new Map();
-            normComputed.results.forEach(r => {
-              if (r.auto_flag_reason) {
-                initialDecisions.set(r.property_composite_key, 'reject');
-              }
-            });
-            setNormDecisions(initialDecisions);
+            // All decisions start empty — user decides every one
+            setNormDecisions(new Map());
 
             addBatchLog(`✅ Computed ${normComputed.results.length} normalization values — review required`, 'success');
 
