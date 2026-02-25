@@ -2530,6 +2530,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
 
 const handleSalesDecision = (saleId, decision) => {
+  // Preserve scroll position before state update
+  const scrollContainer = document.querySelector('[data-norm-scroll]');
+  const scrollTop = scrollContainer?.scrollTop ?? window.scrollY;
+
   // Update local UI state only. Persisting to DB happens in Save All (saveBatchDecisions).
   const updatedSales = timeNormalizedSales.map(sale =>
     sale.id === saleId ? { ...sale, keep_reject: decision } : sale
@@ -2548,6 +2552,15 @@ const handleSalesDecision = (saleId, decision) => {
 
   // Mark there are unsaved changes so user knows to save
   setUnsavedChanges(true);
+
+  // Restore scroll position after React re-render
+  requestAnimationFrame(() => {
+    if (scrollContainer) {
+      scrollContainer.scrollTop = scrollTop;
+    } else {
+      window.scrollTo(0, scrollTop);
+    }
+  });
 };
      
   const saveBatchDecisions = async () => {
@@ -3858,7 +3871,7 @@ const analyzeImportFile = async (file) => {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" data-norm-scroll>
                       <table className="min-w-full table-fixed">
                         <thead className="bg-gray-50 border-b">
                           <tr>
