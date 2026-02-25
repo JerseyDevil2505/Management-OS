@@ -78,6 +78,7 @@ const JobContainer = ({
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
+  const [latestCodeUploadedAt, setLatestCodeUploadedAt] = useState(null);
   const [propertyRecordsCount, setPropertyRecordsCount] = useState(0);
   const [isLoadingVersion, setIsLoadingVersion] = useState(true);
   // Track if current module made changes
@@ -244,6 +245,7 @@ const JobContainer = ({
 
       setLatestFileVersion(currentFileVersion);
       setLatestCodeVersion(currentCodeVersion);
+      setLatestCodeUploadedAt(jobData?.code_file_uploaded_at || null);
       
       // Now we're done with initial loading, start property loading
       setIsLoadingVersion(false);
@@ -1001,6 +1003,7 @@ const JobContainer = ({
       onSubModuleChange: setActiveModule,
       latestFileVersion,
       latestCodeVersion,
+      latestCodeUploadedAt,
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing

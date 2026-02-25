@@ -13,7 +13,9 @@ const FileUploadButton = ({
   isJobContainerLoading = false,  // Accept loading state from JobContainer
   codeFileOnly = false,  // NEW: When true, only allow code file uploads (disable source file)
   standalone = false,  // NEW: When true, component is rendered standalone (not in job container)
-  tenantConfig = null  // Tenant config for auto-normalization behavior
+  tenantConfig = null,  // Tenant config for auto-normalization behavior
+  latestCodeVersion = null,  // Fresh code version from JobContainer
+  latestCodeUploadedAt = null  // Fresh code upload date from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
@@ -3510,11 +3512,11 @@ const handleCodeFileUpdate = async () => {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
     } else if (type === 'code') {
-      // Check if code file was updated
-      const codeVersion = job.code_file_version || 1;
+      // Use fresh version from JobContainer if available, fall back to job prop
+      const codeVersion = latestCodeVersion || job.code_file_version || 1;
 
       if (codeVersion > 1) {
-        const uploadDate = job.code_file_uploaded_at || timestamp;
+        const uploadDate = latestCodeUploadedAt || job.code_file_uploaded_at || timestamp;
         return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
