@@ -2657,8 +2657,10 @@ const handleCodeFileUpdate = async () => {
                           ${result.sales_price?.toLocaleString() || '0'}
                         </div>
                         <div className="text-xs text-gray-500">{result.sales_date || 'No Date'}</div>
-                        {result.is_nud && (
-                          <div className="text-xs text-red-600 font-medium mt-1">NU: {result.sales_nu}</div>
+                        {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00' && (
+                          <div className={`text-xs font-medium mt-1 ${result.is_nud ? 'text-red-600' : 'text-orange-600'}`}>
+                            NU: {result.sales_nu}
+                          </div>
                         )}
                       </div>
 

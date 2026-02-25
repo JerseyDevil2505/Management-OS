@@ -133,20 +133,20 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
     console.warn('Could not load existing norm values:', e);
   }
 
-  // 5. Composite key parser
+  // 5. Composite key parser — matches PreValuationTab format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
   const parseCompositeKey = (key) => {
     if (!key) return {};
-    const parts = key.split('_');
-    if (parts.length >= 3) {
-      const blockLot = parts[0].split('-');
-      return {
-        block: blockLot[0] || '',
-        lot: blockLot[1] || '',
-        qualifier: parts[1] || '',
-        card: parts[2] || ''
-      };
-    }
-    return {};
+    const parts = key.split('-');
+    if (parts.length < 3) return {};
+    const block = parts[1] || '';
+    const lotQual = parts[2] || '';
+    const [lot, qualifier] = lotQual.split('_');
+    return {
+      block,
+      lot: lot || '',
+      qualifier: qualifier === 'NONE' ? '' : qualifier || '',
+      card: parts[3] === 'NONE' ? '' : parts[3] || ''
+    };
   };
 
   // 6. Compute normalized values for each changed property
@@ -179,8 +179,12 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
     const buildingClass = prop.asset_building_class?.toString().trim();
     const validClass = buildingClass && parseInt(buildingClass) > 10;
 
+    // Check year_built vs sale year (same as PreValuationTab)
+    const yearBuilt = prop.asset_year_built;
+    const yearBuiltValid = !yearBuilt || !saleYear || yearBuilt <= saleYear;
+
     // Determine if this sale qualifies for normalization
-    const qualifiesForNorm = hasSale && inYearRange && validCard && validClass &&
+    const qualifiesForNorm = hasSale && inYearRange && validCard && validClass && yearBuiltValid &&
       prop.asset_type_use?.toString().trim() &&
       prop.asset_design_style?.toString().trim() &&
       prop.asset_sfla && prop.asset_sfla > 0 &&
