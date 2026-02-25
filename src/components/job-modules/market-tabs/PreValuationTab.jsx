@@ -53,6 +53,7 @@ const PreValuationTab = ({
   const [isProcessingTime, setIsProcessingTime] = useState(false);
   const [isProcessingSize, setIsProcessingSize] = useState(false);
   const [salesReviewFilter, setSalesReviewFilter] = useState('all');
+  const [showAllNormalizedSales, setShowAllNormalizedSales] = useState(false);
   const [normalizationStats, setNormalizationStats] = useState({
     totalSales: 0,
     timeNormalized: 0,
@@ -3751,7 +3752,18 @@ const analyzeImportFile = async (file) => {
                   className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 p-2 rounded"
                   onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
                 >
-                  <h3 className="text-lg font-semibold">Sales Review ({timeNormalizedSales.length} sales)</h3>
+                  <h3 className="text-lg font-semibold">Sales Review ({showAllNormalizedSales ? timeNormalizedSales.length : (() => {
+                    const endDate = jobData?.end_date;
+                    if (!endDate) return timeNormalizedSales.length;
+                    const assessmentYear = new Date(endDate).getFullYear();
+                    const hspStart = new Date(assessmentYear - 3, 9, 1);
+                    const cspEnd = new Date(assessmentYear, 11, 31);
+                    return timeNormalizedSales.filter(s => {
+                      if (!s.sales_date) return true;
+                      const d = new Date(s.sales_date);
+                      return d >= hspStart && d <= cspEnd;
+                    }).length;
+                  })()} sales{!showAllNormalizedSales ? ' — CSP/PSP/HSP' : ''})</h3>
                   <div className="flex gap-2 items-center">
                     {isResultsCollapsed ? (
                       <ChevronDown size={20} className="text-gray-500" />
@@ -3766,6 +3778,17 @@ const analyzeImportFile = async (file) => {
                   <>
                     <div className="flex justify-between items-center mb-4">
                       <div className="flex gap-2 flex-wrap">
+                        {/* Show All Normalized Sales Toggle */}
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showAllNormalizedSales}
+                            onChange={(e) => setShowAllNormalizedSales(e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Show All Normalized Sales</span>
+                        </label>
+
                         <select
                           value={salesReviewFilter}
                           onChange={(e) => setSalesReviewFilter(e.target.value)}
@@ -3976,6 +3999,18 @@ const analyzeImportFile = async (file) => {
                         <tbody>
                           {timeNormalizedSales
                             .filter(sale => {
+                              // Period filter: default to CSP-PSP-HSP only unless "Show All" is checked
+                              if (!showAllNormalizedSales && sale.sales_date) {
+                                const endDate = jobData?.end_date;
+                                if (endDate) {
+                                  const saleD = new Date(sale.sales_date);
+                                  const assessmentYear = new Date(endDate).getFullYear();
+                                  const hspStart = new Date(assessmentYear - 3, 9, 1); // Oct 1, 3 years prior
+                                  const cspEnd = new Date(assessmentYear, 11, 31);      // Dec 31 of assessment year
+                                  if (saleD < hspStart || saleD > cspEnd) return false;
+                                }
+                              }
+                              // Type/status filter
                               if (salesReviewFilter === 'all') return true;
                               if (salesReviewFilter === 'flagged') return sale.is_outlier;
                               if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
@@ -4150,6 +4185,17 @@ const analyzeImportFile = async (file) => {
     
                     {(() => {
                       const filteredSales = timeNormalizedSales.filter(sale => {
+                        // Period filter: match table above
+                        if (!showAllNormalizedSales && sale.sales_date) {
+                          const endDate = jobData?.end_date;
+                          if (endDate) {
+                            const saleD = new Date(sale.sales_date);
+                            const assessmentYear = new Date(endDate).getFullYear();
+                            const hspStart = new Date(assessmentYear - 3, 9, 1);
+                            const cspEnd = new Date(assessmentYear, 11, 31);
+                            if (saleD < hspStart || saleD > cspEnd) return false;
+                          }
+                        }
                         if (salesReviewFilter === 'all') return true;
                         if (salesReviewFilter === 'flagged') return sale.is_outlier;
                         if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
