@@ -34,6 +34,8 @@ const FileUploadButton = ({
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
+  const [localCodeVersion, setLocalCodeVersion] = useState(null);
+  const [localCodeUploadedAt, setLocalCodeUploadedAt] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);  
 
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -361,6 +363,10 @@ const handleCodeFileUpdate = async () => {
       code_file_version: newCodeVersion,
       code_file_uploaded_at: processedDate
     });
+
+    // Update local state immediately so display refreshes without waiting for parent
+    setLocalCodeVersion(newCodeVersion);
+    setLocalCodeUploadedAt(processedDate);
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
@@ -3512,11 +3518,11 @@ const handleCodeFileUpdate = async () => {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
     } else if (type === 'code') {
-      // Use fresh version from JobContainer if available, fall back to job prop
-      const codeVersion = latestCodeVersion || job.code_file_version || 1;
+      // Use local state first (set after upload), then JobContainer prop, then job prop
+      const codeVersion = localCodeVersion || latestCodeVersion || job.code_file_version || 1;
 
       if (codeVersion > 1) {
-        const uploadDate = latestCodeUploadedAt || job.code_file_uploaded_at || timestamp;
+        const uploadDate = localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || timestamp;
         return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
