@@ -1660,27 +1660,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
 
           // Check if we have an existing decision for this property
+          // Decisions from comparison modal arrive as 'keep' or 'reject' — never 'pending'
+          // For first-time normalization (no existing decisions), default to 'keep'
           const existingDecisionData = existingDecisions[prop.id];
-          let finalDecision = 'pending';
+          let finalDecision = 'keep';
           let saleDataChanged = false;
 
           if (existingDecisionData) {
-            const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
-            const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
-            const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
-
-            saleDataChanged = priceChanged || dateChanged || nuChanged;
-
-            if (saleDataChanged) {
-              finalDecision = 'pending';
-              console.log(`Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
-                old: { price: existingDecisionData.sales_price, date: existingDecisionData.sales_date, nu: existingDecisionData.sales_nu },
-                new: { price: prop.sales_price, date: prop.sales_date, nu: prop.sales_nu },
-                previousDecision: existingDecisionData.decision
-              });
-            } else {
-              finalDecision = existingDecisionData.decision;
-            }
+            // Preserve existing decision — comparison modal handles changes
+            finalDecision = existingDecisionData.decision || 'keep';
           }
 
           normalized.push({
@@ -1800,12 +1788,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       setLastTimeNormalizationRun(new Date().toISOString());
 
-      // Count and notify about sale data changes
-      const salesDataChangedCount = normalized.filter(s => s.sale_data_changed).length;
-      if (salesDataChangedCount > 0) {
-        console.warn(`⚠️ ${salesDataChangedCount} properties had sale data changes - decisions reset to pending review`);
-        alert(`⚠️ IMPORTANT: ${salesDataChangedCount} properties have updated sale data.\n\nTheir Keep/Reject decisions have been automatically reset to "Pending Review".\n\nPlease review these properties in the normalization table below.`);
-      }
+      // NOTE: Sale data changes are now handled in FileUploadButton's comparison modal (Phase 2)
+      // No pending resets needed — decisions arrive as 'keep' or 'reject'
 
       if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
       if (false) console.log('✅ Normalized sales saved to database for persistence');
