@@ -1267,12 +1267,20 @@ const handleCodeFileUpdate = async () => {
       // First get job assignment status
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('has_property_assignments')
+        .select('has_property_assignments, code_file_version, code_file_uploaded_at')
         .eq('id', job.id)
         .single();
 
       if (jobError) throw jobError;
       const hasAssignments = jobData?.has_property_assignments || false;
+
+      // Set fresh code version/date from DB
+      if (jobData?.code_file_version) {
+        setLocalCodeVersion(jobData.code_file_version);
+      }
+      if (jobData?.code_file_uploaded_at) {
+        setLocalCodeUploadedAt(jobData.code_file_uploaded_at);
+      }
 
       // Build query with assignment filter if needed (same logic as JobContainer)
       let versionQuery = supabase
@@ -3650,7 +3658,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙�� Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
+          ⚙�� Code: {getFileStatusWithRealVersion(localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
