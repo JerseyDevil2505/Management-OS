@@ -72,7 +72,6 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
-  const [recentSalesChanges, setRecentSalesChanges] = useState(null);
 
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
@@ -803,53 +802,6 @@ useEffect(() => {
 }, [marketLandData]);
 
 // Check for recent sales changes that need normalization
-useEffect(() => {
-  const checkForSalesChanges = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      // Get most recent comparison report with sales changes
-      const { data: reports, error } = await supabase
-        .from('comparison_reports')
-        .select('report_date, report_data')
-        .eq('job_id', jobData.id)
-        .order('report_date', { ascending: false })
-        .limit(1);
-
-      if (error || !reports || reports.length === 0) {
-        setRecentSalesChanges(null);
-        return;
-      }
-
-      const latestReport = reports[0];
-      const reportData = latestReport.report_data;
-      const salesChangesCount = reportData?.summary?.salesChanges || 0;
-
-      if (salesChangesCount === 0) {
-        setRecentSalesChanges(null);
-        return;
-      }
-
-      // Check if normalization was run after this report
-      const reportDate = new Date(latestReport.report_date);
-      const normDate = lastTimeNormalizationRun ? new Date(lastTimeNormalizationRun) : null;
-
-      if (!normDate || reportDate > normDate) {
-        // Sales changes exist and normalization hasn't been run since
-        setRecentSalesChanges({
-          count: salesChangesCount,
-          reportDate: latestReport.report_date
-        });
-      } else {
-        setRecentSalesChanges(null);
-      }
-    } catch (error) {
-      console.error('Error checking for sales changes:', error);
-    }
-  };
-
-  checkForSalesChanges();
-}, [jobData?.id, lastTimeNormalizationRun]);
 
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
@@ -1660,27 +1612,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
 
           // Check if we have an existing decision for this property
+          // Decisions from comparison modal arrive as 'keep' or 'reject' — never 'pending'
+          // For first-time normalization (no existing decisions), default to 'keep'
           const existingDecisionData = existingDecisions[prop.id];
-          let finalDecision = 'pending';
+          let finalDecision = 'keep';
           let saleDataChanged = false;
 
           if (existingDecisionData) {
-            const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
-            const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
-            const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
-
-            saleDataChanged = priceChanged || dateChanged || nuChanged;
-
-            if (saleDataChanged) {
-              finalDecision = 'pending';
-              console.log(`Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
-                old: { price: existingDecisionData.sales_price, date: existingDecisionData.sales_date, nu: existingDecisionData.sales_nu },
-                new: { price: prop.sales_price, date: prop.sales_date, nu: prop.sales_nu },
-                previousDecision: existingDecisionData.decision
-              });
-            } else {
-              finalDecision = existingDecisionData.decision;
-            }
+            // Preserve existing decision — comparison modal handles changes
+            finalDecision = existingDecisionData.decision || 'keep';
           }
 
           normalized.push({
@@ -1800,12 +1740,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       setLastTimeNormalizationRun(new Date().toISOString());
 
-      // Count and notify about sale data changes
-      const salesDataChangedCount = normalized.filter(s => s.sale_data_changed).length;
-      if (salesDataChangedCount > 0) {
-        console.warn(`⚠️ ${salesDataChangedCount} properties had sale data changes - decisions reset to pending review`);
-        alert(`⚠️ IMPORTANT: ${salesDataChangedCount} properties have updated sale data.\n\nTheir Keep/Reject decisions have been automatically reset to "Pending Review".\n\nPlease review these properties in the normalization table below.`);
-      }
+      // NOTE: Sale data changes are now handled in FileUploadButton's comparison modal (Phase 2)
+      // No pending resets needed — decisions arrive as 'keep' or 'reject'
 
       if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
       if (false) console.log('✅ Normalized sales saved to database for persistence');
@@ -2594,6 +2530,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
 
 const handleSalesDecision = (saleId, decision) => {
+  // Preserve scroll position before state update
+  const scrollContainer = document.querySelector('[data-norm-scroll]');
+  const scrollTop = scrollContainer?.scrollTop ?? window.scrollY;
+
   // Update local UI state only. Persisting to DB happens in Save All (saveBatchDecisions).
   const updatedSales = timeNormalizedSales.map(sale =>
     sale.id === saleId ? { ...sale, keep_reject: decision } : sale
@@ -2612,6 +2552,15 @@ const handleSalesDecision = (saleId, decision) => {
 
   // Mark there are unsaved changes so user knows to save
   setUnsavedChanges(true);
+
+  // Restore scroll position after React re-render
+  requestAnimationFrame(() => {
+    if (scrollContainer) {
+      scrollContainer.scrollTop = scrollTop;
+    } else {
+      window.scrollTo(0, scrollTop);
+    }
+  });
 };
      
   const saveBatchDecisions = async () => {
@@ -3533,26 +3482,6 @@ const analyzeImportFile = async (file) => {
         <div className="w-full">
           <div className="space-y-6 px-2">
 
-          {/* Sales Changes Warning Banner */}
-          {recentSalesChanges && (
-            <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-orange-600 mt-0.5 flex-shrink-0" size={24} />
-                <div className="flex-1">
-                  <h4 className="text-orange-900 font-semibold text-base mb-1">
-                    ⚠️ {recentSalesChanges.count} Sale Change{recentSalesChanges.count !== 1 ? 's' : ''} Detected
-                  </h4>
-                  <p className="text-orange-800 text-sm mb-2">
-                    New sales data from file upload on {new Date(recentSalesChanges.reportDate).toLocaleDateString()} needs to be normalized.
-                    These sales will not appear in the normalization list or be included in HPI calculations until you run Time Normalization.
-                  </p>
-                  <p className="text-orange-900 text-sm font-medium">
-                    👉 Click "Run Time Normalization" below to process these changes and mark them as pending review.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
@@ -3942,7 +3871,7 @@ const analyzeImportFile = async (file) => {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" data-norm-scroll>
                       <table className="min-w-full table-fixed">
                         <thead className="bg-gray-50 border-b">
                           <tr>
@@ -4047,6 +3976,7 @@ const analyzeImportFile = async (file) => {
                         <tbody>
                           {timeNormalizedSales
                             .filter(sale => {
+                              // Type/status filter
                               if (salesReviewFilter === 'all') return true;
                               if (salesReviewFilter === 'flagged') return sale.is_outlier;
                               if (salesReviewFilter === 'pending') return sale.keep_reject === 'pending';
@@ -4443,7 +4373,8 @@ const analyzeImportFile = async (file) => {
                 <button
                   onClick={autoPopulatePageByPage}
                   disabled={isAutoPopulating}
-                  className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-2 text-white rounded disabled:opacity-50"
+                  style={{ backgroundColor: '#0d9488' }}
                   title="Auto-populate Location Analysis from land adjustment codes, plus Zoning and Map Page from source data (empty fields only)"
                 >
                   {isAutoPopulating ? 'Populating...' : 'Auto-Populate PBP'}

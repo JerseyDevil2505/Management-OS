@@ -332,7 +332,7 @@ const calculateDistributionMetrics = async () => {
       // Recalculate revenue metrics using ONLY jobs with project_start_date
       let startedJobsPaid = 0;
       let startedJobsOpen = 0;
-      let startedJobsRemaining = 0;
+      let startedJobsRemainingExRetainer = 0;
 
       // Process active jobs with project_start_date
       activeJobs?.forEach(job => {
@@ -340,20 +340,29 @@ const calculateDistributionMetrics = async () => {
           const contract = job.job_contracts[0];
           let jobPaid = 0;
           let jobOpen = 0;
+          let totalPercentageBilled = 0;
 
           job.billing_events?.forEach(event => {
             const amount = parseFloat(event.amount_billed || 0);
+            const billingYear = new Date(event.billing_date).getFullYear();
             if (event.status === 'P') {
               jobPaid += amount;
-              startedJobsPaid += amount;
+              // Only count as YTD paid if in the current year
+              if (billingYear === currentYear) {
+                startedJobsPaid += amount;
+              }
             } else if (event.status === 'O') {
               jobOpen += amount;
               startedJobsOpen += amount;
             }
+            totalPercentageBilled += parseFloat(event.percentage_billed || 0);
           });
 
           const jobRemaining = contract.contract_amount - jobPaid - jobOpen;
-          startedJobsRemaining += Math.max(0, jobRemaining);
+          // Exclude retainer from remaining
+          const remainingPercentage = Math.max(0, 1 - totalPercentageBilled);
+          const remainingRetainer = (contract.retainer_amount || 0) * remainingPercentage;
+          startedJobsRemainingExRetainer += Math.max(0, jobRemaining - remainingRetainer);
         }
       });
 
@@ -365,24 +374,24 @@ const calculateDistributionMetrics = async () => {
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
 
-      // NEW Project year-end cash formula - ONLY jobs with project_start_date
-      const projectedYearEnd = (startedJobsPaid + startedJobsOpen + startedJobsRemaining) - (plannedContractsTotal * 0.9);
-      
+      // Projected cash = Remaining (No Retainer) from global metrics
+      const projectedYearEnd = globalMetrics.totalRemainingExcludingRetainer;
+
       // Calculate operating reserve based on user setting
-      const operatingReserve = reserveSettings.operatingReserveMonths > 0 
-        ? globalMetrics.dailyFringe * (reserveSettings.operatingReserveMonths * 21) 
+      // Use dailyFringe if available, otherwise fallback to projectedExpenses / 252
+      const effectiveDailyRate = globalMetrics.dailyFringe > 0
+        ? globalMetrics.dailyFringe
+        : (globalMetrics.projectedExpenses / 252);
+      const operatingReserve = reserveSettings.operatingReserveMonths > 0
+        ? effectiveDailyRate * (reserveSettings.operatingReserveMonths * 21)
         : 0;
       const cashReserve = reserveSettings.cashReserve;
-      
-      // Calculate remaining year expenses
-      const remainingDaysInYear = (12 - currentMonth + 1) * 21; // Rough estimate
-      const remainingYearExpenses = globalMetrics.dailyFringe * remainingDaysInYear;
-      
+
       // Projected approach (available by year-end)
-      const projected = projectedYearEnd - 
-                       operatingReserve - 
-                       cashReserve - 
-                       ytdDistributions - 
+      const projected = projectedYearEnd -
+                       operatingReserve -
+                       cashReserve -
+                       ytdDistributions -
                        globalMetrics.projectedExpenses;
       
       setDistributionMetrics({
