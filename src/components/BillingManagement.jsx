@@ -374,8 +374,8 @@ const calculateDistributionMetrics = async () => {
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
 
-      // Project year-end cash - ONLY jobs with project_start_date, excluding retainer
-      const projectedYearEnd = (startedJobsPaid + startedJobsOpen + startedJobsRemainingExRetainer) - (plannedContractsTotal * 0.9);
+      // Projected cash = Remaining (No Retainer) from global metrics
+      const projectedYearEnd = globalMetrics.totalRemainingExcludingRetainer;
 
       // Calculate operating reserve based on user setting
       // Use dailyFringe if available, otherwise fallback to projectedExpenses / 252
