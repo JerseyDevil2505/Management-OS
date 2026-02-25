@@ -97,7 +97,7 @@ const FileUploadButton = ({
   // REMOVED: No syncing needed - use job.vendor_type directly
 
   const addNotification = (message, type = 'info') => {
-    const id = Date.now() + Math.random(); // Make unique with random component
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
     
@@ -113,7 +113,7 @@ const FileUploadButton = ({
   // NEW: Add log entry to batch processing
   const addBatchLog = (message, type = 'info', details = null) => {
     const logEntry = {
-      id: Date.now() + Math.random(), // Make unique with random component
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       timestamp: new Date().toISOString(),
       message,
       type,
