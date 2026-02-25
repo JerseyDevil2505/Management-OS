@@ -72,7 +72,6 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
-  const [recentSalesChanges, setRecentSalesChanges] = useState(null);
 
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
@@ -803,53 +802,6 @@ useEffect(() => {
 }, [marketLandData]);
 
 // Check for recent sales changes that need normalization
-useEffect(() => {
-  const checkForSalesChanges = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      // Get most recent comparison report with sales changes
-      const { data: reports, error } = await supabase
-        .from('comparison_reports')
-        .select('report_date, report_data')
-        .eq('job_id', jobData.id)
-        .order('report_date', { ascending: false })
-        .limit(1);
-
-      if (error || !reports || reports.length === 0) {
-        setRecentSalesChanges(null);
-        return;
-      }
-
-      const latestReport = reports[0];
-      const reportData = latestReport.report_data;
-      const salesChangesCount = reportData?.summary?.salesChanges || 0;
-
-      if (salesChangesCount === 0) {
-        setRecentSalesChanges(null);
-        return;
-      }
-
-      // Check if normalization was run after this report
-      const reportDate = new Date(latestReport.report_date);
-      const normDate = lastTimeNormalizationRun ? new Date(lastTimeNormalizationRun) : null;
-
-      if (!normDate || reportDate > normDate) {
-        // Sales changes exist and normalization hasn't been run since
-        setRecentSalesChanges({
-          count: salesChangesCount,
-          reportDate: latestReport.report_date
-        });
-      } else {
-        setRecentSalesChanges(null);
-      }
-    } catch (error) {
-      console.error('Error checking for sales changes:', error);
-    }
-  };
-
-  checkForSalesChanges();
-}, [jobData?.id, lastTimeNormalizationRun]);
 
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
@@ -3517,26 +3469,6 @@ const analyzeImportFile = async (file) => {
         <div className="w-full">
           <div className="space-y-6 px-2">
 
-          {/* Sales Changes Warning Banner */}
-          {recentSalesChanges && (
-            <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-orange-600 mt-0.5 flex-shrink-0" size={24} />
-                <div className="flex-1">
-                  <h4 className="text-orange-900 font-semibold text-base mb-1">
-                    ⚠️ {recentSalesChanges.count} Sale Change{recentSalesChanges.count !== 1 ? 's' : ''} Detected
-                  </h4>
-                  <p className="text-orange-800 text-sm mb-2">
-                    New sales data from file upload on {new Date(recentSalesChanges.reportDate).toLocaleDateString()} needs to be normalized.
-                    These sales will not appear in the normalization list or be included in HPI calculations until you run Time Normalization.
-                  </p>
-                  <p className="text-orange-900 text-sm font-medium">
-                    👉 Click "Run Time Normalization" below to process these changes and mark them as pending review.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
