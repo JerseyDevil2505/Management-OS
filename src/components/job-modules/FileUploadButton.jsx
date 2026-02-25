@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes } from '../../lib/supabaseClient';
+import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes, worksheetService } from '../../lib/supabaseClient';
 import { computeTargetNormalization, saveNormalizationDecisions } from '../../lib/targetNormalization';
 import * as XLSX from 'xlsx';
 
@@ -1893,6 +1893,17 @@ const handleCodeFileUpdate = async () => {
         }
 
         // Targeted normalization: compute for changed sales and show Phase 2 review
+        // BUT only if normalization has already been run at least once on this job
+        let normalizationAlreadyRun = false;
+        try {
+          const existingNormData = await worksheetService.loadNormalizationData(job.id);
+          const hasSales = existingNormData?.time_normalized_sales && existingNormData.time_normalized_sales.length > 0;
+          const hasConfig = existingNormData?.normalization_config && Object.keys(existingNormData.normalization_config).length > 0;
+          normalizationAlreadyRun = hasSales || hasConfig;
+        } catch (e) {
+          // No record at all — normalization not run yet
+        }
+
         const allChangedSalesKeysForNorm = (comparisonResults?.details?.salesChanges || [])
           .map(sc => sc.property_composite_key);
 
@@ -1901,7 +1912,9 @@ const handleCodeFileUpdate = async () => {
           .map(d => d.property_composite_key)
           .filter(Boolean);
 
-        if (allChangedSalesKeysForNorm.length > 0 || deletedKeys.length > 0) {
+        if (!normalizationAlreadyRun) {
+          addBatchLog('ℹ️ Normalization has not been run yet for this job — skipping Phase 2 review. Run normalization from Market Analysis > Pre-Valuation first.', 'info');
+        } else if (allChangedSalesKeysForNorm.length > 0 || deletedKeys.length > 0) {
           addBatchLog(`🎯 Computing targeted normalization for ${allChangedSalesKeysForNorm.length} changed sales...`, 'info');
           try {
             const normComputed = await computeTargetNormalization(
