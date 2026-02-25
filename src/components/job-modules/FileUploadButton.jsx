@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes } from '../../lib/supabaseClient';
-import { autoNormalizeJob } from '../../lib/autoNormalization';
+import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes, worksheetService } from '../../lib/supabaseClient';
+import { computeTargetNormalization, saveNormalizationDecisions } from '../../lib/targetNormalization';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
@@ -13,7 +13,9 @@ const FileUploadButton = ({
   isJobContainerLoading = false,  // Accept loading state from JobContainer
   codeFileOnly = false,  // NEW: When true, only allow code file uploads (disable source file)
   standalone = false,  // NEW: When true, component is rendered standalone (not in job container)
-  tenantConfig = null  // Tenant config for auto-normalization behavior
+  tenantConfig = null,  // Tenant config for auto-normalization behavior
+  latestCodeVersion = null,  // Fresh code version from JobContainer
+  latestCodeUploadedAt = null  // Fresh code upload date from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
@@ -32,6 +34,8 @@ const FileUploadButton = ({
   const [lastSourceProcessedDate, setLastSourceProcessedDate] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [lastCodeProcessedDate, setLastCodeProcessedDate] = useState(null);
+  const [localCodeVersion, setLocalCodeVersion] = useState(null);
+  const [localCodeUploadedAt, setLocalCodeUploadedAt] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);  
 
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -45,6 +49,15 @@ const FileUploadButton = ({
 
   // Active tab for comparison modal
   const [activeComparisonTab, setActiveComparisonTab] = useState('added');
+
+  // Phase 2: Normalization review state
+  const [showNormReview, setShowNormReview] = useState(false);
+  const [normResults, setNormResults] = useState([]);
+  const [normDecisions, setNormDecisions] = useState(new Map());
+  const [existingNormSales, setExistingNormSales] = useState([]);
+  const [removedNormKeys, setRemovedNormKeys] = useState([]);
+  const [normProcessing, setNormProcessing] = useState(false);
+  const [normSaving, setNormSaving] = useState(false);
 
   // Modal resize functionality
   const [modalSize, setModalSize] = useState({
@@ -84,7 +97,7 @@ const FileUploadButton = ({
   // REMOVED: No syncing needed - use job.vendor_type directly
 
   const addNotification = (message, type = 'info') => {
-    const id = Date.now() + Math.random(); // Make unique with random component
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
     
@@ -100,7 +113,7 @@ const FileUploadButton = ({
   // NEW: Add log entry to batch processing
   const addBatchLog = (message, type = 'info', details = null) => {
     const logEntry = {
-      id: Date.now() + Math.random(), // Make unique with random component
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       timestamp: new Date().toISOString(),
       message,
       type,
@@ -350,6 +363,10 @@ const handleCodeFileUpdate = async () => {
       code_file_version: newCodeVersion,
       code_file_uploaded_at: processedDate
     });
+
+    // Update local state immediately so display refreshes without waiting for parent
+    setLocalCodeVersion(newCodeVersion);
+    setLocalCodeUploadedAt(processedDate);
 
     console.log(`🔧 Code Update - jobService.update result:`, updateResult);
 
@@ -1250,12 +1267,20 @@ const handleCodeFileUpdate = async () => {
       // First get job assignment status
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
-        .select('has_property_assignments')
+        .select('has_property_assignments, code_file_version, code_file_uploaded_at')
         .eq('id', job.id)
         .single();
 
       if (jobError) throw jobError;
       const hasAssignments = jobData?.has_property_assignments || false;
+
+      // Set fresh code version/date from DB
+      if (jobData?.code_file_version) {
+        setLocalCodeVersion(jobData.code_file_version);
+      }
+      if (jobData?.code_file_uploaded_at) {
+        setLocalCodeUploadedAt(jobData.code_file_uploaded_at);
+      }
 
       // Build query with assignment filter if needed (same logic as JobContainer)
       let versionQuery = supabase
@@ -1815,36 +1840,8 @@ const handleCodeFileUpdate = async () => {
         }
       }
 
-      // Clear values_norm_time for ALL sales changes (decided or not)
-      // Any sale that changed price/date has stale normalization that must be wiped
-      // This runs regardless of whether user made explicit decisions
-      const allChangedSalesKeys = (comparisonResults?.details?.salesChanges || [])
-        .filter(sc => {
-          // Don't clear if user chose "Keep Old" - they reverted to old sale, normalization is still valid
-          const decision = salesDecisions.get(sc.property_composite_key);
-          return decision !== 'Keep Old';
-        })
-        .map(sc => sc.property_composite_key);
-
-      if (allChangedSalesKeys.length > 0) {
-        const rejectedCount = allChangedSalesKeys.filter(k => salesDecisions.get(k) === 'Reject').length;
-        const changedCount = allChangedSalesKeys.length - rejectedCount;
-        addBatchLog(`🧹 Clearing normalized values: ${changedCount} changed + ${rejectedCount} rejected...`, 'info');
-        try {
-          for (let i = 0; i < allChangedSalesKeys.length; i += 500) {
-            const batch = allChangedSalesKeys.slice(i, i + 500);
-            await supabase
-              .from('property_market_analysis')
-              .update({ values_norm_time: null, updated_at: new Date().toISOString() })
-              .eq('job_id', job.id)
-              .in('property_composite_key', batch);
-          }
-          addBatchLog(`✅ Cleared values_norm_time for ${allChangedSalesKeys.length} sales`, 'success');
-        } catch (cleanupError) {
-          console.error('Failed to clear stale normalized values:', cleanupError);
-          addBatchLog('⚠️ Could not clear stale normalized values', 'warning');
-        }
-      }
+      // NOTE: values_norm_time clearing is now handled in Phase 2 (NormalizationReviewModal)
+      // via saveNormalizationDecisions() — no redundant clearing needed here
 
        // Update job with new file info - removed source_file_version update
       addBatchLog('🔄 Updating job metadata...', 'info');
@@ -1911,26 +1908,62 @@ const handleCodeFileUpdate = async () => {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
         }
 
-        // Auto-normalize for LOJIK/assessor jobs after every file update
-        // This handles: new sales normalization + re-normalization of changed sales
-        if (tenantConfig?.behavior?.autoNormalize) {
-          addBatchLog('🔄 Auto-normalizing sales data (time normalization)...', 'info');
+        // Targeted normalization: compute for changed sales and show Phase 2 review
+        // BUT only if normalization has already been run at least once on this job
+        let normalizationAlreadyRun = false;
+        try {
+          const existingNormData = await worksheetService.loadNormalizationData(job.id);
+          const hasSales = existingNormData?.time_normalized_sales && existingNormData.time_normalized_sales.length > 0;
+          const hasConfig = existingNormData?.normalization_config && Object.keys(existingNormData.normalization_config).length > 0;
+          normalizationAlreadyRun = hasSales || hasConfig;
+        } catch (e) {
+          // No record at all — normalization not run yet
+        }
+
+        const allChangedSalesKeysForNorm = (comparisonResults?.details?.salesChanges || [])
+          .map(sc => sc.property_composite_key);
+
+        // Also include deleted properties that may have had normalized values
+        const deletedKeys = (comparisonResults?.details?.deletions || [])
+          .map(d => d.property_composite_key)
+          .filter(Boolean);
+
+        if (!normalizationAlreadyRun) {
+          addBatchLog('ℹ️ Normalization has not been run yet for this job — skipping Phase 2 review. Run normalization from Market Analysis > Pre-Valuation first.', 'info');
+        } else if (allChangedSalesKeysForNorm.length > 0 || deletedKeys.length > 0) {
+          addBatchLog(`🎯 Computing targeted normalization for ${allChangedSalesKeysForNorm.length} changed sales...`, 'info');
           try {
-            // Collect rejected keys from sales decisions to exclude from normalization
-            const rejectedKeys = [];
-            for (const [key, dec] of salesDecisions.entries()) {
-              if (dec === 'Reject') rejectedKeys.push(key);
+            const normComputed = await computeTargetNormalization(
+              job.id,
+              job.vendor_type,
+              job.county,
+              allChangedSalesKeysForNorm,
+              salesDecisions
+            );
+
+            if (normComputed.error) {
+              addBatchLog(`⚠️ Normalization compute warning: ${normComputed.error}`, 'warning');
             }
-            const normResult = await autoNormalizeJob(job.id, job.vendor_type, job.county, { rejectedKeys });
-            addBatchLog(`✅ Auto-normalization complete: ${normResult.normalized} sales normalized`, 'success');
-            addNotification(`✅ Auto-normalized ${normResult.normalized} sales`, 'success');
+
+            // Store results for Phase 2 review
+            setNormResults(normComputed.results);
+            setExistingNormSales(normComputed.existing);
+            setRemovedNormKeys([...deletedKeys, ...(normComputed.removedKeys || [])]);
+
+            // All decisions start empty — user decides every one
+            setNormDecisions(new Map());
+
+            addBatchLog(`✅ Computed ${normComputed.results.length} normalization values — review required`, 'success');
+
+            // Show Phase 2 normalization review
+            setShowNormReview(true);
           } catch (normError) {
-            console.error('Auto-normalization failed:', normError);
-            addBatchLog('⚠️ Auto-normalization failed - you can run it manually from Market Analysis', 'warning');
-            addNotification('⚠️ Auto-normalization failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
+            console.error('Targeted normalization failed:', normError);
+            addBatchLog('⚠️ Normalization compute failed — run manually from Market Analysis > Pre-Valuation', 'warning');
+            addNotification('⚠️ Normalization compute failed. Run manually from Market Analysis > Pre-Valuation.', 'warning');
           }
         } else {
-          addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to update normalized values`, 'warning');
+          addBatchLog('ℹ️ No sales changes detected — normalization review not needed', 'info');
         }
       }
       // Check if rollback occurred
@@ -2474,6 +2507,264 @@ const handleCodeFileUpdate = async () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Phase 2: Handle normalization decision
+  const handleNormDecision = (compositeKey, decision) => {
+    setNormDecisions(prev => new Map(prev).set(compositeKey, decision));
+  };
+
+  // Phase 2: Batch set all undecided to keep or reject
+  const handleNormBatchDecision = (decision) => {
+    setNormDecisions(prev => {
+      const updated = new Map(prev);
+      normResults.forEach(r => {
+        if (!updated.has(r.property_composite_key)) {
+          updated.set(r.property_composite_key, decision);
+        }
+      });
+      return updated;
+    });
+  };
+
+  // Phase 2: Save normalization decisions and close
+  const handleSaveNormDecisions = async () => {
+    setNormSaving(true);
+    addBatchLog('💾 Saving normalization decisions...', 'info');
+    try {
+      const result = await saveNormalizationDecisions(
+        job.id,
+        normResults,
+        normDecisions,
+        existingNormSales,
+        removedNormKeys
+      );
+
+      addBatchLog(`✅ Normalization saved: ${result.kept} kept, ${result.rejected} rejected/cleared`, 'success');
+      addNotification(`✅ Normalization complete: ${result.kept} kept, ${result.rejected} rejected`, 'success');
+
+      // Close Phase 2
+      setShowNormReview(false);
+      setNormResults([]);
+      setNormDecisions(new Map());
+    } catch (error) {
+      console.error('Failed to save normalization decisions:', error);
+      addBatchLog('❌ Failed to save normalization decisions', 'error');
+      addNotification('❌ Failed to save normalization decisions', 'error');
+    } finally {
+      setNormSaving(false);
+    }
+  };
+
+  // Phase 2: Normalization Review Modal
+  const NormalizationReviewModal = () => {
+    if (!showNormReview || normResults.length === 0) return null;
+
+    const undecidedCount = normResults.filter(r => !normDecisions.has(r.property_composite_key)).length;
+    const keptCount = [...normDecisions.values()].filter(d => d === 'keep').length;
+    const rejectedCount = [...normDecisions.values()].filter(d => d === 'reject').length;
+    const allDecided = undecidedCount === 0;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg w-full max-w-5xl" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200 bg-amber-50 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Database className="w-5 h-5 text-amber-600" />
+                <h2 className="text-lg font-bold text-gray-900">
+                  Normalization Review — {normResults.length} Sales
+                </h2>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">
+              Review normalized values for changed sales. Every sale needs a Keep or Reject decision before saving.
+            </p>
+          </div>
+
+          {/* Summary bar */}
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <div className="flex gap-4 text-sm">
+              <span className="text-amber-600 font-medium">Undecided: {undecidedCount}</span>
+              <span className="text-green-600 font-medium">Keep: {keptCount}</span>
+              <span className="text-red-600 font-medium">Reject: {rejectedCount}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleNormBatchDecision('keep')}
+                className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded hover:bg-green-200 font-medium"
+              >
+                Keep All Undecided
+              </button>
+              <button
+                onClick={() => handleNormBatchDecision('reject')}
+                className="px-3 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200 font-medium"
+              >
+                Reject All Undecided
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 220px)' }}>
+            <div className="space-y-3">
+              {normResults.map((result, idx) => {
+                const decision = normDecisions.get(result.property_composite_key);
+                const hasFlag = !!result.auto_flag_reason;
+
+                return (
+                  <div
+                    key={result.property_composite_key || idx}
+                    className={`border rounded-lg p-4 ${
+                      hasFlag ? 'border-red-300 bg-red-50' :
+                      decision === 'keep' ? 'border-green-300 bg-green-50' :
+                      decision === 'reject' ? 'border-gray-300 bg-gray-50' :
+                      'border-amber-300 bg-amber-50'
+                    }`}
+                  >
+                    {/* Property header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-bold text-gray-900">
+                          {result.property_block}-{result.property_lot}
+                          {result.property_qualifier && result.property_qualifier !== 'NONE' &&
+                            <span className="text-gray-600"> (Qual: {result.property_qualifier})</span>}
+                        </h4>
+                        <p className="text-gray-600 text-sm">{result.property_location}</p>
+                        {result.auto_flag_reason && (
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-red-200 text-red-800 text-xs rounded font-medium">
+                            Auto-flagged: {result.auto_flag_reason}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right text-xs text-gray-500">
+                        <div>Class: {result.property_m4_class || '--'}</div>
+                        <div>SFLA: {result.asset_sfla?.toLocaleString() || '--'}</div>
+                        <div>Decision: {result.sales_decision}</div>
+                      </div>
+                    </div>
+
+                    {/* Values grid */}
+                    <div className="grid grid-cols-4 gap-3 p-3 bg-white rounded-lg border border-gray-200 mb-3">
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">SALE PRICE</div>
+                        <div className="text-sm font-bold text-gray-900">
+                          ${result.sales_price?.toLocaleString() || '0'}
+                        </div>
+                        <div className="text-xs text-gray-500">{result.sales_date || 'No Date'}</div>
+                        {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00' && (
+                          <div className={`text-xs font-medium mt-1 ${result.is_nud ? 'text-red-600' : 'text-orange-600'}`}>
+                            NU: {result.sales_nu}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">PREVIOUS NORM</div>
+                        <div className={`text-sm font-bold ${result.previous_norm_value ? 'text-blue-600' : 'text-gray-400'}`}>
+                          {result.previous_norm_value ? `$${result.previous_norm_value.toLocaleString()}` : 'None'}
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">NEW NORM VALUE</div>
+                        <div className={`text-sm font-bold ${
+                          !result.qualifies_for_norm ? 'text-gray-400' :
+                          result.norm_value_too_low ? 'text-red-600' :
+                          'text-green-600'
+                        }`}>
+                          {result.time_normalized_price
+                            ? `$${result.time_normalized_price.toLocaleString()}`
+                            : 'N/A'}
+                        </div>
+                        {result.hpi_multiplier && (
+                          <div className="text-xs text-gray-500">HPI: {result.hpi_multiplier.toFixed(4)}</div>
+                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">RATIO</div>
+                        <div className={`text-sm font-bold ${
+                          result.is_outlier ? 'text-red-600' :
+                          result.sales_ratio ? 'text-gray-900' : 'text-gray-400'
+                        }`}>
+                          {result.sales_ratio ? `${(result.sales_ratio * 100).toFixed(1)}%` : '--'}
+                        </div>
+                        {result.is_outlier && (
+                          <div className="text-xs text-red-600 font-medium">Outlier</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Decision buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleNormDecision(result.property_composite_key, 'keep')}
+                        disabled={!result.qualifies_for_norm}
+                        className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+                          decision === 'keep'
+                            ? 'bg-green-600 text-white'
+                            : result.qualifies_for_norm
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        Keep
+                      </button>
+                      <button
+                        onClick={() => handleNormDecision(result.property_composite_key, 'reject')}
+                        className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+                          decision === 'reject'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        }`}
+                      >
+                        Reject
+                      </button>
+                      {decision && (
+                        <span className="ml-2 text-xs text-gray-500 self-center">
+                          {decision === 'keep' ? '✓ Keeping normalized value' : '✗ Will clear normalized value'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
+            <div className="text-sm text-gray-600">
+              {allDecided
+                ? `All ${normResults.length} sales reviewed — ready to save`
+                : `${undecidedCount} of ${normResults.length} still need decisions`}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  // Skip normalization — just close Phase 2
+                  setShowNormReview(false);
+                  addBatchLog('⏭️ Normalization review skipped by user', 'warning');
+                  addNotification('⚠️ Normalization skipped — run manually from Market Analysis > Pre-Valuation', 'warning');
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 font-medium transition-colors"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleSaveNormDecisions}
+                disabled={!allDecided || normSaving}
+                className="px-6 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              >
+                {normSaving ? 'Saving...' : `Save ${normResults.length} Decisions`}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -3237,11 +3528,11 @@ const handleCodeFileUpdate = async () => {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
       }
     } else if (type === 'code') {
-      // Check if code file was updated
-      const codeVersion = job.code_file_version || 1;
+      // Use local state first (set after upload), then JobContainer prop, then job prop
+      const codeVersion = localCodeVersion || latestCodeVersion || job.code_file_version || 1;
 
       if (codeVersion > 1) {
-        const uploadDate = job.code_file_uploaded_at || timestamp;
+        const uploadDate = localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || timestamp;
         return `Updated via FileUpload (${formatDate(uploadDate)})`;
       } else {
         return `Imported at Job Creation (${formatDate(timestamp)})`;
@@ -3369,7 +3660,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙�� Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
+          ⚙�� Code: {getFileStatusWithRealVersion(localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
@@ -3445,6 +3736,9 @@ const handleCodeFileUpdate = async () => {
 
       {/* Results Modal */}
       <ResultsModal />
+
+      {/* Phase 2: Normalization Review Modal */}
+      <NormalizationReviewModal />
     </div>
   );
 };

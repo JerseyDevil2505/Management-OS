@@ -2637,7 +2637,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Sales Pool
                 <span className="ml-2 text-sm font-normal text-gray-500">
-                  {includedSalesCount} of {allSalesCandidates.length} sales included
+                  {includedSalesCount} of {(compFilters.salesDateStart || compFilters.salesDateEnd)
+                    ? salesPoolEntries.filter(p => p._inDateRange).length
+                    : allSalesCandidates.length} sales included
                 </span>
               </h3>
 
@@ -2946,7 +2948,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {(() => {
-                      let displayed = [...salesPoolEntries];
+                      // Only show sales within date range by default; show all only if both dates cleared
+                      const hasDateFilter = compFilters.salesDateStart || compFilters.salesDateEnd;
+                      let displayed = hasDateFilter
+                        ? salesPoolEntries.filter(p => p._inDateRange)
+                        : [...salesPoolEntries];
 
                       // Search filter
                       if (salesPoolSearch) {

@@ -53,7 +53,6 @@ const TENANT_CONFIGS = {
 
     // Behavior defaults
     behavior: {
-      autoNormalize: false,           // Manual normalization via button click
       defaultJobTab: 'checklist',     // Default tab when opening a job
     },
   },
@@ -92,7 +91,6 @@ const TENANT_CONFIGS = {
     },
 
     behavior: {
-      autoNormalize: false,            // No auto-normalize needed; Sales Review/CME use sales_price directly
       defaultJobTab: 'final-valuation',
     },
   },

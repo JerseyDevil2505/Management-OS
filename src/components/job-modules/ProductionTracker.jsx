@@ -635,11 +635,18 @@ const ProductionTracker = ({
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
-        if (job.workflow_stats.validationOverrides) {
+        // Always use fresh overrides from DB (queried above on lines 596-601)
+        // instead of stale persisted ones — overrides may have been added/removed
+        // since workflow_stats was last saved
+        if (currentOverrides && currentOverrides.length > 0) {
+          // Re-run calculateValidationOverrides with fresh data to set state properly
+          await calculateValidationOverrides(true);
+        } else if (job.workflow_stats.validationOverrides) {
+          // Fall back to persisted if DB query returned nothing
           setValidationOverrides(job.workflow_stats.validationOverrides);
-        }
-        if (job.workflow_stats.overrideMap) {
-          setOverrideMap(job.workflow_stats.overrideMap);
+          if (job.workflow_stats.overrideMap) {
+            setOverrideMap(job.workflow_stats.overrideMap);
+          }
         }
 
         setProcessed(true);

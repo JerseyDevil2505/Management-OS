@@ -851,23 +851,29 @@ const App = () => {
     let totalRemaining = 0;
     let totalRemainingExcludingRetainer = 0;
     
+    const currentYear = new Date().getFullYear();
+
     // Process active jobs
     if (activeJobs) {
       activeJobs.forEach(job => {
         if (job.job_contracts?.[0]) {
           const contract = job.job_contracts[0];
           totalSigned += contract.contract_amount || 0;
-          
+
           let jobPaid = 0;
           let jobOpen = 0;
           let totalPercentageBilled = 0;
-          
+
           if (job.billing_events) {
             job.billing_events.forEach(event => {
               const amount = parseFloat(event.amount_billed || 0);
+              const billingYear = new Date(event.billing_date).getFullYear();
               if (event.status === 'P') {
                 jobPaid += amount;
-                totalPaid += amount;
+                // Only count as YTD paid if billing_date is in the current year
+                if (billingYear === currentYear) {
+                  totalPaid += amount;
+                }
               } else if (event.status === 'O') {
                 jobOpen += amount;
                 totalOpen += amount;
@@ -889,7 +895,6 @@ const App = () => {
     
     // Process legacy jobs
     if (legacyJobs) {
-      const currentYear = new Date().getFullYear();
       legacyJobs.forEach(job => {
         if (job.billing_events) {
           job.billing_events.forEach(event => {
@@ -920,7 +925,6 @@ const App = () => {
     
     // Process receivables - FILTER BY CURRENT YEAR ONLY
     if (receivables) {
-      const currentYear = new Date().getFullYear();
       receivables.forEach(receivable => {
         // Only include receivables from current year
         if (new Date(receivable.created_at).getFullYear() === currentYear) {
@@ -948,33 +952,37 @@ const App = () => {
     
     // Calculate expense metrics - FILTER BY CURRENT YEAR ONLY
     let currentExpenses = 0;
+    let lastYearTotalExpenses = 0;
     let monthlyExpenses = new Array(12).fill(0);
+    const currentMonth = new Date().getMonth() + 1;
 
     if (expenses) {
-      const currentYear = new Date().getFullYear();
-      const currentMonth = new Date().getMonth() + 1;
       expenses.forEach(expense => {
-        // Only include expenses from the current fiscal year
+        const amount = parseFloat(expense.amount || 0);
         if (expense.year === currentYear) {
-          const amount = parseFloat(expense.amount || 0);
           monthlyExpenses[expense.month - 1] += amount;
           if (expense.month <= currentMonth) {
             currentExpenses += amount;
           }
+        } else if (expense.year === currentYear - 1) {
+          lastYearTotalExpenses += amount;
         }
       });
     }
-    
+
     // Calculate daily rate and projections
+    // Fallback to last year's total expenses if no current year expenses loaded yet
     const workingDaysYTD = new Date().getMonth() * 21; // Rough estimate
     const totalWorkingDays = 252; // Typical year
     const dailyExpenseRate = workingDaysYTD > 0 ? currentExpenses / workingDaysYTD : 0;
-    const projectedExpenses = dailyExpenseRate * totalWorkingDays;
+    const projectedExpenses = currentExpenses > 0
+      ? dailyExpenseRate * totalWorkingDays
+      : lastYearTotalExpenses;
     
     // Calculate projected cash
     const plannedContractsTotal = planningJobs?.reduce((sum, job) => 
       sum + (job.contract_amount || 0), 0) || 0;
-    const projectedCash = (totalPaid + totalOpen + totalRemaining) - (plannedContractsTotal * 0.6);
+    const projectedCash = (totalPaid + totalOpen + totalRemainingExcludingRetainer) - (plannedContractsTotal * 0.6);
     const projectedProfitLoss = projectedCash - projectedExpenses;
     const projectedProfitLossPercent = projectedCash > 0 ? (projectedProfitLoss / projectedCash) * 100 : 0;
     
