@@ -1256,7 +1256,8 @@ const AdminJobManagement = ({
         municipality: newPlanningJob.municipality,
         end_date: newPlanningJob.dueDate,
         comments: newPlanningJob.comments || '',
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+        organization_id: PPA_ORG_ID
       };
 
       await planningJobService.create(planningData);
@@ -1268,7 +1269,16 @@ const AdminJobManagement = ({
       addNotification('Planning job created successfully!', 'success');
     } catch (error) {
       console.error('Planning job creation error:', error);
-      addNotification('Error creating planning job: ' + error.message, 'error');
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: error
+      });
+
+      const errorMsg = error?.details || error?.message || 'Unknown error occurred';
+      addNotification('Error creating planning job: ' + errorMsg, 'error');
     }
   };
 
