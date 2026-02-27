@@ -7933,6 +7933,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </select>
             </div>
           </div>
+
+          {/* Typical Lot Size Hint */}
+          {calculateTypicalLotSize && (
+            <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: '#0C4A6E', fontWeight: '500' }}>
+                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{calculateTypicalLotSize.median} acres</span>
+                <span style={{ fontSize: '10px', color: '#0C4A6E', marginLeft: '6px' }}>
+                  ({calculateTypicalLotSize.count} properties, range: {calculateTypicalLotSize.min}-{calculateTypicalLotSize.max} acres)
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8221,18 +8233,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 )}
               </div>
-
-              {/* Typical Lot Size Hint */}
-              {calculateTypicalLotSize && (
-                <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '13px', color: '#0C4A6E', fontWeight: '500' }}>
-                    💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{calculateTypicalLotSize.median} acres</span>
-                    <span style={{ fontSize: '11px', color: '#0C4A6E', marginLeft: '8px' }}>
-                      ({calculateTypicalLotSize.count} properties, range: {calculateTypicalLotSize.min}-{calculateTypicalLotSize.max} acres)
-                    </span>
-                  </div>
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                 {/* dynamic bracket labels based on cascadeConfig */}
