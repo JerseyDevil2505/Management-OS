@@ -1256,7 +1256,8 @@ const AdminJobManagement = ({
         municipality: newPlanningJob.municipality,
         end_date: newPlanningJob.dueDate,
         comments: newPlanningJob.comments || '',
-        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad'
+        created_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
+        organization_id: PPA_ORG_ID
       };
 
       await planningJobService.create(planningData);
