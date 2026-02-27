@@ -832,6 +832,7 @@ const calculateDistributionMetrics = async () => {
       const contractData = {
         job_id: selectedJob.id,
         contract_amount: parseFloat(contractSetup.contractAmount),
+        contract_template_type: contractSetup.templateType,
         retainer_percentage: contractSetup.retainerPercentage,
         retainer_amount: parseFloat(contractSetup.contractAmount) * contractSetup.retainerPercentage,
         end_of_job_percentage: contractSetup.endOfJobPercentage,
@@ -2202,7 +2203,7 @@ const calculateDistributionMetrics = async () => {
                                 const contract = job.job_contracts[0];
                                 setContractSetup({
                                   contractAmount: contract.contract_amount.toString(),
-                                  templateType: 'custom',
+                                  templateType: contract.contract_template_type || 'standard',
                                   retainerPercentage: contract.retainer_percentage,
                                   endOfJobPercentage: contract.end_of_job_percentage,
                                   firstYearAppealsPercentage: contract.first_year_appeals_percentage,
@@ -2259,26 +2260,36 @@ const calculateDistributionMetrics = async () => {
                             <p className="text-gray-600">Total Contract</p>
                             <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                           </div>
-                          <div>
-                            <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                          </div>
+                          {job.job_contracts[0].retainer_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].end_of_job_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].first_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].second_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].third_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -2534,7 +2545,7 @@ const calculateDistributionMetrics = async () => {
                               const contract = job.job_contracts[0];
                               setContractSetup({
                                 contractAmount: contract.contract_amount.toString(),
-                                templateType: 'custom',
+                                templateType: contract.contract_template_type || 'standard',
                                 retainerPercentage: contract.retainer_percentage,
                                 endOfJobPercentage: contract.end_of_job_percentage,
                                 firstYearAppealsPercentage: contract.first_year_appeals_percentage,
@@ -2612,26 +2623,36 @@ const calculateDistributionMetrics = async () => {
                               <p className="text-gray-600">Total Contract</p>
                               <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                             </div>
-                            <div>
-                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                            </div>
+                            {job.job_contracts[0].retainer_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].end_of_job_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].first_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].second_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].third_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
