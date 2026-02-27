@@ -1821,17 +1821,22 @@ const getPricePerUnit = useCallback((price, size) => {
         const vcs = timeNormData.new_vcs;
         if (!vcs) return;
 
-        // Determine special region for this property (check if it's an improved sale with a matching vacant sale)
-        let propRegion = 'Normal';
+        // Determine special region for this property
+        // Priority 1: Check if property is directly assigned to a region
+        // Priority 2: Check if there's a matching vacant sale with a region assignment
+        // Priority 3: Default to Normal
+        let propRegion = specialRegions[prop.id] || 'Normal';
 
-        // For improved sales, find if there's a vacant sale at the same location with a special region
-        const matchingVacantSale = vacantSales.find(vs =>
-          vs.property_block === prop.property_block &&
-          vs.property_lot === prop.property_lot
-        );
+        if (propRegion === 'Normal') {
+          // If not directly assigned, find if there's a vacant sale at the same location with a special region
+          const matchingVacantSale = vacantSales.find(vs =>
+            vs.property_block === prop.property_block &&
+            vs.property_lot === prop.property_lot
+          );
 
-        if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
-          propRegion = specialRegions[matchingVacantSale.id];
+          if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
+            propRegion = specialRegions[matchingVacantSale.id];
+          }
         }
 
         // Group by VCS only (legacy)
@@ -2856,6 +2861,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Find improved sales for this VCS
       // SPECIAL REGIONS: Use ALL years for that VCS (rare sales, need full sample)
       // NORMAL REGION: Match by year (standard allocation by year)
+      // REGION FILTERING: For special regions, only include properties in that region or unassigned
       const improvedSalesForYear = properties.filter(prop => {
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
@@ -2868,8 +2874,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           ? new Date(prop.sales_date).getFullYear() === year
           : true; // Special regions use all years
 
+        // Region filtering: ensure improved properties are in the same region
+        const propRegion = specialRegions[prop.id] || 'Normal';
+        const sameRegion = actualRegion === propRegion ||
+                          (actualRegion !== 'Normal' && propRegion === 'Normal'); // Special regions can use unassigned (Normal) properties
+
         // MUST have values_norm_time - this is the key filter
-        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch;
+        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch && sameRegion;
       });
 
       // Calculate averages only if we have improved sales
