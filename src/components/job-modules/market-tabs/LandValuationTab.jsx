@@ -3037,6 +3037,54 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties]);
 
+  // Helper function to calculate typical lot size for Method 2 guidance
+  const calculateTypicalLotSize = useMemo(() => {
+    if (!properties || properties.length === 0) return null;
+
+    // Filter for improved sales only: building class > 10 (residential), exclude condos (type/use starts with '6')
+    const eligibleSales = properties.filter(p => {
+      const hasNormTime = p.values_norm_time && p.values_norm_time > 0;
+      const isResidential = p.property_m4_class && parseInt(p.property_m4_class) > 10;
+      const notCondo = !p.asset_type_use || !p.asset_type_use.toString().startsWith('6');
+
+      return hasNormTime && isResidential && notCondo;
+    });
+
+    if (eligibleSales.length === 0) return null;
+
+    // Get lot sizes using priority: asset_lot_acre > asset_lot_sf / 43560 > calculated from frontage × depth
+    const lotSizes = eligibleSales
+      .map(p => {
+        if (p.asset_lot_acre && p.asset_lot_acre > 0) {
+          return parseFloat(p.asset_lot_acre);
+        }
+        if (p.asset_lot_sf && p.asset_lot_sf > 0) {
+          return p.asset_lot_sf / 43560;
+        }
+        if (p.asset_lot_frontage && p.asset_lot_depth && p.asset_lot_frontage > 0 && p.asset_lot_depth > 0) {
+          const sqft = p.asset_lot_frontage * p.asset_lot_depth;
+          return sqft / 43560;
+        }
+        return null;
+      })
+      .filter(size => size !== null && size > 0);
+
+    if (lotSizes.length === 0) return null;
+
+    // Calculate median (not mean) to avoid outliers
+    const sorted = [...lotSizes].sort((a, b) => a - b);
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+
+    return {
+      median: median.toFixed(2),
+      count: lotSizes.length,
+      min: Math.min(...lotSizes).toFixed(2),
+      max: Math.max(...lotSizes).toFixed(2)
+    };
+  }, [properties]);
+
   // Helper function to get unique regions from vacant test sales
   const getUniqueRegions = () => {
     const regions = new Set(vacantTestSales.map(sale => sale.region));
@@ -8190,6 +8238,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 )}
               </div>
+
+              {/* Typical Lot Size Hint */}
+              {calculateTypicalLotSize && (
+                <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '13px', color: '#0C4A6E', fontWeight: '500' }}>
+                    💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{calculateTypicalLotSize.median} acres</span>
+                    <span style={{ fontSize: '11px', color: '#0C4A6E', marginLeft: '8px' }}>
+                      ({calculateTypicalLotSize.count} properties, range: {calculateTypicalLotSize.min}-{calculateTypicalLotSize.max} acres)
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                 {/* dynamic bracket labels based on cascadeConfig */}
