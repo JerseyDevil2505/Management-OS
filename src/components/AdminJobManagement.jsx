@@ -1269,7 +1269,16 @@ const AdminJobManagement = ({
       addNotification('Planning job created successfully!', 'success');
     } catch (error) {
       console.error('Planning job creation error:', error);
-      addNotification('Error creating planning job: ' + error.message, 'error');
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        fullError: error
+      });
+
+      const errorMsg = error?.details || error?.message || 'Unknown error occurred';
+      addNotification('Error creating planning job: ' + errorMsg, 'error');
     }
   };
 
