@@ -845,6 +845,11 @@ const calculateDistributionMetrics = async () => {
         third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage
       };
 
+      // If editing an existing contract, include the ID so upsert updates instead of inserting
+      if (selectedJob.job_contracts?.[0]?.id) {
+        contractData.id = selectedJob.job_contracts[0].id;
+      }
+
       const { error: contractError } = await supabase
         .from('job_contracts')
         .upsert(contractData);
