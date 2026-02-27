@@ -3050,6 +3050,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return hasNormTime && isResidential && notCondo;
     });
 
+    console.log('🔍 calculateTypicalLotSize debug:', { totalProperties: properties.length, eligibleSales: eligibleSales.length, sampleProps: properties.slice(0, 3).map(p => ({ m4_class: p.property_m4_class, normTime: p.values_norm_time, typeUse: p.asset_type_use })) });
+
     if (eligibleSales.length === 0) return null;
 
     // Get lot sizes using priority: asset_lot_acre > asset_lot_sf / 43560 > calculated from frontage × depth
