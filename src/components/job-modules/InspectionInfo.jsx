@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
+  // Get refusal codes from job config
+  const refusalCodes = jobData?.infoby_category_config?.refusal || [];
+  const vendor = jobData?.vendor_type || 'BRT';
 
   const metrics = useMemo(() => {
     if (!properties || properties.length === 0) {
@@ -62,8 +65,17 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       const hasListDate = prop.inspection_list_date;
       const hasEntry = hasListBy && hasListDate;
 
-      // Refusal check - look for refusal codes or flags
-      const hasRefusal = prop.inspection_refusal_code || prop.inspection_refusal || prop.refusal_code;
+      // Refusal check - use vendor-specific code field
+      let hasRefusal = false;
+      if (vendor === 'Microsystems') {
+        // Microsystems: check info_by_code
+        const infoByCode = prop.info_by_code;
+        hasRefusal = infoByCode && refusalCodes.includes(infoByCode);
+      } else {
+        // BRT (default): check inspection_info_by field
+        const infoByCode = prop.inspection_info_by;
+        hasRefusal = infoByCode && refusalCodes.includes(infoByCode);
+      }
 
       // Improved property = has improvement value > 0
       const improvementValue = parseFloat(prop.values_cama_improvement || prop.values_mod_improvement || 0);
@@ -144,7 +156,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       missingInspections,
       inspectorBreakdown
     };
-  }, [properties]);
+  }, [properties, refusalCodes, vendor]);
 
   const sortedClasses = Object.entries(metrics.byClass)
     .sort(([a], [b]) => a.localeCompare(b));
