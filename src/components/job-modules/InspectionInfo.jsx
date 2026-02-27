@@ -15,6 +15,11 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         improvedNotInspected: 0,
         improvedEntryRate: 0,
         byClass: {},
+        byVCS: {
+          vacant: { total: 0, inspected: 0, refusals: 0 },
+          commercial: { total: 0, inspected: 0, refusals: 0 },
+          residential: { total: 0, inspected: 0, refusals: 0 }
+        },
         missingInspections: [],
         inspectorBreakdown: {}
       };
@@ -26,6 +31,11 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedInspected = 0;
     let improvedNotInspected = 0;
     const byClass = {};
+    const byVCS = {
+      vacant: { total: 0, inspected: 0, refusals: 0 },
+      commercial: { total: 0, inspected: 0, refusals: 0 },
+      residential: { total: 0, inspected: 0, refusals: 0 }
+    };
     const missingInspections = [];
     const inspectorBreakdown = {};
 
@@ -36,10 +46,24 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       }
       byClass[propertyClass].total++;
 
+      // Determine VCS category
+      const vcsCode = prop.new_vcs || prop.vcs_code || '';
+      let vcsCategory = 'residential';
+      if (vcsCode === '00' || vcsCode.toUpperCase() === 'VACANT') {
+        vcsCategory = 'vacant';
+      } else if (vcsCode.toUpperCase() === 'COMM' || propertyClass?.toUpperCase().includes('COMM')) {
+        vcsCategory = 'commercial';
+      }
+
+      byVCS[vcsCategory].total++;
+
       // Entry = has list_by + list_date (BRT: LISTBY/LISTDT, Microsystems: Insp By/Insp Date)
       const hasListBy = prop.inspection_list_by && prop.inspection_list_by.trim();
       const hasListDate = prop.inspection_list_date;
       const hasEntry = hasListBy && hasListDate;
+
+      // Refusal check - look for refusal codes or flags
+      const hasRefusal = prop.inspection_refusal_code || prop.inspection_refusal || prop.refusal_code;
 
       // Improved property = has improvement value > 0
       const improvementValue = parseFloat(prop.values_cama_improvement || prop.values_mod_improvement || 0);
@@ -53,6 +77,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
+        byVCS[vcsCategory].inspected++;
 
         if (isImproved) {
           improvedInspected++;
@@ -70,6 +95,12 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         if (isImproved) {
           improvedNotInspected++;
         }
+
+        // Track refusals
+        if (hasRefusal) {
+          byVCS[vcsCategory].refusals++;
+        }
+
         // Track missing - limit to first 500 for display
         if (missingInspections.length < 500) {
           missingInspections.push({
@@ -79,7 +110,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
             location: prop.property_location || '',
             class: propertyClass,
             owner: prop.owner_name || '',
-            isImproved
+            isImproved,
+            isRefusal: hasRefusal
           });
         }
       }
@@ -103,6 +135,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       improvedNotInspected,
       improvedEntryRate: parseFloat(improvedEntryRate),
       byClass,
+      byVCS,
       missingInspections,
       inspectorBreakdown
     };
@@ -182,7 +215,47 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* By VCS */}
+        <div className="bg-white rounded-lg border p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
+            Inspections by VCS
+          </h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 text-gray-500">Type</th>
+                <th className="text-right py-2 text-gray-500">Total</th>
+                <th className="text-right py-2 text-gray-500">Entry</th>
+                <th className="text-right py-2 text-gray-500">Rate</th>
+                <th className="text-right py-2 text-gray-500">Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(metrics.byVCS).map(([vcsType, data]) => {
+                const entryRate = data.total > 0 ? (data.inspected / data.total) * 100 : 0;
+                return (
+                  <tr key={vcsType} className="border-b border-gray-100">
+                    <td className="py-2 font-medium capitalize">{vcsType}</td>
+                    <td className="text-right py-2">{data.total.toLocaleString()}</td>
+                    <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
+                    <td className="text-right py-2">
+                      <span className={`font-medium ${
+                        entryRate >= 90 ? 'text-green-600'
+                        : entryRate >= 50 ? 'text-amber-600'
+                        : 'text-red-600'
+                      }`}>
+                        {entryRate.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="text-right py-2 text-red-600">{data.refusals.toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
         {/* By Class */}
         <div className="bg-white rounded-lg border p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
@@ -298,6 +371,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                   <th className="text-left py-2 text-gray-500">Location</th>
                   <th className="text-left py-2 text-gray-500">Owner</th>
                   <th className="text-center py-2 text-gray-500">Impr</th>
+                  <th className="text-center py-2 text-gray-500">Ref</th>
                 </tr>
               </thead>
               <tbody>
@@ -312,6 +386,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                     <td className="py-1.5 text-center">
                       {prop.isImproved ? (
                         <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" title="Improved"></span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-center">
+                      {prop.isRefusal ? (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700" title="Refusal">R</span>
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
