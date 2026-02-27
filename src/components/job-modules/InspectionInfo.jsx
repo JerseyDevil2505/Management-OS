@@ -15,11 +15,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         improvedNotInspected: 0,
         improvedEntryRate: 0,
         byClass: {},
-        byVCS: {
-          vacant: { total: 0, inspected: 0, refusals: 0 },
-          commercial: { total: 0, inspected: 0, refusals: 0 },
-          residential: { total: 0, inspected: 0, refusals: 0 }
-        },
+        byVCS: {},
         missingInspections: [],
         inspectorBreakdown: {}
       };
@@ -31,11 +27,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedInspected = 0;
     let improvedNotInspected = 0;
     const byClass = {};
-    const byVCS = {
-      vacant: { total: 0, inspected: 0, refusals: 0 },
-      commercial: { total: 0, inspected: 0, refusals: 0 },
-      residential: { total: 0, inspected: 0, refusals: 0 }
-    };
+    const byVCS = {};
     const missingInspections = [];
     const inspectorBreakdown = {};
 
@@ -55,7 +47,15 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         vcsCategory = 'commercial';
       }
 
-      byVCS[vcsCategory].total++;
+      // Only include residential for VCS breakdown
+      const isResidential = vcsCategory === 'residential';
+      if (isResidential) {
+        const vcsLabel = vcsCode || 'Unknown';
+        if (!byVCS[vcsLabel]) {
+          byVCS[vcsLabel] = { total: 0, inspected: 0, refusals: 0 };
+        }
+        byVCS[vcsLabel].total++;
+      }
 
       // Entry = has list_by + list_date (BRT: LISTBY/LISTDT, Microsystems: Insp By/Insp Date)
       const hasListBy = prop.inspection_list_by && prop.inspection_list_by.trim();
@@ -77,7 +77,11 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
-        byVCS[vcsCategory].inspected++;
+
+        if (isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].inspected++;
+        }
 
         if (isImproved) {
           improvedInspected++;
@@ -96,9 +100,10 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
           improvedNotInspected++;
         }
 
-        // Track refusals
-        if (hasRefusal) {
-          byVCS[vcsCategory].refusals++;
+        // Track refusals in VCS breakdown
+        if (hasRefusal && isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].refusals++;
         }
 
         // Track missing - limit to first 500 for display
@@ -143,6 +148,14 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
 
   const sortedClasses = Object.entries(metrics.byClass)
     .sort(([a], [b]) => a.localeCompare(b));
+
+  const sortedVCS = Object.entries(metrics.byVCS)
+    .sort(([a], [b]) => {
+      // Sort with 'Unknown' last
+      if (a === 'Unknown') return 1;
+      if (b === 'Unknown') return -1;
+      return a.localeCompare(b);
+    });
 
   const sortedInspectors = Object.entries(metrics.inspectorBreakdown)
     .sort(([, a], [, b]) => b - a);
@@ -216,44 +229,48 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* By VCS */}
+        {/* By VCS - Residential Only */}
         <div className="bg-white rounded-lg border p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
-            Inspections by VCS
+            Residential Inspections by VCS
           </h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 text-gray-500">Type</th>
-                <th className="text-right py-2 text-gray-500">Total</th>
-                <th className="text-right py-2 text-gray-500">Entry</th>
-                <th className="text-right py-2 text-gray-500">Rate</th>
-                <th className="text-right py-2 text-gray-500">Ref</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(metrics.byVCS).map(([vcsType, data]) => {
-                const entryRate = data.total > 0 ? (data.inspected / data.total) * 100 : 0;
-                return (
-                  <tr key={vcsType} className="border-b border-gray-100">
-                    <td className="py-2 font-medium capitalize">{vcsType}</td>
-                    <td className="text-right py-2">{data.total.toLocaleString()}</td>
-                    <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
-                    <td className="text-right py-2">
-                      <span className={`font-medium ${
-                        entryRate >= 90 ? 'text-green-600'
-                        : entryRate >= 50 ? 'text-amber-600'
-                        : 'text-red-600'
-                      }`}>
-                        {entryRate.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="text-right py-2 text-red-600">{data.refusals.toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {sortedVCS.length === 0 ? (
+            <p className="text-gray-400 text-sm">No residential properties found.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 text-gray-500">VCS Code</th>
+                  <th className="text-right py-2 text-gray-500">Total</th>
+                  <th className="text-right py-2 text-gray-500">Entry</th>
+                  <th className="text-right py-2 text-gray-500">Rate</th>
+                  <th className="text-right py-2 text-gray-500">Refusal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedVCS.map(([vcsCode, data]) => {
+                  const entryRate = data.total > 0 ? (data.inspected / data.total) * 100 : 0;
+                  return (
+                    <tr key={vcsCode} className="border-b border-gray-100">
+                      <td className="py-2 font-medium">{vcsCode}</td>
+                      <td className="text-right py-2">{data.total.toLocaleString()}</td>
+                      <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
+                      <td className="text-right py-2">
+                        <span className={`font-medium ${
+                          entryRate >= 90 ? 'text-green-600'
+                          : entryRate >= 50 ? 'text-amber-600'
+                          : 'text-red-600'
+                        }`}>
+                          {entryRate.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="text-right py-2 text-red-600">{data.refusals.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* By Class */}
