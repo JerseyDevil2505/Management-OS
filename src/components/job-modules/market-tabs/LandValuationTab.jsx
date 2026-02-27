@@ -1821,17 +1821,22 @@ const getPricePerUnit = useCallback((price, size) => {
         const vcs = timeNormData.new_vcs;
         if (!vcs) return;
 
-        // Determine special region for this property (check if it's an improved sale with a matching vacant sale)
-        let propRegion = 'Normal';
+        // Determine special region for this property
+        // Priority 1: Check if property is directly assigned to a region
+        // Priority 2: Check if there's a matching vacant sale with a region assignment
+        // Priority 3: Default to Normal
+        let propRegion = specialRegions[prop.id] || 'Normal';
 
-        // For improved sales, find if there's a vacant sale at the same location with a special region
-        const matchingVacantSale = vacantSales.find(vs =>
-          vs.property_block === prop.property_block &&
-          vs.property_lot === prop.property_lot
-        );
+        if (propRegion === 'Normal') {
+          // If not directly assigned, find if there's a vacant sale at the same location with a special region
+          const matchingVacantSale = vacantSales.find(vs =>
+            vs.property_block === prop.property_block &&
+            vs.property_lot === prop.property_lot
+          );
 
-        if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
-          propRegion = specialRegions[matchingVacantSale.id];
+          if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
+            propRegion = specialRegions[matchingVacantSale.id];
+          }
         }
 
         // Group by VCS only (legacy)
@@ -2856,6 +2861,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Find improved sales for this VCS
       // SPECIAL REGIONS: Use ALL years for that VCS (rare sales, need full sample)
       // NORMAL REGION: Match by year (standard allocation by year)
+      // REGION FILTERING: For special regions, only include properties in that region or unassigned
       const improvedSalesForYear = properties.filter(prop => {
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
@@ -2868,8 +2874,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           ? new Date(prop.sales_date).getFullYear() === year
           : true; // Special regions use all years
 
+        // Region filtering: ensure improved properties are in the same region
+        const propRegion = specialRegions[prop.id] || 'Normal';
+        const sameRegion = actualRegion === propRegion ||
+                          (actualRegion !== 'Normal' && propRegion === 'Normal'); // Special regions can use unassigned (Normal) properties
+
         // MUST have values_norm_time - this is the key filter
-        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch;
+        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch && sameRegion;
       });
 
       // Calculate averages only if we have improved sales
@@ -3025,6 +3036,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     }
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties]);
+
+  // Helper function to calculate typical lot size for Method 2 guidance
+  // Uses same logic as VCS sheet: market_manual_lot_acre when available
+  const calculateTypicalLotSize = useMemo(() => {
+    if (!properties || properties.length === 0) return null;
+
+    // Filter for properties with market_manual_lot_acre (matches VCS sheet logic)
+    const eligibleSales = properties.filter(p =>
+      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+    ) || [];
+
+    if (eligibleSales.length === 0) return null;
+
+    // Use market_manual_lot_acre values
+    const lotSizes = eligibleSales.map(p => parseFloat(p.market_manual_lot_acre));
+
+    if (lotSizes.length === 0) return null;
+
+    // Calculate median (not mean) to avoid outliers
+    const sorted = [...lotSizes].sort((a, b) => a - b);
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+
+    return {
+      median: median.toFixed(2),
+      count: lotSizes.length,
+      min: Math.min(...lotSizes).toFixed(2),
+      max: Math.max(...lotSizes).toFixed(2)
+    };
+  }, [properties]);
 
   // Helper function to get unique regions from vacant test sales
   const getUniqueRegions = () => {
@@ -7438,7 +7480,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={specialRegions[sale.id] || 'Normal'}
-                        onChange={(e) => setSpecialRegions(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const selectedRegion = e.target.value;
+                          // Auto-create cascade config for SPECIAL_REGIONS if not already present
+                          if (selectedRegion !== 'Normal' && SPECIAL_REGIONS.includes(selectedRegion) && !cascadeConfig.special?.[selectedRegion]) {
+                            setCascadeConfig(prev => ({
+                              ...prev,
+                              special: {
+                                ...(prev.special || {}),
+                                [selectedRegion]: JSON.parse(JSON.stringify(prev.normal || {}))
+                              }
+                            }));
+                          }
+                          setSpecialRegions(prev => ({ ...prev, [sale.id]: selectedRegion }));
+                        }}
                         className="special-region-select"
                       >
                         {regionOptions.map(region => (
@@ -7878,6 +7933,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </select>
             </div>
           </div>
+
+          {/* Typical Lot Size Hint */}
+          {calculateTypicalLotSize && (
+            <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: '#0C4A6E', fontWeight: '500' }}>
+                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{calculateTypicalLotSize.median} acres</span>
+                <span style={{ fontSize: '10px', color: '#0C4A6E', marginLeft: '6px' }}>
+                  ({calculateTypicalLotSize.count} properties, range: {calculateTypicalLotSize.min}-{calculateTypicalLotSize.max} acres)
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -10208,11 +10275,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
                   {valuationMode === 'ff' ? (
                     <>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF || '-'}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF ? parseFloat(sale.avgImprovedFF).toFixed(2) : '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                     </>
                   ) : (
-                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{parseFloat(sale.avgImprovedAcres).toFixed(2)}</td>
                   )}
                   <td style={{
                     padding: '8px',
@@ -10435,11 +10502,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
                       {valuationMode === 'ff' ? (
                         <>
-                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF || '-'}</td>
-                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF ? parseFloat(sale.avgImprovedFF).toFixed(2) : '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                         </>
                       ) : (
-                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{parseFloat(sale.avgImprovedAcres).toFixed(2)}</td>
                       )}
                       <td style={{
                         padding: '8px',

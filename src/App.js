@@ -489,6 +489,7 @@ const App = () => {
             job_responsibilities(count),
             job_contracts(
               contract_amount,
+              contract_template_type,
               retainer_percentage,
               retainer_amount,
               end_of_job_percentage,
@@ -496,7 +497,9 @@ const App = () => {
               first_year_appeals_percentage,
               first_year_appeals_amount,
               second_year_appeals_percentage,
-              second_year_appeals_amount
+              second_year_appeals_amount,
+              third_year_appeals_percentage,
+              third_year_appeals_amount
             ),
             billing_events(
               id,

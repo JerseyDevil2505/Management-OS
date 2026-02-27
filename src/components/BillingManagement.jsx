@@ -355,7 +355,10 @@ const calculateDistributionMetrics = async () => {
               jobOpen += amount;
               startedJobsOpen += amount;
             }
-            totalPercentageBilled += parseFloat(event.percentage_billed || 0);
+            // Only count regular billing events toward percentage, exclude retainer events
+            if (!['turnover', '1st_appeals', '2nd_appeals', '3rd_appeals', 'retainer'].includes(event.billing_type)) {
+              totalPercentageBilled += parseFloat(event.percentage_billed || 0);
+            }
           });
 
           const jobRemaining = contract.contract_amount - jobPaid - jobOpen;
@@ -742,11 +745,14 @@ const calculateDistributionMetrics = async () => {
 
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
-    
+
     const contract = job.job_contracts[0];
     const events = job.billing_events || [];
-    
-    const totalPercentageBilled = events.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+
+    // Only count regular billing events toward percentage, exclude retainer events
+    const totalPercentageBilled = events
+      .filter(event => !['turnover', '1st_appeals', '2nd_appeals', '3rd_appeals', 'retainer'].includes(event.billing_type))
+      .reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
     const totalAmountBilled = events.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
     const remainingDue = contract.contract_amount - totalAmountBilled;
 
@@ -826,6 +832,7 @@ const calculateDistributionMetrics = async () => {
       const contractData = {
         job_id: selectedJob.id,
         contract_amount: parseFloat(contractSetup.contractAmount),
+        contract_template_type: contractSetup.templateType,
         retainer_percentage: contractSetup.retainerPercentage,
         retainer_amount: parseFloat(contractSetup.contractAmount) * contractSetup.retainerPercentage,
         end_of_job_percentage: contractSetup.endOfJobPercentage,
@@ -837,6 +844,11 @@ const calculateDistributionMetrics = async () => {
         third_year_appeals_percentage: contractSetup.thirdYearAppealsPercentage,
         third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage
       };
+
+      // If editing an existing contract, include the ID so upsert updates instead of inserting
+      if (selectedJob.job_contracts?.[0]?.id) {
+        contractData.id = selectedJob.job_contracts[0].id;
+      }
 
       const { error: contractError } = await supabase
         .from('job_contracts')
@@ -2196,7 +2208,7 @@ const calculateDistributionMetrics = async () => {
                                 const contract = job.job_contracts[0];
                                 setContractSetup({
                                   contractAmount: contract.contract_amount.toString(),
-                                  templateType: 'custom',
+                                  templateType: contract.contract_template_type || 'standard',
                                   retainerPercentage: contract.retainer_percentage,
                                   endOfJobPercentage: contract.end_of_job_percentage,
                                   firstYearAppealsPercentage: contract.first_year_appeals_percentage,
@@ -2253,26 +2265,36 @@ const calculateDistributionMetrics = async () => {
                             <p className="text-gray-600">Total Contract</p>
                             <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                           </div>
-                          <div>
-                            <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                          </div>
+                          {job.job_contracts[0].retainer_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].end_of_job_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].first_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].second_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                            </div>
+                          )}
+                          {job.job_contracts[0].third_year_appeals_percentage > 0 && (
+                            <div>
+                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -2528,7 +2550,7 @@ const calculateDistributionMetrics = async () => {
                               const contract = job.job_contracts[0];
                               setContractSetup({
                                 contractAmount: contract.contract_amount.toString(),
-                                templateType: 'custom',
+                                templateType: contract.contract_template_type || 'standard',
                                 retainerPercentage: contract.retainer_percentage,
                                 endOfJobPercentage: contract.end_of_job_percentage,
                                 firstYearAppealsPercentage: contract.first_year_appeals_percentage,
@@ -2606,26 +2628,36 @@ const calculateDistributionMetrics = async () => {
                               <p className="text-gray-600">Total Contract</p>
                               <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                             </div>
-                            <div>
-                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                            </div>
+                            {job.job_contracts[0].retainer_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].end_of_job_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].first_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].second_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                              </div>
+                            )}
+                            {job.job_contracts[0].third_year_appeals_percentage > 0 && (
+                              <div>
+                                <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                                <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -3338,12 +3370,15 @@ const calculateDistributionMetrics = async () => {
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedJob.job_contracts && selectedJob.job_contracts.length > 0 ? 'Edit' : 'Setup'} Contract: {selectedJob.job_name}
-            </h3>
-            
-            <div className="space-y-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 pb-4 flex-shrink-0">
+              <h3 className="text-lg font-semibold">
+                {selectedJob.job_contracts && selectedJob.job_contracts.length > 0 ? 'Edit' : 'Setup'} Contract: {selectedJob.job_name}
+              </h3>
+            </div>
+
+            <div className="px-6 overflow-y-auto flex-1 min-h-0">
+              <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contract Amount
@@ -3487,9 +3522,10 @@ const calculateDistributionMetrics = async () => {
                   Format: Date Percentage% D/blank InvoiceNumber $Total $Retainer $0 $Billed
                 </p>
               </div>
+              </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex justify-end space-x-3 p-6 pt-4 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowContractSetup(false);
