@@ -3043,14 +3043,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (!properties || properties.length === 0) return null;
 
     // Filter for properties with market_manual_lot_acre (matches VCS sheet logic)
-    const eligibleSales = properties.filter(p =>
-      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
-    ) || [];
+    // Falls back to asset_lot_acre so the banner works for both vendors
+    const eligibleSales = properties.filter(p => {
+      const lot = p.market_manual_lot_acre || p.asset_lot_acre;
+      return lot && parseFloat(lot) > 0;
+    }) || [];
 
     if (eligibleSales.length === 0) return null;
 
-    // Use market_manual_lot_acre values
-    const lotSizes = eligibleSales.map(p => parseFloat(p.market_manual_lot_acre));
+    // Use market_manual_lot_acre with asset_lot_acre fallback
+    const lotSizes = eligibleSales.map(p => parseFloat(p.market_manual_lot_acre || p.asset_lot_acre));
 
     if (lotSizes.length === 0) return null;
 
