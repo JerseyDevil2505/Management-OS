@@ -355,7 +355,10 @@ const calculateDistributionMetrics = async () => {
               jobOpen += amount;
               startedJobsOpen += amount;
             }
-            totalPercentageBilled += parseFloat(event.percentage_billed || 0);
+            // Only count regular billing events toward percentage, exclude retainer events
+            if (!['turnover', '1st_appeals', '2nd_appeals', '3rd_appeals', 'retainer'].includes(event.billing_type)) {
+              totalPercentageBilled += parseFloat(event.percentage_billed || 0);
+            }
           });
 
           const jobRemaining = contract.contract_amount - jobPaid - jobOpen;
@@ -742,11 +745,14 @@ const calculateDistributionMetrics = async () => {
 
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
-    
+
     const contract = job.job_contracts[0];
     const events = job.billing_events || [];
-    
-    const totalPercentageBilled = events.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
+
+    // Only count regular billing events toward percentage, exclude retainer events
+    const totalPercentageBilled = events
+      .filter(event => !['turnover', '1st_appeals', '2nd_appeals', '3rd_appeals', 'retainer'].includes(event.billing_type))
+      .reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
     const totalAmountBilled = events.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
     const remainingDue = contract.contract_amount - totalAmountBilled;
 
