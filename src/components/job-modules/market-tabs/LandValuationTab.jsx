@@ -7449,7 +7449,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={specialRegions[sale.id] || 'Normal'}
-                        onChange={(e) => setSpecialRegions(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const selectedRegion = e.target.value;
+                          // Auto-create cascade config for SPECIAL_REGIONS if not already present
+                          if (selectedRegion !== 'Normal' && SPECIAL_REGIONS.includes(selectedRegion) && !cascadeConfig.special?.[selectedRegion]) {
+                            setCascadeConfig(prev => ({
+                              ...prev,
+                              special: {
+                                ...(prev.special || {}),
+                                [selectedRegion]: JSON.parse(JSON.stringify(prev.normal || {}))
+                              }
+                            }));
+                          }
+                          setSpecialRegions(prev => ({ ...prev, [sale.id]: selectedRegion }));
+                        }}
                         className="special-region-select"
                       >
                         {regionOptions.map(region => (
