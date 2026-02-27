@@ -2,8 +2,48 @@ import React, { useMemo } from 'react';
 import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
-  // Get refusal codes from job config
-  const refusalCodes = jobData?.infoby_category_config?.refusal || [];
+  // Extract refusal codes from parsed code definitions
+  const getRefusalCodesFromCodeFile = () => {
+    const vendor = jobData?.vendor_type || 'BRT';
+    const refusalCodes = [];
+
+    // First try to get from infoby_category_config (ProductionTracker)
+    if (jobData?.infoby_category_config?.refusal) {
+      return jobData.infoby_category_config.refusal;
+    }
+
+    // Otherwise extract from parsed_code_definitions (code file)
+    const codeDefs = jobData?.parsed_code_definitions;
+    if (!codeDefs) return refusalCodes;
+
+    if (vendor === 'BRT') {
+      // BRT: Look in Residential section for "REFUSED" descriptions
+      const residentialSection = codeDefs.sections?.['Residential'] || {};
+      Object.values(residentialSection).forEach(item => {
+        if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+          const code = item.KEY || item.DATA.KEY;
+          if (code) refusalCodes.push(code);
+        }
+      });
+    } else if (vendor === 'Microsystems') {
+      // Microsystems: Look for "REFUSED" in any section
+      const sections = codeDefs.sections || {};
+      Object.values(sections).forEach(section => {
+        if (typeof section === 'object') {
+          Object.values(section).forEach(item => {
+            if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+              const code = item.KEY || item.DATA.KEY;
+              if (code) refusalCodes.push(code);
+            }
+          });
+        }
+      });
+    }
+
+    return refusalCodes;
+  };
+
+  const refusalCodes = getRefusalCodesFromCodeFile();
   const vendor = jobData?.vendor_type || 'BRT';
 
   const metrics = useMemo(() => {
