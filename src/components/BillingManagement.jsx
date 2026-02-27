@@ -3489,7 +3489,7 @@ const calculateDistributionMetrics = async () => {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-gray-200 sticky bottom-0 bg-white z-50">
+            <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => {
                   setShowContractSetup(false);
