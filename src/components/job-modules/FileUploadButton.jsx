@@ -2650,18 +2650,33 @@ const handleCodeFileUpdate = async () => {
                     </div>
 
                     {/* Values grid */}
-                    <div className="grid grid-cols-4 gap-3 p-3 bg-white rounded-lg border border-gray-200 mb-3">
+                    <div className="grid grid-cols-5 gap-3 p-3 bg-white rounded-lg border border-gray-200 mb-3">
                       <div className="text-center">
                         <div className="text-xs font-semibold text-gray-500 mb-1">SALE PRICE</div>
                         <div className="text-sm font-bold text-gray-900">
                           ${result.sales_price?.toLocaleString() || '0'}
                         </div>
                         <div className="text-xs text-gray-500">{result.sales_date || 'No Date'}</div>
-                        {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00' && (
-                          <div className={`text-xs font-medium mt-1 ${result.is_nud ? 'text-red-600' : 'text-orange-600'}`}>
-                            NU: {result.sales_nu}
-                          </div>
-                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">SALES NU</div>
+                        <div className={`text-sm font-bold ${
+                          !result.sales_nu || String(result.sales_nu).trim() === '' || String(result.sales_nu).trim() === '0' || String(result.sales_nu).trim() === '00'
+                            ? 'text-gray-400'
+                            : result.is_nud ? 'text-red-600' : 'text-orange-600'
+                        }`}>
+                          {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00'
+                            ? result.sales_nu
+                            : '--'}
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">PROPERTY CLASS</div>
+                        <div className="text-sm font-bold text-gray-900">
+                          {result.property_m4_class || '--'}
+                        </div>
                       </div>
 
                       <div className="text-center">
@@ -2684,19 +2699,6 @@ const handleCodeFileUpdate = async () => {
                         </div>
                         {result.hpi_multiplier && (
                           <div className="text-xs text-gray-500">HPI: {result.hpi_multiplier.toFixed(4)}</div>
-                        )}
-                      </div>
-
-                      <div className="text-center">
-                        <div className="text-xs font-semibold text-gray-500 mb-1">RATIO</div>
-                        <div className={`text-sm font-bold ${
-                          result.is_outlier ? 'text-red-600' :
-                          result.sales_ratio ? 'text-gray-900' : 'text-gray-400'
-                        }`}>
-                          {result.sales_ratio ? `${(result.sales_ratio * 100).toFixed(1)}%` : '--'}
-                        </div>
-                        {result.is_outlier && (
-                          <div className="text-xs text-red-600 font-medium">Outlier</div>
                         )}
                       </div>
                     </div>
