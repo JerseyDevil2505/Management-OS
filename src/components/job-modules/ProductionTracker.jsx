@@ -108,8 +108,11 @@ const ProductionTracker = ({
   const [currentValidationIndex, setCurrentValidationIndex] = useState(0); // NEW: Track current validation item
 
   // NEW: Smart data staleness detection
-  const isDataStale = currentWorkflowStats?.needsRefresh && 
+  const isDataStale = currentWorkflowStats?.needsRefresh &&
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
+
+  // File version staleness check - if current file version is newer than processed version, analytics are outdated
+  const isAnalyticsStale = processed && analytics && latestFileVersion > (analytics?.processedFileVersion || 0);
 
   const addNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${notificationCounterRef.current++}`;
@@ -2042,18 +2045,19 @@ const ProductionTracker = ({
         classBreakdown,
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
-        
+        processedFileVersion: latestFileVersion,
+
         // FIX: Use classBreakdown totals for global rates
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
         jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
-        
+
         // Commercial metrics using class breakdown for accuracy
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
         pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
-        
+
         // Track overrides applied during processing
         overridesAppliedCount: decisionsToApply.length
       };
@@ -2085,7 +2089,8 @@ const ProductionTracker = ({
             billable: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           }
         },
-        totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
+        totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0),
+        processedFileVersion: latestFileVersion
       };
 
       // Set all the state with potentially adjusted values
@@ -3219,11 +3224,13 @@ const exportMissingPropertiesReport = () => {
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length + 
-               ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length + 
+              (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length +
+               ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length +
                ((infoByCategoryConfig || {}).special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              (processed && !isDataStale)
+              isAnalyticsStale
+                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                : (processed && !isDataStale)
                 ? 'bg-green-600 text-white hover:bg-green-700'
                 : processing
                 ? 'bg-yellow-600 text-white'
@@ -3232,13 +3239,15 @@ const exportMissingPropertiesReport = () => {
           >
             {processing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : isAnalyticsStale ? (
+              <AlertTriangle className="w-4 h-4" />
             ) : (processed && !isDataStale) ? (
               <CheckCircle className="w-4 h-4" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
             <span>
-              {processing ? 'Processing...' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
+              {processing ? 'Processing...' : isAnalyticsStale ? 'Rerun Needed' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
             </span>
           </button>
         </div>
