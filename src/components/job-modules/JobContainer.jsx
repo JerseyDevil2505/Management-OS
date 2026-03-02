@@ -977,13 +977,16 @@ const JobContainer = ({
 
       // 🔧 ENHANCED: Include class breakdown for AdminJobManagement
       classBreakdown: analyticsData.classBreakdown || {},
-      
+
       // Include billing analytics for completeness
       billingAnalytics: analyticsData.billingAnalytics || null,
       validationReport: analyticsData.validationReport || null,
-      
+
       // Inspector stats for detailed analytics
-      inspectorStats: analyticsData.inspectorStats || {}
+      inspectorStats: analyticsData.inspectorStats || {},
+
+      // NEW: Pass through needs_reprocessing flag (set to false when processing completes)
+      needsReprocessing: analyticsData.needsReprocessing !== undefined ? analyticsData.needsReprocessing : false
     };
 
     // 🔧 ENHANCED: Update App.js state with database persistence flag

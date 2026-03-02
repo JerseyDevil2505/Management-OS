@@ -111,23 +111,8 @@ const ProductionTracker = ({
   const isDataStale = currentWorkflowStats?.needsRefresh &&
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
 
-  // File version staleness check - only show Rerun Needed if we have reliable version data
-  // For old analytics without processedFileVersion, don't mark as stale (can't reliably detect)
-  const processedVersion = analytics?.processedFileVersion || billingAnalytics?.processedFileVersion;
-  const isAnalyticsStale = processed && analytics && processedVersion !== undefined && latestFileVersion > processedVersion;
-
-  // DEBUG: Log staleness check values
-  useEffect(() => {
-    if (processed && analytics) {
-      console.log('🔍 ANALYTICS STALENESS CHECK:', {
-        isAnalyticsStale,
-        processed,
-        latestFileVersion,
-        processedFileVersion: analytics?.processedFileVersion,
-        comparison: `${latestFileVersion} > ${analytics?.processedFileVersion || 0} = ${latestFileVersion > (analytics?.processedFileVersion || 0)}`
-      });
-    }
-  }, [isAnalyticsStale, processed, analytics, latestFileVersion]);
+  // Check if analytics need reprocessing - uses database flag set by file uploads
+  const isAnalyticsStale = jobData?.needs_reprocessing === true;
 
   const addNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${notificationCounterRef.current++}`;
@@ -2060,7 +2045,6 @@ const ProductionTracker = ({
         classBreakdown,
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
-        processedFileVersion: latestFileVersion,
 
         // FIX: Use classBreakdown totals for global rates
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
@@ -2104,8 +2088,7 @@ const ProductionTracker = ({
             billable: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           }
         },
-        totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0),
-        processedFileVersion: latestFileVersion
+        totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
       // Set all the state with potentially adjusted values
@@ -2329,7 +2312,8 @@ const ProductionTracker = ({
           validationOverrides: freshOverrides,
           overrideMap: freshOverrideMap,
           totalValidationOverrides: freshOverrides.length,
-          lastProcessed: new Date().toISOString()
+          lastProcessed: new Date().toISOString(),
+          needsReprocessing: false  // Clear the reprocessing flag after successful completion
         });
         debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with fresh override data');
       }

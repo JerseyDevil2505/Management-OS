@@ -3353,11 +3353,23 @@ const handleCodeFileUpdate = async () => {
                       }, 3000);
                     }
                     
+                    // Set flag indicating analytics need reprocessing
+                    try {
+                      await supabase
+                        .from('jobs')
+                        .update({ needs_reprocessing: true })
+                        .eq('id', job.id);
+                      addBatchLog('🚩 Set needs_reprocessing flag', 'success');
+                    } catch (flagError) {
+                      console.warn('Could not set needs_reprocessing flag:', flagError);
+                      addBatchLog('⚠️ Warning: Could not set reprocessing flag', 'warning');
+                    }
+
                     // Notify parent
                     if (onFileProcessed) {
                       onFileProcessed(result);
                     }
-                    
+
                     // Trigger data refresh in JobContainer
                     if (onDataRefresh) {
                       addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');
