@@ -114,6 +114,19 @@ const ProductionTracker = ({
   // File version staleness check - if current file version is newer than processed version, analytics are outdated
   const isAnalyticsStale = processed && analytics && latestFileVersion > (analytics?.processedFileVersion || 0);
 
+  // DEBUG: Log staleness check values
+  useEffect(() => {
+    if (processed && analytics) {
+      console.log('🔍 ANALYTICS STALENESS CHECK:', {
+        isAnalyticsStale,
+        processed,
+        latestFileVersion,
+        processedFileVersion: analytics?.processedFileVersion,
+        comparison: `${latestFileVersion} > ${analytics?.processedFileVersion || 0} = ${latestFileVersion > (analytics?.processedFileVersion || 0)}`
+      });
+    }
+  }, [isAnalyticsStale, processed, analytics, latestFileVersion]);
+
   const addNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${notificationCounterRef.current++}`;
     const notification = { id, message, type, timestamp: new Date() };
