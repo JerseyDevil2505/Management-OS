@@ -3229,7 +3229,7 @@ const exportMissingPropertiesReport = () => {
                ((infoByCategoryConfig || {}).special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
               isAnalyticsStale
-                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                ? 'bg-red-600 text-white hover:bg-red-700'
                 : (processed && !isDataStale)
                 ? 'bg-green-600 text-white hover:bg-green-700'
                 : processing
