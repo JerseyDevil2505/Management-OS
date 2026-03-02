@@ -77,6 +77,18 @@ const FileUploadButton = ({
     }
   }, [salesDecisions]);
 
+  // Ref for normalization review scroll container
+  const normContainerRef = React.useRef(null);
+  const pendingNormScrollRestore = React.useRef(null);
+
+  // Restore scroll position after React re-renders from normalization decision
+  React.useEffect(() => {
+    if (pendingNormScrollRestore.current !== null && normContainerRef.current) {
+      normContainerRef.current.scrollTop = pendingNormScrollRestore.current;
+      pendingNormScrollRestore.current = null;
+    }
+  }, [normDecisions]);
+
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchLogs, setBatchLogs] = useState([]);
@@ -2513,8 +2525,12 @@ const handleCodeFileUpdate = async () => {
     );
   };
 
-  // Phase 2: Handle normalization decision
+  // Phase 2: Handle normalization decision with scroll position preservation
   const handleNormDecision = (compositeKey, decision) => {
+    // Save current scroll position before state update
+    if (normContainerRef.current) {
+      pendingNormScrollRestore.current = normContainerRef.current.scrollTop;
+    }
     setNormDecisions(prev => new Map(prev).set(compositeKey, decision));
   };
 
@@ -2611,7 +2627,7 @@ const handleCodeFileUpdate = async () => {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 220px)' }}>
+          <div ref={normContainerRef} className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 220px)' }}>
             <div className="space-y-3">
               {normResults.map((result, idx) => {
                 const decision = normDecisions.get(result.property_composite_key);
