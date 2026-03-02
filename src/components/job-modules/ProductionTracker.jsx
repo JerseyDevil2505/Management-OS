@@ -3326,11 +3326,11 @@ const exportMissingPropertiesReport = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
-                  
+
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                       <label className="text-sm font-medium text-gray-700">Sort:</label>
-                      <select 
+                      <select
                         value={inspectorSort}
                         onChange={(e) => setInspectorSort(e.target.value)}
                         className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
@@ -3343,7 +3343,86 @@ const exportMissingPropertiesReport = () => {
                     </div>
                   </div>
                 </div>
-                
+
+                {/* Job Completion Forecast */}
+                {analytics && (
+                  (() => {
+                    // Calculate aggregate daily average across all inspectors
+                    const inspectors = Object.entries(analytics.inspectorStats || {});
+                    const totalFieldDays = inspectors.reduce((sum, [_, stats]) => sum + (stats.fieldDays || 0), 0);
+                    const totalInspected = inspectors.reduce((sum, [_, stats]) => sum + (stats.totalInspected || 0), 0);
+
+                    // Global daily average = total inspected / total field days
+                    const globalDailyAverage = totalFieldDays > 0 ? Math.round(totalInspected / totalFieldDays) : 0;
+
+                    // Remaining properties
+                    const remaining = (analytics.totalRecords || 0) - (analytics.validInspections || 0);
+
+                    // Days needed (calendar days, not work weeks)
+                    const daysNeeded = globalDailyAverage > 0 ? Math.ceil(remaining / globalDailyAverage) : 0;
+
+                    // Project completion date
+                    const today = new Date();
+                    const completionDate = new Date(today);
+                    completionDate.setDate(completionDate.getDate() + daysNeeded);
+
+                    // Weeks remaining (for display)
+                    const weeksRemaining = (daysNeeded / 7).toFixed(1);
+
+                    // Percentage complete
+                    const percentComplete = (analytics.totalRecords || 0) > 0
+                      ? Math.round(((analytics.validInspections || 0) / (analytics.totalRecords || 0)) * 100)
+                      : 0;
+
+                    return (
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6 mb-6">
+                        <h4 className="text-lg font-bold text-blue-900 mb-4 flex items-center">
+                          <Calendar className="w-5 h-5 mr-2" />
+                          Job Completion Forecast
+                        </h4>
+
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Global Daily Average</div>
+                            <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day (all inspectors)</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Remaining</div>
+                            <div className="text-3xl font-bold text-orange-600">{remaining.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500 mt-1">of {(analytics.totalRecords || 0).toLocaleString()}</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Days to Complete</div>
+                            <div className="text-3xl font-bold text-indigo-600">{daysNeeded}</div>
+                            <div className="text-xs text-gray-500 mt-1">{weeksRemaining} weeks</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Projected Completion</div>
+                            <div className="text-2xl font-bold text-green-600">{completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                            <div className="text-xs text-gray-500 mt-1">{completionDate.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Progress</div>
+                            <div className="text-3xl font-bold text-green-600">{percentComplete}%</div>
+                            <div className="text-xs text-gray-500 mt-1">{(analytics.validInspections || 0).toLocaleString()} inspected</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 bg-white rounded p-3 border border-blue-100">
+                          <p className="text-xs text-gray-600">
+                            <span className="font-medium">Note:</span> Forecast assumes {globalDailyAverage} properties/day pace continues. Adjust for inspector PTO, holidays, and workday variations as needed.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
                 {Object.keys(analytics.inspectorStats || {}).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
