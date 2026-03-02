@@ -111,8 +111,10 @@ const ProductionTracker = ({
   const isDataStale = currentWorkflowStats?.needsRefresh &&
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
 
-  // File version staleness check - if current file version is newer than processed version, analytics are outdated
-  const isAnalyticsStale = processed && analytics && latestFileVersion > (analytics?.processedFileVersion || 0);
+  // File version staleness check - only show Rerun Needed if we have reliable version data
+  // For old analytics without processedFileVersion, don't mark as stale (can't reliably detect)
+  const processedVersion = analytics?.processedFileVersion || billingAnalytics?.processedFileVersion;
+  const isAnalyticsStale = processed && analytics && processedVersion !== undefined && latestFileVersion > processedVersion;
 
   // DEBUG: Log staleness check values
   useEffect(() => {
