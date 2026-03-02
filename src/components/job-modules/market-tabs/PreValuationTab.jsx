@@ -1612,15 +1612,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
 
           // Check if we have an existing decision for this property
-          // Decisions from comparison modal arrive as 'keep' or 'reject' — never 'pending'
-          // For first-time normalization (no existing decisions), default to 'keep'
+          // Decisions from comparison modal or previous normalization runs arrive as 'keep' or 'reject'
+          // For first-time normalization (no existing decisions), default to 'pending' so user can review
           const existingDecisionData = existingDecisions[prop.id];
-          let finalDecision = 'keep';
+          let finalDecision = 'pending';
           let saleDataChanged = false;
 
           if (existingDecisionData) {
-            // Preserve existing decision — comparison modal handles changes
-            finalDecision = existingDecisionData.decision || 'keep';
+            // Preserve existing decision from previous normalization run
+            finalDecision = existingDecisionData.decision || 'pending';
           }
 
           normalized.push({

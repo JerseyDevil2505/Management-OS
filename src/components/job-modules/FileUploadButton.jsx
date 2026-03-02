@@ -77,6 +77,18 @@ const FileUploadButton = ({
     }
   }, [salesDecisions]);
 
+  // Ref for normalization review scroll container
+  const normContainerRef = React.useRef(null);
+  const pendingNormScrollRestore = React.useRef(null);
+
+  // Restore scroll position after React re-renders from normalization decision
+  React.useEffect(() => {
+    if (pendingNormScrollRestore.current !== null && normContainerRef.current) {
+      normContainerRef.current.scrollTop = pendingNormScrollRestore.current;
+      pendingNormScrollRestore.current = null;
+    }
+  }, [normDecisions]);
+
   // NEW: Batch processing modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchLogs, setBatchLogs] = useState([]);
@@ -2513,8 +2525,12 @@ const handleCodeFileUpdate = async () => {
     );
   };
 
-  // Phase 2: Handle normalization decision
+  // Phase 2: Handle normalization decision with scroll position preservation
   const handleNormDecision = (compositeKey, decision) => {
+    // Save current scroll position before state update
+    if (normContainerRef.current) {
+      pendingNormScrollRestore.current = normContainerRef.current.scrollTop;
+    }
     setNormDecisions(prev => new Map(prev).set(compositeKey, decision));
   };
 
@@ -2611,7 +2627,7 @@ const handleCodeFileUpdate = async () => {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 220px)' }}>
+          <div ref={normContainerRef} className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 220px)' }}>
             <div className="space-y-3">
               {normResults.map((result, idx) => {
                 const decision = normDecisions.get(result.property_composite_key);
@@ -2650,18 +2666,33 @@ const handleCodeFileUpdate = async () => {
                     </div>
 
                     {/* Values grid */}
-                    <div className="grid grid-cols-4 gap-3 p-3 bg-white rounded-lg border border-gray-200 mb-3">
+                    <div className="grid grid-cols-5 gap-3 p-3 bg-white rounded-lg border border-gray-200 mb-3">
                       <div className="text-center">
                         <div className="text-xs font-semibold text-gray-500 mb-1">SALE PRICE</div>
                         <div className="text-sm font-bold text-gray-900">
                           ${result.sales_price?.toLocaleString() || '0'}
                         </div>
                         <div className="text-xs text-gray-500">{result.sales_date || 'No Date'}</div>
-                        {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00' && (
-                          <div className={`text-xs font-medium mt-1 ${result.is_nud ? 'text-red-600' : 'text-orange-600'}`}>
-                            NU: {result.sales_nu}
-                          </div>
-                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">SALES NU</div>
+                        <div className={`text-sm font-bold ${
+                          !result.sales_nu || String(result.sales_nu).trim() === '' || String(result.sales_nu).trim() === '0' || String(result.sales_nu).trim() === '00'
+                            ? 'text-gray-400'
+                            : result.is_nud ? 'text-red-600' : 'text-orange-600'
+                        }`}>
+                          {result.sales_nu && String(result.sales_nu).trim() !== '' && String(result.sales_nu).trim() !== '0' && String(result.sales_nu).trim() !== '00'
+                            ? result.sales_nu
+                            : '--'}
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-gray-500 mb-1">PROPERTY CLASS</div>
+                        <div className="text-sm font-bold text-gray-900">
+                          {result.property_m4_class || '--'}
+                        </div>
                       </div>
 
                       <div className="text-center">
@@ -2684,19 +2715,6 @@ const handleCodeFileUpdate = async () => {
                         </div>
                         {result.hpi_multiplier && (
                           <div className="text-xs text-gray-500">HPI: {result.hpi_multiplier.toFixed(4)}</div>
-                        )}
-                      </div>
-
-                      <div className="text-center">
-                        <div className="text-xs font-semibold text-gray-500 mb-1">RATIO</div>
-                        <div className={`text-sm font-bold ${
-                          result.is_outlier ? 'text-red-600' :
-                          result.sales_ratio ? 'text-gray-900' : 'text-gray-400'
-                        }`}>
-                          {result.sales_ratio ? `${(result.sales_ratio * 100).toFixed(1)}%` : '--'}
-                        </div>
-                        {result.is_outlier && (
-                          <div className="text-xs text-red-600 font-medium">Outlier</div>
                         )}
                       </div>
                     </div>
@@ -3353,11 +3371,23 @@ const handleCodeFileUpdate = async () => {
                       }, 3000);
                     }
                     
+                    // Set flag indicating analytics need reprocessing
+                    try {
+                      await supabase
+                        .from('jobs')
+                        .update({ needs_reprocessing: true })
+                        .eq('id', job.id);
+                      addBatchLog('🚩 Set needs_reprocessing flag', 'success');
+                    } catch (flagError) {
+                      console.warn('Could not set needs_reprocessing flag:', flagError);
+                      addBatchLog('⚠️ Warning: Could not set reprocessing flag', 'warning');
+                    }
+
                     // Notify parent
                     if (onFileProcessed) {
                       onFileProcessed(result);
                     }
-                    
+
                     // Trigger data refresh in JobContainer
                     if (onDataRefresh) {
                       addBatchLog('🔄 Triggering data refresh in JobContainer...', 'info');

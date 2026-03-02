@@ -2166,7 +2166,7 @@ const calculateDistributionMetrics = async () => {
                         <div className="flex items-center space-x-3">
                           <h3 className="text-xl font-semibold text-gray-900">{job.job_name}</h3>
                           <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                            {job.vendor || 'No Vendor'}
+                            {job.vendor_type || 'No Vendor'}
                           </span>
                           {needsContractSetup && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
