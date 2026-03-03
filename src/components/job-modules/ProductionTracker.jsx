@@ -3361,6 +3361,7 @@ const exportMissingPropertiesReport = () => {
                           .select('measure_date')
                           .eq('job_id', jobData.id)
                           .eq('file_version', latestFileVersion)
+                          .in('property_class', ['2', '3A'])
                           .gte('measure_date', twoWeeksAgo.toISOString().split('T')[0])
                           .lte('measure_date', today.toISOString().split('T')[0]);
 
@@ -3370,7 +3371,7 @@ const exportMissingPropertiesReport = () => {
                         }
 
                         if (recentData && recentData.length > 0) {
-                          // Count unique working days in last 14 days
+                          // Count unique working days in last 14 days (residential only)
                           const uniqueDays = new Set(recentData.map(r => r.measure_date));
                           const recentWorkingDays = uniqueDays.size;
                           const recentPropertiesInspected = recentData.length;
