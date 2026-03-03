@@ -3425,14 +3425,55 @@ const exportMissingPropertiesReport = () => {
                       ? Math.round(((analytics.validInspections || 0) / (analytics.totalRecords || 0)) * 100)
                       : 0;
 
-                    return (
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6 mb-6">
-                        <h4 className="text-lg font-bold text-blue-900 mb-4 flex items-center">
-                          <Calendar className="w-5 h-5 mr-2" />
-                          Job Completion Forecast
-                        </h4>
+                    // Determine status message based on remaining and recent activity
+                    let statusMessage = '';
+                    let statusBgColor = 'bg-white';
+                    let statusBorderColor = 'border-blue-100';
+                    let statusTextColor = 'text-gray-900';
+                    let completionDisplay = '';
 
-                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                    if (remaining === 0) {
+                      // Inspection phase complete
+                      statusMessage = '✓ Inspection Phase Complete';
+                      statusBgColor = 'bg-green-50';
+                      statusBorderColor = 'border-green-200';
+                      statusTextColor = 'text-green-700';
+                      completionDisplay = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else if (remaining > 0 && recentDailyAverage === 0) {
+                      // No recent activity
+                      statusMessage = '⏸ No Recent Activity (Last 14 Days)';
+                      statusBgColor = 'bg-orange-50';
+                      statusBorderColor = 'border-orange-200';
+                      statusTextColor = 'text-orange-700';
+                      completionDisplay = 'Using historical average';
+                    } else {
+                      // Normal activity
+                      statusMessage = '→ Active Inspection Phase';
+                      statusBgColor = 'bg-blue-50';
+                      statusBorderColor = 'border-blue-200';
+                      statusTextColor = 'text-blue-700';
+                      completionDisplay = completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' (' + completionDate.toLocaleDateString('en-US', { weekday: 'short' }) + ')';
+                    }
+
+                    return (
+                      <div className={`border-2 rounded-lg p-6 mb-6 ${
+                        remaining === 0
+                          ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+                          : recentDailyAverage === 0
+                          ? 'bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200'
+                          : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className={`text-lg font-bold ${statusTextColor} flex items-center`}>
+                            <Calendar className="w-5 h-5 mr-2" />
+                            Job Completion Forecast
+                          </h4>
+                          <div className={`text-sm font-semibold px-3 py-1 rounded ${statusBgColor} ${statusBorderColor} border ${statusTextColor}`}>
+                            {statusMessage}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
                             <div className="text-sm text-gray-600 mb-1">Global Avg (All-Time)</div>
                             <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
@@ -3441,7 +3482,7 @@ const exportMissingPropertiesReport = () => {
 
                           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
                             <div className="text-sm text-gray-600 mb-1">Global Avg (Last 14 Days)</div>
-                            <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || globalDailyAverage}</div>
+                            <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || '—'}</div>
                             <div className="text-xs text-gray-500 mt-1">active pace</div>
                           </div>
 
@@ -3452,27 +3493,25 @@ const exportMissingPropertiesReport = () => {
                           </div>
 
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
-                            <div className="text-sm text-gray-600 mb-1">Days to Complete</div>
-                            <div className="text-3xl font-bold text-indigo-600">{daysNeeded}</div>
-                            <div className="text-xs text-gray-500 mt-1">{weeksRemaining} weeks</div>
+                            <div className="text-sm text-gray-600 mb-1">{remaining === 0 ? 'Completed' : 'Days to Complete'}</div>
+                            <div className="text-3xl font-bold text-indigo-600">{remaining === 0 ? '✓' : daysNeeded}</div>
+                            <div className="text-xs text-gray-500 mt-1">{remaining === 0 ? today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : weeksRemaining + ' weeks'}</div>
                           </div>
 
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
                             <div className="text-sm text-gray-600 mb-1">Projected Completion</div>
-                            <div className="text-2xl font-bold text-green-600">{completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                            <div className="text-xs text-gray-500 mt-1">{completionDate.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                          </div>
-
-                          <div className="bg-white rounded-lg p-4 border border-blue-100">
-                            <div className="text-sm text-gray-600 mb-1">Progress</div>
-                            <div className="text-3xl font-bold text-green-600">{percentComplete}%</div>
-                            <div className="text-xs text-gray-500 mt-1">{(analytics.validInspections || 0).toLocaleString()} inspected</div>
+                            <div className="text-2xl font-bold text-green-600">{completionDisplay}</div>
                           </div>
                         </div>
 
                         <div className="mt-4 bg-white rounded p-3 border border-blue-100">
                           <p className="text-xs text-gray-600">
-                            <span className="font-medium">Note:</span> Forecast uses the last 14 days' pace ({recentDailyAverage || globalDailyAverage} properties/day). Adjust for inspector PTO, holidays, crew changes, and workday variations as needed.
+                            <span className="font-medium">Note:</span> {remaining === 0
+                              ? 'Inspection phase complete. Project ready for next phase.'
+                              : recentDailyAverage === 0
+                              ? 'No activity in last 14 days. Forecast uses historical average (' + globalDailyAverage + ' properties/day).'
+                              : 'Forecast based on last 14 days pace (' + recentDailyAverage + ' properties/day). Adjust for inspector PTO, holidays, crew changes as needed.'
+                            }
                           </p>
                         </div>
                       </div>
