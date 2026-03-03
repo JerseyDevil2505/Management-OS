@@ -3390,18 +3390,17 @@ const exportMissingPropertiesReport = () => {
                 {/* Job Completion Forecast */}
                 {analytics && (
                   (() => {
-                    // Calculate aggregate daily average across all inspectors
+                    // Calculate aggregate daily average for RESIDENTIAL INSPECTORS ONLY
                     const inspectors = Object.entries(analytics.inspectorStats || {});
 
-                    // Sum each inspector's individual daily average for combined rate
-                    const combinedDailyRate = inspectors.reduce((sum, [_, stats]) => {
-                      return sum + (stats.dailyAverage || stats.commercialAverage || 0);
-                    }, 0);
+                    // Sum each RESIDENTIAL inspector's individual daily average for combined rate
+                    const residentialInspectors = inspectors.filter(([_, stats]) =>
+                      stats.inspector_type?.toLowerCase() === 'residential'
+                    );
 
-                    // Global daily average (all-time)
-                    const totalInspected = inspectors.reduce((sum, [_, stats]) => sum + (stats.totalInspected || 0), 0);
-                    const totalFieldDays = inspectors.reduce((sum, [_, stats]) => sum + (stats.fieldDays || 0), 0);
-                    const globalDailyAverage = totalFieldDays > 0 ? Math.round(totalInspected / totalFieldDays) : 0;
+                    const globalDailyAverage = residentialInspectors.reduce((sum, [_, stats]) => {
+                      return sum + (stats.dailyAverage || 0);
+                    }, 0);
 
                     // Use recent daily average for projection if available (from state), otherwise fall back to all-time
                     const projectionDailyAverage = recentDailyAverage > 0 ? recentDailyAverage : globalDailyAverage;
