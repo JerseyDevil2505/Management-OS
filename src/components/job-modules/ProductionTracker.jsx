@@ -3349,17 +3349,22 @@ const exportMissingPropertiesReport = () => {
                   (() => {
                     // Calculate aggregate daily average across all inspectors
                     const inspectors = Object.entries(analytics.inspectorStats || {});
-                    const totalFieldDays = inspectors.reduce((sum, [_, stats]) => sum + (stats.fieldDays || 0), 0);
-                    const totalInspected = inspectors.reduce((sum, [_, stats]) => sum + (stats.totalInspected || 0), 0);
 
-                    // Global daily average = total inspected / total field days
+                    // Sum each inspector's individual daily average for combined rate
+                    const combinedDailyRate = inspectors.reduce((sum, [_, stats]) => {
+                      return sum + (stats.dailyAverage || stats.commercialAverage || 0);
+                    }, 0);
+
+                    // Global daily average per inspector (for reference)
+                    const totalInspected = inspectors.reduce((sum, [_, stats]) => sum + (stats.totalInspected || 0), 0);
+                    const totalFieldDays = inspectors.reduce((sum, [_, stats]) => sum + (stats.fieldDays || 0), 0);
                     const globalDailyAverage = totalFieldDays > 0 ? Math.round(totalInspected / totalFieldDays) : 0;
 
                     // Remaining properties
                     const remaining = (analytics.totalRecords || 0) - (analytics.validInspections || 0);
 
-                    // Days needed (calendar days, not work weeks)
-                    const daysNeeded = globalDailyAverage > 0 ? Math.ceil(remaining / globalDailyAverage) : 0;
+                    // Days needed using combined rate (all inspectors working)
+                    const daysNeeded = combinedDailyRate > 0 ? Math.ceil(remaining / combinedDailyRate) : 0;
 
                     // Project completion date
                     const today = new Date();
