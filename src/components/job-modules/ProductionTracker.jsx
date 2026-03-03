@@ -3390,17 +3390,17 @@ const exportMissingPropertiesReport = () => {
                 {/* Job Completion Forecast */}
                 {analytics && (
                   (() => {
-                    // Calculate aggregate daily average for RESIDENTIAL INSPECTORS ONLY
+                    // Calculate average daily average PER INSPECTOR (not combined)
                     const inspectors = Object.entries(analytics.inspectorStats || {});
 
-                    // Sum each RESIDENTIAL inspector's individual daily average for combined rate
+                    // Average of individual daily averages
                     const residentialInspectors = inspectors.filter(([_, stats]) =>
                       stats.inspector_type?.toLowerCase() === 'residential'
                     );
 
-                    const globalDailyAverage = residentialInspectors.reduce((sum, [_, stats]) => {
-                      return sum + (stats.dailyAverage || 0);
-                    }, 0);
+                    const globalDailyAverage = residentialInspectors.length > 0
+                      ? Math.round(residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.dailyAverage || 0), 0) / residentialInspectors.length)
+                      : 0;
 
                     // Use recent daily average for projection if available (from state), otherwise fall back to all-time
                     const projectionDailyAverage = recentDailyAverage > 0 ? recentDailyAverage : globalDailyAverage;
@@ -3472,17 +3472,28 @@ const exportMissingPropertiesReport = () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
                             <div className="text-sm text-gray-600 mb-1">Daily Average (All-Time)</div>
                             <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day/Inspector</div>
+                          </div>
+
+                          <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                            <div className="text-sm text-gray-600 mb-1">Team Pace (All-Time)</div>
+                            <div className="text-3xl font-bold text-indigo-600">
+                              {residentialInspectors.length > 0
+                                ? Math.round(residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.dailyAverage || 0), 0))
+                                : '—'
+                              }
+                            </div>
                             <div className="text-xs text-gray-500 mt-1">properties/day</div>
                           </div>
 
                           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                            <div className="text-sm text-gray-600 mb-1">Global Avg (Last 14 Days)</div>
+                            <div className="text-sm text-gray-600 mb-1">Team Pace (Last 14 Days)</div>
                             <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || '—'}</div>
-                            <div className="text-xs text-gray-500 mt-1">active pace</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day</div>
                           </div>
 
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
