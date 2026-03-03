@@ -107,6 +107,9 @@ const ProductionTracker = ({
   const [processingComplete, setProcessingComplete] = useState(false); // NEW: Track when processing is done
   const [currentValidationIndex, setCurrentValidationIndex] = useState(0); // NEW: Track current validation item
 
+  // NEW: Recent daily average (last 14 days) for completion forecast
+  const [recentDailyAverage, setRecentDailyAverage] = useState(0);
+
   // NEW: Smart data staleness detection
   const isDataStale = currentWorkflowStats?.needsRefresh &&
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
@@ -3344,6 +3347,46 @@ const exportMissingPropertiesReport = () => {
                   </div>
                 </div>
 
+                {/* Fetch recent daily average on analytics change */}
+                {analytics && jobData?.id && latestFileVersion && (
+                  (() => {
+                    const calculateRecentPace = async () => {
+                      try {
+                        const today = new Date();
+                        const twoWeeksAgo = new Date(today);
+                        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+                        const { data: recentData, error } = await supabase
+                          .from('inspection_data')
+                          .select('measure_date')
+                          .eq('job_id', jobData.id)
+                          .eq('file_version', latestFileVersion)
+                          .gte('measure_date', twoWeeksAgo.toISOString().split('T')[0])
+                          .lte('measure_date', today.toISOString().split('T')[0]);
+
+                        if (error) {
+                          console.warn('Could not fetch recent inspection data:', error);
+                          return;
+                        }
+
+                        if (recentData && recentData.length > 0) {
+                          // Count unique working days in last 14 days
+                          const uniqueDays = new Set(recentData.map(r => r.measure_date));
+                          const recentWorkingDays = uniqueDays.size;
+                          const recentPropertiesInspected = recentData.length;
+
+                          const pace = recentWorkingDays > 0 ? Math.round(recentPropertiesInspected / recentWorkingDays) : 0;
+                          setRecentDailyAverage(pace);
+                        }
+                      } catch (error) {
+                        console.error('Error calculating recent pace:', error);
+                      }
+                    };
+
+                    calculateRecentPace();
+                  })()
+                )}
+
                 {/* Job Completion Forecast */}
                 {analytics && (
                   (() => {
@@ -3355,16 +3398,19 @@ const exportMissingPropertiesReport = () => {
                       return sum + (stats.dailyAverage || stats.commercialAverage || 0);
                     }, 0);
 
-                    // Global daily average per inspector (for reference)
+                    // Global daily average (all-time)
                     const totalInspected = inspectors.reduce((sum, [_, stats]) => sum + (stats.totalInspected || 0), 0);
                     const totalFieldDays = inspectors.reduce((sum, [_, stats]) => sum + (stats.fieldDays || 0), 0);
                     const globalDailyAverage = totalFieldDays > 0 ? Math.round(totalInspected / totalFieldDays) : 0;
 
+                    // Use recent daily average for projection if available (from state), otherwise fall back to all-time
+                    const projectionDailyAverage = recentDailyAverage > 0 ? recentDailyAverage : globalDailyAverage;
+
                     // Remaining properties
                     const remaining = (analytics.totalRecords || 0) - (analytics.validInspections || 0);
 
-                    // Days needed using combined rate (all inspectors working)
-                    const daysNeeded = combinedDailyRate > 0 ? Math.ceil(remaining / combinedDailyRate) : 0;
+                    // Days needed using recent pace (last 2 weeks average)
+                    const daysNeeded = projectionDailyAverage > 0 ? Math.ceil(remaining / projectionDailyAverage) : 0;
 
                     // Project completion date
                     const today = new Date();
@@ -3386,11 +3432,17 @@ const exportMissingPropertiesReport = () => {
                           Job Completion Forecast
                         </h4>
 
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
-                            <div className="text-sm text-gray-600 mb-1">Global Daily Average</div>
+                            <div className="text-sm text-gray-600 mb-1">Global Avg (All-Time)</div>
                             <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
-                            <div className="text-xs text-gray-500 mt-1">properties/day (all inspectors)</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day</div>
+                          </div>
+
+                          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                            <div className="text-sm text-gray-600 mb-1">Global Avg (Last 14 Days)</div>
+                            <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || globalDailyAverage}</div>
+                            <div className="text-xs text-gray-500 mt-1">active pace</div>
                           </div>
 
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
@@ -3420,7 +3472,7 @@ const exportMissingPropertiesReport = () => {
 
                         <div className="mt-4 bg-white rounded p-3 border border-blue-100">
                           <p className="text-xs text-gray-600">
-                            <span className="font-medium">Note:</span> Forecast assumes {globalDailyAverage} properties/day pace continues. Adjust for inspector PTO, holidays, and workday variations as needed.
+                            <span className="font-medium">Note:</span> Forecast uses the last 14 days' pace ({recentDailyAverage || globalDailyAverage} properties/day). Adjust for inspector PTO, holidays, crew changes, and workday variations as needed.
                           </p>
                         </div>
                       </div>
