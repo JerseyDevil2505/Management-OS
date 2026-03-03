@@ -3390,13 +3390,13 @@ const exportMissingPropertiesReport = () => {
                 {/* Job Completion Forecast */}
                 {analytics && (
                   (() => {
-                    // Per-inspector daily average (residential only)
+                    // Daily average per inspector (residential only)
                     const inspectors = Object.entries(analytics.inspectorStats || {});
                     const residentialInspectors = inspectors.filter(([_, stats]) =>
                       stats.inspector_type?.toLowerCase() === 'residential'
                     );
 
-                    // Total residential / total residential field days
+                    // Total residential inspections / total residential field days
                     const totalResidentialInspected = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialInspected || 0), 0);
                     const totalResidentialFieldDays = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialFieldDays || 0), 0);
                     const globalDailyAverage = totalResidentialFieldDays > 0 ? Math.round(totalResidentialInspected / totalResidentialFieldDays) : 0;
