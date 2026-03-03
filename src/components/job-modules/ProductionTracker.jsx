@@ -3475,7 +3475,7 @@ const exportMissingPropertiesReport = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
-                            <div className="text-sm text-gray-600 mb-1">Global Avg (All-Time)</div>
+                            <div className="text-sm text-gray-600 mb-1">Daily Average (All-Time)</div>
                             <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
                             <div className="text-xs text-gray-500 mt-1">properties/day</div>
                           </div>
