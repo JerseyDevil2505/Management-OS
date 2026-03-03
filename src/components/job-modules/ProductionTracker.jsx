@@ -3390,17 +3390,16 @@ const exportMissingPropertiesReport = () => {
                 {/* Job Completion Forecast */}
                 {analytics && (
                   (() => {
-                    // Calculate average daily average PER INSPECTOR (not combined)
+                    // Per-inspector daily average (residential only)
                     const inspectors = Object.entries(analytics.inspectorStats || {});
-
-                    // Average of individual daily averages
                     const residentialInspectors = inspectors.filter(([_, stats]) =>
                       stats.inspector_type?.toLowerCase() === 'residential'
                     );
 
-                    const globalDailyAverage = residentialInspectors.length > 0
-                      ? Math.round(residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.dailyAverage || 0), 0) / residentialInspectors.length)
-                      : 0;
+                    // Total residential / total residential field days
+                    const totalResidentialInspected = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialInspected || 0), 0);
+                    const totalResidentialFieldDays = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialFieldDays || 0), 0);
+                    const globalDailyAverage = totalResidentialFieldDays > 0 ? Math.round(totalResidentialInspected / totalResidentialFieldDays) : 0;
 
                     // Use recent daily average for projection if available (from state), otherwise fall back to all-time
                     const projectionDailyAverage = recentDailyAverage > 0 ? recentDailyAverage : globalDailyAverage;
@@ -3472,26 +3471,15 @@ const exportMissingPropertiesReport = () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                           <div className="bg-white rounded-lg p-4 border border-blue-100">
                             <div className="text-sm text-gray-600 mb-1">Daily Average (All-Time)</div>
                             <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
                             <div className="text-xs text-gray-500 mt-1">properties/day/Inspector</div>
                           </div>
 
-                          <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-                            <div className="text-sm text-gray-600 mb-1">Team Pace (All-Time)</div>
-                            <div className="text-3xl font-bold text-indigo-600">
-                              {residentialInspectors.length > 0
-                                ? Math.round(residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.dailyAverage || 0), 0))
-                                : '—'
-                              }
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">properties/day</div>
-                          </div>
-
                           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                            <div className="text-sm text-gray-600 mb-1">Team Pace (Last 14 Days)</div>
+                            <div className="text-sm text-gray-600 mb-1">Daily Average (Last 14 Days)</div>
                             <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || '—'}</div>
                             <div className="text-xs text-gray-500 mt-1">properties/day</div>
                           </div>
@@ -3519,8 +3507,8 @@ const exportMissingPropertiesReport = () => {
                             <span className="font-medium">Note:</span> {remaining === 0
                               ? 'Inspection phase complete. Project ready for next phase.'
                               : recentDailyAverage === 0
-                              ? 'No activity in last 14 days. Forecast uses historical average (' + globalDailyAverage + ' properties/day).'
-                              : 'Forecast based on last 14 days pace (' + recentDailyAverage + ' properties/day). Adjust for inspector PTO, holidays, crew changes as needed.'
+                              ? 'No activity in last 14 days. Using all-time daily average (' + globalDailyAverage + ' per inspector).'
+                              : 'Based on last 14 days pace (' + recentDailyAverage + ' properties/day team). Adjust for inspector PTO, holidays, crew changes as needed.'
                             }
                           </p>
                         </div>
