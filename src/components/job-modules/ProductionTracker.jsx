@@ -1227,10 +1227,16 @@ const ProductionTracker = ({
         let wasAddedToInspectionData = false;
         let reasonNotAdded = '';
 
-        // Always count ALL properties for denominators (manager progress view)
+        // Count properties for denominators
+        const cardValue = record.property_addl_card || '1';
+        const isPrimary = isPrimaryCard(cardValue, actualVendor);
+
         if (classBreakdown[propertyClass]) {
           classBreakdown[propertyClass].total++;
-          billingByClass[propertyClass].total++;
+          // For billing: only count primary cards (main cards) in total
+          if (isPrimary) {
+            billingByClass[propertyClass].total++;
+          }
         }
 
         // Check for existing validation override FIRST
@@ -1244,8 +1250,7 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = record.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            if (isPrimary) {
               billingByClass[propertyClass].billable++;
             }
           }
@@ -1612,8 +1617,7 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = record.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            if (isPrimary) {
               billingByClass[propertyClass].billable++;
             }
           }
@@ -1841,8 +1845,8 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = fullRecord.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            const isPrimaryOverride = isPrimaryCard(fullRecord.property_addl_card || '1', actualVendor);
+            if (isPrimaryOverride) {
               billingByClass[propertyClass].billable++;
             }
           }
