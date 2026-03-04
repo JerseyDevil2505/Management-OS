@@ -356,7 +356,7 @@ const OrganizationManagement = () => {
                   <td>
                     <div className="billing-status">
                       {org.is_free_account || org.subscription_status === 'free' ? (
-                        <span className="billing-paid" style={{ background: '#dcfce7', color: '#166534' }}>Free</span>
+                        <span className="billing-free">Free</span>
                       ) : org.payment_received_date ? (
                         <span className="billing-paid">Paid</span>
                       ) : org.po_received_date ? (
@@ -379,8 +379,7 @@ const OrganizationManagement = () => {
                       </button>
                       <button className="edit-btn" onClick={() => handleEditOrg(org)}>Edit</button>
                       <button
-                        className="edit-btn"
-                        style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#fca5a5' }}
+                        className="delete-btn"
                         onClick={() => setDeleteConfirm(org)}
                       >Del</button>
                     </div>
@@ -395,25 +394,25 @@ const OrganizationManagement = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="org-modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="org-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-            <h3 style={{ color: '#dc2626' }}>Delete Organization</h3>
-            <p style={{ margin: '1rem 0', color: '#334155', lineHeight: '1.6' }}>
+          <div className="org-modal delete-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="delete-modal-title">Delete Organization</h3>
+            <p className="delete-modal-warning">
               Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This will permanently remove:
             </p>
-            <ul style={{ margin: '0.5rem 0 1rem 1.25rem', color: '#64748b', fontSize: '0.9rem', lineHeight: '1.8' }}>
+            <ul className="delete-modal-list">
               <li>All jobs and property records</li>
               <li>All staff/employee records</li>
               <li>All checklist items, billing events, and analytics</li>
               <li>All inspection and valuation data</li>
             </ul>
-            <p style={{ margin: '0 0 1rem', color: '#dc2626', fontWeight: '600', fontSize: '0.85rem' }}>
+            <p className="delete-modal-danger">
               This action cannot be undone.
             </p>
             <div className="org-modal-actions">
               <button type="button" onClick={() => setDeleteConfirm(null)}>Cancel</button>
               <button
                 type="button"
-                style={{ background: '#dc2626', color: 'white', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                className="delete-permanent-btn"
                 onClick={() => handleDeleteOrg(deleteConfirm)}
               >
                 Delete Permanently
@@ -490,7 +489,7 @@ const OrganizationManagement = () => {
                     />
                     Single Job Mode (skip job list on login)
                   </label>
-                  <label style={{ marginTop: '8px', display: 'block' }}>
+                  <label className="checkbox-group-secondary-label">
                     <input
                       type="checkbox"
                       checked={newOrg.is_free_account}
@@ -510,9 +509,9 @@ const OrganizationManagement = () => {
                 </div>
               )}
               {newOrg.is_free_account && (
-                <div className="fee-preview" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                  <strong style={{ color: '#166534' }}>Free Account</strong>
-                  <div className="fee-breakdown" style={{ color: '#15803d' }}>
+                <div className="fee-preview fee-preview-free">
+                  <strong className="fee-preview-free-title">Free Account</strong>
+                  <div className="fee-breakdown fee-preview-free-breakdown">
                     No invoices will be generated for this organization
                   </div>
                 </div>
@@ -593,7 +592,7 @@ const OrganizationManagement = () => {
                     />
                     Single Job Mode
                   </label>
-                  <label style={{ marginTop: '8px', display: 'block' }}>
+                  <label className="checkbox-group-secondary-label">
                     <input
                       type="checkbox"
                       checked={editOrg.is_free_account}
@@ -613,9 +612,9 @@ const OrganizationManagement = () => {
                 </div>
               )}
               {editOrg.is_free_account && (
-                <div className="fee-preview" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                  <strong style={{ color: '#166534' }}>Free Account</strong>
-                  <div className="fee-breakdown" style={{ color: '#15803d' }}>
+                <div className="fee-preview fee-preview-free">
+                  <strong className="fee-preview-free-title">Free Account</strong>
+                  <div className="fee-breakdown fee-preview-free-breakdown">
                     No invoices will be generated for this organization
                   </div>
                 </div>

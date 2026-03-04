@@ -107,9 +107,15 @@ const ProductionTracker = ({
   const [processingComplete, setProcessingComplete] = useState(false); // NEW: Track when processing is done
   const [currentValidationIndex, setCurrentValidationIndex] = useState(0); // NEW: Track current validation item
 
+  // NEW: Recent daily average (last 14 days) for completion forecast
+  const [recentDailyAverage, setRecentDailyAverage] = useState(0);
+
   // NEW: Smart data staleness detection
-  const isDataStale = currentWorkflowStats?.needsRefresh && 
+  const isDataStale = currentWorkflowStats?.needsRefresh &&
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
+
+  // Check if analytics need reprocessing - uses database flag set by file uploads
+  const isAnalyticsStale = jobData?.needs_reprocessing === true;
 
   const addNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${notificationCounterRef.current++}`;
@@ -1221,10 +1227,16 @@ const ProductionTracker = ({
         let wasAddedToInspectionData = false;
         let reasonNotAdded = '';
 
-        // Always count ALL properties for denominators (manager progress view)
+        // Count properties for denominators
+        const cardValue = record.property_addl_card || '1';
+        const isPrimary = isPrimaryCard(cardValue, actualVendor);
+
         if (classBreakdown[propertyClass]) {
           classBreakdown[propertyClass].total++;
-          billingByClass[propertyClass].total++;
+          // For billing: only count primary cards (main cards) in total
+          if (isPrimary) {
+            billingByClass[propertyClass].total++;
+          }
         }
 
         // Check for existing validation override FIRST
@@ -1238,8 +1250,7 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = record.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            if (isPrimary) {
               billingByClass[propertyClass].billable++;
             }
           }
@@ -1606,8 +1617,7 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = record.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            if (isPrimary) {
               billingByClass[propertyClass].billable++;
             }
           }
@@ -1835,8 +1845,8 @@ const ProductionTracker = ({
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
             // Only count primary cards (1 for BRT, M for Microsystems) for billing
-            const cardValue = fullRecord.property_addl_card || '1';
-            if (isPrimaryCard(cardValue, actualVendor)) {
+            const isPrimaryOverride = isPrimaryCard(fullRecord.property_addl_card || '1', actualVendor);
+            if (isPrimaryOverride) {
               billingByClass[propertyClass].billable++;
             }
           }
@@ -2042,18 +2052,18 @@ const ProductionTracker = ({
         classBreakdown,
         validationIssues: validationIssues.length,
         processingDate: new Date().toISOString(),
-        
+
         // FIX: Use classBreakdown totals for global rates
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
         jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
-        
+
         // Commercial metrics using class breakdown for accuracy
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
         pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
-        
+
         // Track overrides applied during processing
         overridesAppliedCount: decisionsToApply.length
       };
@@ -2069,19 +2079,19 @@ const ProductionTracker = ({
         },
         progressData: {
           commercial: {
-            total: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.total || 0), 0),
+            total: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
             billable: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           },
           exempt: {
-            total: ['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingByClass[cls]?.total || 0), 0),
+            total: ['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
             billable: ['15A', '15B', '15C', '15D', '15E', '15F'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           },
           railroad: {
-            total: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.total || 0), 0),
+            total: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
             billable: ['5A', '5B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           },
           personalProperty: {
-            total: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.total || 0), 0),
+            total: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0),
             billable: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           }
         },
@@ -2309,7 +2319,8 @@ const ProductionTracker = ({
           validationOverrides: freshOverrides,
           overrideMap: freshOverrideMap,
           totalValidationOverrides: freshOverrides.length,
-          lastProcessed: new Date().toISOString()
+          lastProcessed: new Date().toISOString(),
+          needsReprocessing: false  // Clear the reprocessing flag after successful completion
         });
         debugLog('APP_INTEGRATION', '✅ Data sent to App.js central hub with fresh override data');
       }
@@ -3219,11 +3230,13 @@ const exportMissingPropertiesReport = () => {
           <button
             onClick={startProcessingSession}
             disabled={processing || (!isDateLocked) || hasUnsavedChanges ||
-              (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length + 
-               ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length + 
+              (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length +
+               ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length +
                ((infoByCategoryConfig || {}).special || []).length) === 0}
             className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              (processed && !isDataStale)
+              isAnalyticsStale
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : (processed && !isDataStale)
                 ? 'bg-green-600 text-white hover:bg-green-700'
                 : processing
                 ? 'bg-yellow-600 text-white'
@@ -3232,13 +3245,15 @@ const exportMissingPropertiesReport = () => {
           >
             {processing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : isAnalyticsStale ? (
+              <AlertTriangle className="w-4 h-4" />
             ) : (processed && !isDataStale) ? (
               <CheckCircle className="w-4 h-4" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
             <span>
-              {processing ? 'Processing...' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
+              {processing ? 'Processing...' : isAnalyticsStale ? 'Rerun Needed' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
             </span>
           </button>
         </div>
@@ -3318,11 +3333,11 @@ const exportMissingPropertiesReport = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Inspector Performance Analytics</h3>
-                  
+
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                       <label className="text-sm font-medium text-gray-700">Sort:</label>
-                      <select 
+                      <select
                         value={inspectorSort}
                         onChange={(e) => setInspectorSort(e.target.value)}
                         className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
@@ -3335,7 +3350,178 @@ const exportMissingPropertiesReport = () => {
                     </div>
                   </div>
                 </div>
-                
+
+                {/* Fetch recent daily average on analytics change */}
+                {analytics && jobData?.id && latestFileVersion && (
+                  (() => {
+                    const calculateRecentPace = async () => {
+                      try {
+                        const today = new Date();
+                        const twoWeeksAgo = new Date(today);
+                        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+                        const { data: recentData, error } = await supabase
+                          .from('inspection_data')
+                          .select('measure_date')
+                          .eq('job_id', jobData.id)
+                          .eq('file_version', latestFileVersion)
+                          .in('property_class', ['2', '3A'])
+                          .gte('measure_date', twoWeeksAgo.toISOString().split('T')[0])
+                          .lte('measure_date', today.toISOString().split('T')[0]);
+
+                        if (error) {
+                          console.warn('Could not fetch recent inspection data:', error);
+                          return;
+                        }
+
+                        if (recentData && recentData.length > 0) {
+                          // Count unique working days in last 14 days (residential only)
+                          const uniqueDays = new Set(recentData.map(r => r.measure_date));
+                          const recentWorkingDays = uniqueDays.size;
+                          const recentPropertiesInspected = recentData.length;
+
+                          const pace = recentWorkingDays > 0 ? Math.round(recentPropertiesInspected / recentWorkingDays) : 0;
+                          setRecentDailyAverage(pace);
+                        }
+                      } catch (error) {
+                        console.error('Error calculating recent pace:', error);
+                      }
+                    };
+
+                    calculateRecentPace();
+                  })()
+                )}
+
+                {/* Job Completion Forecast */}
+                {analytics && (
+                  (() => {
+                    // Daily average per inspector (residential only)
+                    const inspectors = Object.entries(analytics.inspectorStats || {});
+                    const residentialInspectors = inspectors.filter(([_, stats]) =>
+                      stats.inspector_type?.toLowerCase() === 'residential'
+                    );
+
+                    // Total residential inspections / total residential field days
+                    const totalResidentialInspected = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialInspected || 0), 0);
+                    const totalResidentialFieldDays = residentialInspectors.reduce((sum, [_, stats]) => sum + (stats.residentialFieldDays || 0), 0);
+                    const globalDailyAverage = totalResidentialFieldDays > 0 ? Math.round(totalResidentialInspected / totalResidentialFieldDays) : 0;
+
+                    // Use recent daily average for projection if available (from state), otherwise fall back to all-time
+                    const projectionDailyAverage = recentDailyAverage > 0 ? recentDailyAverage : globalDailyAverage;
+
+                    // Remaining properties
+                    const remaining = (analytics.totalRecords || 0) - (analytics.validInspections || 0);
+
+                    // Days needed using recent pace (last 2 weeks average)
+                    const daysNeeded = projectionDailyAverage > 0 ? Math.ceil(remaining / projectionDailyAverage) : 0;
+
+                    // Project completion date
+                    const today = new Date();
+                    const completionDate = new Date(today);
+                    completionDate.setDate(completionDate.getDate() + daysNeeded);
+
+                    // Weeks remaining (for display)
+                    const weeksRemaining = (daysNeeded / 7).toFixed(1);
+
+                    // Percentage complete
+                    const percentComplete = (analytics.totalRecords || 0) > 0
+                      ? Math.round(((analytics.validInspections || 0) / (analytics.totalRecords || 0)) * 100)
+                      : 0;
+
+                    // Determine status message based on remaining and recent activity
+                    let statusMessage = '';
+                    let statusBgColor = 'bg-white';
+                    let statusBorderColor = 'border-blue-100';
+                    let statusTextColor = 'text-gray-900';
+                    let completionDisplay = '';
+
+                    if (remaining === 0) {
+                      // Inspection phase complete
+                      statusMessage = '✓ Inspection Phase Complete';
+                      statusBgColor = 'bg-green-50';
+                      statusBorderColor = 'border-green-200';
+                      statusTextColor = 'text-green-700';
+                      completionDisplay = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else if (remaining > 0 && recentDailyAverage === 0) {
+                      // No recent activity
+                      statusMessage = '⏸ No Recent Activity (Last 14 Days)';
+                      statusBgColor = 'bg-orange-50';
+                      statusBorderColor = 'border-orange-200';
+                      statusTextColor = 'text-orange-700';
+                      completionDisplay = 'Using historical average';
+                    } else {
+                      // Normal activity
+                      statusMessage = '→ Active Inspection Phase';
+                      statusBgColor = 'bg-blue-50';
+                      statusBorderColor = 'border-blue-200';
+                      statusTextColor = 'text-blue-700';
+                      completionDisplay = completionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' (' + completionDate.toLocaleDateString('en-US', { weekday: 'short' }) + ')';
+                    }
+
+                    return (
+                      <div className={`border-2 rounded-lg p-6 mb-6 ${
+                        remaining === 0
+                          ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+                          : recentDailyAverage === 0
+                          ? 'bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200'
+                          : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className={`text-lg font-bold ${statusTextColor} flex items-center`}>
+                            <Calendar className="w-5 h-5 mr-2" />
+                            Job Completion Forecast
+                          </h4>
+                          <div className={`text-sm font-semibold px-3 py-1 rounded ${statusBgColor} ${statusBorderColor} border ${statusTextColor}`}>
+                            {statusMessage}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Daily Average (All-Time)</div>
+                            <div className="text-3xl font-bold text-blue-600">{globalDailyAverage}</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day/Inspector</div>
+                          </div>
+
+                          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                            <div className="text-sm text-gray-600 mb-1">Daily Average (Last 14 Days)</div>
+                            <div className="text-3xl font-bold text-yellow-600">{recentDailyAverage || '—'}</div>
+                            <div className="text-xs text-gray-500 mt-1">properties/day</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Remaining</div>
+                            <div className="text-3xl font-bold text-orange-600">{remaining.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500 mt-1">of {(analytics.totalRecords || 0).toLocaleString()}</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">{remaining === 0 ? 'Completed' : 'Days to Complete'}</div>
+                            <div className="text-3xl font-bold text-indigo-600">{remaining === 0 ? '✓' : daysNeeded}</div>
+                            <div className="text-xs text-gray-500 mt-1">{remaining === 0 ? today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : weeksRemaining + ' weeks'}</div>
+                          </div>
+
+                          <div className="bg-white rounded-lg p-4 border border-blue-100">
+                            <div className="text-sm text-gray-600 mb-1">Projected Completion</div>
+                            <div className="text-2xl font-bold text-green-600">{completionDisplay}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 bg-white rounded p-3 border border-blue-100">
+                          <p className="text-xs text-gray-600">
+                            <span className="font-medium">Note:</span> {remaining === 0
+                              ? 'Inspection phase complete. Project ready for next phase.'
+                              : recentDailyAverage === 0
+                              ? 'No activity in last 14 days. Using all-time daily average (' + globalDailyAverage + ' per inspector).'
+                              : 'Based on last 14 days pace (' + recentDailyAverage + ' properties/day team). Adjust for inspector PTO, holidays, crew changes as needed.'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
                 {Object.keys(analytics.inspectorStats || {}).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />

@@ -489,6 +489,7 @@ const App = () => {
             job_responsibilities(count),
             job_contracts(
               contract_amount,
+              contract_template_type,
               retainer_percentage,
               retainer_amount,
               end_of_job_percentage,
@@ -496,7 +497,9 @@ const App = () => {
               first_year_appeals_percentage,
               first_year_appeals_amount,
               second_year_appeals_percentage,
-              second_year_appeals_amount
+              second_year_appeals_amount,
+              third_year_appeals_percentage,
+              third_year_appeals_amount
             ),
             billing_events(
               id,
@@ -823,9 +826,23 @@ const App = () => {
     console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
   }, []);
 
-  const handleWorkflowStatsUpdate = useCallback(() => {
-    console.log('📊 Workflow stats updated - jobs list will refresh when user returns to jobs');
-  }, []);
+  const handleWorkflowStatsUpdate = useCallback((stats, persistToDatabase) => {
+    console.log('📊 Workflow stats updated:', stats);
+
+    if (persistToDatabase && stats?.needsReprocessing !== undefined && selectedJob?.id) {
+      // Persist needs_reprocessing flag to database
+      supabase
+        .from('jobs')
+        .update({ needs_reprocessing: stats.needsReprocessing })
+        .eq('id', selectedJob.id)
+        .then(() => {
+          console.log(`✅ Updated needs_reprocessing to ${stats.needsReprocessing} for job ${selectedJob.id}`);
+        })
+        .catch((error) => {
+          console.error('❌ Failed to update needs_reprocessing flag:', error);
+        });
+    }
+  }, [selectedJob?.id]);
 
   const handleJobDataRefresh = useCallback(async (jobId, opts = {}) => {
     const { forceRefresh } = opts;

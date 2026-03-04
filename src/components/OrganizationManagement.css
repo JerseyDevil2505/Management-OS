@@ -190,6 +190,15 @@
   font-size: 0.875rem;
 }
 
+.billing-free {
+  background: #dcfce7;
+  color: #166534;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  display: inline-block;
+}
+
 .billing-paid {
   color: #059669;
   font-weight: 600;
@@ -469,6 +478,89 @@
 .fee-detail {
   color: #92400e;
   margin-left: 0.5rem;
+}
+
+/* Delete Button */
+.delete-btn {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background: #fecaca;
+}
+
+/* Delete Confirmation Modal */
+.delete-modal {
+  max-width: 420px;
+}
+
+.delete-modal-title {
+  color: #dc2626;
+}
+
+.delete-modal-warning {
+  margin: 1rem 0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.delete-modal-list {
+  margin: 0.5rem 0 1rem 1.25rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.8;
+}
+
+.delete-modal-danger {
+  margin: 0 0 1rem;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* Delete Permanently Button */
+.delete-permanent-btn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-permanent-btn:hover {
+  background: #b91c1c;
+}
+
+/* Checkbox Label Spacing */
+.checkbox-group-secondary-label {
+  margin-top: 8px;
+  display: block;
+}
+
+/* Free Account Fee Preview */
+.fee-preview-free {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.fee-preview-free-title {
+  color: #166534;
+}
+
+.fee-preview-free-breakdown {
+  color: #15803d;
 }
 
 /* Responsive */

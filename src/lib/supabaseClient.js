@@ -3373,7 +3373,8 @@ export const planningJobService = {
         ccdd: pj.ccdd_code, // Alternative accessor
         municipality: pj.municipality,
         end_date: pj.end_date,  // Use end_date instead
-        comments: pj.comments
+        comments: pj.comments,
+        organization_id: pj.organization_id
       }));
     } catch (error) {
       console.error('Planning jobs error:', error);
@@ -3388,15 +3389,16 @@ export const planningJobService = {
         municipality: planningJobData.municipality,
         end_date: planningJobData.end_date,
         comments: planningJobData.comments,
-        created_by: planningJobData.created_by
+        created_by: planningJobData.created_by,
+        organization_id: planningJobData.organization_id
       };
-      
+
       const { data, error } = await supabase
         .from('planning_jobs')
         .insert([dbFields])
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     } catch (error) {

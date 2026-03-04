@@ -2,6 +2,49 @@ import React, { useMemo } from 'react';
 import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
+  // Extract refusal codes from parsed code definitions
+  const getRefusalCodesFromCodeFile = () => {
+    const vendor = jobData?.vendor_type || 'BRT';
+    const refusalCodes = [];
+
+    // First try to get from infoby_category_config (ProductionTracker)
+    if (jobData?.infoby_category_config?.refusal) {
+      return jobData.infoby_category_config.refusal;
+    }
+
+    // Otherwise extract from parsed_code_definitions (code file)
+    const codeDefs = jobData?.parsed_code_definitions;
+    if (!codeDefs) return refusalCodes;
+
+    if (vendor === 'BRT') {
+      // BRT: Look in Residential section for "REFUSED" descriptions
+      const residentialSection = codeDefs.sections?.['Residential'] || {};
+      Object.values(residentialSection).forEach(item => {
+        if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+          const code = item.KEY || item.DATA.KEY;
+          if (code) refusalCodes.push(code);
+        }
+      });
+    } else if (vendor === 'Microsystems') {
+      // Microsystems: Look for "REFUSED" in any section
+      const sections = codeDefs.sections || {};
+      Object.values(sections).forEach(section => {
+        if (typeof section === 'object') {
+          Object.values(section).forEach(item => {
+            if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+              const code = item.KEY || item.DATA.KEY;
+              if (code) refusalCodes.push(code);
+            }
+          });
+        }
+      });
+    }
+
+    return refusalCodes;
+  };
+
+  const refusalCodes = getRefusalCodesFromCodeFile();
+  const vendor = jobData?.vendor_type || 'BRT';
 
   const metrics = useMemo(() => {
     if (!properties || properties.length === 0) {
@@ -15,6 +58,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         improvedNotInspected: 0,
         improvedEntryRate: 0,
         byClass: {},
+        byVCS: {},
         missingInspections: [],
         inspectorBreakdown: {}
       };
@@ -26,6 +70,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedInspected = 0;
     let improvedNotInspected = 0;
     const byClass = {};
+    const byVCS = {};
     const missingInspections = [];
     const inspectorBreakdown = {};
 
@@ -36,10 +81,41 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       }
       byClass[propertyClass].total++;
 
+      // Determine VCS category
+      const vcsCode = prop.new_vcs || prop.vcs_code || '';
+      let vcsCategory = 'residential';
+      if (vcsCode === '00' || vcsCode.toUpperCase() === 'VACANT') {
+        vcsCategory = 'vacant';
+      } else if (vcsCode.toUpperCase() === 'COMM' || propertyClass?.toUpperCase().includes('COMM')) {
+        vcsCategory = 'commercial';
+      }
+
+      // Only include residential for VCS breakdown
+      const isResidential = vcsCategory === 'residential';
+      if (isResidential) {
+        const vcsLabel = vcsCode || 'Unknown';
+        if (!byVCS[vcsLabel]) {
+          byVCS[vcsLabel] = { total: 0, inspected: 0, refusals: 0 };
+        }
+        byVCS[vcsLabel].total++;
+      }
+
       // Entry = has list_by + list_date (BRT: LISTBY/LISTDT, Microsystems: Insp By/Insp Date)
       const hasListBy = prop.inspection_list_by && prop.inspection_list_by.trim();
       const hasListDate = prop.inspection_list_date;
       const hasEntry = hasListBy && hasListDate;
+
+      // Refusal check - use vendor-specific code field
+      let hasRefusal = false;
+      if (vendor === 'Microsystems') {
+        // Microsystems: check info_by_code
+        const infoByCode = prop.info_by_code;
+        hasRefusal = infoByCode && refusalCodes.includes(infoByCode);
+      } else {
+        // BRT (default): check inspection_info_by field
+        const infoByCode = prop.inspection_info_by;
+        hasRefusal = infoByCode && refusalCodes.includes(infoByCode);
+      }
 
       // Improved property = has improvement value > 0
       const improvementValue = parseFloat(prop.values_cama_improvement || prop.values_mod_improvement || 0);
@@ -53,6 +129,11 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
+
+        if (isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].inspected++;
+        }
 
         if (isImproved) {
           improvedInspected++;
@@ -70,6 +151,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         if (isImproved) {
           improvedNotInspected++;
         }
+
+        // Track refusals in VCS breakdown
+        if (hasRefusal && isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].refusals++;
+        }
+
         // Track missing - limit to first 500 for display
         if (missingInspections.length < 500) {
           missingInspections.push({
@@ -79,7 +167,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
             location: prop.property_location || '',
             class: propertyClass,
             owner: prop.owner_name || '',
-            isImproved
+            isImproved,
+            isRefusal: hasRefusal
           });
         }
       }
@@ -103,13 +192,22 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       improvedNotInspected,
       improvedEntryRate: parseFloat(improvedEntryRate),
       byClass,
+      byVCS,
       missingInspections,
       inspectorBreakdown
     };
-  }, [properties]);
+  }, [properties, refusalCodes, vendor]);
 
   const sortedClasses = Object.entries(metrics.byClass)
     .sort(([a], [b]) => a.localeCompare(b));
+
+  const sortedVCS = Object.entries(metrics.byVCS)
+    .sort(([a], [b]) => {
+      // Sort with 'Unknown' last
+      if (a === 'Unknown') return 1;
+      if (b === 'Unknown') return -1;
+      return a.localeCompare(b);
+    });
 
   const sortedInspectors = Object.entries(metrics.inspectorBreakdown)
     .sort(([, a], [, b]) => b - a);
@@ -182,7 +280,51 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* By VCS - Residential Only */}
+        <div className="bg-white rounded-lg border p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
+            Residential Inspections by VCS
+          </h3>
+          {sortedVCS.length === 0 ? (
+            <p className="text-gray-400 text-sm">No residential properties found.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 text-gray-500">VCS Code</th>
+                  <th className="text-right py-2 text-gray-500">Total</th>
+                  <th className="text-right py-2 text-gray-500">Entry</th>
+                  <th className="text-right py-2 text-gray-500">Rate</th>
+                  <th className="text-right py-2 text-gray-500">Refusal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedVCS.map(([vcsCode, data]) => {
+                  const entryRate = data.total > 0 ? (data.inspected / data.total) * 100 : 0;
+                  return (
+                    <tr key={vcsCode} className="border-b border-gray-100">
+                      <td className="py-2 font-medium">{vcsCode}</td>
+                      <td className="text-right py-2">{data.total.toLocaleString()}</td>
+                      <td className="text-right py-2">{data.inspected.toLocaleString()}</td>
+                      <td className="text-right py-2">
+                        <span className={`font-medium ${
+                          entryRate >= 90 ? 'text-green-600'
+                          : entryRate >= 50 ? 'text-amber-600'
+                          : 'text-red-600'
+                        }`}>
+                          {entryRate.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="text-right py-2 text-red-600">{data.refusals.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
         {/* By Class */}
         <div className="bg-white rounded-lg border p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
@@ -298,6 +440,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                   <th className="text-left py-2 text-gray-500">Location</th>
                   <th className="text-left py-2 text-gray-500">Owner</th>
                   <th className="text-center py-2 text-gray-500">Impr</th>
+                  <th className="text-center py-2 text-gray-500">Ref</th>
                 </tr>
               </thead>
               <tbody>
@@ -312,6 +455,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
                     <td className="py-1.5 text-center">
                       {prop.isImproved ? (
                         <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" title="Improved"></span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-center">
+                      {prop.isRefusal ? (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700" title="Refusal">R</span>
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
