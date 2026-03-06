@@ -1360,6 +1360,8 @@ useEffect(() => {
           asset_map_page: prop.asset_map_page || '',
           asset_key_page: prop.asset_key_page || '',
           worksheet_notes: prop.worksheet_notes || '',
+          asset_year_built: prop.asset_year_built || '',
+          asset_sfla: prop.asset_sfla || '',
           // Add raw fields for decoding
           asset_building_class: prop.asset_building_class,
           asset_type_use: prop.asset_type_use,
