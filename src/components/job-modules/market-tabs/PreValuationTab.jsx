@@ -2988,6 +2988,8 @@ const processSelectedProperties = async () => {
       'Building',
       'Type/Use',
       'Design',
+      'Year Built',
+      'SFLA',
       'New VCS',
       'Location Analysis',
       'Zoning',
@@ -3008,6 +3010,8 @@ const processSelectedProperties = async () => {
       prop.building_class_display || '',
       prop.type_use_display || '',
       prop.design_display || '',
+      prop.asset_year_built || '',
+      prop.asset_sfla || '',
       prop.new_vcs || '',
       prop.location_analysis || '',
       prop.asset_zoning || '',
@@ -3067,6 +3071,8 @@ const processSelectedProperties = async () => {
       { wch: 15 },  // Building
       { wch: 15 },  // Type/Use
       { wch: 15 },  // Design
+      { wch: 12 },  // Year Built
+      { wch: 10 },  // SFLA
       { wch: 12 },  // New VCS
       { wch: 25 },  // Location Analysis
       { wch: 10 },  // Zoning
