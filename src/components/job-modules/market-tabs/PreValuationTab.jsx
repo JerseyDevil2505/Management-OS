@@ -1360,6 +1360,8 @@ useEffect(() => {
           asset_map_page: prop.asset_map_page || '',
           asset_key_page: prop.asset_key_page || '',
           worksheet_notes: prop.worksheet_notes || '',
+          asset_year_built: prop.asset_year_built || '',
+          asset_sfla: prop.asset_sfla || '',
           // Add raw fields for decoding
           asset_building_class: prop.asset_building_class,
           asset_type_use: prop.asset_type_use,
@@ -2988,6 +2990,8 @@ const processSelectedProperties = async () => {
       'Building',
       'Type/Use',
       'Design',
+      'Year Built',
+      'SFLA',
       'New VCS',
       'Location Analysis',
       'Zoning',
@@ -3008,6 +3012,8 @@ const processSelectedProperties = async () => {
       prop.building_class_display || '',
       prop.type_use_display || '',
       prop.design_display || '',
+      prop.asset_year_built || '',
+      prop.asset_sfla || '',
       prop.new_vcs || '',
       prop.location_analysis || '',
       prop.asset_zoning || '',
@@ -3067,6 +3073,8 @@ const processSelectedProperties = async () => {
       { wch: 15 },  // Building
       { wch: 15 },  // Type/Use
       { wch: 15 },  // Design
+      { wch: 12 },  // Year Built
+      { wch: 10 },  // SFLA
       { wch: 12 },  // New VCS
       { wch: 25 },  // Location Analysis
       { wch: 10 },  // Zoning
