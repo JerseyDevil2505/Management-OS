@@ -43,8 +43,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // SUM: SFLA, bathrooms, bedrooms, fireplaces, basement_area, fin_basement_area,
     // garage_area, det_garage_area, deck_area, patio_area, pool_area, open_porch_area, enclosed_porch_area
+    // Includes lot acre for farm properties with multiple cards like 3A + 3B
     const sumFields = [
-      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'asset_sfla', 'asset_lot_acre', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
       'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
       'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
       'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'

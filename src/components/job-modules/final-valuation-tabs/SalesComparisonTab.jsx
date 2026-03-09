@@ -1051,9 +1051,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
     const aggregated = { ...prop };
 
-    // SUM fields
+    // SUM fields (includes lot acre for farm properties with multiple cards like 3A + 3B)
     const sumFields = [
-      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'asset_sfla', 'asset_lot_acre', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
       'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
       'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
       'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'
@@ -4141,6 +4141,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             <td
                               className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
                               onClick={() => {
+                                // Pre-populate subject and comps for detailed view
+                                setManualSubject({
+                                  block: result.subject.property_block || '',
+                                  lot: result.subject.property_lot || '',
+                                  qualifier: result.subject.property_qualifier || ''
+                                });
+                                // Pre-populate comps (up to 5)
+                                const newComps = [
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' }
+                                ];
+                                result.comparables.forEach((comp, idx) => {
+                                  if (idx < 5) {
+                                    newComps[idx] = {
+                                      block: comp.property_block || '',
+                                      lot: comp.property_lot || '',
+                                      qualifier: comp.property_qualifier || ''
+                                    };
+                                  }
+                                });
+                                setManualComps(newComps);
                                 setManualEvaluationResult(result);
                                 setActiveSubTab('detailed');
                               }}
