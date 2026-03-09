@@ -78,6 +78,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Store additional cards count
     aggregated._additionalCardsCount = allCards.length - 1;
 
+    // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
+    // This keeps the editable value in sync with the display render function
+    if (aggregated._pkg?.is_farm_package && aggregated._pkg?.combined_lot_acres > 0) {
+      aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
+    }
+
     return aggregated;
   }, [getPropertyCards]);
 
