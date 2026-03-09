@@ -39,7 +39,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [compFilters, setCompFilters] = useState({
     adjustmentBracket: '', // '' (unselected), 'auto', or 'bracket_0', 'bracket_1', etc.
     autoAdjustment: false, // Auto checkbox - default OFF
-    salesCodes: ['00', '0', '07', '7', '32', '36'], // CSP default codes (includes both padded BRT and unpadded Microsystems formats)
+    salesCodes: ['00', '0', '07', '7', '32', '33', '3', '36'], // CSP default codes (includes both padded BRT and unpadded Microsystems formats, plus farm sales code 33)
     salesDateStart: cspDateRange.start,
     salesDateEnd: cspDateRange.end,
     vcs: [],
