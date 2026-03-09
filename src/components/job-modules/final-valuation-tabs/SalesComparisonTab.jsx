@@ -92,6 +92,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [bracketMappings, setBracketMappings] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
   const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
+  const [savedPoolOverrideSets, setSavedPoolOverrideSets] = useState([]); // Saved pool override sets from DB
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -281,6 +282,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadSavedEvaluations();
       loadSavedResultSets();
       loadBracketMappings();
+      loadSavedPoolOverrideSets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -432,6 +434,90 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       setBracketMappings(data || []);
     } catch (error) {
       console.warn('Bracket mappings loading error:', error.message);
+    }
+  };
+
+  // ==================== SALES POOL OVERRIDE SETS ====================
+  const loadSavedPoolOverrideSets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_sales_pool_overrides')
+        .select('id, name, overrides, created_at')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSavedPoolOverrideSets(data || []);
+    } catch (error) {
+      console.warn('⚠️ Error loading saved pool override sets:', error.message);
+    }
+  };
+
+  // Save current pool overrides with a user-provided name
+  const handleSavePoolOverrideSet = async () => {
+    if (Object.keys(salesPoolOverrides).length === 0) {
+      alert('No overrides to save. Mark some sales as included/excluded first.');
+      return;
+    }
+
+    const name = window.prompt('Enter a name for this pool override set:');
+    if (!name || !name.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_sales_pool_overrides')
+        .insert({
+          job_id: jobData.id,
+          name: name.trim(),
+          overrides: salesPoolOverrides
+        });
+
+      if (error) throw error;
+
+      alert(`Pool override set "${name.trim()}" saved successfully!`);
+      await loadSavedPoolOverrideSets();
+    } catch (error) {
+      console.error('Error saving pool override set:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
+  };
+
+  // Load a saved pool override set
+  const handleLoadPoolOverrideSet = async (setId) => {
+    if (!setId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('job_sales_pool_overrides')
+        .select('overrides')
+        .eq('id', setId)
+        .single();
+
+      if (error) throw error;
+
+      setSalesPoolOverrides(data.overrides || {});
+      console.log('✅ Loaded pool override set');
+    } catch (error) {
+      console.error('Error loading pool override set:', error);
+      alert(`Failed to load: ${error.message}`);
+    }
+  };
+
+  // Delete a saved pool override set
+  const handleDeletePoolOverrideSet = async (setId, setName) => {
+    if (!window.confirm(`Delete saved pool override set "${setName}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_sales_pool_overrides')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+      await loadSavedPoolOverrideSets();
+    } catch (error) {
+      console.error('Error deleting pool override set:', error);
+      alert(`Failed to delete: ${error.message}`);
     }
   };
 
@@ -2638,14 +2724,60 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {activeSubTab === 'sales-pool' && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Sales Pool
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  {includedSalesCount} of {(compFilters.salesDateStart || compFilters.salesDateEnd)
-                    ? salesPoolEntries.filter(p => p._inDateRange).length
-                    : allSalesCandidates.length} sales included
-                </span>
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Sales Pool
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    {includedSalesCount} of {(compFilters.salesDateStart || compFilters.salesDateEnd)
+                      ? salesPoolEntries.filter(p => p._inDateRange).length
+                      : allSalesCandidates.length} sales included
+                  </span>
+                </h3>
+
+                {/* Override Set Controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSavePoolOverrideSet}
+                    className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded hover:bg-blue-600"
+                    title="Save current pool overrides (includes/excludes) to a named set"
+                  >
+                    Save Overrides
+                  </button>
+
+                  {savedPoolOverrideSets.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleLoadPoolOverrideSet(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="px-2 py-1.5 text-sm border border-gray-300 rounded bg-white hover:bg-gray-50"
+                      defaultValue=""
+                    >
+                      <option value="">Load saved overrides...</option>
+                      {savedPoolOverrideSets.map(set => (
+                        <option key={set.id} value={set.id}>{set.name}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {savedPoolOverrideSets.length > 0 && (
+                    <div className="border-l border-gray-300 pl-2">
+                      {savedPoolOverrideSets.map(set => (
+                        <button
+                          key={set.id}
+                          onClick={() => handleDeletePoolOverrideSet(set.id, set.name)}
+                          className="ml-1 px-2 py-1 text-xs text-red-600 bg-red-50 border border-red-300 rounded hover:bg-red-100"
+                          title={`Delete override set: ${set.name}`}
+                        >
+                          ✕ {set.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Analytics Sections */}
               <div className="mb-4 space-y-1">
