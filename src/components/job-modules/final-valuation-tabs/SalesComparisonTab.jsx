@@ -1437,7 +1437,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               logExclusion('year built max', `comp=${comp.asset_year_built} > max=${compFilters.builtYearMax}`);
               return false;
             }
-          } else {
+          } else if (compFilters.builtWithinYears > 0) {
+            // Only apply tolerance filter if it's set to > 0
+            // When cleared (0), no year built restriction applies
             // Normalize pre-1925 year built to 1925 for comparison purposes only.
             // Historic homes (1790, 1850, 1910, etc.) are all treated as 1925 so they can match each other.
             const YEAR_FLOOR = 1925;
@@ -1463,7 +1465,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               logExclusion('SFLA max', `comp=${comp.asset_sfla} > max=${compFilters.sizeMax}`);
               return false;
             }
-          } else {
+          } else if (compFilters.sizeWithinSqft > 0) {
+            // Only apply tolerance filter if it's set to > 0
+            // When cleared (0), no size restriction applies
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
             if (sizeDiff > compFilters.sizeWithinSqft) {
               if (isFirstProperty) debugFilters.size++;
