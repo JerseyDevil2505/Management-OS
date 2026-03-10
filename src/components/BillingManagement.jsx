@@ -423,6 +423,7 @@ const calculateDistributionMetrics = async () => {
       }
       
       // Always fetch fresh data directly from database
+      // ONLY fetch standard jobs (not legacy_billing) for bonding report
       const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
         .select(`
