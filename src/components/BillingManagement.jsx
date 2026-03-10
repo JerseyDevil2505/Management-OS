@@ -520,7 +520,10 @@ const calculateDistributionMetrics = async () => {
             };
 
             if (isFullyBilled) {
-              completedJobs.push(jobEntry);
+              // Only add completed jobs if they have a retainer held (bonding obligation)
+              if (retainerHeld > 0) {
+                completedJobs.push(jobEntry);
+              }
             } else {
               activeBondJobs.push(jobEntry);
             }
