@@ -206,7 +206,8 @@ Thank you for your immediate attention to this matter.`;
     endOfJobPercentage: 0.05,
     firstYearAppealsPercentage: 0.03,
     secondYearAppealsPercentage: 0.02,
-    thirdYearAppealsPercentage: 0.00
+    thirdYearAppealsPercentage: 0.00,
+    bondingRequired: true
   });
   const [billingForm, setBillingForm] = useState({
     billingDate: new Date().toISOString().split('T')[0],
@@ -234,7 +235,8 @@ Thank you for your immediate attention to this matter.`;
     endOfJobPercentage: 0.05,
     firstYearAppealsPercentage: 0.03,
     secondYearAppealsPercentage: 0.02,
-    thirdYearAppealsPercentage: 0.00
+    thirdYearAppealsPercentage: 0.00,
+    bondingRequired: true
   });
   const [globalMetrics, setGlobalMetrics] = useState({
     totalSigned: 0,
@@ -421,6 +423,7 @@ const calculateDistributionMetrics = async () => {
       }
       
       // Always fetch fresh data directly from database
+      // ONLY fetch standard jobs (not legacy_billing) for bonding report
       const { data: activeJobsData, error: activeError } = await supabase
         .from('jobs')
         .select(`
@@ -433,7 +436,7 @@ const calculateDistributionMetrics = async () => {
           totalresidential,
           totalcommercial,
           workflow_stats,
-          job_contracts(contract_amount, retainer_percentage)
+          job_contracts(contract_amount, retainer_percentage, bonding_required)
         `)
         .eq('job_type', 'standard');
 
@@ -446,6 +449,7 @@ const calculateDistributionMetrics = async () => {
         .from('planning_jobs')
         .select('*')
         .gt('contract_amount', 0);
+        // Filter will be applied client-side for bonding_required
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
@@ -458,10 +462,15 @@ const calculateDistributionMetrics = async () => {
       const activeBondJobs = [];
       const completedJobs = [];
 
-      // Process active jobs
+      // Process active jobs - FILTER for bonding_required = true
       if (activeJobsData && activeJobsData.length > 0) {
         activeJobsData.forEach(job => {
           const contract = job.job_contracts?.[0];
+
+          // Skip jobs where bonding is not required
+          if (contract && contract.bonding_required === false) {
+            return;
+          }
 
           // Get parcels from workflow_stats or job properties
           let parcels = 0;
@@ -511,7 +520,10 @@ const calculateDistributionMetrics = async () => {
             };
 
             if (isFullyBilled) {
-              completedJobs.push(jobEntry);
+              // Only add completed jobs if they have a retainer held (bonding obligation)
+              if (retainerHeld > 0) {
+                completedJobs.push(jobEntry);
+              }
             } else {
               activeBondJobs.push(jobEntry);
             }
@@ -519,9 +531,14 @@ const calculateDistributionMetrics = async () => {
         });
       }
 
-      // Process planning jobs (always active - never 100% billed)
+      // Process planning jobs (always active - never 100% billed) - FILTER for bonding_required = true
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
+          // Skip planning jobs where bonding is not required
+          if (job.bonding_required === false) {
+            return;
+          }
+
           if (job.contract_amount > 0) {
             const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
                            ? parseInt(job.manual_parcel_count, 10)
@@ -842,7 +859,8 @@ const calculateDistributionMetrics = async () => {
         second_year_appeals_percentage: contractSetup.secondYearAppealsPercentage,
         second_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.secondYearAppealsPercentage,
         third_year_appeals_percentage: contractSetup.thirdYearAppealsPercentage,
-        third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage
+        third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage,
+        bonding_required: contractSetup.bondingRequired
       };
 
       // If editing an existing contract, include the ID so upsert updates instead of inserting
@@ -1379,6 +1397,21 @@ const calculateDistributionMetrics = async () => {
     }
   };
 
+  const handleUpdatePlannedBondingRequired = async (planningJobId, bondingRequired) => {
+    try {
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ bonding_required: bondingRequired })
+        .eq('id', planningJobId);
+
+      if (error) throw error;
+
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error updating bonding required status:', error);
+    }
+  };
+
   const loadAllOpenInvoices = async () => {
     try {
       // Get all jobs with open invoices (both standard and legacy)
@@ -1499,7 +1532,8 @@ const calculateDistributionMetrics = async () => {
           second_year_appeals_percentage: 0.02,
           second_year_appeals_amount: planningJob.contract_amount * 0.02,
           third_year_appeals_percentage: 0.00,
-          third_year_appeals_amount: 0
+          third_year_appeals_amount: 0,
+          bonding_required: planningJob.bonding_required !== false ? true : false
         };
 
         await supabase.from('job_contracts').insert(contractData);
@@ -1762,7 +1796,8 @@ const calculateDistributionMetrics = async () => {
         second_year_appeals_percentage: legacyJobForm.secondYearAppealsPercentage,
         second_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.secondYearAppealsPercentage,
         third_year_appeals_percentage: legacyJobForm.thirdYearAppealsPercentage,
-        third_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.thirdYearAppealsPercentage
+        third_year_appeals_amount: parseFloat(legacyJobForm.contractAmount) * legacyJobForm.thirdYearAppealsPercentage,
+        bonding_required: legacyJobForm.bondingRequired !== false ? true : false
       };
 
       const { error: contractError } = await supabase
@@ -2213,7 +2248,8 @@ const calculateDistributionMetrics = async () => {
                                   endOfJobPercentage: contract.end_of_job_percentage,
                                   firstYearAppealsPercentage: contract.first_year_appeals_percentage,
                                   secondYearAppealsPercentage: contract.second_year_appeals_percentage,
-                                  thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                                  thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0,
+                                  bondingRequired: contract.bonding_required !== false
                                 });
                                 setShowContractSetup(true);
                               }}
@@ -2403,6 +2439,9 @@ const calculateDistributionMetrics = async () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Target Date
                     </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bonding Required
+                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Action
                     </th>
@@ -2479,6 +2518,20 @@ const calculateDistributionMetrics = async () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {job.end_date ? new Date(job.end_date).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                          <input
+                            type="checkbox"
+                            checked={job.bonding_required !== false}
+                            onChange={(e) => {
+                              setPlanningJobs(prev =>
+                                prev.map(j => j.id === job.id ? { ...j, bonding_required: e.target.checked } : j)
+                              );
+                              // Optionally update in database if you want to persist immediately
+                              handleUpdatePlannedBondingRequired(job.id, e.target.checked);
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
@@ -3505,6 +3558,19 @@ const calculateDistributionMetrics = async () => {
                 </div>
               )}
 
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="bondingRequired"
+                  checked={contractSetup.bondingRequired}
+                  onChange={(e) => setContractSetup(prev => ({ ...prev, bondingRequired: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="bondingRequired" className="block text-sm font-medium text-gray-700">
+                  Bonding Required
+                </label>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Billing History (Optional - paste from Excel)
@@ -3539,7 +3605,8 @@ const calculateDistributionMetrics = async () => {
                     endOfJobPercentage: 0.05,
                     firstYearAppealsPercentage: 0.03,
                     secondYearAppealsPercentage: 0.02,
-                    thirdYearAppealsPercentage: 0.00
+                    thirdYearAppealsPercentage: 0.00,
+                    bondingRequired: true
                   });
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
@@ -4023,6 +4090,19 @@ const calculateDistributionMetrics = async () => {
                   </div>
                 </div>
               )}
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="legacyBondingRequired"
+                  checked={legacyJobForm.bondingRequired}
+                  onChange={(e) => setLegacyJobForm(prev => ({ ...prev, bondingRequired: e.target.checked }))}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="legacyBondingRequired" className="block text-sm font-medium text-gray-700">
+                  Bonding Required
+                </label>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

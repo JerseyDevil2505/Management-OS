@@ -6,8 +6,8 @@ import { interpretCodes } from '../../lib/supabaseClient';
 
 const DataVisualizations = ({ jobData, properties }) => {
   const [filters, setFilters] = useState({
-    type: 'all',
-    use: 'all',
+    propertyClass: 'all',
+    typeUse: 'all',
     vcs: 'all',
     designStyle: 'all',
     yearRange: 'all'
@@ -41,39 +41,115 @@ const DataVisualizations = ({ jobData, properties }) => {
     };
   });
 
-  // Extract unique filter values
+  // Memoize code definitions and vendor type to avoid unnecessary re-renders
+  const codeDefinitions = jobData?.parsed_code_definitions;
+  const vendorType = jobData?.vendor_type;
+  const jobEndDate = jobData?.end_date;
+
+  // Extract unique filter values with decoded labels
   const filterOptions = useMemo(() => {
-    const types = new Set();
-    const uses = new Set();
+
+    const propertyClasses = new Map(); // Map of raw value -> decoded label
+    const typeUseMap = new Map();
     const vcsValues = new Set();
-    const designStyles = new Set();
+    const designStyleMap = new Map();
 
     properties.forEach(prop => {
-      if (prop.property_type) types.add(prop.property_type);
-      if (prop.property_use) uses.add(prop.property_use);
+      // Property Class (M4/CAMA)
+      if (prop.property_m4_class || prop.property_cama_class) {
+        const rawClass = prop.property_m4_class || prop.property_cama_class;
+        propertyClasses.set(rawClass, rawClass);
+      }
+
+      // Type/Use - decode using interpretCodes
+      if (prop.asset_type_use) {
+        let decodedTypeName = prop.asset_type_use;
+        if (codeDefinitions && vendorType) {
+          const decoded = interpretCodes.getTypeName(prop, codeDefinitions, vendorType);
+          if (decoded && decoded !== prop.asset_type_use) {
+            decodedTypeName = decoded;
+          }
+        }
+        typeUseMap.set(prop.asset_type_use, decodedTypeName);
+      }
+
+      // VCS (no decoding needed)
       if (prop.property_vcs) vcsValues.add(prop.property_vcs);
-      if (prop.property_design_style) designStyles.add(prop.property_design_style);
+
+      // Design Style - decode using interpretCodes
+      if (prop.asset_design_style) {
+        let decodedDesignName = prop.asset_design_style;
+        if (codeDefinitions && vendorType) {
+          const decoded = interpretCodes.getDesignName(prop, codeDefinitions, vendorType);
+          if (decoded && decoded !== prop.asset_design_style) {
+            decodedDesignName = decoded;
+          }
+        }
+        // Treat '00' and blank as 'Blank'
+        const rawStyle = prop.asset_design_style.trim();
+        if (!rawStyle || rawStyle === '00') {
+          designStyleMap.set('00', 'Blank');
+        } else {
+          designStyleMap.set(rawStyle, decodedDesignName);
+        }
+      }
     });
 
     return {
-      types: Array.from(types).sort(),
-      uses: Array.from(uses).sort(),
+      propertyClasses: Array.from(propertyClasses.values()).sort(),
+      typeUseOptions: Array.from(typeUseMap.values()).sort(),
       vcsValues: Array.from(vcsValues).sort(),
-      designStyles: Array.from(designStyles).sort()
+      designStyles: Array.from(designStyleMap.values()).sort(),
+      // Keep raw -> decoded maps for filtering
+      typeUseMap,
+      designStyleMap
     };
-  }, [properties]);
+  }, [properties, codeDefinitions, vendorType]);
 
   // Apply filters to properties
   const filteredProperties = useMemo(() => {
     return properties.filter(prop => {
-      if (filters.type !== 'all' && prop.property_type !== filters.type) return false;
-      if (filters.use !== 'all' && prop.property_use !== filters.use) return false;
+      // Property Class filter
+      if (filters.propertyClass !== 'all') {
+        const propClass = prop.property_m4_class || prop.property_cama_class;
+        if (propClass !== filters.propertyClass) return false;
+      }
+
+      // Type/Use filter - match against decoded label
+      if (filters.typeUse !== 'all') {
+        let decodedTypeName = prop.asset_type_use;
+        if (codeDefinitions && vendorType) {
+          const decoded = interpretCodes.getTypeName(prop, codeDefinitions, vendorType);
+          if (decoded && decoded !== prop.asset_type_use) {
+            decodedTypeName = decoded;
+          }
+        }
+        if (decodedTypeName !== filters.typeUse) return false;
+      }
+
       if (filters.vcs !== 'all' && prop.property_vcs !== filters.vcs) return false;
-      if (filters.designStyle !== 'all' && prop.property_design_style !== filters.designStyle) return false;
+
+      // Design Style filter - match against decoded label
+      if (filters.designStyle !== 'all') {
+        const rawStyle = prop.asset_design_style?.trim() || '';
+        let decodedDesignName = prop.asset_design_style;
+
+        // Check for blank/00
+        if (!rawStyle || rawStyle === '00') {
+          decodedDesignName = 'Blank';
+        } else if (codeDefinitions && vendorType) {
+          const decoded = interpretCodes.getDesignName(prop, codeDefinitions, vendorType);
+          if (decoded && decoded !== prop.asset_design_style) {
+            decodedDesignName = decoded;
+          }
+        }
+
+        if (decodedDesignName !== filters.designStyle) return false;
+      }
       
       if (filters.yearRange !== 'all' && prop.sales_date) {
         const saleYear = new Date(prop.sales_date).getFullYear();
-        const endYear = parseInt(jobData.end_date?.substring(0, 4) || new Date().getFullYear());
+        const endYear = parseInt(jobEndDate?.substring(0, 4) || new Date().getFullYear());
         
         switch (filters.yearRange) {
           case 'hsp':
@@ -92,7 +168,7 @@ const DataVisualizations = ({ jobData, properties }) => {
       
       return true;
     });
-  }, [properties, filters, jobData.end_date]);
+  }, [properties, filters, jobEndDate, codeDefinitions, vendorType]);
 
   // Market History - with optional Building Class and Sales Code filters
   const marketHistoryData = useMemo(() => {
@@ -578,35 +654,35 @@ const DataVisualizations = ({ jobData, properties }) => {
           </div>
           
           <div className="filter-grid grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {/* Property Type Filter */}
+            {/* Property Class Filter */}
             <div className="filter-item">
               <label className="filter-label block text-sm font-medium text-gray-700 mb-1">
-                Property Type
+                Property Class
               </label>
               <select
-                value={filters.type}
-                onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+                value={filters.propertyClass}
+                onChange={(e) => setFilters({ ...filters, propertyClass: e.target.value })}
                 className="filter-select w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="all">All Types</option>
-                {filterOptions.types.map(type => (
-                  <option key={type} value={type}>{type}</option>
+                <option value="all">All Classes</option>
+                {filterOptions.propertyClasses?.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
                 ))}
               </select>
             </div>
 
-            {/* Property Use Filter */}
+            {/* Property Type/Use Filter */}
             <div className="filter-item">
               <label className="filter-label block text-sm font-medium text-gray-700 mb-1">
-                Property Use
+                Property Type Use
               </label>
               <select
-                value={filters.use}
-                onChange={(e) => setFilters({ ...filters, use: e.target.value })}
+                value={filters.typeUse}
+                onChange={(e) => setFilters({ ...filters, typeUse: e.target.value })}
                 className="filter-select w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="all">All Uses</option>
-                {filterOptions.uses.map(use => (
+                {filterOptions.typeUseOptions?.map(use => (
                   <option key={use} value={use}>{use}</option>
                 ))}
               </select>
@@ -668,7 +744,7 @@ const DataVisualizations = ({ jobData, properties }) => {
           {Object.values(filters).some(f => f !== 'all') && (
             <div className="active-filters mt-4 flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium text-gray-700">Active:</span>
-              {Object.entries(filters).map(([key, value]) => 
+              {Object.entries(filters).map(([key, value]) =>
                 value !== 'all' && (
                   <span key={key} className="active-filter-tag px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
                     {key}: {value}
@@ -676,7 +752,7 @@ const DataVisualizations = ({ jobData, properties }) => {
                 )
               )}
               <button
-                onClick={() => setFilters({ type: 'all', use: 'all', vcs: 'all', designStyle: 'all', yearRange: 'all' })}
+                onClick={() => setFilters({ propertyClass: 'all', typeUse: 'all', vcs: 'all', designStyle: 'all', yearRange: 'all' })}
                 className="clear-filters-button text-sm text-blue-600 hover:text-blue-800 underline ml-2"
               >
                 Clear All
