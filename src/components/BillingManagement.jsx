@@ -1408,42 +1408,6 @@ const calculateDistributionMetrics = async () => {
     }
   };
 
-  const bulkSetAllBondingRequired = async () => {
-    if (!window.confirm('Set bonding_required = true for ALL active and planned jobs?\n\nYou can then edit specific jobs to turn it off.')) {
-      return;
-    }
-
-    try {
-      setLoadingStates(prev => ({ ...prev, contractSetup: true }));
-
-      // Update all job_contracts to bonding_required = true
-      const { error: contractError } = await supabase
-        .from('job_contracts')
-        .update({ bonding_required: true })
-        .is('bonding_required', null)
-        .or(`bonding_required.eq.false`);
-
-      if (contractError) throw contractError;
-
-      // Update all planning_jobs to bonding_required = true
-      const { error: planningError } = await supabase
-        .from('planning_jobs')
-        .update({ bonding_required: true })
-        .is('bonding_required', null)
-        .or(`bonding_required.eq.false`);
-
-      if (planningError) throw planningError;
-
-      alert('✅ All contracts and planned jobs set to bonding_required = true!\n\nNow you can edit specific jobs to turn it off.');
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      console.error('Error bulk updating bonding required:', error);
-      alert('Error updating bonding status: ' + error.message);
-    } finally {
-      setLoadingStates(prev => ({ ...prev, contractSetup: false }));
-    }
-  };
-
   const loadAllOpenInvoices = async () => {
     try {
       // Get all jobs with open invoices (both standard and legacy)
