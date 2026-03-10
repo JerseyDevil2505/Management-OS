@@ -435,7 +435,7 @@ const calculateDistributionMetrics = async () => {
           totalresidential,
           totalcommercial,
           workflow_stats,
-          job_contracts(contract_amount, retainer_percentage)
+          job_contracts(contract_amount, retainer_percentage, bonding_required)
         `)
         .eq('job_type', 'standard');
 
@@ -448,6 +448,7 @@ const calculateDistributionMetrics = async () => {
         .from('planning_jobs')
         .select('*')
         .gt('contract_amount', 0);
+        // Filter will be applied client-side for bonding_required
 
       if (planningError) {
         console.error('Error fetching planning jobs:', planningError);
@@ -460,10 +461,15 @@ const calculateDistributionMetrics = async () => {
       const activeBondJobs = [];
       const completedJobs = [];
 
-      // Process active jobs
+      // Process active jobs - FILTER for bonding_required = true
       if (activeJobsData && activeJobsData.length > 0) {
         activeJobsData.forEach(job => {
           const contract = job.job_contracts?.[0];
+
+          // Skip jobs where bonding is not required
+          if (contract && contract.bonding_required === false) {
+            return;
+          }
 
           // Get parcels from workflow_stats or job properties
           let parcels = 0;
@@ -521,9 +527,14 @@ const calculateDistributionMetrics = async () => {
         });
       }
 
-      // Process planning jobs (always active - never 100% billed)
+      // Process planning jobs (always active - never 100% billed) - FILTER for bonding_required = true
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
+          // Skip planning jobs where bonding is not required
+          if (job.bonding_required === false) {
+            return;
+          }
+
           if (job.contract_amount > 0) {
             const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
                            ? parseInt(job.manual_parcel_count, 10)
@@ -1394,6 +1405,42 @@ const calculateDistributionMetrics = async () => {
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating bonding required status:', error);
+    }
+  };
+
+  const bulkSetAllBondingRequired = async () => {
+    if (!window.confirm('Set bonding_required = true for ALL active and planned jobs?\n\nYou can then edit specific jobs to turn it off.')) {
+      return;
+    }
+
+    try {
+      setLoadingStates(prev => ({ ...prev, contractSetup: true }));
+
+      // Update all job_contracts to bonding_required = true
+      const { error: contractError } = await supabase
+        .from('job_contracts')
+        .update({ bonding_required: true })
+        .is('bonding_required', null)
+        .or(`bonding_required.eq.false`);
+
+      if (contractError) throw contractError;
+
+      // Update all planning_jobs to bonding_required = true
+      const { error: planningError } = await supabase
+        .from('planning_jobs')
+        .update({ bonding_required: true })
+        .is('bonding_required', null)
+        .or(`bonding_required.eq.false`);
+
+      if (planningError) throw planningError;
+
+      alert('✅ All contracts and planned jobs set to bonding_required = true!\n\nNow you can edit specific jobs to turn it off.');
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error bulk updating bonding required:', error);
+      alert('Error updating bonding status: ' + error.message);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, contractSetup: false }));
     }
   };
 
