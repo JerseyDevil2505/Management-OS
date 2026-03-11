@@ -141,14 +141,14 @@ const RevenueManagement = () => {
         }
       });
 
-      // Count primary cards per org (considering vendor type)
+      // Count primary cards per org (BRT='1', Microsystems='M')
       const lineItemMap = {};
       for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
         if (jobIds.length > 0) {
-          // Get all property records for these jobs
+          // Get all property records for these jobs with their cards
           const { data: records, error: fetchError } = await supabase
             .from('property_records')
-            .select('id, job_id, property_addl_card')
+            .select('job_id, property_addl_card')
             .in('job_id', jobIds);
 
           if (fetchError) {
@@ -157,29 +157,18 @@ const RevenueManagement = () => {
             continue;
           }
 
-          // Filter for primary cards based on vendor type
-          const allRecords = records || [];
-          const primaryCount = allRecords.filter(record => {
+          // Count primary cards based on vendor type
+          const primaryCount = (records || []).filter(record => {
             const job = jobsMap[record.job_id];
             if (!job) return false;
 
-            const card = record.property_addl_card;
-            const cardTrimmed = typeof card === 'string' ? card.trim() : card;
-
             if (job.vendor_type === 'BRT') {
-              // BRT: main card is null, empty string, or '1'
-              return !cardTrimmed || cardTrimmed === '1';
+              return record.property_addl_card === '1';
             } else if (job.vendor_type === 'Microsystems') {
-              // Microsystems: main card is null, empty string, or 'M'
-              return !cardTrimmed || cardTrimmed.toUpperCase() === 'M';
+              return record.property_addl_card === 'M';
             }
-            return !cardTrimmed; // Fallback: assume null/empty is primary
+            return false;
           }).length;
-
-          // Debug log for first few orgs
-          if (Object.keys(lineItemMap).length < 3) {
-            console.log(`Org ${orgId}: Total records=${allRecords.length}, Primary=${primaryCount}, Sample cards:`, allRecords.slice(0, 5).map(r => r.property_addl_card));
-          }
 
           lineItemMap[orgId] = primaryCount;
         }
