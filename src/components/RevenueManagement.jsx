@@ -457,9 +457,9 @@ const RevenueManagement = () => {
       // Line item fee
       rows.push([
         '1',
-        `Data Processing Fee - ${lineItems.toLocaleString()} line items @ $${priceConfig.pricePerLine.toFixed(2)}/line`,
+        `Data Processing Fee - ${lineItems.toLocaleString()} line items @ $${fees.effectiveRate.toFixed(2)}/line`,
         lineItems.toLocaleString(),
-        `$${priceConfig.pricePerLine.toFixed(2)}`,
+        `$${fees.effectiveRate.toFixed(2)}`,
         `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       ]);
 
