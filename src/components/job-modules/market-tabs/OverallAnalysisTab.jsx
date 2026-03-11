@@ -49,6 +49,8 @@ const OverallAnalysisTab = ({
   // Microsystems diagnostic state
   const [diagnosticStatus, setDiagnosticStatus] = useState(null);
   const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
+  const [storyHeightMappings, setStoryHeightMappings] = useState({});
+  const [showStoryHeightConfig, setShowStoryHeightConfig] = useState(false);
 
   // Check if Microsystems definitions need repair
   const needsRepair = vendorType === 'Microsystems' && codeDefinitions && !codeDefinitions.flat_lookup;
@@ -1360,18 +1362,29 @@ const OverallAnalysisTab = ({
         });
       }
 
-      // REQUIREMENT: Only process if "CONDO" appears in the decoded story height
-      if (!storyStr.includes('CONDO')) return;
-
-      // Parse floor level from the CONDO description
+      // Determine floor level: use user mapping if configured, otherwise auto-detect from description
       let floor = 'Unknown';
-      if (storyStr.includes('1ST')) floor = '1ST FLOOR';
-      else if (storyStr.includes('2ND')) floor = '2ND FLOOR';
-      else if (storyStr.includes('3RD')) floor = '3RD FLOOR';
-      else if (storyStr.includes('4TH')) floor = '4TH FLOOR';
-      else if (storyStr.includes('5TH')) floor = '5TH FLOOR';
-      else if (storyStr.includes('TOP')) floor = 'TOP FLOOR';
-      else if (storyStr.includes('PENT') || storyStr.includes('PHSE') || storyStr.includes('PENTHOUSE')) floor = 'PENTHOUSE';
+
+      // Check if user has configured a mapping for this code
+      if (storyHeightMappings[storyHeightCode] && storyHeightMappings[storyHeightCode].floorLevel) {
+        floor = storyHeightMappings[storyHeightCode].floorLevel;
+      } else {
+        // Auto-detect floor level from description keywords (CONDO optional, but floor numbers required)
+        const hasCondo = storyStr.includes('CONDO');
+        const hasFloorKeyword = /\b(1ST|2ND|3RD|4TH|5TH|FLOOR|PENTHOUSE|PENT)\b/.test(storyStr);
+
+        // Only process if "CONDO" appears OR if it has floor keywords
+        if (!hasCondo && !hasFloorKeyword) return;
+
+        // Parse floor level from description
+        if (storyStr.includes('1ST')) floor = '1ST FLOOR';
+        else if (storyStr.includes('2ND')) floor = '2ND FLOOR';
+        else if (storyStr.includes('3RD')) floor = '3RD FLOOR';
+        else if (storyStr.includes('4TH')) floor = '4TH FLOOR';
+        else if (storyStr.includes('5TH')) floor = '5TH FLOOR';
+        else if (storyStr.includes('TOP')) floor = 'TOP FLOOR';
+        else if (storyStr.includes('PENT') || storyStr.includes('PHSE') || storyStr.includes('PENTHOUSE')) floor = 'PENTHOUSE';
+      }
 
       // Get time-normalized price (prefer PMA lookup, fallback to property field)
       const keyForLookup = p.property_composite_key;
@@ -3803,6 +3816,99 @@ const OverallAnalysisTab = ({
                 </div>
               )}
 
+              {/* Story Height Mapping Configuration */}
+              <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div
+                  onClick={() => setShowStoryHeightConfig(!showStoryHeightConfig)}
+                  className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
+                >
+                  <div>
+                    <h3 className="text-lg font-semibold">Story Height Mapping Configuration</h3>
+                    <div className="text-xs text-gray-500 mt-1">Map story height codes to floor levels for analysis</div>
+                  </div>
+                  {showStoryHeightConfig ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                </div>
+
+                {showStoryHeightConfig && (
+                  <div className="bg-blue-50 border border-blue-200 rounded p-4">
+                    <p className="text-sm text-blue-700 mb-4">
+                      Configure which story height codes should be included in floor analysis. Select codes from your data and assign them to floor levels.
+                    </p>
+
+                    {Object.keys(storyHeightMappings).length === 0 ? (
+                      <div className="text-center py-6 text-gray-500">
+                        <p className="text-sm">No story height codes configured yet.</p>
+                        <p className="text-xs text-gray-400 mt-2">Once you click "Configure Codes" below, available codes will appear here.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-blue-200">
+                          <thead className="bg-blue-100">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Story Height Code</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Description</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Map to Floor</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {Object.entries(storyHeightMappings).map(([code, config]) => (
+                              <tr key={code}>
+                                <td className="px-3 py-2 text-sm font-medium text-gray-900">{code}</td>
+                                <td className="px-3 py-2 text-sm text-gray-600">{config.decoded || 'Unknown'}</td>
+                                <td className="px-3 py-2 text-sm">
+                                  <select
+                                    value={config.floorLevel || ''}
+                                    onChange={(e) => {
+                                      const updated = { ...storyHeightMappings };
+                                      updated[code].floorLevel = e.target.value;
+                                      setStoryHeightMappings(updated);
+                                    }}
+                                    className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                                  >
+                                    <option value="">-- Select Floor --</option>
+                                    <option value="1ST FLOOR">1ST FLOOR</option>
+                                    <option value="2ND FLOOR">2ND FLOOR</option>
+                                    <option value="3RD FLOOR">3RD FLOOR</option>
+                                    <option value="4TH FLOOR">4TH FLOOR</option>
+                                    <option value="5TH FLOOR">5TH FLOOR</option>
+                                    <option value="TOP FLOOR">TOP FLOOR</option>
+                                    <option value="PENTHOUSE">PENTHOUSE</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2 text-sm">
+                                  <button
+                                    onClick={() => {
+                                      const updated = { ...storyHeightMappings };
+                                      delete updated[code];
+                                      setStoryHeightMappings(updated);
+                                    }}
+                                    className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="mt-4 pt-4 border-t border-blue-200">
+                      <button
+                        className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                        disabled
+                        title="Feature to auto-detect codes from your data coming soon"
+                      >
+                        + Configure Codes from Data
+                      </button>
+                      <p className="text-xs text-blue-600 mt-2">Tip: Once you have floor data with consistent story height codes, we can auto-detect and configure them.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Floor Premium Analysis */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div
@@ -3811,7 +3917,7 @@ const OverallAnalysisTab = ({
                 >
                   <div>
                     <h3 className="text-lg font-semibold">VCS Floor Premium Analysis</h3>
-                    <div className="text-xs text-gray-500 mt-1">Only condos with "CONDO" in story height description</div>
+                    <div className="text-xs text-gray-500 mt-1">{Object.keys(storyHeightMappings).length > 0 ? `Using ${Object.keys(storyHeightMappings).length} configured story height code(s)` : 'Configure story height codes above to enable floor analysis'}</div>
                   </div>
                   {expandedSections.condoFloor ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
