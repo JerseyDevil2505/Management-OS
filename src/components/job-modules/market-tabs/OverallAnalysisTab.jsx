@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { interpretCodes } from '../../../lib/supabaseClient';
+import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
@@ -51,6 +51,39 @@ const OverallAnalysisTab = ({
   const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
   const [storyHeightMappings, setStoryHeightMappings] = useState({});
   const [showStoryHeightConfig, setShowStoryHeightConfig] = useState(false);
+  const [isSavingStoryHeight, setIsSavingStoryHeight] = useState(false);
+
+  // Load story height mappings from database on component mount
+  useEffect(() => {
+    if (jobData?.id && jobData?.story_height_config) {
+      setStoryHeightMappings(jobData.story_height_config || {});
+    }
+  }, [jobData?.id]);
+
+  // Save story height mappings to database
+  const saveStoryHeightMappings = async (mappings) => {
+    if (!jobData?.id) return;
+
+    setIsSavingStoryHeight(true);
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ story_height_config: mappings })
+        .eq('id', jobData.id);
+
+      if (error) {
+        console.error('Error saving story height mappings:', error);
+        alert('Failed to save story height mappings');
+      } else {
+        console.log('✅ Story height mappings saved successfully');
+      }
+    } catch (err) {
+      console.error('Error saving mappings:', err);
+      alert('Error saving mappings');
+    } finally {
+      setIsSavingStoryHeight(false);
+    }
+  };
 
   // Check if Microsystems definitions need repair
   const needsRepair = vendorType === 'Microsystems' && codeDefinitions && !codeDefinitions.flat_lookup;
@@ -3863,8 +3896,10 @@ const OverallAnalysisTab = ({
                                       const updated = { ...storyHeightMappings };
                                       updated[code].floorLevel = e.target.value;
                                       setStoryHeightMappings(updated);
+                                      saveStoryHeightMappings(updated);
                                     }}
-                                    className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                                    disabled={isSavingStoryHeight}
+                                    className="px-2 py-1 border border-gray-300 rounded text-sm bg-white disabled:opacity-50"
                                   >
                                     <option value="">-- Select Floor --</option>
                                     <option value="1ST FLOOR">1ST FLOOR</option>
@@ -3882,8 +3917,10 @@ const OverallAnalysisTab = ({
                                       const updated = { ...storyHeightMappings };
                                       delete updated[code];
                                       setStoryHeightMappings(updated);
+                                      saveStoryHeightMappings(updated);
                                     }}
-                                    className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                    disabled={isSavingStoryHeight}
+                                    className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50"
                                   >
                                     Remove
                                   </button>
