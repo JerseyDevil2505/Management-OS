@@ -3925,15 +3925,27 @@ const OverallAnalysisTab = ({
 
               {/* Story Height Mapping Configuration */}
               <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-                <div
-                  onClick={() => setShowStoryHeightConfig(!showStoryHeightConfig)}
-                  className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
-                >
-                  <div>
-                    <h3 className="text-lg font-semibold">Story Height Mapping Configuration</h3>
-                    <div className="text-xs text-gray-500 mt-1">Map story height codes to floor levels for analysis</div>
+                <div className="flex justify-between items-center mb-4">
+                  <div
+                    onClick={() => setShowStoryHeightConfig(!showStoryHeightConfig)}
+                    className="flex justify-between items-center cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded flex-1"
+                  >
+                    <div>
+                      <h3 className="text-lg font-semibold">Story Height Mapping Configuration</h3>
+                      <div className="text-xs text-gray-500 mt-1">Map story height codes to floor levels for analysis</div>
+                    </div>
+                    {showStoryHeightConfig ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                   </div>
-                  {showStoryHeightConfig ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      discoverStoryHeightCodes();
+                    }}
+                    disabled={isSavingStoryHeight}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 ml-4 whitespace-nowrap"
+                  >
+                    + Configure Codes from Data
+                  </button>
                 </div>
 
                 {showStoryHeightConfig && (
@@ -4005,17 +4017,6 @@ const OverallAnalysisTab = ({
                         </table>
                       </div>
                     )}
-
-                    <div className="mt-4 pt-4 border-t border-blue-200">
-                      <button
-                        onClick={discoverStoryHeightCodes}
-                        disabled={isSavingStoryHeight}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                      >
-                        + Configure Codes from Data
-                      </button>
-                      <p className="text-xs text-blue-600 mt-2">Tip: Click to discover story height codes available in your condo data.</p>
-                    </div>
 
                     {/* Code Selector Modal */}
                     {showCodeSelector && (
