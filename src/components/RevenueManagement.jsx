@@ -138,17 +138,22 @@ const RevenueManagement = () => {
           jobsByOrg[job.organization_id].push(job.id);
         }
       });
+      console.log('Jobs per org:', jobsByOrg);
 
       // Count primary cards (no additional card) per org
       const lineItemMap = {};
       for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
         if (jobIds.length > 0) {
-          const { count } = await supabase
+          const { count, error: countError } = await supabase
             .from('property_records')
             .select('*', { count: 'exact', head: true })
             .in('job_id', jobIds)
             .is('property_addl_card', null);
 
+          if (countError) {
+            console.error(`Error counting property records for org ${orgId}:`, countError);
+          }
+          console.log(`Org ${orgId} (${jobIds.length} jobs): ${count} primary cards`);
           lineItemMap[orgId] = count || 0;
         }
       }
