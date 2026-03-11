@@ -49,9 +49,14 @@ const EmployeeManagement = ({
 
 const loadEmployees = () => {
     setIsLoading(true);
-    
+
+    // Filter to only show PPA Inc employees (exclude LOJIK/assessor clients)
+    const ppaOnlyEmployees = propEmployees.filter(emp =>
+      !emp.organization_id || emp.organization_id === PPA_ORG_ID
+    );
+
     // Transform prop employees to component format
-    const transformedEmployees = propEmployees.map(emp => ({
+    const transformedEmployees = ppaOnlyEmployees.map(emp => ({
       id: emp.id,
       inspectorNumber: emp.employee_number || `TEMP${emp.id}`,
       name: `${emp.last_name || ''}, ${emp.first_name || ''}`.replace(/, $/, ''),
@@ -67,14 +72,14 @@ const loadEmployees = () => {
       initials: emp.initials,
       status: emp.employment_status === 'inactive' ? 'inactive' : 'active'
     }));
-    
+
     setEmployees(transformedEmployees);
     setFilteredEmployees(transformedEmployees);
-    
+
     if (transformedEmployees.length > 0) {
       setImportComplete(true);
     }
-    
+
     setIsLoading(false);
 };
   
