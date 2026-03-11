@@ -143,6 +143,11 @@ const RevenueManagement = () => {
 
       // Count primary cards per org (BRT='1', Microsystems='M')
       const lineItemMap = {};
+      const orgNames = {};
+      for (const org of orgs) {
+        orgNames[org.id] = org.name;
+      }
+
       for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
         if (jobIds.length > 0) {
           // Get all property records for these jobs with their cards
@@ -171,6 +176,7 @@ const RevenueManagement = () => {
           }).length;
 
           lineItemMap[orgId] = primaryCount;
+          console.log(`${orgNames[orgId]}: ${jobIds.length} jobs, ${records?.length || 0} total records, ${primaryCount} primary cards`);
         }
       }
 
