@@ -504,18 +504,16 @@ const UserManagement = ({ onViewAs }) => {
                 <table className="um-table">
                   <colgroup>
                     <col style={{ width: '14%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '14%' }} />
-                    <col style={{ width: '9%' }} />
-                    <col style={{ width: '8%' }} />
-                    <col style={{ width: '35%' }} />
+                    <col style={{ width: '24%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '34%' }} />
                   </colgroup>
                   <thead>
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
                       <th>Organization</th>
-                      <th>Status</th>
                       <th>Account</th>
                       <th>Actions</th>
                     </tr>
@@ -542,11 +540,6 @@ const UserManagement = ({ onViewAs }) => {
                               </span>
                             ));
                           })()}
-                        </td>
-                        <td>
-                          <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
-                            {user.employment_status || 'Active'}
-                          </span>
                         </td>
                         <td>
                           <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
