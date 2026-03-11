@@ -1134,7 +1134,7 @@ const RevenueManagement = () => {
           </button>
         </div>
 
-        {proposals.length === 0 ? (
+        {proposals.filter(p => p.status !== 'accepted' && p.status !== 'declined').length === 0 ? (
           <div className="revenue-proposals-empty">No proposals yet. Click "+ New Proposal" to create one.</div>
         ) : (
           <div className="revenue-table-wrapper">
@@ -1151,7 +1151,7 @@ const RevenueManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {proposals.map(p => (
+                {proposals.filter(p => p.status !== 'accepted' && p.status !== 'declined').map(p => (
                   <tr key={p.id} className={p.status === 'accepted' ? 'revenue-row-accepted' : ''}>
                     <td>
                       <div className="revenue-client-name">{p.town_name}</div>
