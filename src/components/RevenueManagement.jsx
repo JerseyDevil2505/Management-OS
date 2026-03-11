@@ -5,6 +5,7 @@ import './RevenueManagement.css';
 const RevenueManagement = () => {
   const [organizations, setOrganizations] = useState([]);
   const [staffCounts, setStaffCounts] = useState({});
+  const [lineItemCounts, setLineItemCounts] = useState({});
   const [orgCcddCodes, setOrgCcddCodes] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -117,20 +118,40 @@ const RevenueManagement = () => {
         }
       });
 
-      // Load CCDD codes from jobs per org
+      // Load CCDD codes and calculate primary card counts per org
       const { data: jobs, error: jobError } = await supabase
         .from('jobs')
-        .select('organization_id, ccdd_code')
-        .not('ccdd_code', 'is', null);
+        .select('id, organization_id, ccdd_code');
 
       if (jobError) throw jobError;
 
       const ccddMap = {};
+      const jobsByOrg = {};
       (jobs || []).forEach(job => {
         if (job.organization_id && job.ccdd_code) {
           ccddMap[job.organization_id] = job.ccdd_code;
         }
+        if (job.organization_id) {
+          if (!jobsByOrg[job.organization_id]) {
+            jobsByOrg[job.organization_id] = [];
+          }
+          jobsByOrg[job.organization_id].push(job.id);
+        }
       });
+
+      // Count primary cards (no additional card) per org
+      const lineItemMap = {};
+      for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
+        if (jobIds.length > 0) {
+          const { count } = await supabase
+            .from('property_records')
+            .select('*', { count: 'exact', head: true })
+            .in('job_id', jobIds)
+            .or('property_addl_card.is.null,property_addl_card.eq.');
+
+          lineItemMap[orgId] = count || 0;
+        }
+      }
 
       // Load proposals
       const { data: proposalData, error: proposalError } = await supabase
@@ -142,6 +163,7 @@ const RevenueManagement = () => {
 
       setOrganizations(orgs || []);
       setStaffCounts(counts);
+      setLineItemCounts(lineItemMap);
       setOrgCcddCodes(ccddMap);
       setProposals(proposalData || []);
     } catch (err) {
@@ -164,7 +186,7 @@ const RevenueManagement = () => {
       return { lineItemFee: 0, primaryFee: overrideTotal, staffFee: 0, total: overrideTotal, isFree: false, isOverride: true };
     }
 
-    const lineItems = org.line_item_count || 0;
+    const lineItems = lineItemCounts[org.id] || 0;
     const userCount = staffCounts[org.id] || 0;
 
     const lineItemFee = calculateTieredLineItemFee(lineItems);
@@ -174,7 +196,7 @@ const RevenueManagement = () => {
     const effectiveRate = getEffectiveRate(lineItems);
 
     return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount, effectiveRate };
-  }, [staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
+  }, [lineItemCounts, staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
 
   // View Open Invoices filter
   const [showOpenOnly, setShowOpenOnly] = useState(false);
@@ -229,7 +251,7 @@ const RevenueManagement = () => {
       const fees = calculateFees(org);
       const billingStatus = getBillingStatus(org);
       totalAnnual += fees.total;
-      totalLineItems += org.line_item_count || 0;
+      totalLineItems += lineItemCounts[org.id] || 0;
       totalUsers += staffCounts[org.id] || 0;
       if (fees.isFree) {
         freeAccounts++;
@@ -246,7 +268,7 @@ const RevenueManagement = () => {
     });
 
     return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers, collectedRevenue, outstandingRevenue, sentCount, openCount };
-  }, [organizations, calculateFees, staffCounts]);
+  }, [organizations, calculateFees, staffCounts, lineItemCounts]);
 
   // Update billing status on org
   const handleBillingStatusChange = async (orgId, newStatus) => {
@@ -434,7 +456,7 @@ const RevenueManagement = () => {
 
     // Fee calculations
     const fees = calculateFees(org);
-    const lineItems = org.line_item_count || 0;
+    const lineItems = lineItemCounts[org.id] || 0;
     const userCount = staffCounts[org.id] || 0;
 
     // Line items table
@@ -573,7 +595,7 @@ const RevenueManagement = () => {
 
     setSuccessMessage(`Invoice generated: ${fileName}`);
     setTimeout(() => setSuccessMessage(''), 3000);
-  }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
+  }, [calculateFees, staffCounts, lineItemCounts, priceConfig, orgCcddCodes, billingYear]);
 
   // --- Proposal handlers ---
   const resetProposalForm = () => {
@@ -1000,7 +1022,7 @@ const RevenueManagement = () => {
                     <div className="revenue-client-name">{org.name}</div>
                     <div className="revenue-client-contact">{org.primary_contact_name || ''}</div>
                   </td>
-                  <td>{(org.line_item_count || 0).toLocaleString()}</td>
+                  <td>{(lineItemCounts[org.id] || 0).toLocaleString()}</td>
                   <td className="revenue-col-right">
                     {fees.isFree ? '-' : fees.isOverride ? '-' : `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
