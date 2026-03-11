@@ -60,6 +60,8 @@ const BillingManagement = ({
   const [revenueData, setRevenueData] = useState({ totalRevenue: 0 });
   const [showOpenInvoices, setShowOpenInvoices] = useState(false);
   const [allOpenInvoices, setAllOpenInvoices] = useState([]);
+  const [invoiceSortColumn, setInvoiceSortColumn] = useState('billing_date');
+  const [invoiceSortOrder, setInvoiceSortOrder] = useState('desc');
   const [officeReceivables, setOfficeReceivables] = useState([]);
   const [showReceivableForm, setShowReceivableForm] = useState(false);
   const [receivableForm, setReceivableForm] = useState({
@@ -1492,6 +1494,46 @@ const calculateDistributionMetrics = async () => {
     } catch (error) {
       console.error('Error loading open invoices:', error);
     }
+  };
+
+  const handleInvoiceSort = (column) => {
+    // If clicking the same column, toggle sort order; otherwise, set new column with desc order
+    if (invoiceSortColumn === column) {
+      setInvoiceSortOrder(invoiceSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setInvoiceSortColumn(column);
+      setInvoiceSortOrder('desc');
+    }
+  };
+
+  const getSortedInvoices = () => {
+    const sorted = [...allOpenInvoices].sort((a, b) => {
+      let aVal = a[invoiceSortColumn];
+      let bVal = b[invoiceSortColumn];
+
+      // Handle date comparisons
+      if (invoiceSortColumn === 'billing_date') {
+        aVal = new Date(aVal).getTime();
+        bVal = new Date(bVal).getTime();
+      }
+
+      // Handle numeric comparisons
+      if (invoiceSortColumn === 'amount_billed') {
+        aVal = parseFloat(aVal) || 0;
+        bVal = parseFloat(bVal) || 0;
+      }
+
+      // Handle string comparisons
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return invoiceSortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return invoiceSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
   };
 
   const handleRolloverToActive = async (planningJob) => {
@@ -4237,16 +4279,60 @@ const calculateDistributionMetrics = async () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Municipality</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Open Balance</th>
+                      <th
+                        onClick={() => handleInvoiceSort('job_name')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                        title="Click to sort"
+                      >
+                        <div className="flex items-center gap-2">
+                          Municipality
+                          {invoiceSortColumn === 'job_name' && (
+                            <span>{invoiceSortOrder === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleInvoiceSort('invoice_number')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                        title="Click to sort"
+                      >
+                        <div className="flex items-center gap-2">
+                          Invoice #
+                          {invoiceSortColumn === 'invoice_number' && (
+                            <span>{invoiceSortOrder === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleInvoiceSort('billing_date')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                        title="Click to sort"
+                      >
+                        <div className="flex items-center gap-2">
+                          Date
+                          {invoiceSortColumn === 'billing_date' && (
+                            <span>{invoiceSortOrder === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleInvoiceSort('amount_billed')}
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                        title="Click to sort"
+                      >
+                        <div className="flex items-center gap-2">
+                          Open Balance
+                          {invoiceSortColumn === 'amount_billed' && (
+                            <span>{invoiceSortOrder === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {allOpenInvoices.map((invoice) => {
+                    {getSortedInvoices().map((invoice) => {
                       const daysOld = calculateInvoiceAge(invoice.billing_date);
                       const rowColor = getAgingColor(daysOld);
                       

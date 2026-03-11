@@ -5,6 +5,7 @@ import './RevenueManagement.css';
 const RevenueManagement = () => {
   const [organizations, setOrganizations] = useState([]);
   const [staffCounts, setStaffCounts] = useState({});
+  const [lineItemCounts, setLineItemCounts] = useState({});
   const [orgCcddCodes, setOrgCcddCodes] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -117,20 +118,51 @@ const RevenueManagement = () => {
         }
       });
 
-      // Load CCDD codes from jobs per org
+      // Load CCDD codes and jobs with vendor type
       const { data: jobs, error: jobError } = await supabase
         .from('jobs')
-        .select('organization_id, ccdd_code')
-        .not('ccdd_code', 'is', null);
+        .select('id, organization_id, ccdd_code, vendor_type');
 
       if (jobError) throw jobError;
 
       const ccddMap = {};
+      const jobsByOrg = {};
+      const jobsMap = {};
       (jobs || []).forEach(job => {
         if (job.organization_id && job.ccdd_code) {
           ccddMap[job.organization_id] = job.ccdd_code;
         }
+        if (job.organization_id) {
+          if (!jobsByOrg[job.organization_id]) {
+            jobsByOrg[job.organization_id] = [];
+          }
+          jobsByOrg[job.organization_id].push(job.id);
+          jobsMap[job.id] = job;
+        }
       });
+
+      // Count primary cards per org (BRT='1', Microsystems='M')
+      const lineItemMap = {};
+      for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
+        if (jobIds.length > 0) {
+          // Count BRT primary cards (card = '1')
+          const { count: brtCount } = await supabase
+            .from('property_records')
+            .select('*', { count: 'exact', head: true })
+            .in('job_id', jobIds)
+            .eq('property_addl_card', '1');
+
+          // Count Microsystems primary cards (card = 'M')
+          const { count: microCount } = await supabase
+            .from('property_records')
+            .select('*', { count: 'exact', head: true })
+            .in('job_id', jobIds)
+            .eq('property_addl_card', 'M');
+
+          const total = (brtCount || 0) + (microCount || 0);
+          lineItemMap[orgId] = total;
+        }
+      }
 
       // Load proposals
       const { data: proposalData, error: proposalError } = await supabase
@@ -142,8 +174,10 @@ const RevenueManagement = () => {
 
       setOrganizations(orgs || []);
       setStaffCounts(counts);
+      setLineItemCounts(lineItemMap);
       setOrgCcddCodes(ccddMap);
       setProposals(proposalData || []);
+      console.log('✅ Revenue data loaded:', { orgCount: orgs.length, lineItemMap });
     } catch (err) {
       console.error('Error loading revenue data:', err);
       setError('Failed to load revenue data');
@@ -164,7 +198,7 @@ const RevenueManagement = () => {
       return { lineItemFee: 0, primaryFee: overrideTotal, staffFee: 0, total: overrideTotal, isFree: false, isOverride: true };
     }
 
-    const lineItems = org.line_item_count || 0;
+    const lineItems = lineItemCounts[org.id] || 0;
     const userCount = staffCounts[org.id] || 0;
 
     const lineItemFee = calculateTieredLineItemFee(lineItems);
@@ -174,7 +208,7 @@ const RevenueManagement = () => {
     const effectiveRate = getEffectiveRate(lineItems);
 
     return { lineItemFee, primaryFee, staffFee, total, isFree: false, isOverride: false, lineItems, userCount, effectiveRate };
-  }, [staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
+  }, [lineItemCounts, staffCounts, priceConfig, calculateTieredLineItemFee, getEffectiveRate]);
 
   // View Open Invoices filter
   const [showOpenOnly, setShowOpenOnly] = useState(false);
@@ -229,7 +263,7 @@ const RevenueManagement = () => {
       const fees = calculateFees(org);
       const billingStatus = getBillingStatus(org);
       totalAnnual += fees.total;
-      totalLineItems += org.line_item_count || 0;
+      totalLineItems += lineItemCounts[org.id] || 0;
       totalUsers += staffCounts[org.id] || 0;
       if (fees.isFree) {
         freeAccounts++;
@@ -246,7 +280,7 @@ const RevenueManagement = () => {
     });
 
     return { totalAnnual, totalLineItems, freeAccounts, paidAccounts, totalUsers, collectedRevenue, outstandingRevenue, sentCount, openCount };
-  }, [organizations, calculateFees, staffCounts]);
+  }, [organizations, calculateFees, staffCounts, lineItemCounts]);
 
   // Update billing status on org
   const handleBillingStatusChange = async (orgId, newStatus) => {
@@ -255,13 +289,20 @@ const RevenueManagement = () => {
       const now = new Date().toISOString().split('T')[0];
 
       // Set dates based on status
-      if (newStatus === 'paid') {
+      if (newStatus === 'free') {
+        updateData.subscription_status = 'free';
+        updateData.payment_received_date = null;
+        updateData.invoice_sent_date = null;
+      } else if (newStatus === 'paid') {
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = now;
       } else if (newStatus === 'sent') {
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = null;
         updateData.invoice_sent_date = now;
       } else {
         // open
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = null;
         updateData.invoice_sent_date = null;
       }
@@ -434,7 +475,7 @@ const RevenueManagement = () => {
 
     // Fee calculations
     const fees = calculateFees(org);
-    const lineItems = org.line_item_count || 0;
+    const lineItems = lineItemCounts[org.id] || 0;
     const userCount = staffCounts[org.id] || 0;
 
     // Line items table
@@ -457,9 +498,9 @@ const RevenueManagement = () => {
       // Line item fee
       rows.push([
         '1',
-        `Data Processing Fee - ${lineItems.toLocaleString()} line items @ $${priceConfig.pricePerLine.toFixed(2)}/line`,
+        `Data Processing Fee - ${lineItems.toLocaleString()} line items @ $${fees.effectiveRate.toFixed(2)}/line`,
         lineItems.toLocaleString(),
-        `$${priceConfig.pricePerLine.toFixed(2)}`,
+        `$${fees.effectiveRate.toFixed(2)}`,
         `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       ]);
 
@@ -573,7 +614,7 @@ const RevenueManagement = () => {
 
     setSuccessMessage(`Invoice generated: ${fileName}`);
     setTimeout(() => setSuccessMessage(''), 3000);
-  }, [calculateFees, staffCounts, priceConfig, orgCcddCodes, billingYear]);
+  }, [calculateFees, staffCounts, lineItemCounts, priceConfig, orgCcddCodes, billingYear]);
 
   // --- Proposal handlers ---
   const resetProposalForm = () => {
@@ -861,6 +902,7 @@ const RevenueManagement = () => {
   }, [billingYear]);
 
   const billingStatusOptions = [
+    { value: 'free', label: 'Free', color: '#7c3aed', bg: '#ede9fe' },
     { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
     { value: 'sent', label: 'Sent', color: '#1e40af', bg: '#dbeafe' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
@@ -1000,7 +1042,7 @@ const RevenueManagement = () => {
                     <div className="revenue-client-name">{org.name}</div>
                     <div className="revenue-client-contact">{org.primary_contact_name || ''}</div>
                   </td>
-                  <td>{(org.line_item_count || 0).toLocaleString()}</td>
+                  <td>{(lineItemCounts[org.id] || 0).toLocaleString()}</td>
                   <td className="revenue-col-right">
                     {fees.isFree ? '-' : fees.isOverride ? '-' : `$${fees.lineItemFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
@@ -1009,35 +1051,31 @@ const RevenueManagement = () => {
                     {fees.isFree ? '-' : fees.isOverride ? '-' : `$${(fees.primaryFee + fees.staffFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
                   <td style={{ position: 'relative' }}>
-                    {billingStatus === 'free' ? (
-                      <span className="revenue-billing-badge revenue-billing-free">Free</span>
-                    ) : (
-                      <div style={{ position: 'relative', display: 'inline-block' }} ref={isDropdownOpen ? statusDropdownRef : null}>
-                        <button
-                          className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
-                          onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
-                          title="Click to change status"
-                        >
-                          {getBillingLabel(billingStatus)}
-                          <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
-                        </button>
-                        {isDropdownOpen && (
-                          <div className="revenue-status-dropdown">
-                            {billingStatusOptions.map(opt => (
-                              <button
-                                key={opt.value}
-                                className={`revenue-status-option ${billingStatus === opt.value ? 'revenue-status-active' : ''}`}
-                                style={{ '--opt-bg': opt.bg, '--opt-color': opt.color }}
-                                onClick={() => handleBillingStatusChange(org.id, opt.value)}
-                              >
-                                <span className="revenue-status-dot" style={{ background: opt.color }}></span>
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ position: 'relative', display: 'inline-block' }} ref={isDropdownOpen ? statusDropdownRef : null}>
+                      <button
+                        className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
+                        onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
+                        title="Click to change status"
+                      >
+                        {getBillingLabel(billingStatus)}
+                        <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
+                      </button>
+                      {isDropdownOpen && (
+                        <div className="revenue-status-dropdown">
+                          {billingStatusOptions.map(opt => (
+                            <button
+                              key={opt.value}
+                              className={`revenue-status-option ${billingStatus === opt.value ? 'revenue-status-active' : ''}`}
+                              style={{ '--opt-bg': opt.bg, '--opt-color': opt.color }}
+                              onClick={() => handleBillingStatusChange(org.id, opt.value)}
+                            >
+                              <span className="revenue-status-dot" style={{ background: opt.color }}></span>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td>
                     {(() => {
@@ -1134,7 +1172,7 @@ const RevenueManagement = () => {
           </button>
         </div>
 
-        {proposals.length === 0 ? (
+        {proposals.filter(p => p.status !== 'accepted' && p.status !== 'declined').length === 0 ? (
           <div className="revenue-proposals-empty">No proposals yet. Click "+ New Proposal" to create one.</div>
         ) : (
           <div className="revenue-table-wrapper">
@@ -1151,7 +1189,7 @@ const RevenueManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {proposals.map(p => (
+                {proposals.filter(p => p.status !== 'accepted' && p.status !== 'declined').map(p => (
                   <tr key={p.id} className={p.status === 'accepted' ? 'revenue-row-accepted' : ''}>
                     <td>
                       <div className="revenue-client-name">{p.town_name}</div>
