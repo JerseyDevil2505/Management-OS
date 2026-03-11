@@ -4010,7 +4010,7 @@ const OverallAnalysisTab = ({
                       <button
                         onClick={discoverStoryHeightCodes}
                         disabled={isSavingStoryHeight}
-                        className="px-4 py-2 bg-blue-600 text-white font-semibold text-sm border border-blue-700 rounded hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                       >
                         + Configure Codes from Data
                       </button>
