@@ -147,7 +147,7 @@ const RevenueManagement = () => {
             .from('property_records')
             .select('*', { count: 'exact', head: true })
             .in('job_id', jobIds)
-            .or('property_addl_card.is.null,property_addl_card.eq.');
+            .is('property_addl_card', null);
 
           lineItemMap[orgId] = count || 0;
         }
