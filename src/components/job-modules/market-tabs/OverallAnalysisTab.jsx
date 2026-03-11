@@ -52,6 +52,9 @@ const OverallAnalysisTab = ({
   const [storyHeightMappings, setStoryHeightMappings] = useState({});
   const [showStoryHeightConfig, setShowStoryHeightConfig] = useState(false);
   const [isSavingStoryHeight, setIsSavingStoryHeight] = useState(false);
+  const [availableStoryCodes, setAvailableStoryCodes] = useState([]);
+  const [showCodeSelector, setShowCodeSelector] = useState(false);
+  const [selectedCodesForConfig, setSelectedCodesForConfig] = useState(new Set());
 
   // Load story height mappings from database on component mount
   useEffect(() => {
@@ -83,6 +86,77 @@ const OverallAnalysisTab = ({
     } finally {
       setIsSavingStoryHeight(false);
     }
+  };
+
+  // Discover unique story height codes from property data
+  const discoverStoryHeightCodes = () => {
+    // Filter for condos
+    const condos = filteredProperties.filter(p => {
+      const typeCode = p.asset_type_use;
+      if (!typeCode || !codeDefinitions) return false;
+      const pWithStringCode = { ...p, asset_type_use: String(typeCode) };
+      const typeDecoded = vendorType === 'BRT'
+        ? interpretCodes.getBRTValue?.(pWithStringCode, codeDefinitions, 'asset_type_use') || ''
+        : interpretCodes.getMicrosystemsValue?.(pWithStringCode, codeDefinitions, 'asset_type_use') || '';
+      return String(typeDecoded).toUpperCase().includes('CONDO');
+    });
+
+    // Collect unique story height codes with their decoded values
+    const codeMap = {};
+    condos.forEach(p => {
+      const code = p.asset_story_height;
+      if (!code) return;
+      if (codeMap[code]) return; // Already collected
+
+      let decoded = '';
+      if (codeDefinitions) {
+        const pWithStringCode = { ...p, asset_story_height: String(code) };
+        if (vendorType === 'BRT') {
+          decoded = interpretCodes.getBRTValue?.(pWithStringCode, codeDefinitions, 'asset_story_height') || '';
+        } else if (vendorType === 'Microsystems') {
+          decoded = interpretCodes.getMicrosystemsValue?.(pWithStringCode, codeDefinitions, 'asset_story_height') || '';
+        }
+      }
+
+      codeMap[code] = {
+        code,
+        decoded: decoded || 'Unknown',
+        count: 0
+      };
+    });
+
+    // Count occurrences of each code
+    condos.forEach(p => {
+      const code = p.asset_story_height;
+      if (code && codeMap[code]) {
+        codeMap[code].count++;
+      }
+    });
+
+    const codes = Object.values(codeMap).sort((a, b) => b.count - a.count);
+    setAvailableStoryCodes(codes);
+    setShowCodeSelector(true);
+    setSelectedCodesForConfig(new Set());
+  };
+
+  // Add selected codes to configuration
+  const addSelectedCodesToConfig = async () => {
+    const updated = { ...storyHeightMappings };
+
+    selectedCodesForConfig.forEach(code => {
+      const codeData = availableStoryCodes.find(c => c.code === code);
+      if (codeData && !updated[code]) {
+        updated[code] = {
+          decoded: codeData.decoded,
+          floorLevel: ''
+        };
+      }
+    });
+
+    setStoryHeightMappings(updated);
+    await saveStoryHeightMappings(updated);
+    setShowCodeSelector(false);
+    setSelectedCodesForConfig(new Set());
   };
 
   // Check if Microsystems definitions need repair
@@ -3934,14 +4008,68 @@ const OverallAnalysisTab = ({
 
                     <div className="mt-4 pt-4 border-t border-blue-200">
                       <button
-                        className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                        disabled
-                        title="Feature to auto-detect codes from your data coming soon"
+                        onClick={discoverStoryHeightCodes}
+                        disabled={isSavingStoryHeight}
+                        className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         + Configure Codes from Data
                       </button>
-                      <p className="text-xs text-blue-600 mt-2">Tip: Once you have floor data with consistent story height codes, we can auto-detect and configure them.</p>
+                      <p className="text-xs text-blue-600 mt-2">Tip: Click to discover story height codes available in your condo data.</p>
                     </div>
+
+                    {/* Code Selector Modal */}
+                    {showCodeSelector && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-96 overflow-auto">
+                          <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
+                            <h4 className="font-semibold text-gray-900">Select Story Height Codes to Configure</h4>
+                            <p className="text-xs text-gray-500 mt-1">Found {availableStoryCodes.length} unique codes in your condo data</p>
+                          </div>
+
+                          <div className="p-4 space-y-2">
+                            {availableStoryCodes.map((codeData) => (
+                              <label key={codeData.code} className="flex items-start gap-3 p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedCodesForConfig.has(codeData.code)}
+                                  onChange={(e) => {
+                                    const updated = new Set(selectedCodesForConfig);
+                                    if (e.target.checked) {
+                                      updated.add(codeData.code);
+                                    } else {
+                                      updated.delete(codeData.code);
+                                    }
+                                    setSelectedCodesForConfig(updated);
+                                  }}
+                                  className="mt-1"
+                                />
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{codeData.code}</div>
+                                  <div className="text-sm text-gray-600">{codeData.decoded}</div>
+                                  <div className="text-xs text-gray-400">{codeData.count} properties</div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+
+                          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex gap-3 justify-end">
+                            <button
+                              onClick={() => setShowCodeSelector(false)}
+                              className="px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={addSelectedCodesToConfig}
+                              disabled={selectedCodesForConfig.size === 0 || isSavingStoryHeight}
+                              className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Add {selectedCodesForConfig.size > 0 ? `(${selectedCodesForConfig.size})` : ''} Selected Codes
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
