@@ -289,13 +289,20 @@ const RevenueManagement = () => {
       const now = new Date().toISOString().split('T')[0];
 
       // Set dates based on status
-      if (newStatus === 'paid') {
+      if (newStatus === 'free') {
+        updateData.subscription_status = 'free';
+        updateData.payment_received_date = null;
+        updateData.invoice_sent_date = null;
+      } else if (newStatus === 'paid') {
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = now;
       } else if (newStatus === 'sent') {
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = null;
         updateData.invoice_sent_date = now;
       } else {
         // open
+        updateData.subscription_status = 'active';
         updateData.payment_received_date = null;
         updateData.invoice_sent_date = null;
       }
@@ -895,6 +902,7 @@ const RevenueManagement = () => {
   }, [billingYear]);
 
   const billingStatusOptions = [
+    { value: 'free', label: 'Free', color: '#7c3aed', bg: '#ede9fe' },
     { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
     { value: 'sent', label: 'Sent', color: '#1e40af', bg: '#dbeafe' },
     { value: 'paid', label: 'Paid', color: '#166534', bg: '#dcfce7' }
@@ -1043,35 +1051,31 @@ const RevenueManagement = () => {
                     {fees.isFree ? '-' : fees.isOverride ? '-' : `$${(fees.primaryFee + fees.staffFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   </td>
                   <td style={{ position: 'relative' }}>
-                    {billingStatus === 'free' ? (
-                      <span className="revenue-billing-badge revenue-billing-free">Free</span>
-                    ) : (
-                      <div style={{ position: 'relative', display: 'inline-block' }} ref={isDropdownOpen ? statusDropdownRef : null}>
-                        <button
-                          className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
-                          onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
-                          title="Click to change status"
-                        >
-                          {getBillingLabel(billingStatus)}
-                          <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
-                        </button>
-                        {isDropdownOpen && (
-                          <div className="revenue-status-dropdown">
-                            {billingStatusOptions.map(opt => (
-                              <button
-                                key={opt.value}
-                                className={`revenue-status-option ${billingStatus === opt.value ? 'revenue-status-active' : ''}`}
-                                style={{ '--opt-bg': opt.bg, '--opt-color': opt.color }}
-                                onClick={() => handleBillingStatusChange(org.id, opt.value)}
-                              >
-                                <span className="revenue-status-dot" style={{ background: opt.color }}></span>
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ position: 'relative', display: 'inline-block' }} ref={isDropdownOpen ? statusDropdownRef : null}>
+                      <button
+                        className={`revenue-billing-badge revenue-billing-${billingStatus} revenue-status-btn`}
+                        onClick={() => setOpenStatusDropdown(isDropdownOpen ? null : org.id)}
+                        title="Click to change status"
+                      >
+                        {getBillingLabel(billingStatus)}
+                        <span style={{ marginLeft: '4px', fontSize: '0.6rem' }}>&#9662;</span>
+                      </button>
+                      {isDropdownOpen && (
+                        <div className="revenue-status-dropdown">
+                          {billingStatusOptions.map(opt => (
+                            <button
+                              key={opt.value}
+                              className={`revenue-status-option ${billingStatus === opt.value ? 'revenue-status-active' : ''}`}
+                              style={{ '--opt-bg': opt.bg, '--opt-color': opt.color }}
+                              onClick={() => handleBillingStatusChange(org.id, opt.value)}
+                            >
+                              <span className="revenue-status-dot" style={{ background: opt.color }}></span>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td>
                     {(() => {
