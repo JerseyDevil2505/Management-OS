@@ -118,15 +118,16 @@ const RevenueManagement = () => {
         }
       });
 
-      // Load CCDD codes and calculate primary card counts per org
+      // Load CCDD codes and jobs with vendor type
       const { data: jobs, error: jobError } = await supabase
         .from('jobs')
-        .select('id, organization_id, ccdd_code');
+        .select('id, organization_id, ccdd_code, vendor_type');
 
       if (jobError) throw jobError;
 
       const ccddMap = {};
       const jobsByOrg = {};
+      const jobsMap = {};
       (jobs || []).forEach(job => {
         if (job.organization_id && job.ccdd_code) {
           ccddMap[job.organization_id] = job.ccdd_code;
@@ -136,25 +137,43 @@ const RevenueManagement = () => {
             jobsByOrg[job.organization_id] = [];
           }
           jobsByOrg[job.organization_id].push(job.id);
+          jobsMap[job.id] = job;
         }
       });
-      console.log('Jobs per org:', jobsByOrg);
 
-      // Count primary cards (no additional card) per org
+      // Count primary cards per org (considering vendor type)
       const lineItemMap = {};
       for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
         if (jobIds.length > 0) {
-          const { count, error: countError } = await supabase
+          // Get all property records for these jobs
+          const { data: records, error: fetchError } = await supabase
             .from('property_records')
-            .select('*', { count: 'exact', head: true })
-            .in('job_id', jobIds)
-            .is('property_addl_card', null);
+            .select('id, job_id, property_addl_card')
+            .in('job_id', jobIds);
 
-          if (countError) {
-            console.error(`Error counting property records for org ${orgId}:`, countError);
+          if (fetchError) {
+            console.error(`Error fetching property records for org ${orgId}:`, fetchError);
+            lineItemMap[orgId] = 0;
+            continue;
           }
-          console.log(`Org ${orgId} (${jobIds.length} jobs): ${count} primary cards`);
-          lineItemMap[orgId] = count || 0;
+
+          // Filter for primary cards based on vendor type
+          const primaryCount = (records || []).filter(record => {
+            const job = jobsMap[record.job_id];
+            if (!job) return false;
+
+            const card = record.property_addl_card;
+            if (job.vendor_type === 'BRT') {
+              // BRT: main card is null or '1'
+              return !card || card === '1';
+            } else if (job.vendor_type === 'Microsystems') {
+              // Microsystems: main card is null or 'M'
+              return !card || card.toUpperCase() === 'M';
+            }
+            return !card; // Fallback: assume null is primary
+          }).length;
+
+          lineItemMap[orgId] = primaryCount;
         }
       }
 
@@ -171,6 +190,7 @@ const RevenueManagement = () => {
       setLineItemCounts(lineItemMap);
       setOrgCcddCodes(ccddMap);
       setProposals(proposalData || []);
+      console.log('✅ Revenue data loaded:', { orgCount: orgs.length, lineItemMap });
     } catch (err) {
       console.error('Error loading revenue data:', err);
       setError('Failed to load revenue data');
