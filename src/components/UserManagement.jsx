@@ -70,7 +70,7 @@ const UserManagement = ({ onViewAs }) => {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .eq('employment_status', 'full_time')
+        .in('employment_status', ['full_time', 'inactive'])
         .in('role', ['Management', 'Admin', 'Owner', 'client_user'])
         .order('last_name');
 
