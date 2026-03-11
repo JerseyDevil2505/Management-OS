@@ -55,6 +55,7 @@ const OverallAnalysisTab = ({
   const [availableStoryCodes, setAvailableStoryCodes] = useState([]);
   const [showCodeSelector, setShowCodeSelector] = useState(false);
   const [selectedCodesForConfig, setSelectedCodesForConfig] = useState(new Set());
+  const [codePositions, setCodePositions] = useState({}); // Track Top/Bottom for each code
 
   // Load story height mappings from database on component mount
   useEffect(() => {
@@ -136,7 +137,19 @@ const OverallAnalysisTab = ({
     const codes = Object.values(codeMap).sort((a, b) => b.count - a.count);
     setAvailableStoryCodes(codes);
     setShowCodeSelector(true);
-    setSelectedCodesForConfig(new Set());
+
+    // Pre-select codes that are already configured
+    const alreadyConfigured = new Set(Object.keys(storyHeightMappings));
+    setSelectedCodesForConfig(alreadyConfigured);
+
+    // Pre-populate positions from existing mappings
+    const positions = {};
+    Object.entries(storyHeightMappings).forEach(([code, config]) => {
+      if (config.position) {
+        positions[code] = config.position;
+      }
+    });
+    setCodePositions(positions);
   };
 
   // Add selected codes to configuration
@@ -148,8 +161,12 @@ const OverallAnalysisTab = ({
       if (codeData && !updated[code]) {
         updated[code] = {
           decoded: codeData.decoded,
-          floorLevel: ''
+          floorLevel: '',
+          position: codePositions[code] || ''
         };
+      } else if (updated[code] && codePositions[code]) {
+        // Update position if it's already configured
+        updated[code].position = codePositions[code];
       }
     });
 
@@ -157,6 +174,7 @@ const OverallAnalysisTab = ({
     await saveStoryHeightMappings(updated);
     setShowCodeSelector(false);
     setSelectedCodesForConfig(new Set());
+    setCodePositions({});
   };
 
   // Check if Microsystems definitions need repair
@@ -3967,6 +3985,7 @@ const OverallAnalysisTab = ({
                               <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Story Height Code</th>
                               <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Description</th>
                               <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Map to Floor</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Position</th>
                               <th className="px-3 py-2 text-left text-xs font-medium text-blue-900">Action</th>
                             </tr>
                           </thead>
@@ -3995,6 +4014,24 @@ const OverallAnalysisTab = ({
                                     <option value="5TH FLOOR">5TH FLOOR</option>
                                     <option value="TOP FLOOR">TOP FLOOR</option>
                                     <option value="PENTHOUSE">PENTHOUSE</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2 text-sm">
+                                  <select
+                                    value={config.position || ''}
+                                    onChange={(e) => {
+                                      const updated = { ...storyHeightMappings };
+                                      updated[code].position = e.target.value;
+                                      setStoryHeightMappings(updated);
+                                      saveStoryHeightMappings(updated);
+                                    }}
+                                    disabled={isSavingStoryHeight}
+                                    className="px-2 py-1 border border-gray-300 rounded text-sm bg-white disabled:opacity-50"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    <option value="TOP">Top</option>
+                                    <option value="BOTTOM">Bottom</option>
+                                    <option value="MIDDLE">Middle</option>
                                   </select>
                                 </td>
                                 <td className="px-3 py-2 text-sm">
@@ -4027,29 +4064,55 @@ const OverallAnalysisTab = ({
                             <p className="text-xs text-gray-500 mt-1">Found {availableStoryCodes.length} unique codes in your condo data</p>
                           </div>
 
-                          <div className="p-4 space-y-2">
+                          <div className="p-4 space-y-3">
                             {availableStoryCodes.map((codeData) => (
-                              <label key={codeData.code} className="flex items-start gap-3 p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedCodesForConfig.has(codeData.code)}
-                                  onChange={(e) => {
-                                    const updated = new Set(selectedCodesForConfig);
-                                    if (e.target.checked) {
-                                      updated.add(codeData.code);
-                                    } else {
-                                      updated.delete(codeData.code);
-                                    }
-                                    setSelectedCodesForConfig(updated);
-                                  }}
-                                  className="mt-1"
-                                />
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">{codeData.code}</div>
-                                  <div className="text-sm text-gray-600">{codeData.decoded}</div>
-                                  <div className="text-xs text-gray-400">{codeData.count} properties</div>
+                              <div key={codeData.code} className="p-3 border border-gray-200 rounded hover:bg-gray-50">
+                                <div className="flex items-start gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCodesForConfig.has(codeData.code)}
+                                    onChange={(e) => {
+                                      const updated = new Set(selectedCodesForConfig);
+                                      if (e.target.checked) {
+                                        updated.add(codeData.code);
+                                      } else {
+                                        updated.delete(codeData.code);
+                                      }
+                                      setSelectedCodesForConfig(updated);
+                                    }}
+                                    className="mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="text-sm font-medium text-gray-900">{codeData.code}</div>
+                                    <div className="text-sm text-gray-600">{codeData.decoded}</div>
+                                    <div className="text-xs text-gray-400">{codeData.count} properties</div>
+                                  </div>
                                 </div>
-                              </label>
+
+                                {selectedCodesForConfig.has(codeData.code) && (
+                                  <div className="mt-3 ml-7 pt-3 border-t border-gray-200">
+                                    <label className="block text-xs font-medium text-gray-700 mb-2">Position in Building:</label>
+                                    <select
+                                      value={codePositions[codeData.code] || ''}
+                                      onChange={(e) => {
+                                        const updated = { ...codePositions };
+                                        if (e.target.value) {
+                                          updated[codeData.code] = e.target.value;
+                                        } else {
+                                          delete updated[codeData.code];
+                                        }
+                                        setCodePositions(updated);
+                                      }}
+                                      className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                                    >
+                                      <option value="">-- Select Position --</option>
+                                      <option value="TOP">Top Floor / Penthouse</option>
+                                      <option value="BOTTOM">Bottom Floor / Basement</option>
+                                      <option value="MIDDLE">Middle Floors</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
                             ))}
                           </div>
 
