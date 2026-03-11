@@ -143,40 +143,24 @@ const RevenueManagement = () => {
 
       // Count primary cards per org (BRT='1', Microsystems='M')
       const lineItemMap = {};
-      const orgNames = {};
-      for (const org of orgs) {
-        orgNames[org.id] = org.name;
-      }
-
       for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
         if (jobIds.length > 0) {
-          // Get all property records for these jobs with their cards
-          const { data: records, error: fetchError } = await supabase
+          // Count BRT primary cards (card = '1')
+          const { count: brtCount } = await supabase
             .from('property_records')
-            .select('job_id, property_addl_card')
-            .in('job_id', jobIds);
+            .select('*', { count: 'exact', head: true })
+            .in('job_id', jobIds)
+            .eq('property_addl_card', '1');
 
-          if (fetchError) {
-            console.error(`Error fetching property records for org ${orgId}:`, fetchError);
-            lineItemMap[orgId] = 0;
-            continue;
-          }
+          // Count Microsystems primary cards (card = 'M')
+          const { count: microCount } = await supabase
+            .from('property_records')
+            .select('*', { count: 'exact', head: true })
+            .in('job_id', jobIds)
+            .eq('property_addl_card', 'M');
 
-          // Count primary cards based on vendor type
-          const primaryCount = (records || []).filter(record => {
-            const job = jobsMap[record.job_id];
-            if (!job) return false;
-
-            if (job.vendor_type === 'BRT') {
-              return record.property_addl_card === '1';
-            } else if (job.vendor_type === 'Microsystems') {
-              return record.property_addl_card === 'M';
-            }
-            return false;
-          }).length;
-
-          lineItemMap[orgId] = primaryCount;
-          console.log(`${orgNames[orgId]}: ${jobIds.length} jobs, ${records?.length || 0} total records, ${primaryCount} primary cards`);
+          const total = (brtCount || 0) + (microCount || 0);
+          lineItemMap[orgId] = total;
         }
       }
 
