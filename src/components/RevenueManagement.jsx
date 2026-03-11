@@ -158,20 +158,28 @@ const RevenueManagement = () => {
           }
 
           // Filter for primary cards based on vendor type
-          const primaryCount = (records || []).filter(record => {
+          const allRecords = records || [];
+          const primaryCount = allRecords.filter(record => {
             const job = jobsMap[record.job_id];
             if (!job) return false;
 
             const card = record.property_addl_card;
+            const cardTrimmed = typeof card === 'string' ? card.trim() : card;
+
             if (job.vendor_type === 'BRT') {
-              // BRT: main card is null or '1'
-              return !card || card === '1';
+              // BRT: main card is null, empty string, or '1'
+              return !cardTrimmed || cardTrimmed === '1';
             } else if (job.vendor_type === 'Microsystems') {
-              // Microsystems: main card is null or 'M'
-              return !card || card.toUpperCase() === 'M';
+              // Microsystems: main card is null, empty string, or 'M'
+              return !cardTrimmed || cardTrimmed.toUpperCase() === 'M';
             }
-            return !card; // Fallback: assume null is primary
+            return !cardTrimmed; // Fallback: assume null/empty is primary
           }).length;
+
+          // Debug log for first few orgs
+          if (Object.keys(lineItemMap).length < 3) {
+            console.log(`Org ${orgId}: Total records=${allRecords.length}, Primary=${primaryCount}, Sample cards:`, allRecords.slice(0, 5).map(r => r.property_addl_card));
+          }
 
           lineItemMap[orgId] = primaryCount;
         }
