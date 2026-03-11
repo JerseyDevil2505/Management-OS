@@ -3,12 +3,15 @@ import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Setti
 import * as XLSX from 'xlsx';
 import { employeeService, supabase } from '../lib/supabaseClient';
 
-const EmployeeManagement = ({ 
-  employees: propEmployees = [], 
+const EmployeeManagement = ({
+  employees: propEmployees = [],
   globalAnalytics: propGlobalAnalytics = null,
   onDataUpdate,
-  onRefresh 
+  onRefresh
 }) => {
+  // PPA Organization ID constant
+  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -797,7 +800,8 @@ const loadEmployees = () => {
           initials: initials,
           weekly_hours: weeklyHours ? parseFloat(weeklyHours) : null,
           hire_date: new Date().toISOString().split('T')[0],
-          created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad'
+          created_by: '5df85ca3-7a54-4798-a665-c31da8d9caad',
+          organization_id: PPA_ORG_ID
         };
       });
 

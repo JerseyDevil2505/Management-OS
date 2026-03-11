@@ -488,6 +488,7 @@ const App = () => {
             staged_unit_rate_config,
             job_responsibilities(count),
             job_contracts(
+              id,
               contract_amount,
               contract_template_type,
               retainer_percentage,
@@ -499,7 +500,8 @@ const App = () => {
               second_year_appeals_percentage,
               second_year_appeals_amount,
               third_year_appeals_percentage,
-              third_year_appeals_amount
+              third_year_appeals_amount,
+              bonding_required
             ),
             billing_events(
               id,

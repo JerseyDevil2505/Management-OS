@@ -39,7 +39,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [compFilters, setCompFilters] = useState({
     adjustmentBracket: '', // '' (unselected), 'auto', or 'bracket_0', 'bracket_1', etc.
     autoAdjustment: false, // Auto checkbox - default OFF
-    salesCodes: ['00', '07', '32', '36'], // CSP default codes
+    salesCodes: ['00', '0', '07', '7', '32', '33', '3', '36'], // CSP default codes (includes both padded BRT and unpadded Microsystems formats, plus farm sales code 33)
     salesDateStart: cspDateRange.start,
     salesDateEnd: cspDateRange.end,
     vcs: [],
@@ -92,6 +92,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [bracketMappings, setBracketMappings] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
   const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
+  const [savedPoolOverrideSets, setSavedPoolOverrideSets] = useState([]); // Saved pool override sets from DB
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -281,6 +282,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadSavedEvaluations();
       loadSavedResultSets();
       loadBracketMappings();
+      loadSavedPoolOverrideSets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -432,6 +434,90 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       setBracketMappings(data || []);
     } catch (error) {
       console.warn('Bracket mappings loading error:', error.message);
+    }
+  };
+
+  // ==================== SALES POOL OVERRIDE SETS ====================
+  const loadSavedPoolOverrideSets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_sales_pool_overrides')
+        .select('id, name, overrides, created_at')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSavedPoolOverrideSets(data || []);
+    } catch (error) {
+      console.warn('⚠️ Error loading saved pool override sets:', error.message);
+    }
+  };
+
+  // Save current pool overrides with a user-provided name
+  const handleSavePoolOverrideSet = async () => {
+    if (Object.keys(salesPoolOverrides).length === 0) {
+      alert('No overrides to save. Mark some sales as included/excluded first.');
+      return;
+    }
+
+    const name = window.prompt('Enter a name for this pool override set:');
+    if (!name || !name.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_sales_pool_overrides')
+        .insert({
+          job_id: jobData.id,
+          name: name.trim(),
+          overrides: salesPoolOverrides
+        });
+
+      if (error) throw error;
+
+      alert(`Pool override set "${name.trim()}" saved successfully!`);
+      await loadSavedPoolOverrideSets();
+    } catch (error) {
+      console.error('Error saving pool override set:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
+  };
+
+  // Load a saved pool override set
+  const handleLoadPoolOverrideSet = async (setId) => {
+    if (!setId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('job_sales_pool_overrides')
+        .select('overrides')
+        .eq('id', setId)
+        .single();
+
+      if (error) throw error;
+
+      setSalesPoolOverrides(data.overrides || {});
+      console.log('✅ Loaded pool override set');
+    } catch (error) {
+      console.error('Error loading pool override set:', error);
+      alert(`Failed to load: ${error.message}`);
+    }
+  };
+
+  // Delete a saved pool override set
+  const handleDeletePoolOverrideSet = async (setId, setName) => {
+    if (!window.confirm(`Delete saved pool override set "${setName}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_sales_pool_overrides')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+      await loadSavedPoolOverrideSets();
+    } catch (error) {
+      console.error('Error deleting pool override set:', error);
+      alert(`Failed to delete: ${error.message}`);
     }
   };
 
@@ -965,9 +1051,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
     const aggregated = { ...prop };
 
-    // SUM fields
+    // SUM fields (includes lot acre for farm properties with multiple cards like 3A + 3B)
     const sumFields = [
-      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'asset_sfla', 'asset_lot_acre', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
       'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
       'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
       'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'
@@ -998,6 +1084,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     });
 
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
+
+    // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
+    // This keeps the editable value in sync with the display render function
+    if (aggregated._pkg?.is_farm_package && aggregated._pkg?.combined_lot_acres > 0) {
+      aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
+    }
 
     return aggregated;
   };
@@ -1437,7 +1529,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               logExclusion('year built max', `comp=${comp.asset_year_built} > max=${compFilters.builtYearMax}`);
               return false;
             }
-          } else {
+          } else if (compFilters.builtWithinYears > 0) {
+            // Only apply tolerance filter if it's set to > 0
+            // When cleared (0), no year built restriction applies
             // Normalize pre-1925 year built to 1925 for comparison purposes only.
             // Historic homes (1790, 1850, 1910, etc.) are all treated as 1925 so they can match each other.
             const YEAR_FLOOR = 1925;
@@ -1463,7 +1557,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               logExclusion('SFLA max', `comp=${comp.asset_sfla} > max=${compFilters.sizeMax}`);
               return false;
             }
-          } else {
+          } else if (compFilters.sizeWithinSqft > 0) {
+            // Only apply tolerance filter if it's set to > 0
+            // When cleared (0), no size restriction applies
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
             if (sizeDiff > compFilters.sizeWithinSqft) {
               if (isFirstProperty) debugFilters.size++;
@@ -2634,14 +2730,60 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {activeSubTab === 'sales-pool' && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Sales Pool
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  {includedSalesCount} of {(compFilters.salesDateStart || compFilters.salesDateEnd)
-                    ? salesPoolEntries.filter(p => p._inDateRange).length
-                    : allSalesCandidates.length} sales included
-                </span>
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Sales Pool
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    {includedSalesCount} of {(compFilters.salesDateStart || compFilters.salesDateEnd)
+                      ? salesPoolEntries.filter(p => p._inDateRange).length
+                      : allSalesCandidates.length} sales included
+                  </span>
+                </h3>
+
+                {/* Override Set Controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSavePoolOverrideSet}
+                    className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded hover:bg-blue-600"
+                    title="Save current pool overrides (includes/excludes) to a named set"
+                  >
+                    Save Overrides
+                  </button>
+
+                  {savedPoolOverrideSets.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleLoadPoolOverrideSet(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="px-2 py-1.5 text-sm border border-gray-300 rounded bg-white hover:bg-gray-50"
+                      defaultValue=""
+                    >
+                      <option value="">Load saved overrides...</option>
+                      {savedPoolOverrideSets.map(set => (
+                        <option key={set.id} value={set.id}>{set.name}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {savedPoolOverrideSets.length > 0 && (
+                    <div className="border-l border-gray-300 pl-2">
+                      {savedPoolOverrideSets.map(set => (
+                        <button
+                          key={set.id}
+                          onClick={() => handleDeletePoolOverrideSet(set.id, set.name)}
+                          className="ml-1 px-2 py-1 text-xs text-red-600 bg-red-50 border border-red-300 rounded hover:bg-red-100"
+                          title={`Delete override set: ${set.name}`}
+                        >
+                          ✕ {set.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Analytics Sections */}
               <div className="mb-4 space-y-1">
@@ -4005,6 +4147,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             <td
                               className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
                               onClick={() => {
+                                // Pre-populate subject and comps for detailed view
+                                setManualSubject({
+                                  block: result.subject.property_block || '',
+                                  lot: result.subject.property_lot || '',
+                                  qualifier: result.subject.property_qualifier || ''
+                                });
+                                // Pre-populate comps (up to 5)
+                                const newComps = [
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' },
+                                  { block: '', lot: '', qualifier: '' }
+                                ];
+                                result.comparables.forEach((comp, idx) => {
+                                  if (idx < 5) {
+                                    newComps[idx] = {
+                                      block: comp.property_block || '',
+                                      lot: comp.property_lot || '',
+                                      qualifier: comp.property_qualifier || ''
+                                    };
+                                  }
+                                });
+                                setManualComps(newComps);
                                 setManualEvaluationResult(result);
                                 setActiveSubTab('detailed');
                               }}
