@@ -947,9 +947,9 @@ const RevenueManagement = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
     const rightX = pageWidth - margin;
-    doc.text('LOJIK for Professional Property Appraisers Inc', rightX, margin + 10, { align: 'right' });
-    doc.text('Property Assessment Specialists', rightX, margin + 20, { align: 'right' });
-    doc.text('New Jersey', rightX, margin + 30, { align: 'right' });
+    doc.text('LOJIK LLC', rightX, margin + 10, { align: 'right' });
+    doc.text('PO BOX 1225', rightX, margin + 20, { align: 'right' });
+    doc.text('DELRAN, NJ 08075', rightX, margin + 30, { align: 'right' });
 
     // Divider line
     doc.setDrawColor(...lojikBlue);
@@ -990,19 +990,13 @@ const RevenueManagement = () => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('LOJIK', margin, pageHeight - 65);
+    doc.text('LOJIK LLC', margin, pageHeight - 65);
 
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    doc.text('For Professional Property Appraisers Inc', margin, pageHeight - 52);
-    doc.text('Property Assessment Specialists', margin, pageHeight - 41);
-
-    // Contact info in footer
     doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text('New Jersey', margin, pageHeight - 30);
-    doc.text('www.lojik.com', margin, pageHeight - 20);
+    doc.text('PO BOX 1225 | DELRAN, NJ 08075', margin, pageHeight - 52);
+    doc.text('www.lojik.com', margin, pageHeight - 41);
 
     // Bottom center footer
     doc.setFontSize(7);
