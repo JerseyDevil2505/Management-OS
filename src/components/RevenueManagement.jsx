@@ -901,6 +901,122 @@ const RevenueManagement = () => {
     setTimeout(() => setSuccessMessage(''), 3000);
   }, [billingYear]);
 
+  // Generate LOJIK Letterhead PDF
+  const generateLetterhead = useCallback(async () => {
+    const { default: jsPDF } = await import('jspdf');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 40;
+    const lojikBlue = [0, 102, 204];
+
+    // Load logo
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // Header: Logo
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'PNG', margin, margin, 100, 44);
+      } catch {
+        doc.setTextColor(...lojikBlue);
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOJIK', margin, margin + 30);
+      }
+    } else {
+      doc.setTextColor(...lojikBlue);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin, margin + 30);
+    }
+
+    // Address and contact info on right side
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    const rightX = pageWidth - margin;
+    doc.text('LOJIK for Professional Property Appraisers Inc', rightX, margin + 10, { align: 'right' });
+    doc.text('Property Assessment Specialists', rightX, margin + 20, { align: 'right' });
+    doc.text('New Jersey', rightX, margin + 30, { align: 'right' });
+
+    // Divider line
+    doc.setDrawColor(...lojikBlue);
+    doc.setLineWidth(2);
+    doc.line(margin, margin + 65, pageWidth - margin, margin + 65);
+
+    // Date
+    const today = new Date();
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Date: ${today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, margin, margin + 90);
+
+    // Letter body area - large space for content
+    let contentY = margin + 120;
+
+    // Salutation placeholder
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Dear Recipient,', margin, contentY);
+
+    // Content instructions (subtle)
+    contentY += 30;
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont('helvetica', 'italic');
+    doc.text('[Your letter content goes here]', margin, contentY);
+    doc.text('Edit this document in Microsoft Word or your preferred editor.', margin, contentY + 12);
+    doc.text('Remove these placeholder lines and compose your message.', margin, contentY + 24);
+
+    // Footer divider
+    doc.setDrawColor(...lojikBlue);
+    doc.setLineWidth(1);
+    doc.line(margin, pageHeight - 80, pageWidth - margin, pageHeight - 80);
+
+    // Footer: Company signature block
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('LOJIK', margin, pageHeight - 65);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    doc.text('For Professional Property Appraisers Inc', margin, pageHeight - 52);
+    doc.text('Property Assessment Specialists', margin, pageHeight - 41);
+
+    // Contact info in footer
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text('New Jersey', margin, pageHeight - 30);
+    doc.text('www.lojik.com', margin, pageHeight - 20);
+
+    // Bottom center footer
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Generated ${today.toLocaleDateString()}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+
+    // Save the PDF
+    const fileName = `LOJIK_Letterhead_${today.getFullYear()}.pdf`;
+    doc.save(fileName);
+
+    setSuccessMessage(`Letterhead generated: ${fileName}`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  }, []);
+
   const billingStatusOptions = [
     { value: 'free', label: 'Free', color: '#7c3aed', bg: '#ede9fe' },
     { value: 'open', label: 'Open', color: '#854d0e', bg: '#fef9c3' },
@@ -958,6 +1074,13 @@ const RevenueManagement = () => {
             onClick={() => setShowInvoiceModal(true)}
           >
             Pricing Config
+          </button>
+          <button
+            className="revenue-config-btn"
+            onClick={generateLetterhead}
+            title="Generate a LOJIK letterhead for correspondence with municipalities"
+          >
+            Generate Letterhead
           </button>
         </div>
       </div>
