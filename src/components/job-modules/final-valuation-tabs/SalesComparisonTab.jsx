@@ -105,6 +105,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   ]);
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+  const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
   // ==================== APPEAL LOG → CME NAVIGATION ====================
   useEffect(() => {
@@ -1207,25 +1208,51 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         ));
       }
 
-      setManualEvaluationResult({
+      const updatedResult = {
         subject,
         comparables: fetchedComps,
         projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
         confidenceScore: Math.round(confidenceScore),
         hasSubjectSale: false
-      });
+      };
 
-      console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+      setManualEvaluationResult(updatedResult);
 
-      // Auto-scroll to results after rendering completes
-      setTimeout(() => {
-        if (detailedResultsRef.current) {
-          detailedResultsRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }, 300);
+      // ✅ CRITICAL FIX: Sync changes back to evaluationResults if editing an existing result
+      if (editingResultIndex !== null && evaluationResults && evaluationResults.length > editingResultIndex) {
+        const updatedResults = [...evaluationResults];
+        updatedResults[editingResultIndex] = updatedResult;
+        setEvaluationResults(updatedResults);
+        console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
+
+        // Auto-switch back to Results tab to show the updated row
+        setTimeout(() => {
+          setActiveSubTab('results');
+          setEditingResultIndex(null); // Clear the editing index
+
+          // Auto-scroll to the updated row
+          setTimeout(() => {
+            if (resultsRef.current) {
+              resultsRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+              });
+            }
+          }, 300);
+        }, 500);
+      } else {
+        console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+
+        // Auto-scroll to results after rendering completes
+        setTimeout(() => {
+          if (detailedResultsRef.current) {
+            detailedResultsRef.current.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }
+        }, 300);
+      }
 
     } catch (error) {
       console.error('Error in manual evaluation:', error);
@@ -1245,6 +1272,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       { block: '', lot: '', qualifier: '' }
     ]);
     setManualEvaluationResult(null);
+    setEditingResultIndex(null); // Clear the tracking index when clearing comps
   };
 
   // ==================== EVALUATE COMPARABLES ====================
@@ -4172,6 +4200,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                 });
                                 setManualComps(newComps);
                                 setManualEvaluationResult(result);
+                                setEditingResultIndex(idx); // Track which result row is being edited
                                 setActiveSubTab('detailed');
                               }}
                               title="Click to view detailed analysis"
@@ -4359,11 +4388,37 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
           <div className="space-y-6">
+            {/* Editing Indicator Banner */}
+            {editingResultIndex !== null && manualEvaluationResult && (
+              <div className="bg-purple-50 border border-purple-300 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-purple-900 mb-1">✏️ Editing Evaluation Result</h3>
+                    <p className="text-sm text-purple-700">
+                      You are editing the result for <strong>{manualEvaluationResult.subject.property_block}/{manualEvaluationResult.subject.property_lot}{manualEvaluationResult.subject.property_qualifier ? '/' + manualEvaluationResult.subject.property_qualifier : ''}</strong>
+                      {' '}(Row {editingResultIndex + 1})
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Switch back to Results tab to see the updated row
+                      setActiveSubTab('results');
+                    }}
+                    className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium whitespace-nowrap"
+                  >
+                    View Results
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Header with Manual Entry Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Manual Property Evaluation</h3>
               <p className="text-sm text-blue-700">
-                Enter BLQ (Block/Lot/Qualifier) info below to fetch properties and run an appraisal evaluation without using the Search tab.
+                {editingResultIndex !== null
+                  ? 'Modify the subject and comparables below, then click "Evaluate and Update" to save your changes.'
+                  : 'Enter BLQ (Block/Lot/Qualifier) info below to fetch properties and run an appraisal evaluation without using the Search tab.'}
               </p>
             </div>
 
