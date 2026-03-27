@@ -2433,21 +2433,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             if (compValue > 0) compConditionMultiplier = getConditionMultiplier(comp);
           }
 
-          // Calculate adjustment with condition multipliers for detached items (only for flat/percent, not per_sqft)
-          // per_sqft adjustments need to fall through to the normal calculation below
+          // Apply condition multipliers for all detached item adjustments
           if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
                adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
                adjustmentDef.adjustment_id.startsWith('stable_')) &&
-              (adjustmentType === 'flat' || adjustmentType === 'percent') &&
               (subjectValue !== compValue)) {
-            // Apply condition-adjusted calculation
+            // Apply condition multipliers to the values
             const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
             const compAdjustedValue = compValue * compConditionMultiplier;
             const adjustedDifference = subjectAdjustedValue - compAdjustedValue;
 
-            // Return the condition-adjusted flat adjustment
-            return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
-                   (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
+            // For flat/percent, return early with condition-adjusted flat adjustment
+            if (adjustmentType === 'flat' || adjustmentType === 'percent') {
+              return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
+                     (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
+            }
+            // For per_sqft/count, update the values to use condition-adjusted values and fall through
+            else if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+              subjectValue = subjectAdjustedValue;
+              compValue = compAdjustedValue;
+            }
           }
         } else {
           return 0; // Unknown attribute
