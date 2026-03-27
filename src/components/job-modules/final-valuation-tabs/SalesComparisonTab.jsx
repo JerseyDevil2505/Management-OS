@@ -332,6 +332,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     if (!name || !name.trim()) return;
 
     try {
+      // Check if a result set with this name already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('job_cme_result_sets')
+        .select('id')
+        .eq('job_id', jobData.id)
+        .eq('name', name.trim())
+        .single();
+
+      let shouldOverwrite = false;
+      let existingId = null;
+
+      if (existing) {
+        // Result set already exists - ask for overwrite confirmation
+        existingId = existing.id;
+        shouldOverwrite = window.confirm(
+          `Result set "${name.trim()}" already exists. Do you want to overwrite it?`
+        );
+        if (!shouldOverwrite) return; // User cancelled
+      }
+
       // Serialize results for storage - preserve all property fields so loaded results
       // can be displayed in DetailedAppraisalGrid with full attribute data (VCS, year built,
       // bathrooms, building class, style, conditions, lot size, etc.)
@@ -349,19 +369,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         hasSubjectSale: r.hasSubjectSale,
       }));
 
-      const { error } = await supabase
-        .from('job_cme_result_sets')
-        .insert({
-          job_id: jobData.id,
-          name: name.trim(),
-          adjustment_bracket: compFilters.adjustmentBracket,
-          search_criteria: compFilters,
-          results: serializedResults,
-        });
+      let error;
+      if (shouldOverwrite && existingId) {
+        // Update existing result set
+        const { error: updateError } = await supabase
+          .from('job_cme_result_sets')
+          .update({
+            adjustment_bracket: compFilters.adjustmentBracket,
+            search_criteria: compFilters,
+            results: serializedResults,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingId);
+        error = updateError;
+      } else {
+        // Insert new result set
+        const { error: insertError } = await supabase
+          .from('job_cme_result_sets')
+          .insert({
+            job_id: jobData.id,
+            name: name.trim(),
+            adjustment_bracket: compFilters.adjustmentBracket,
+            search_criteria: compFilters,
+            results: serializedResults,
+          });
+        error = insertError;
+      }
 
       if (error) throw error;
 
-      alert(`Result set "${name.trim()}" saved successfully!`);
+      alert(`Result set "${name.trim()}" ${shouldOverwrite ? 'updated' : 'saved'} successfully!`);
       await loadSavedResultSets();
     } catch (error) {
       console.error('Error saving result set:', error);
