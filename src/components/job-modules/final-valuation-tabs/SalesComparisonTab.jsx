@@ -2405,6 +2405,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             compValue = hasCode(comp) ? 1 : 0;
           }
 
+          // For per_sqft or count adjustments on detached items, use actual area/count values instead of binary
+          if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
+               adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+               adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (adjustmentType === 'per_sqft' || adjustmentType === 'count')) {
+            // Map adjustment ID to area column
+            if (adjustmentDef.adjustment_id.startsWith('pole_barn_')) {
+              subjectValue = subject.pole_barn_area || 0;
+              compValue = comp.pole_barn_area || 0;
+            } else if (adjustmentDef.adjustment_id.startsWith('barn_')) {
+              subjectValue = subject.barn_area || 0;
+              compValue = comp.barn_area || 0;
+            } else if (adjustmentDef.adjustment_id.startsWith('stable_')) {
+              subjectValue = subject.stable_area || 0;
+              compValue = comp.stable_area || 0;
+            }
+          }
+
           // For detached items (barn, pole_barn, stable), store condition multipliers for later use
           let subjectConditionMultiplier = 1.0;
           let compConditionMultiplier = 1.0;
@@ -2415,10 +2433,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             if (compValue > 0) compConditionMultiplier = getConditionMultiplier(comp);
           }
 
-          // Calculate adjustment with condition multipliers for detached items
+          // Calculate adjustment with condition multipliers for detached items (only for flat/percent, not per_sqft)
+          // per_sqft adjustments need to fall through to the normal calculation below
           if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
                adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
                adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (adjustmentType === 'flat' || adjustmentType === 'percent') &&
               (subjectValue !== compValue)) {
             // Apply condition-adjusted calculation
             const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
