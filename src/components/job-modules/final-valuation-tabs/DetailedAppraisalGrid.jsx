@@ -1497,8 +1497,27 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       doc.setFont('helvetica', 'bold');
       doc.text('Dynamic Adjustments', margin, margin + 55);
 
-      // Build dynamic rows
-      const dynamicRows = dynamicAttrs.map(attr => {
+      // ✅ FILTER: Only show dynamic attributes that have actual values
+      // (not "NONE" for subject or all comparables)
+      const relevantDynamicAttrs = dynamicAttrs.filter(attr => {
+        const subjectVal = attr.render(subject);
+
+        // Check if subject has a non-NONE value
+        if (subjectVal !== 'NONE') return true;
+
+        // Check if any comparable has a non-NONE value
+        for (let i = 0; i < comps.length; i++) {
+          if (comps[i]) {
+            const compVal = attr.render(comps[i]);
+            if (compVal !== 'NONE') return true;
+          }
+        }
+
+        return false; // All values are NONE - hide this row
+      });
+
+      // Build dynamic rows using filtered attributes
+      const dynamicRows = relevantDynamicAttrs.map(attr => {
         const row = [attr.label];
 
         // Subject column
@@ -1568,60 +1587,63 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         dynamicRows.push(valRow);
       }
 
-      autoTable(doc, {
-        head: headers,
-        body: dynamicRows,
-        startY: margin + 65,
-        margin: { left: margin, right: margin },
-        styles: {
-          fontSize: 7,
-          cellPadding: 3,
-          lineColor: [200, 200, 200],
-          lineWidth: 0.5,
-          valign: 'middle'
-        },
-        headStyles: {
-          fillColor: lojikBlue,
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          halign: 'center'
-        },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 80 },
-          1: { fillColor: [255, 255, 230], halign: 'center' },
-          2: { fillColor: [230, 242, 255], halign: 'center' },
-          3: { fillColor: [230, 242, 255], halign: 'center' },
-          4: { fillColor: [230, 242, 255], halign: 'center' },
-          5: { fillColor: [230, 242, 255], halign: 'center' },
-          6: { fillColor: [230, 242, 255], halign: 'center' }
-        },
-        didParseCell: function(data) {
-          if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
-            data.cell.styles.fillColor = [240, 240, 240];
-            data.cell.styles.fontStyle = 'bold';
-          }
-          if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
-            data.cell.styles.fillColor = [200, 230, 255];
-            data.cell.styles.fontStyle = 'bold';
-          }
-          // Color adjustment amounts: green for positive, red for negative
-          const cellData = data.row.raw?.[data.column.index];
-          if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
-            if (cellData.adjAmount > 0) {
-              data.cell.styles.textColor = [34, 139, 34]; // Green
-            } else if (cellData.adjAmount < 0) {
-              data.cell.styles.textColor = [220, 20, 60]; // Red
+      // Only render the table if there are relevant dynamic attributes
+      if (relevantDynamicAttrs.length > 0) {
+        autoTable(doc, {
+          head: headers,
+          body: dynamicRows,
+          startY: margin + 65,
+          margin: { left: margin, right: margin },
+          styles: {
+            fontSize: 7,
+            cellPadding: 3,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.5,
+            valign: 'middle'
+          },
+          headStyles: {
+            fillColor: lojikBlue,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center'
+          },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 80 },
+            1: { fillColor: [255, 255, 230], halign: 'center' },
+            2: { fillColor: [230, 242, 255], halign: 'center' },
+            3: { fillColor: [230, 242, 255], halign: 'center' },
+            4: { fillColor: [230, 242, 255], halign: 'center' },
+            5: { fillColor: [230, 242, 255], halign: 'center' },
+            6: { fillColor: [230, 242, 255], halign: 'center' }
+          },
+          didParseCell: function(data) {
+            if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
+              data.cell.styles.fillColor = [240, 240, 240];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
+              data.cell.styles.fillColor = [200, 230, 255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            // Color adjustment amounts: green for positive, red for negative
+            const cellData = data.row.raw?.[data.column.index];
+            if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+              if (cellData.adjAmount > 0) {
+                data.cell.styles.textColor = [34, 139, 34]; // Green
+              } else if (cellData.adjAmount < 0) {
+                data.cell.styles.textColor = [220, 20, 60]; // Red
+              }
+            }
+          },
+          willDrawCell: function(data) {
+            // Convert object cells to string content before drawing
+            const cellData = data.row.raw?.[data.column.index];
+            if (cellData && typeof cellData === 'object' && cellData.content) {
+              data.cell.text = cellData.content.split('\n');
             }
           }
-        },
-        willDrawCell: function(data) {
-          // Convert object cells to string content before drawing
-          const cellData = data.row.raw?.[data.column.index];
-          if (cellData && typeof cellData === 'object' && cellData.content) {
-            data.cell.text = cellData.content.split('\n');
-          }
-        }
-      });
+        });
+      }
     }
 
     // ==================== CHAPTER 123 TEST ====================
