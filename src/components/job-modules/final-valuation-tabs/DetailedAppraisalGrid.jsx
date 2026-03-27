@@ -1840,7 +1840,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           </thead>
           <tbody className="bg-white">
             {/* Render all attributes in order */}
-            {allAttributes.map((attr) => (
+            {allAttributes
+              .filter(attr => {
+                // ✅ FILTER: Hide dynamic attributes with all NONE values
+                if (!attr.isDynamic) return true; // Always show non-dynamic attributes
+
+                const subjectVal = attr.render(aggregatedSubject);
+                if (subjectVal !== 'NONE') return true; // Show if subject has value
+
+                // Check if any comparable has a non-NONE value
+                for (let i = 0; i < aggregatedComps.length; i++) {
+                  if (aggregatedComps[i]) {
+                    const compVal = attr.render(aggregatedComps[i]);
+                    if (compVal !== 'NONE') return true;
+                  }
+                }
+
+                return false; // Hide if all values are NONE
+              })
+              .map((attr) => (
               <tr key={attr.id} className="border-b hover:bg-gray-50">
                 <td className="px-2 py-2">
                   <input 
@@ -2097,7 +2115,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   </tr>
                 </thead>
                 <tbody>
-                  {allAttributes.filter(attr => rowVisibility[attr.id] !== false).map(attr => {
+                  {allAttributes
+                    .filter(attr => rowVisibility[attr.id] !== false)
+                    .filter(attr => {
+                      // ✅ FILTER: Hide dynamic attributes with all NONE values
+                      if (!attr.isDynamic) return true; // Always show non-dynamic attributes
+
+                      const subjectVal = attr.render(subject);
+                      if (subjectVal !== 'NONE') return true; // Show if subject has value
+
+                      // Check if any comparable has a non-NONE value
+                      for (let i = 0; i < comps.length; i++) {
+                        if (comps[i]) {
+                          const compVal = attr.render(comps[i]);
+                          if (compVal !== 'NONE') return true;
+                        }
+                      }
+
+                      return false; // Hide if all values are NONE
+                    })
+                    .map(attr => {
                     const config = EDITABLE_CONFIG[attr.id];
                     // Make both configured fields AND dynamic rows editable
                     const isEditable = !!config || attr.isDynamic;
