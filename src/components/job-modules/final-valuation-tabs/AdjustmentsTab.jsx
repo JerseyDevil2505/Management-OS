@@ -794,6 +794,29 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     }));
   };
 
+  // Magic Fill: Copy bracket_0 value to all other brackets
+  const handleMagicFill = (adjustmentId) => {
+    setAdjustments(prev => prev.map(adj => {
+      if (adj.adjustment_id === adjustmentId) {
+        const firstBracketValue = adj.bracket_0;
+
+        // Only fill if bracket_0 has a value
+        if (firstBracketValue === undefined || firstBracketValue === null || firstBracketValue === '') {
+          alert('Please fill bracket 0 first');
+          return adj;
+        }
+
+        // Copy the value to all other brackets (1-9)
+        const updated = { ...adj };
+        for (let i = 1; i < 10; i++) {
+          updated[`bracket_${i}`] = firstBracketValue;
+        }
+        return updated;
+      }
+      return adj;
+    }));
+  };
+
   const handleSaveAdjustments = async () => {
     try {
       setIsSaving(true);
@@ -1822,7 +1845,19 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                   .map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
-                      {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
+                      <div className="flex items-center gap-2">
+                        <span>{formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}</span>
+                        {adj.bracket_0 !== undefined && adj.bracket_0 !== null && adj.bracket_0 !== '' && (
+                          <button
+                            onClick={() => handleMagicFill(adj.adjustment_id)}
+                            title="Auto-fill remaining brackets with this value"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium text-xs transition-colors"
+                          >
+                            <span>✨</span>
+                            <span>Fill</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (

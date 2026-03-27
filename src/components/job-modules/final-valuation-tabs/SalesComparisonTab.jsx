@@ -105,6 +105,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   ]);
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+  const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
   // ==================== APPEAL LOG → CME NAVIGATION ====================
   useEffect(() => {
@@ -331,6 +332,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     if (!name || !name.trim()) return;
 
     try {
+      // Check if a result set with this name already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('job_cme_result_sets')
+        .select('id')
+        .eq('job_id', jobData.id)
+        .eq('name', name.trim())
+        .single();
+
+      let shouldOverwrite = false;
+      let existingId = null;
+
+      if (existing) {
+        // Result set already exists - ask for overwrite confirmation
+        existingId = existing.id;
+        shouldOverwrite = window.confirm(
+          `Result set "${name.trim()}" already exists. Do you want to overwrite it?`
+        );
+        if (!shouldOverwrite) return; // User cancelled
+      }
+
       // Serialize results for storage - preserve all property fields so loaded results
       // can be displayed in DetailedAppraisalGrid with full attribute data (VCS, year built,
       // bathrooms, building class, style, conditions, lot size, etc.)
@@ -348,19 +369,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         hasSubjectSale: r.hasSubjectSale,
       }));
 
-      const { error } = await supabase
-        .from('job_cme_result_sets')
-        .insert({
-          job_id: jobData.id,
-          name: name.trim(),
-          adjustment_bracket: compFilters.adjustmentBracket,
-          search_criteria: compFilters,
-          results: serializedResults,
-        });
+      let error;
+      if (shouldOverwrite && existingId) {
+        // Update existing result set
+        const { error: updateError } = await supabase
+          .from('job_cme_result_sets')
+          .update({
+            adjustment_bracket: compFilters.adjustmentBracket,
+            search_criteria: compFilters,
+            results: serializedResults,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingId);
+        error = updateError;
+      } else {
+        // Insert new result set
+        const { error: insertError } = await supabase
+          .from('job_cme_result_sets')
+          .insert({
+            job_id: jobData.id,
+            name: name.trim(),
+            adjustment_bracket: compFilters.adjustmentBracket,
+            search_criteria: compFilters,
+            results: serializedResults,
+          });
+        error = insertError;
+      }
 
       if (error) throw error;
 
-      alert(`Result set "${name.trim()}" saved successfully!`);
+      alert(`Result set "${name.trim()}" ${shouldOverwrite ? 'updated' : 'saved'} successfully!`);
       await loadSavedResultSets();
     } catch (error) {
       console.error('Error saving result set:', error);
@@ -1207,25 +1245,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         ));
       }
 
-      setManualEvaluationResult({
+      const updatedResult = {
         subject,
         comparables: fetchedComps,
         projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
         confidenceScore: Math.round(confidenceScore),
         hasSubjectSale: false
-      });
+      };
 
-      console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+      setManualEvaluationResult(updatedResult);
 
-      // Auto-scroll to results after rendering completes
-      setTimeout(() => {
-        if (detailedResultsRef.current) {
-          detailedResultsRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }, 300);
+      // ✅ Sync changes back to evaluationResults if editing an existing result
+      if (editingResultIndex !== null && evaluationResults && evaluationResults.length > editingResultIndex) {
+        const updatedResults = [...evaluationResults];
+        updatedResults[editingResultIndex] = updatedResult;
+        setEvaluationResults(updatedResults);
+        console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
+      } else {
+        console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+      }
 
     } catch (error) {
       console.error('Error in manual evaluation:', error);
@@ -1245,6 +1283,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       { block: '', lot: '', qualifier: '' }
     ]);
     setManualEvaluationResult(null);
+    setEditingResultIndex(null); // Clear the tracking index when clearing comps
   };
 
   // ==================== EVALUATE COMPARABLES ====================
@@ -4172,6 +4211,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                 });
                                 setManualComps(newComps);
                                 setManualEvaluationResult(result);
+                                setEditingResultIndex(idx); // Track which result row is being edited
                                 setActiveSubTab('detailed');
                               }}
                               title="Click to view detailed analysis"
@@ -4363,7 +4403,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Manual Property Evaluation</h3>
               <p className="text-sm text-blue-700">
-                Enter BLQ (Block/Lot/Qualifier) info below to fetch properties and run an appraisal evaluation without using the Search tab.
+                {editingResultIndex !== null
+                  ? 'Modify the subject and comparables below, then click "Evaluate and Update" to save your changes.'
+                  : 'Enter BLQ (Block/Lot/Qualifier) info below to fetch properties and run an appraisal evaluation without using the Search tab.'}
               </p>
             </div>
 
