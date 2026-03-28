@@ -2434,9 +2434,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           }
 
           // Calculate adjustment with condition multipliers for detached items
+          // Only apply early return for flat/percent adjustments; per_sqft/count need to fall through
           if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
                adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
                adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (adjustmentType === 'flat' || adjustmentType === 'percent') &&
               (subjectValue !== compValue)) {
             // Apply condition-adjusted calculation
             const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
