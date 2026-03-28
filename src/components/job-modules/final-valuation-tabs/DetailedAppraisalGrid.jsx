@@ -1127,8 +1127,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       const compAdjustments = [];
       let totalAdjustment = 0;
 
-      // Get comp's sales price (edited or original)
-      const compSalesPrice = getEditedValue(compKey, 'sales_price') || comp.sales_price || 0;
+      // Get comp's sales price (edited or original), parsed as number
+      const compSalesPrice = parseFloat(getEditedValue(compKey, 'sales_price')) || parseFloat(comp.sales_price) || 0;
 
       // Calculate adjustments for each adjustable attribute
       Object.keys(EDITABLE_CONFIG).forEach(attrId => {
