@@ -2433,27 +2433,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             if (compValue > 0) compConditionMultiplier = getConditionMultiplier(comp);
           }
 
-          // Apply condition multipliers for all detached item adjustments
+          // Calculate adjustment with condition multipliers for detached items
+          // For flat/percent: apply multiplier to the adjustment value (early return)
+          // For per_sqft/count: apply multiplier to the adjustment value in the switch statement below
           if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
                adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
                adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (adjustmentType === 'flat' || adjustmentType === 'percent') &&
               (subjectValue !== compValue)) {
-            // Apply condition multipliers to the values
-            const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
-            const compAdjustedValue = compValue * compConditionMultiplier;
-            const adjustedDifference = subjectAdjustedValue - compAdjustedValue;
-
-            // For flat/percent, return early with condition-adjusted flat adjustment
-            if (adjustmentType === 'flat' || adjustmentType === 'percent') {
-              return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
-                     (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
-            }
-            // For per_sqft/count, update the values to use condition-adjusted values and fall through
-            else if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
-              subjectValue = subjectAdjustedValue;
-              compValue = compAdjustedValue;
-            }
+            // Apply condition-adjusted calculation for flat/percent
+            // Use condition multiplier that corresponds to which property is different
+            const useMultiplier = subjectValue > 0 ? subjectConditionMultiplier : compConditionMultiplier;
+            const adjustedDifference = subjectValue - compValue;
+            return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
+                   (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
           }
+
+          // For per_sqft/count, we'll apply the condition multiplier to adjustmentValue in the switch below
         } else {
           return 0; // Unknown attribute
         }
@@ -2486,11 +2482,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         }
 
       case 'per_sqft':
-        return difference * adjustmentValue;
+        // For detached items, apply condition multiplier to the rate
+        let sqftAdjustmentValue = adjustmentValue;
+        if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
+             adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+             adjustmentDef.adjustment_id.startsWith('stable_')) &&
+            (subjectValue !== compValue)) {
+          // Apply multiplier from whichever property has the item
+          if (difference > 0) {
+            // Subject has more (better), apply subject's multiplier
+            sqftAdjustmentValue = adjustmentValue * subjectConditionMultiplier;
+          } else {
+            // Comp has more (better), apply comp's multiplier
+            sqftAdjustmentValue = adjustmentValue * compConditionMultiplier;
+          }
+        }
+        return difference * sqftAdjustmentValue;
 
       case 'count':
         // Count adjustment: multiply difference by $ per count (e.g., $5,000 per bedroom)
-        return difference * adjustmentValue;
+        // For detached items, apply condition multiplier to the rate
+        let countAdjustmentValue = adjustmentValue;
+        if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
+             adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+             adjustmentDef.adjustment_id.startsWith('stable_')) &&
+            (subjectValue !== compValue)) {
+          // Apply multiplier from whichever property has the item
+          if (difference > 0) {
+            // Subject has more (better), apply subject's multiplier
+            countAdjustmentValue = adjustmentValue * subjectConditionMultiplier;
+          } else {
+            // Comp has more (better), apply comp's multiplier
+            countAdjustmentValue = adjustmentValue * compConditionMultiplier;
+          }
+        }
+        return difference * countAdjustmentValue;
 
       case 'percent':
         // Percent adjustment based on comp sale price
