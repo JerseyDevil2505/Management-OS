@@ -475,15 +475,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           worse: interiorWorseConditions
         },
         conditionHandlingMethod: conditionHandlingMethod, // 'condition_table', 'effective_age', or 'ncovr_override'
-        // Franklin NCOVR scale mapping (used when conditionHandlingMethod === 'ncovr_override')
-        ncorv_scale: {
-          excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
-          good: { min: 0.71, max: 0.85, name: 'Good' },
-          average: { min: 0.56, max: 0.70, name: 'Average' },
-          fair: { min: 0.41, max: 0.55, name: 'Fair' },
-          poor: { min: 0.26, max: 0.40, name: 'Poor' },
-          dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
-        },
+        ...(conditionHandlingMethod === 'ncovr_override' && {
+          ncorv_scale: {
+            excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
+            good: { min: 0.71, max: 0.85, name: 'Good' },
+            average: { min: 0.56, max: 0.70, name: 'Average' },
+            fair: { min: 0.41, max: 0.55, name: 'Fair' },
+            poor: { min: 0.26, max: 0.40, name: 'Poor' },
+            dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
+          }
+        }),
         savedAt: new Date().toISOString()
       };
 
@@ -1419,11 +1420,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 name="conditionHandlingMethod"
                 value="ncovr_override"
                 checked={conditionHandlingMethod === 'ncovr_override'}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
-                  // Auto-populate NCOVR condition ranking for Franklin's scale
+                  // Pre-populate defaults for NCOVR (user will save via Save button)
                   setManualExteriorBaseline('AVERAGE');
                   setExteriorBetterConditions(['GOOD', 'EXCELLENT']);
                   setExteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
@@ -1431,51 +1432,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   setManualInteriorBaseline('AVERAGE');
                   setInteriorBetterConditions(['GOOD', 'EXCELLENT']);
                   setInteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
-
-                  // Auto-save to database with pre-populated ranking
-                  try {
-                    const config = jobData.attribute_condition_config || {};
-                    const updatedConfig = {
-                      ...config,
-                      conditionHandlingMethod: newMethod,
-                      exterior: {
-                        baseline: 'AVERAGE',
-                        better: ['GOOD', 'EXCELLENT'],
-                        worse: ['FAIR', 'POOR', 'DILAPIDATED']
-                      },
-                      interior: {
-                        baseline: 'AVERAGE',
-                        better: ['GOOD', 'EXCELLENT'],
-                        worse: ['FAIR', 'POOR', 'DILAPIDATED']
-                      },
-                      ncorv_scale: {
-                        excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
-                        good: { min: 0.71, max: 0.85, name: 'Good' },
-                        average: { min: 0.56, max: 0.70, name: 'Average' },
-                        fair: { min: 0.41, max: 0.55, name: 'Fair' },
-                        poor: { min: 0.26, max: 0.40, name: 'Poor' },
-                        dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
-                      }
-                    };
-
-                    await supabase
-                      .from('jobs')
-                      .update({ attribute_condition_config: updatedConfig })
-                      .eq('id', jobData.id);
-
-                    if (onUpdateJobCache) {
-                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
-                    }
-
-                    console.log('✅ NCOVR Override method auto-configured with Franklin scale');
-                  } catch (error) {
-                    console.error('Error saving NCOVR condition method:', error);
-                  }
                 }}
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
               />
               <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
-                Using NCOVR Override % (Auto-configured for Franklin)
+                Using NCOVR Override % (Franklin Scale)
               </span>
             </label>
           </div>
@@ -1491,9 +1452,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               fontSize: '12px',
               color: '#0C4A6E'
             }}>
-              <strong>ℹ️ NCOVR Override Selected:</strong> Conditions are automatically derived from property NCOVR percentages using Franklin's scale:
+              <strong>ℹ️ NCOVR Override Selected:</strong> Properties will use NCOVR percentages to determine condition:
               <br/>• Excellent: 86-100% | Good: 71-85% | Average: 56-70% | Fair: 41-55% | Poor: 26-40% | Dilapidated: 1-25%
-              <br/>• Condition ranking has been auto-configured (Baseline: Average, Better: Good/Excellent, Worse: Fair/Poor/Dilapidated)
+              <br/>• Default ranking configured below (Baseline: Average, Better: Good/Excellent, Worse: Fair/Poor/Dilapidated)
+              <br/>• <strong>Click "Save Configuration" to persist</strong> the condition ranking for CME use
             </div>
           )}
         </div>
