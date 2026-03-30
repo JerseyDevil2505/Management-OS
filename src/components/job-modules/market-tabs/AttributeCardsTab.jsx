@@ -1423,10 +1423,40 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
-                  // Auto-save to database
+                  // Auto-populate NCOVR condition ranking for Franklin's scale
+                  setManualExteriorBaseline('AVERAGE');
+                  setExteriorBetterConditions(['GOOD', 'EXCELLENT']);
+                  setExteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
+
+                  setManualInteriorBaseline('AVERAGE');
+                  setInteriorBetterConditions(['GOOD', 'EXCELLENT']);
+                  setInteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
+
+                  // Auto-save to database with pre-populated ranking
                   try {
                     const config = jobData.attribute_condition_config || {};
-                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+                    const updatedConfig = {
+                      ...config,
+                      conditionHandlingMethod: newMethod,
+                      exterior: {
+                        baseline: 'AVERAGE',
+                        better: ['GOOD', 'EXCELLENT'],
+                        worse: ['FAIR', 'POOR', 'DILAPIDATED']
+                      },
+                      interior: {
+                        baseline: 'AVERAGE',
+                        better: ['GOOD', 'EXCELLENT'],
+                        worse: ['FAIR', 'POOR', 'DILAPIDATED']
+                      },
+                      ncorv_scale: {
+                        excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
+                        good: { min: 0.71, max: 0.85, name: 'Good' },
+                        average: { min: 0.56, max: 0.70, name: 'Average' },
+                        fair: { min: 0.41, max: 0.55, name: 'Fair' },
+                        poor: { min: 0.26, max: 0.40, name: 'Poor' },
+                        dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
+                      }
+                    };
 
                     await supabase
                       .from('jobs')
@@ -1436,17 +1466,36 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     if (onUpdateJobCache) {
                       onUpdateJobCache({ attribute_condition_config: updatedConfig });
                     }
+
+                    console.log('✅ NCOVR Override method auto-configured with Franklin scale');
                   } catch (error) {
-                    console.error('Error saving condition handling method:', error);
+                    console.error('Error saving NCOVR condition method:', error);
                   }
                 }}
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
               />
               <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
-                Using NCOVR Override %
+                Using NCOVR Override % (Auto-configured for Franklin)
               </span>
             </label>
           </div>
+
+          {/* NCOVR Info Note */}
+          {conditionHandlingMethod === 'ncovr_override' && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px',
+              backgroundColor: '#DBEAFE',
+              borderRadius: '4px',
+              border: '1px solid #0EA5E9',
+              fontSize: '12px',
+              color: '#0C4A6E'
+            }}>
+              <strong>ℹ️ NCOVR Override Selected:</strong> Conditions are automatically derived from property NCOVR percentages using Franklin's scale:
+              <br/>• Excellent: 86-100% | Good: 71-85% | Average: 56-70% | Fair: 41-55% | Poor: 26-40% | Dilapidated: 1-25%
+              <br/>• Condition ranking has been auto-configured (Baseline: Average, Better: Good/Excellent, Worse: Fair/Poor/Dilapidated)
+            </div>
+          )}
         </div>
 
         {/* Type/Use Filter and Interior Inspection Toggle */}
