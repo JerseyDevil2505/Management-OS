@@ -2153,16 +2153,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         break;
 
       case 'exterior_condition':
-        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
-        let subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
-        let compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+        // Check if using NCOVR override method
+        const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        let subjectExtCondName, compExtCondName;
 
-        // Fallback for Microsystems if code definitions not loaded: use simple mapping
-        if (!subjectExtCondName && vendorType === 'Microsystems') {
-          subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
-        }
-        if (!compExtCondName && vendorType === 'Microsystems') {
-          compExtCondName = translateConditionCode(comp.asset_ext_cond);
+        if (conditionMethod === 'ncovr_override') {
+          // Use NCOVR percentages to determine condition
+          subjectExtCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
+          compExtCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+
+          console.log(`🎯 NCOVR Method: Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectExtCondName}`);
+          console.log(`🎯 NCOVR Method: Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compExtCondName}`);
+        } else {
+          // Use standard condition codes
+          subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
+          compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+
+          // Fallback for Microsystems if code definitions not loaded: use simple mapping
+          if (!subjectExtCondName && vendorType === 'Microsystems') {
+            subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
+          }
+          if (!compExtCondName && vendorType === 'Microsystems') {
+            compExtCondName = translateConditionCode(comp.asset_ext_cond);
+          }
         }
 
         subjectValue = getConditionRank(subjectExtCondName, 'exterior');
@@ -2170,16 +2183,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         break;
 
       case 'interior_condition':
-        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
-        let subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
-        let compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+        // Check if using NCOVR override method
+        const intConditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        let subjectIntCondName, compIntCondName;
 
-        // Fallback for Microsystems if code definitions not loaded: use simple mapping
-        if (!subjectIntCondName && vendorType === 'Microsystems') {
-          subjectIntCondName = translateConditionCode(subject.asset_int_cond);
-        }
-        if (!compIntCondName && vendorType === 'Microsystems') {
-          compIntCondName = translateConditionCode(comp.asset_int_cond);
+        if (intConditionMethod === 'ncovr_override') {
+          // Use NCOVR percentages to determine condition
+          subjectIntCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
+          compIntCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+
+          console.log(`🎯 NCOVR Method (Interior): Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectIntCondName}`);
+          console.log(`🎯 NCOVR Method (Interior): Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compIntCondName}`);
+        } else {
+          // Use standard condition codes
+          subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
+          compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+
+          // Fallback for Microsystems if code definitions not loaded: use simple mapping
+          if (!subjectIntCondName && vendorType === 'Microsystems') {
+            subjectIntCondName = translateConditionCode(subject.asset_int_cond);
+          }
+          if (!compIntCondName && vendorType === 'Microsystems') {
+            compIntCondName = translateConditionCode(comp.asset_int_cond);
+          }
         }
 
         subjectValue = getConditionRank(subjectIntCondName, 'interior');
@@ -2514,6 +2540,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     };
 
     return conditionMap[normalized] || null;
+  };
+
+  // Helper: Map NCOVR percentage to Franklin condition name
+  const mapNCOVRToConditionName = (ncovr_pct) => {
+    if (!ncovr_pct && ncovr_pct !== 0) return null;
+
+    const pct = parseFloat(ncovr_pct);
+    if (isNaN(pct)) return null;
+
+    // Franklin NCOVR scale (stored as 0.00-1.00 decimal)
+    if (pct >= 0.86) return 'EXCELLENT';
+    if (pct >= 0.71) return 'GOOD';
+    if (pct >= 0.56) return 'AVERAGE';
+    if (pct >= 0.41) return 'FAIR';
+    if (pct >= 0.26) return 'POOR';
+    if (pct >= 0.01) return 'DILAPIDATED';
+
+    return null;
   };
 
   // Helper: Get numeric rank for condition codes based on user configuration

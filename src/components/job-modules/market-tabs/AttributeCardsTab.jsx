@@ -453,8 +453,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const saveConditionConfigToDatabase = async () => {
     if (!jobData?.id) return;
 
-    // Validation: require both exterior and interior to be configured
-    if (!manualExteriorBaseline || !manualInteriorBaseline) {
+    // Validation: require both exterior and interior to be configured UNLESS using NCOVR
+    if (conditionHandlingMethod !== 'ncovr_override' && (!manualExteriorBaseline || !manualInteriorBaseline)) {
       alert('Please define both Exterior and Interior baseline conditions before saving.');
       return;
     }
@@ -474,7 +474,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           better: interiorBetterConditions,
           worse: interiorWorseConditions
         },
-        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table' or 'effective_age'
+        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table', 'effective_age', or 'ncovr_override'
+        // Franklin NCOVR scale mapping (used when conditionHandlingMethod === 'ncovr_override')
+        ncorv_scale: {
+          excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
+          good: { min: 0.71, max: 0.85, name: 'Good' },
+          average: { min: 0.56, max: 0.70, name: 'Average' },
+          fair: { min: 0.41, max: 0.55, name: 'Fair' },
+          poor: { min: 0.26, max: 0.40, name: 'Poor' },
+          dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
+        },
         savedAt: new Date().toISOString()
       };
 
@@ -524,11 +533,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (config.interior.worse) setInteriorWorseConditions(config.interior.worse);
         }
 
-        // Load condition handling method
+        // Load condition handling method (including NCOVR support)
         if (config.conditionHandlingMethod) {
           setConditionHandlingMethod(config.conditionHandlingMethod);
         }
 
+        // Note: NCOVR scale is stored in config.ncorv_scale if needed by other components
         console.log('✅ Condition configuration loaded from database:', config);
       }
     } catch (error) {
@@ -1334,13 +1344,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               Condition will be handled:
             </h4>
           </div>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
-                type="checkbox"
+                type="radio"
+                name="conditionHandlingMethod"
+                value="condition_table"
                 checked={conditionHandlingMethod === 'condition_table'}
                 onChange={async (e) => {
-                  const newMethod = e.target.checked ? 'condition_table' : 'effective_age';
+                  const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
                   // Auto-save to database
@@ -1369,10 +1381,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
-                type="checkbox"
+                type="radio"
+                name="conditionHandlingMethod"
+                value="effective_age"
                 checked={conditionHandlingMethod === 'effective_age'}
                 onChange={async (e) => {
-                  const newMethod = e.target.checked ? 'effective_age' : 'condition_table';
+                  const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
                   // Auto-save to database
@@ -1396,6 +1410,40 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               />
               <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
                 In Effective Age
+              </span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="conditionHandlingMethod"
+                value="ncovr_override"
+                checked={conditionHandlingMethod === 'ncovr_override'}
+                onChange={async (e) => {
+                  const newMethod = e.target.value;
+                  setConditionHandlingMethod(newMethod);
+
+                  // Auto-save to database
+                  try {
+                    const config = jobData.attribute_condition_config || {};
+                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+
+                    await supabase
+                      .from('jobs')
+                      .update({ attribute_condition_config: updatedConfig })
+                      .eq('id', jobData.id);
+
+                    if (onUpdateJobCache) {
+                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
+                    }
+                  } catch (error) {
+                    console.error('Error saving condition handling method:', error);
+                  }
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                Using NCOVR Override %
               </span>
             </label>
           </div>
