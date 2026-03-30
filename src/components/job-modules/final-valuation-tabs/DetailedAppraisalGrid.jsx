@@ -379,6 +379,24 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   };
 
+  // Helper: Map NCOVR percentage to Franklin condition name
+  const mapNCOVRToConditionName = (ncovr_pct) => {
+    if (!ncovr_pct && ncovr_pct !== 0) return null;
+
+    const pct = parseFloat(ncovr_pct);
+    if (isNaN(pct)) return null;
+
+    // Franklin NCOVR scale (stored as 0.00-1.00 decimal)
+    if (pct >= 0.86) return 'EXCELLENT';
+    if (pct >= 0.71) return 'GOOD';
+    if (pct >= 0.56) return 'AVERAGE';
+    if (pct >= 0.41) return 'FAIR';
+    if (pct >= 0.26) return 'POOR';
+    if (pct >= 0.01) return 'DILAPIDATED';
+
+    return null;
+  };
+
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
     {
@@ -741,6 +759,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'ext_condition',
       label: 'Ext. Condition',
       render: (prop) => {
+        // Check if using NCOVR override method
+        const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        if (conditionMethod === 'ncovr_override') {
+          // Use NCOVR percentage to determine condition
+          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          return conditionName || 'N/A';
+        }
+
+        // Standard condition code lookup
         if (!prop.asset_ext_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getExteriorConditionName(prop, codeDefinitions, vendorType);
@@ -754,6 +781,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'int_condition',
       label: 'Int. Condition',
       render: (prop) => {
+        // Check if using NCOVR override method
+        const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        if (conditionMethod === 'ncovr_override') {
+          // Use NCOVR percentage to determine condition
+          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          return conditionName || 'N/A';
+        }
+
+        // Standard condition code lookup
         if (!prop.asset_int_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getInteriorConditionName(prop, codeDefinitions, vendorType);
