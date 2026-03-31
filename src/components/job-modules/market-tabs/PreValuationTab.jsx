@@ -3704,9 +3704,50 @@ const analyzeImportFile = async (file) => {
                   </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-700">
-                    {normalizationStats.averageRatio ? `${(normalizationStats.averageRatio * 100).toFixed(2)}%` : '0.00%'}
+                    {(() => {
+                      const currentYear = new Date().getFullYear();
+                      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
+                      const currentYearSales = properties.filter(p => {
+                        if (!p.sales_price || p.sales_price <= minPrice) return false;
+                        if (!p.sales_date) return false;
+
+                        const saleYear = new Date(p.sales_date).getFullYear();
+                        if (saleYear !== currentYear) return false;
+
+                        // Check sales_nu conditions (empty, null, 00, 7, or 07 are valid)
+                        const nu = p.sales_nu?.toString().trim();
+                        const validNU = !nu || nu === '' || nu === '00' || nu === '7' || nu === '07';
+                        if (!validNU) return false;
+
+                        // Same filters as normalization
+                        const parsed = parseCompositeKey(p.property_composite_key);
+                        const card = parsed.card?.toUpperCase();
+
+                        // Card filter based on vendor
+                        if (vendorType === 'Microsystems') {
+                          if (card !== 'M') return false;
+                        } else {
+                          if (card !== '1') return false;
+                        }
+
+                        const buildingClass = p.asset_building_class?.toString().trim();
+                        const typeUse = p.asset_type_use?.toString().trim();
+                        const designStyle = p.asset_design_style?.toString().trim();
+
+                        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
+                        if (!typeUse) return false;
+                        if (!designStyle) return false;
+
+                        return true;
+                      });
+
+                      const totalAssessedValue = currentYearSales.reduce((sum, p) => sum + (p.values_mod_total || 0), 0);
+                      const totalSalesPrice = currentYearSales.reduce((sum, p) => sum + (p.sales_price || 0), 0);
+                      const avgRatio = totalSalesPrice > 0 ? totalAssessedValue / totalSalesPrice : 0;
+                      return `${(avgRatio * 100).toFixed(2)}%`;
+                    })()}
                   </div>
-                  <div className="text-sm text-gray-500">True Ratio</div>
+                  <div className="text-sm text-gray-500">True Ratio (Current Year)</div>
                 </div>
                 </div>
               </div>
