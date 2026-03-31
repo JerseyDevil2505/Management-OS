@@ -88,6 +88,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
   const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table', 'effective_age', or 'ncovr_override'
   const [conditionEquivalents, setConditionEquivalents] = useState({}); // Map of condition equivalencies (e.g., { 'MODERN': 'GOOD' })
+  const [newEquivalentFrom, setNewEquivalentFrom] = useState(''); // For new mapping being added
+  const [newEquivalentTo, setNewEquivalentTo] = useState(''); // For new mapping being added
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
@@ -1916,7 +1918,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         </div>
                       </div>
 
-                      {/* Condition Equivalents */}
+                      {/* Condition Equivalents - Dropdown Pairs */}
                       <div style={{
                         marginTop: '20px',
                         padding: '15px',
@@ -1927,37 +1929,143 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: '#166534' }}>
                           ✓ Condition Equivalents (optional)
                         </label>
-                        <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 10px 0' }}>
-                          Treat conditions as equivalent for ranking (e.g., "MODERN = GOOD" means both get the same rank and no adjustment between them).
+                        <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 12px 0' }}>
+                          Treat conditions as equivalent for ranking (e.g., MODERN = GOOD means both get the same rank and no adjustment between them).
                         </p>
-                        <input
-                          type="text"
-                          placeholder="e.g., MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
-                          value={Object.entries(conditionEquivalents || {})
-                            .map(([key, val]) => `${key.toUpperCase()} = ${val.toUpperCase()}`)
-                            .join(', ')}
-                          onChange={(e) => {
-                            // Parse input like "MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
-                            const pairs = e.target.value.split(',').map(p => p.trim()).filter(p => p);
-                            const newEquivalents = {};
-                            pairs.forEach(pair => {
-                              const [from, to] = pair.split('=').map(s => s.trim().toUpperCase());
-                              if (from && to) {
-                                newEquivalents[from] = to;
-                              }
-                            });
-                            setConditionEquivalents(newEquivalents);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '10px',
-                            border: '1px solid #86EFAC',
-                            borderRadius: '4px',
-                            fontSize: '13px',
-                            fontFamily: 'monospace',
-                            boxSizing: 'border-box'
-                          }}
-                        />
+
+                        {/* Existing Mappings */}
+                        {Object.keys(conditionEquivalents || {}).length > 0 && (
+                          <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid #86EFAC' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534', marginBottom: '8px' }}>
+                              Created Mappings:
+                            </div>
+                            {Object.entries(conditionEquivalents).map(([from, to]) => (
+                              <div key={from} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                backgroundColor: 'white',
+                                borderRadius: '4px',
+                                marginBottom: '6px',
+                                border: '1px solid #86EFAC'
+                              }}>
+                                <span style={{ fontWeight: '600', color: '#059669', flex: 1 }}>
+                                  {from.toUpperCase()} → {to.toUpperCase()}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    const updated = { ...conditionEquivalents };
+                                    delete updated[from];
+                                    setConditionEquivalents(updated);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626',
+                                    border: 'none',
+                                    borderRadius: '3px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  ✕ Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add New Mapping */}
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: 'white',
+                          borderRadius: '4px',
+                          border: '1px dashed #86EFAC'
+                        }}>
+                          <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534', marginBottom: '10px' }}>
+                            Add New Mapping:
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '12px', color: '#4B5563', display: 'block', marginBottom: '4px' }}>
+                                From Condition:
+                              </label>
+                              <select
+                                value={newEquivalentFrom}
+                                onChange={(e) => setNewEquivalentFrom(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  border: '1px solid #86EFAC',
+                                  borderRadius: '4px',
+                                  fontSize: '13px',
+                                  backgroundColor: 'white'
+                                }}
+                              >
+                                <option value="">-- Select condition --</option>
+                                {Object.entries(availableConditionCodes[isExterior ? 'exterior' : 'interior'] || {})
+                                  .map(([code, desc]) => (
+                                    <option key={code} value={desc.toUpperCase()}>
+                                      {code} {desc}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '12px', color: '#4B5563', display: 'block', marginBottom: '4px' }}>
+                                Maps To:
+                              </label>
+                              <select
+                                value={newEquivalentTo}
+                                onChange={(e) => setNewEquivalentTo(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  border: '1px solid #86EFAC',
+                                  borderRadius: '4px',
+                                  fontSize: '13px',
+                                  backgroundColor: 'white'
+                                }}
+                              >
+                                <option value="">-- Select condition --</option>
+                                {Object.entries(availableConditionCodes[isExterior ? 'exterior' : 'interior'] || {})
+                                  .map(([code, desc]) => (
+                                    <option key={code} value={desc.toUpperCase()}>
+                                      {code} {desc}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (newEquivalentFrom && newEquivalentTo && newEquivalentFrom !== newEquivalentTo) {
+                                  setConditionEquivalents({
+                                    ...conditionEquivalents,
+                                    [newEquivalentFrom.toUpperCase()]: newEquivalentTo.toUpperCase()
+                                  });
+                                  setNewEquivalentFrom('');
+                                  setNewEquivalentTo('');
+                                }
+                              }}
+                              disabled={!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: (!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo) ? '#D1D5DB' : '#059669',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: (!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo) ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              + Add Mapping
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Save Button */}
