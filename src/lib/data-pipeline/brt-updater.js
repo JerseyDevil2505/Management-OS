@@ -848,6 +848,9 @@ export class BRTUpdater {
       property_zoning: this.preserveStringValue(rawRecord.PROPERTY_ZONING),
       property_tax_map_page: this.preserveStringValue(rawRecord.PROPERTY_TAXMAPPAGE),
 
+      // Market adjustments and overrides
+      ncovr_override_pct: this.parseNumeric(rawRecord.NCOVR) ? (this.parseNumeric(rawRecord.NCOVR) / 1000) : null,
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: false, // CHANGED: false for updates
