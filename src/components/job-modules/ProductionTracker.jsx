@@ -977,13 +977,25 @@ const ProductionTracker = ({
   };
 
   // NEW: Close processing modal after everything is done
-  const closeProcessingModal = () => {
+  const closeProcessingModal = async () => {
     setPendingValidations([]);
     setProcessedValidationDecisions({});
     setShowProcessingModal(false);
     setProcessingComplete(false);
     addNotification('✅ Processing complete with validation decisions applied', 'success');
-    
+
+    // Clear the needs_reprocessing flag now that processing is done
+    if (jobData?.id) {
+      try {
+        await supabase
+          .from('jobs')
+          .update({ needs_reprocessing: false })
+          .eq('id', jobData.id);
+      } catch (err) {
+        console.warn('Could not clear needs_reprocessing flag:', err);
+      }
+    }
+
     // If overrides were applied, suggest reprocessing to update reports
     const overrideCount = Object.values(processedValidationDecisions).filter(d => d.action === 'override').length;
     if (overrideCount > 0) {
@@ -3233,27 +3245,15 @@ const exportMissingPropertiesReport = () => {
               (((infoByCategoryConfig || {}).entry || []).length + ((infoByCategoryConfig || {}).refusal || []).length +
                ((infoByCategoryConfig || {}).estimation || []).length + ((infoByCategoryConfig || {}).priced || []).length +
                ((infoByCategoryConfig || {}).special || []).length) === 0}
-            className={`px-6 py-2 rounded-lg flex items-center space-x-2 transition-all ${
-              isAnalyticsStale
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : (processed && !isDataStale)
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : processing
-                ? 'bg-yellow-600 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            className="px-6 py-2 rounded-lg flex items-center space-x-2 transition-all bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {processing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : isAnalyticsStale ? (
-              <AlertTriangle className="w-4 h-4" />
-            ) : (processed && !isDataStale) ? (
-              <CheckCircle className="w-4 h-4" />
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <Factory className="w-4 h-4" />
             )}
             <span>
-              {processing ? 'Processing...' : isAnalyticsStale ? 'Rerun Needed' : (processed && !isDataStale) ? 'Processed ✓' : 'Start Processing Session'}
+              {processing ? 'Processing...' : 'Process'}
             </span>
           </button>
         </div>
@@ -4075,7 +4075,6 @@ const exportMissingPropertiesReport = () => {
                       <Download className="w-4 h-4" />
                       <span>Export Missing Report</span>
                     </button>
-                  )}  
                   )}
                 </div>
 
