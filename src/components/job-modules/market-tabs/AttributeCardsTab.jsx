@@ -1465,50 +1465,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <br/>• <strong>Click "Save Configuration" to persist</strong> the condition ranking for CME use
             </div>
           )}
-
-          {/* Condition Equivalents Input */}
-          <div style={{
-            marginTop: '15px',
-            padding: '12px',
-            backgroundColor: '#F0FDF4',
-            borderRadius: '4px',
-            border: '1px solid #86EFAC'
-          }}>
-            <label style={{ fontSize: '13px', fontWeight: '600', color: '#166534', display: 'block', marginBottom: '8px' }}>
-              ✓ Condition Equivalents (optional)
-            </label>
-            <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 8px 0' }}>
-              Treat conditions as equivalent for ranking (e.g., "MODERN = GOOD" means both get the same rank).
-            </p>
-            <input
-              type="text"
-              placeholder="e.g., MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
-              value={Object.entries(conditionEquivalents)
-                .map(([key, val]) => `${key.toUpperCase()} = ${val.toUpperCase()}`)
-                .join(', ')}
-              onChange={(e) => {
-                // Parse input like "MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
-                const pairs = e.target.value.split(',').map(p => p.trim()).filter(p => p);
-                const newEquivalents = {};
-                pairs.forEach(pair => {
-                  const [from, to] = pair.split('=').map(s => s.trim().toUpperCase());
-                  if (from && to) {
-                    newEquivalents[from] = to;
-                  }
-                });
-                setConditionEquivalents(newEquivalents);
-              }}
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                border: '1px solid #86EFAC',
-                borderRadius: '4px',
-                fontSize: '13px',
-                fontFamily: 'monospace',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
         </div>
 
         {/* Type/Use Filter and Interior Inspection Toggle */}
@@ -1958,6 +1914,50 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <strong>Order matters:</strong> Rank 1 should be closest to baseline (e.g., GOOD before EXCELLENT).
                           Use ↑↓ arrows to reorder.
                         </div>
+                      </div>
+
+                      {/* Condition Equivalents */}
+                      <div style={{
+                        marginTop: '20px',
+                        padding: '15px',
+                        backgroundColor: '#F0FDF4',
+                        borderRadius: '6px',
+                        border: '2px solid #86EFAC'
+                      }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: '#166534' }}>
+                          ✓ Condition Equivalents (optional)
+                        </label>
+                        <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 10px 0' }}>
+                          Treat conditions as equivalent for ranking (e.g., "MODERN = GOOD" means both get the same rank and no adjustment between them).
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="e.g., MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
+                          value={Object.entries(conditionEquivalents || {})
+                            .map(([key, val]) => `${key.toUpperCase()} = ${val.toUpperCase()}`)
+                            .join(', ')}
+                          onChange={(e) => {
+                            // Parse input like "MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
+                            const pairs = e.target.value.split(',').map(p => p.trim()).filter(p => p);
+                            const newEquivalents = {};
+                            pairs.forEach(pair => {
+                              const [from, to] = pair.split('=').map(s => s.trim().toUpperCase());
+                              if (from && to) {
+                                newEquivalents[from] = to;
+                              }
+                            });
+                            setConditionEquivalents(newEquivalents);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '1px solid #86EFAC',
+                            borderRadius: '4px',
+                            fontSize: '13px',
+                            fontFamily: 'monospace',
+                            boxSizing: 'border-box'
+                          }}
+                        />
                       </div>
 
                       {/* Save Button */}
