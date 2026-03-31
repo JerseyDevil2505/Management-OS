@@ -2576,7 +2576,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
 
     const config = conditionConfig[configType];
-    const code = conditionName.toUpperCase().trim();
+    let code = conditionName.toUpperCase().trim();
+
+    // Check if this condition has an equivalent - redirect to equivalent for ranking
+    const equivalents = conditionConfig?.conditionEquivalents || {};
+    if (equivalents[code]) {
+      code = equivalents[code].toUpperCase().trim();
+      console.log(`   🔄 Condition equivalent: ${conditionName.toUpperCase()} → ${code}`);
+    }
+
     const baseline = config.baseline?.toUpperCase().trim();
     const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
     const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());

@@ -86,7 +86,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
-  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table' or 'effective_age'
+  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table', 'effective_age', or 'ncovr_override'
+  const [conditionEquivalents, setConditionEquivalents] = useState({}); // Map of condition equivalencies (e.g., { 'MODERN': 'GOOD' })
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
@@ -485,6 +486,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
           }
         }),
+        conditionEquivalents: conditionEquivalents, // Map conditions to their rank equivalents
         savedAt: new Date().toISOString()
       };
 
@@ -537,6 +539,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         // Load condition handling method (including NCOVR support)
         if (config.conditionHandlingMethod) {
           setConditionHandlingMethod(config.conditionHandlingMethod);
+        }
+
+        // Load condition equivalents
+        if (config.conditionEquivalents) {
+          setConditionEquivalents(config.conditionEquivalents);
         }
 
         // Note: NCOVR scale is stored in config.ncorv_scale if needed by other components
@@ -1458,6 +1465,50 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <br/>• <strong>Click "Save Configuration" to persist</strong> the condition ranking for CME use
             </div>
           )}
+
+          {/* Condition Equivalents Input */}
+          <div style={{
+            marginTop: '15px',
+            padding: '12px',
+            backgroundColor: '#F0FDF4',
+            borderRadius: '4px',
+            border: '1px solid #86EFAC'
+          }}>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: '#166534', display: 'block', marginBottom: '8px' }}>
+              ✓ Condition Equivalents (optional)
+            </label>
+            <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 8px 0' }}>
+              Treat conditions as equivalent for ranking (e.g., "MODERN = GOOD" means both get the same rank).
+            </p>
+            <input
+              type="text"
+              placeholder="e.g., MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
+              value={Object.entries(conditionEquivalents)
+                .map(([key, val]) => `${key.toUpperCase()} = ${val.toUpperCase()}`)
+                .join(', ')}
+              onChange={(e) => {
+                // Parse input like "MODERN = GOOD, EXCELLENT EXT = EXCELLENT INT"
+                const pairs = e.target.value.split(',').map(p => p.trim()).filter(p => p);
+                const newEquivalents = {};
+                pairs.forEach(pair => {
+                  const [from, to] = pair.split('=').map(s => s.trim().toUpperCase());
+                  if (from && to) {
+                    newEquivalents[from] = to;
+                  }
+                });
+                setConditionEquivalents(newEquivalents);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                border: '1px solid #86EFAC',
+                borderRadius: '4px',
+                fontSize: '13px',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
         </div>
 
         {/* Type/Use Filter and Interior Inspection Toggle */}
