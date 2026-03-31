@@ -1133,7 +1133,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   };
 
   // ==================== MANUAL BLQ EVALUATION (DETAILED TAB) ====================
-  const handleManualEvaluate = async () => {
+  const handleManualEvaluate = async (syncToResults = false) => {
     setIsManualEvaluating(true);
 
     try {
@@ -1255,8 +1255,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       setManualEvaluationResult(updatedResult);
 
-      // ✅ Sync changes back to evaluationResults if editing an existing result
-      if (editingResultIndex !== null && evaluationResults && evaluationResults.length > editingResultIndex) {
+      // ✅ Sync changes back to evaluationResults ONLY if syncToResults flag is true and we're editing
+      if (syncToResults && editingResultIndex !== null && evaluationResults && evaluationResults.length > editingResultIndex) {
         const updatedResults = [...evaluationResults];
         updatedResults[editingResultIndex] = updatedResult;
         setEvaluationResults(updatedResults);
@@ -4601,14 +4601,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-300">
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={handleManualEvaluate}
+                    onClick={() => handleManualEvaluate(false)}
                     disabled={isManualEvaluating}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium text-sm"
                   >
                     {isManualEvaluating ? 'Evaluating...' : 'Evaluate'}
                   </button>
                   <button
-                    onClick={handleManualEvaluate}
+                    onClick={() => handleManualEvaluate(true)}
                     disabled={isManualEvaluating}
                     className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50 font-medium text-sm"
                   >
