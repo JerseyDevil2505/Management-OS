@@ -379,6 +379,24 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   };
 
+  // Helper: Map NCOVR percentage to Franklin condition name
+  const mapNCOVRToConditionName = (ncovr_pct) => {
+    if (!ncovr_pct && ncovr_pct !== 0) return null;
+
+    const pct = parseFloat(ncovr_pct);
+    if (isNaN(pct)) return null;
+
+    // Franklin NCOVR scale (stored as 0.00-1.00 decimal)
+    if (pct >= 0.86) return 'EXCELLENT';
+    if (pct >= 0.71) return 'GOOD';
+    if (pct >= 0.56) return 'AVERAGE';
+    if (pct >= 0.41) return 'FAIR';
+    if (pct >= 0.26) return 'POOR';
+    if (pct >= 0.01) return 'DILAPIDATED';
+
+    return null;
+  };
+
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
     {
@@ -741,6 +759,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'ext_condition',
       label: 'Ext. Condition',
       render: (prop) => {
+        // Check if using NCOVR override method
+        const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        if (conditionMethod === 'ncovr_override') {
+          // Use NCOVR percentage to determine condition
+          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          return conditionName || 'N/A';
+        }
+
+        // Standard condition code lookup
         if (!prop.asset_ext_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getExteriorConditionName(prop, codeDefinitions, vendorType);
@@ -754,6 +781,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'int_condition',
       label: 'Int. Condition',
       render: (prop) => {
+        // Check if using NCOVR override method
+        const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
+        if (conditionMethod === 'ncovr_override') {
+          // Use NCOVR percentage to determine condition
+          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          return conditionName || 'N/A';
+        }
+
+        // Standard condition code lookup
         if (!prop.asset_int_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getInteriorConditionName(prop, codeDefinitions, vendorType);
@@ -1695,9 +1731,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const upperLimit = directorsRatio * 1.15;
     const lowerLimit = directorsRatio * 0.85;
 
-    const ch123Pass = assessmentRatio <= upperLimit;
-    const exceedsBy = assessmentRatio > upperLimit
-      ? ((assessmentRatio - upperLimit) * 100).toFixed(1)
+    // Hard cap: Assessment ratio cannot exceed 100% (1.0), regardless of director ratio
+    const effectiveUpperLimit = Math.min(upperLimit, 1.0);
+
+    const ch123Pass = assessmentRatio <= effectiveUpperLimit;
+    const exceedsBy = assessmentRatio > effectiveUpperLimit
+      ? ((assessmentRatio - effectiveUpperLimit) * 100).toFixed(1)
       : 0;
 
     // Build Chapter 123 summary table
@@ -1708,7 +1747,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ['Median Adjusted Price (Comps)', medianAdjustedPrice > 0 ? `$${Math.round(medianAdjustedPrice).toLocaleString()}` : 'N/A'],
       ['Assessment-to-Value Ratio', assessmentRatio > 0 ? `${(assessmentRatio * 100).toFixed(2)}%` : 'N/A'],
       ["Director's Ratio", `${(directorsRatio * 100).toFixed(2)}%`],
-      ['Common Level Range (Upper)', `${(upperLimit * 100).toFixed(2)}%`],
+      ['Common Level Range (Upper)', `${(effectiveUpperLimit * 100).toFixed(2)}%`],
       ['Common Level Range (Lower)', `${(lowerLimit * 100).toFixed(2)}%`],
       ['Chapter 123 Result', ch123Pass ? 'WITHIN RANGE' : `EXCEEDS by ${exceedsBy}%`]
     ];
@@ -1746,7 +1785,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         // Highlight ratio row
         if (data.row.index === 4 && data.column.index === 1) {
           data.cell.styles.fontStyle = 'bold';
-          if (assessmentRatio > upperLimit) {
+          if (assessmentRatio > effectiveUpperLimit) {
             data.cell.styles.textColor = [220, 20, 60];
           } else if (assessmentRatio < lowerLimit) {
             data.cell.styles.textColor = [200, 150, 0];

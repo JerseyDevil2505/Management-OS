@@ -86,7 +86,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
-  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table' or 'effective_age'
+  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table', 'effective_age', or 'ncovr_override'
+  const [conditionEquivalents, setConditionEquivalents] = useState({}); // Map of condition equivalencies (e.g., { 'MODERN': 'GOOD' })
+  const [newEquivalentFrom, setNewEquivalentFrom] = useState(''); // For new mapping being added
+  const [newEquivalentTo, setNewEquivalentTo] = useState(''); // For new mapping being added
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
@@ -453,8 +456,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const saveConditionConfigToDatabase = async () => {
     if (!jobData?.id) return;
 
-    // Validation: require both exterior and interior to be configured
-    if (!manualExteriorBaseline || !manualInteriorBaseline) {
+    // Validation: require both exterior and interior to be configured UNLESS using NCOVR
+    if (conditionHandlingMethod !== 'ncovr_override' && (!manualExteriorBaseline || !manualInteriorBaseline)) {
       alert('Please define both Exterior and Interior baseline conditions before saving.');
       return;
     }
@@ -474,7 +477,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           better: interiorBetterConditions,
           worse: interiorWorseConditions
         },
-        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table' or 'effective_age'
+        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table', 'effective_age', or 'ncovr_override'
+        ...(conditionHandlingMethod === 'ncovr_override' && {
+          ncorv_scale: {
+            excellent: { min: 0.86, max: 1.00, name: 'Excellent' },
+            good: { min: 0.71, max: 0.85, name: 'Good' },
+            average: { min: 0.56, max: 0.70, name: 'Average' },
+            fair: { min: 0.41, max: 0.55, name: 'Fair' },
+            poor: { min: 0.26, max: 0.40, name: 'Poor' },
+            dilapidated: { min: 0.01, max: 0.25, name: 'Dilapidated' }
+          }
+        }),
+        conditionEquivalents: conditionEquivalents, // Map conditions to their rank equivalents
         savedAt: new Date().toISOString()
       };
 
@@ -524,11 +538,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (config.interior.worse) setInteriorWorseConditions(config.interior.worse);
         }
 
-        // Load condition handling method
+        // Load condition handling method (including NCOVR support)
         if (config.conditionHandlingMethod) {
           setConditionHandlingMethod(config.conditionHandlingMethod);
         }
 
+        // Load condition equivalents
+        if (config.conditionEquivalents) {
+          setConditionEquivalents(config.conditionEquivalents);
+        }
+
+        // Note: NCOVR scale is stored in config.ncorv_scale if needed by other components
         console.log('✅ Condition configuration loaded from database:', config);
       }
     } catch (error) {
@@ -1334,13 +1354,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               Condition will be handled:
             </h4>
           </div>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
-                type="checkbox"
+                type="radio"
+                name="conditionHandlingMethod"
+                value="condition_table"
                 checked={conditionHandlingMethod === 'condition_table'}
                 onChange={async (e) => {
-                  const newMethod = e.target.checked ? 'condition_table' : 'effective_age';
+                  const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
                   // Auto-save to database
@@ -1369,10 +1391,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
-                type="checkbox"
+                type="radio"
+                name="conditionHandlingMethod"
+                value="effective_age"
                 checked={conditionHandlingMethod === 'effective_age'}
                 onChange={async (e) => {
-                  const newMethod = e.target.checked ? 'effective_age' : 'condition_table';
+                  const newMethod = e.target.value;
                   setConditionHandlingMethod(newMethod);
 
                   // Auto-save to database
@@ -1398,7 +1422,51 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 In Effective Age
               </span>
             </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="conditionHandlingMethod"
+                value="ncovr_override"
+                checked={conditionHandlingMethod === 'ncovr_override'}
+                onChange={(e) => {
+                  const newMethod = e.target.value;
+                  setConditionHandlingMethod(newMethod);
+
+                  // Pre-populate defaults for NCOVR (user will save via Save button)
+                  setManualExteriorBaseline('AVERAGE');
+                  setExteriorBetterConditions(['GOOD', 'EXCELLENT']);
+                  setExteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
+
+                  setManualInteriorBaseline('AVERAGE');
+                  setInteriorBetterConditions(['GOOD', 'EXCELLENT']);
+                  setInteriorWorseConditions(['FAIR', 'POOR', 'DILAPIDATED']);
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                Using NCOVR Override % (Franklin Scale)
+              </span>
+            </label>
           </div>
+
+          {/* NCOVR Info Note */}
+          {conditionHandlingMethod === 'ncovr_override' && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px',
+              backgroundColor: '#DBEAFE',
+              borderRadius: '4px',
+              border: '1px solid #0EA5E9',
+              fontSize: '12px',
+              color: '#0C4A6E'
+            }}>
+              <strong>ℹ️ NCOVR Override Selected:</strong> Properties will use NCOVR percentages to determine condition:
+              <br/>• Excellent: 86-100% | Good: 71-85% | Average: 56-70% | Fair: 41-55% | Poor: 26-40% | Dilapidated: 1-25%
+              <br/>• Default ranking configured below (Baseline: Average, Better: Good/Excellent, Worse: Fair/Poor/Dilapidated)
+              <br/>• <strong>Click "Save Configuration" to persist</strong> the condition ranking for CME use
+            </div>
+          )}
         </div>
 
         {/* Type/Use Filter and Interior Inspection Toggle */}
@@ -1847,6 +1915,156 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         <div style={{ marginTop: '8px' }}>
                           <strong>Order matters:</strong> Rank 1 should be closest to baseline (e.g., GOOD before EXCELLENT).
                           Use ↑↓ arrows to reorder.
+                        </div>
+                      </div>
+
+                      {/* Condition Equivalents - Dropdown Pairs */}
+                      <div style={{
+                        marginTop: '20px',
+                        padding: '15px',
+                        backgroundColor: '#F0FDF4',
+                        borderRadius: '6px',
+                        border: '2px solid #86EFAC'
+                      }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: '#166534' }}>
+                          ✓ Condition Equivalents (optional)
+                        </label>
+                        <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 12px 0' }}>
+                          Treat conditions as equivalent for ranking (e.g., MODERN = GOOD means both get the same rank and no adjustment between them).
+                        </p>
+
+                        {/* Existing Mappings */}
+                        {Object.keys(conditionEquivalents || {}).length > 0 && (
+                          <div style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid #86EFAC' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534', marginBottom: '8px' }}>
+                              Created Mappings:
+                            </div>
+                            {Object.entries(conditionEquivalents).map(([from, to]) => (
+                              <div key={from} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                backgroundColor: 'white',
+                                borderRadius: '4px',
+                                marginBottom: '6px',
+                                border: '1px solid #86EFAC'
+                              }}>
+                                <span style={{ fontWeight: '600', color: '#059669', flex: 1 }}>
+                                  {from.toUpperCase()} → {to.toUpperCase()}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    const updated = { ...conditionEquivalents };
+                                    delete updated[from];
+                                    setConditionEquivalents(updated);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626',
+                                    border: 'none',
+                                    borderRadius: '3px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  ✕ Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add New Mapping */}
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: 'white',
+                          borderRadius: '4px',
+                          border: '1px dashed #86EFAC'
+                        }}>
+                          <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534', marginBottom: '10px' }}>
+                            Add New Mapping:
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '12px', color: '#4B5563', display: 'block', marginBottom: '4px' }}>
+                                From Condition:
+                              </label>
+                              <select
+                                value={newEquivalentFrom}
+                                onChange={(e) => setNewEquivalentFrom(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  border: '1px solid #86EFAC',
+                                  borderRadius: '4px',
+                                  fontSize: '13px',
+                                  backgroundColor: 'white'
+                                }}
+                              >
+                                <option value="">-- Select condition --</option>
+                                {Object.entries(availableConditionCodes[isExterior ? 'exterior' : 'interior'] || {})
+                                  .map(([code, desc]) => (
+                                    <option key={code} value={desc.toUpperCase()}>
+                                      {code} {desc}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '12px', color: '#4B5563', display: 'block', marginBottom: '4px' }}>
+                                Maps To:
+                              </label>
+                              <select
+                                value={newEquivalentTo}
+                                onChange={(e) => setNewEquivalentTo(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  border: '1px solid #86EFAC',
+                                  borderRadius: '4px',
+                                  fontSize: '13px',
+                                  backgroundColor: 'white'
+                                }}
+                              >
+                                <option value="">-- Select condition --</option>
+                                {Object.entries(availableConditionCodes[isExterior ? 'exterior' : 'interior'] || {})
+                                  .map(([code, desc]) => (
+                                    <option key={code} value={desc.toUpperCase()}>
+                                      {code} {desc}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (newEquivalentFrom && newEquivalentTo && newEquivalentFrom !== newEquivalentTo) {
+                                  setConditionEquivalents({
+                                    ...conditionEquivalents,
+                                    [newEquivalentFrom.toUpperCase()]: newEquivalentTo.toUpperCase()
+                                  });
+                                  setNewEquivalentFrom('');
+                                  setNewEquivalentTo('');
+                                }
+                              }}
+                              disabled={!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: (!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo) ? '#D1D5DB' : '#059669',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: (!newEquivalentFrom || !newEquivalentTo || newEquivalentFrom === newEquivalentTo) ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              + Add Mapping
+                            </button>
+                          </div>
                         </div>
                       </div>
 
