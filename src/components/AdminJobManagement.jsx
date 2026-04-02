@@ -1562,6 +1562,39 @@ const AdminJobManagement = ({
     }
   };
 
+  const goToArchivedJob = async (job) => {
+    const ccdd = job.ccdd || job.ccddCode;
+    if (ccdd) {
+      try {
+        const { data: grant } = await supabase
+          .from('job_access_grants')
+          .select('target_job_id')
+          .eq('ccdd', ccdd)
+          .eq('source_job_id', job.id)
+          .eq('is_active', true)
+          .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+          .maybeSingle();
+
+        if (grant?.target_job_id) {
+          const { data: targetJob } = await supabase
+            .from('jobs')
+            .select('*')
+            .eq('id', grant.target_job_id)
+            .single();
+
+          if (targetJob) {
+            onJobSelect(targetJob);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Grant check failed, routing to original archived job:', err);
+      }
+    }
+    // No grant found or lookup failed — proceed normally
+    onJobSelect(job);
+  };
+
   const sortJobsByBilling = (jobList) => {
     return jobList.sort((a, b) => {
       // Extract year from dueDate (format: "YYYY-MM-DD" or just "YYYY")
@@ -3020,7 +3053,7 @@ const AdminJobManagement = ({
                     {/* Job Actions */}
                     <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                       <button
-                        onClick={() => onJobSelect(job)}
+                        onClick={() => goToArchivedJob(job)}
                         disabled={processing}
                         className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
                         title="Open archived job workspace for appeal defense and CME"

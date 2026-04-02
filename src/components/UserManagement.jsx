@@ -27,10 +27,25 @@ const UserManagement = ({ onViewAs }) => {
   });
   const [resetPassword, setResetPassword] = useState('');
 
+  // Job access grants state
+  const [grants, setGrants] = useState([]);
+  const [showGrantsSection, setShowGrantsSection] = useState(false);
+  const [showAddGrant, setShowAddGrant] = useState(false);
+  const [allJobs, setAllJobs] = useState([]);
+  const [newGrant, setNewGrant] = useState({
+    grantee_employee_id: '',
+    source_job_id: '',
+    target_job_id: '',
+    expires_at: '',
+    notes: ''
+  });
+
   useEffect(() => {
     loadUsers();
     loadOrganizations();
     loadEmployeeOrgLinks();
+    loadGrants();
+    loadAllJobs();
   }, []);
 
   const loadOrganizations = async () => {
@@ -86,6 +101,41 @@ const UserManagement = ({ onViewAs }) => {
 
   const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
   const isDevMode = process.env.NODE_ENV === 'development';
+
+  const loadAllJobs = async () => {
+    try {
+      const { data } = await supabase
+        .from('jobs')
+        .select('id, job_name, ccdd_code, municipality, organization_id, status')
+        .order('job_name');
+      setAllJobs(data || []);
+    } catch (err) {
+      console.error('Error loading jobs:', err);
+    }
+  };
+
+  const loadGrants = async () => {
+    try {
+      const { data } = await supabase
+        .from('job_access_grants')
+        .select(`
+          id,
+          ccdd,
+          granted_at,
+          expires_at,
+          is_active,
+          notes,
+          grantee_employee_id,
+          source_job_id,
+          target_job_id,
+          granted_by
+        `)
+        .order('granted_at', { ascending: false });
+      setGrants(data || []);
+    } catch (err) {
+      console.error('Error loading grants:', err);
+    }
+  };
 
   const getOrgName = (orgId) => {
     if (!orgId) return 'PPA Inc (Internal)';
@@ -294,6 +344,93 @@ const UserManagement = ({ onViewAs }) => {
     }
   };
 
+  const handleAddGrant = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    try {
+      // Validate all required fields
+      if (!newGrant.grantee_employee_id) throw new Error('Please select a grantee employee');
+      if (!newGrant.source_job_id) throw new Error('Please select a source job');
+      if (!newGrant.target_job_id) throw new Error('Please select a target job');
+
+      // Get CCDD from the source job
+      const sourceJob = allJobs.find(j => j.id === newGrant.source_job_id);
+      if (!sourceJob) throw new Error('Source job not found');
+      if (!sourceJob.ccdd_code) throw new Error('Source job has no CCDD code assigned');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad';
+
+      // Look up granted_by employee id from auth user
+      const { data: grantorEmp } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('email', session?.user?.email)
+        .maybeSingle();
+
+      const grantPayload = {
+        grantee_employee_id: newGrant.grantee_employee_id,
+        source_job_id: newGrant.source_job_id,
+        target_job_id: newGrant.target_job_id,
+        ccdd: sourceJob.ccdd_code,
+        granted_by: grantorEmp?.id || currentUserId,
+        expires_at: newGrant.expires_at || null,
+        notes: newGrant.notes || null,
+        is_active: true
+      };
+
+      console.log('Inserting grant with payload:', grantPayload);
+
+      const { error } = await supabase
+        .from('job_access_grants')
+        .insert(grantPayload);
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+
+      setNewGrant({ grantee_employee_id: '', source_job_id: '', target_job_id: '', expires_at: '', notes: '' });
+      setShowAddGrant(false);
+      loadGrants();
+      setSuccessMessage('Access grant created successfully');
+    } catch (err) {
+      console.error('Error creating grant:', err);
+      const errorMsg = err?.message || err?.error?.message || JSON.stringify(err);
+      setError('Failed to create grant: ' + errorMsg);
+    }
+  };
+
+  const handleRevokeGrant = async (grantId) => {
+    if (!window.confirm('Revoke this access grant?')) return;
+    try {
+      const { error } = await supabase
+        .from('job_access_grants')
+        .update({ is_active: false })
+        .eq('id', grantId);
+      if (!error) {
+        loadGrants();
+        setSuccessMessage('Access grant revoked');
+      }
+    } catch (err) {
+      console.error('Error revoking grant:', err);
+      setError('Failed to revoke grant');
+    }
+  };
+
+  // Helper to get employee name from id
+  const getEmployeeName = (empId) => {
+    const emp = users.find(u => u.id === empId);
+    return emp ? `${emp.first_name} ${emp.last_name}` : empId;
+  };
+
+  // Helper to get job display name
+  const getJobDisplay = (jobId) => {
+    const job = allJobs.find(j => j.id === jobId);
+    return job ? `${job.job_name} (${job.ccdd_code})` : jobId;
+  };
+
   const handleDeleteUser = async (user) => {
     setError('');
     setSuccessMessage('');
@@ -433,7 +570,20 @@ const UserManagement = ({ onViewAs }) => {
                           {user.has_account ? 'Yes' : 'No'}
                         </span>
                       </td>
-                      <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <td style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {onViewAs && user.role === 'Management' && user.organization_id && user.organization_id !== PPA_ORG_ID && (
+                          <button
+                            onClick={() => onViewAs(user)}
+                            style={{
+                              padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                              background: '#7c3aed', color: 'white', border: 'none', cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={`View dashboard as ${user.first_name} ${user.last_name}`}
+                          >
+                            View As
+                          </button>
+                        )}
                         <button
                           className="reset-pwd-btn"
                           onClick={() => {
@@ -796,6 +946,179 @@ const UserManagement = ({ onViewAs }) => {
           </div>
         </div>
       )}
+
+      {/* Cross-Org Job Access Grants — Admin Only */}
+      <div style={{ marginTop: '2rem' }}>
+        <div
+          onClick={() => setShowGrantsSection(prev => !prev)}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '1rem 1.25rem', background: 'linear-gradient(135deg, #1e3a5f 0%, #2a5298 100%)',
+            borderRadius: showGrantsSection ? '8px 8px 0 0' : '8px',
+            cursor: 'pointer', userSelect: 'none'
+          }}
+        >
+          <h3 style={{ margin: 0, color: 'white', fontSize: '1rem', fontWeight: '600' }}>
+            🔐 Cross-Org Job Access Grants
+          </h3>
+          <span style={{ color: 'white', fontSize: '0.875rem' }}>
+            {showGrantsSection ? '▲ Collapse' : '▼ Expand'}
+          </span>
+        </div>
+
+        {showGrantsSection && (
+          <div style={{ border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '1.25rem', background: 'white' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
+                Grant PPA staff temporary access to a LOJIK client job for appeal collaboration.
+              </p>
+              <button
+                onClick={() => setShowAddGrant(prev => !prev)}
+                className="create-user-btn"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+              >
+                {showAddGrant ? 'Cancel' : '+ Add Grant'}
+              </button>
+            </div>
+
+            {/* Add Grant Form */}
+            {showAddGrant && (
+              <form onSubmit={handleAddGrant} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div className="um-form-group" style={{ margin: 0 }}>
+                    <label>Grantee (PPA Staff)</label>
+                    <select
+                      required
+                      value={newGrant.grantee_employee_id}
+                      onChange={e => setNewGrant(prev => ({ ...prev, grantee_employee_id: e.target.value }))}
+                    >
+                      <option value="">Select PPA employee...</option>
+                      {ppaUsers.map(u => (
+                        <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="um-form-group" style={{ margin: 0 }}>
+                    <label>Source Job (PPA Archived)</label>
+                    <select
+                      required
+                      value={newGrant.source_job_id}
+                      onChange={e => setNewGrant(prev => ({ ...prev, source_job_id: e.target.value }))}
+                    >
+                      <option value="">Select archived PPA job...</option>
+                      {allJobs
+                        .filter(j => !j.organization_id || j.organization_id === PPA_ORG_ID)
+                        .map(j => (
+                          <option key={j.id} value={j.id}>{j.job_name} ({j.ccdd_code})</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="um-form-group" style={{ margin: 0 }}>
+                    <label>Target Job (LOJIK Client)</label>
+                    <select
+                      required
+                      value={newGrant.target_job_id}
+                      onChange={e => setNewGrant(prev => ({ ...prev, target_job_id: e.target.value }))}
+                    >
+                      <option value="">Select client job...</option>
+                      {allJobs
+                        .filter(j => j.organization_id && j.organization_id !== PPA_ORG_ID)
+                        .map(j => (
+                          <option key={j.id} value={j.id}>{j.job_name} ({j.ccdd_code})</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="um-form-group" style={{ margin: 0 }}>
+                    <label>Expires (optional)</label>
+                    <input
+                      type="date"
+                      value={newGrant.expires_at}
+                      onChange={e => setNewGrant(prev => ({ ...prev, expires_at: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="um-form-group" style={{ margin: '0 0 1rem 0' }}>
+                  <label>Notes (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Jackson appeal season 2026"
+                    value={newGrant.notes}
+                    onChange={e => setNewGrant(prev => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+
+                <button type="submit" className="create-user-btn" style={{ padding: '0.5rem 1.25rem' }}>
+                  Create Grant
+                </button>
+              </form>
+            )}
+
+            {/* Grants Table */}
+            {grants.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', fontSize: '0.875rem' }}>
+                No access grants configured yet.
+              </div>
+            ) : (
+              <div className="um-table-container">
+                <table className="um-table">
+                  <thead>
+                    <tr>
+                      <th>Grantee</th>
+                      <th>Source Job (PPA)</th>
+                      <th>Target Job (Client)</th>
+                      <th>CCDD</th>
+                      <th>Granted</th>
+                      <th>Expires</th>
+                      <th>Notes</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grants.map(grant => {
+                      const isExpired = grant.expires_at && new Date(grant.expires_at) < new Date();
+                      const status = !grant.is_active ? 'Revoked' : isExpired ? 'Expired' : 'Active';
+                      const statusColor = status === 'Active' ? '#166534' : '#991b1b';
+                      const statusBg = status === 'Active' ? '#dcfce7' : '#fee2e2';
+                      return (
+                        <tr key={grant.id}>
+                          <td style={{ fontWeight: '500' }}>{getEmployeeName(grant.grantee_employee_id)}</td>
+                          <td>{getJobDisplay(grant.source_job_id)}</td>
+                          <td>{getJobDisplay(grant.target_job_id)}</td>
+                          <td style={{ fontWeight: '700', color: '#1e40af' }}>{grant.ccdd}</td>
+                          <td>{new Date(grant.granted_at).toLocaleDateString()}</td>
+                          <td>{grant.expires_at ? new Date(grant.expires_at).toLocaleDateString() : '—'}</td>
+                          <td style={{ color: '#64748b', fontSize: '0.8rem' }}>{grant.notes || '—'}</td>
+                          <td>
+                            <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: statusBg, color: statusColor }}>
+                              {status}
+                            </span>
+                          </td>
+                          <td>
+                            {grant.is_active && !isExpired && (
+                              <button
+                                onClick={() => handleRevokeGrant(grant.id)}
+                                style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer' }}
+                              >
+                                Revoke
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
