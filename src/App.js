@@ -13,6 +13,7 @@ import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
 import AssessorDashboard from './components/AssessorDashboard';
+import AppealsSummary from './components/AppealsSummary';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -64,7 +65,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+    const validViews = ['admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -83,7 +84,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+      const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -1334,6 +1335,21 @@ const App = () => {
               >
                 📋 Jobs ({filterJobsForUser(appData.jobs).length})
               </button>
+              <button
+                onClick={() => handleViewChange('appeals')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'appeals'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'appeals' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                ⚖️ Appeals
+              </button>
               {isAdmin && tenantConfig.modules.billing && (
                 <button
                   onClick={() => handleViewChange('billing')}
@@ -1523,6 +1539,13 @@ const App = () => {
             workflowStats={appData.workflowStats}
             onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['jobs'])}
+          />
+        )}
+
+        {activeView === 'appeals' && (
+          <AppealsSummary
+            jobs={filterJobsForUser(appData.jobs)}
+            onJobSelect={handleJobSelect}
           />
         )}
 

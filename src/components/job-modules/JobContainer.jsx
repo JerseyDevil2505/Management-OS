@@ -1297,6 +1297,23 @@ const JobContainer = ({
           </div>
         )}
 
+        {/* Archived Job Status Banner */}
+        {!isLoading && jobData?.archived_at && (
+          <div className="mb-6 rounded-lg border-l-4 border-l-amber-600 bg-amber-50 border border-amber-200 p-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-900">
+                  This job is archived for record keeping
+                </p>
+                <p className="text-sm text-amber-800 mt-1">
+                  You can still upload files, update data, and use the CME tool for appeal defense. The job will remain archived in the main job list.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Show version info banner AFTER loading */}
         {!isLoading && (
           <div className={`mb-6 rounded-lg border p-4 ${
@@ -1342,7 +1359,7 @@ const JobContainer = ({
                 </div>
               )}
             </div>
-            
+
             {versionError && (
               <div className="mt-2">
                 <p className="text-sm text-red-700">
