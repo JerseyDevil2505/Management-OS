@@ -570,7 +570,20 @@ const UserManagement = ({ onViewAs }) => {
                           {user.has_account ? 'Yes' : 'No'}
                         </span>
                       </td>
-                      <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <td style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {onViewAs && user.role === 'Management' && (
+                          <button
+                            onClick={() => onViewAs(user)}
+                            style={{
+                              padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                              background: '#7c3aed', color: 'white', border: 'none', cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={`View dashboard as ${user.first_name} ${user.last_name}`}
+                          >
+                            View As
+                          </button>
+                        )}
                         <button
                           className="reset-pwd-btn"
                           onClick={() => {
