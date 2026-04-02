@@ -571,7 +571,7 @@ const UserManagement = ({ onViewAs }) => {
                         </span>
                       </td>
                       <td style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {onViewAs && user.role === 'Management' && (
+                        {onViewAs && user.role === 'Management' && user.organization_id && user.organization_id !== PPA_ORG_ID && (
                           <button
                             onClick={() => onViewAs(user)}
                             style={{
