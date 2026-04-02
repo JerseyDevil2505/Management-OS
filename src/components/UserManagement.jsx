@@ -369,7 +369,7 @@ const UserManagement = ({ onViewAs }) => {
           grantee_employee_id: newGrant.grantee_employee_id,
           source_job_id: newGrant.source_job_id,
           target_job_id: newGrant.target_job_id,
-          ccdd: sourceJob.ccdd,
+          ccdd: sourceJob.ccdd_code,
           granted_by: grantorEmp?.id || currentUserId,
           expires_at: newGrant.expires_at || null,
           notes: newGrant.notes || null,
