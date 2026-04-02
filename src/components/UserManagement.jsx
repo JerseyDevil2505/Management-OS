@@ -106,8 +106,8 @@ const UserManagement = ({ onViewAs }) => {
     try {
       const { data } = await supabase
         .from('jobs')
-        .select('id, name, ccdd, municipality, organization_id, status')
-        .order('name');
+        .select('id, job_name, ccdd_code, municipality, organization_id, status')
+        .order('job_name');
       setAllJobs(data || []);
     } catch (err) {
       console.error('Error loading jobs:', err);
@@ -414,7 +414,7 @@ const UserManagement = ({ onViewAs }) => {
   // Helper to get job display name
   const getJobDisplay = (jobId) => {
     const job = allJobs.find(j => j.id === jobId);
-    return job ? `${job.name} (${job.ccdd})` : jobId;
+    return job ? `${job.job_name} (${job.ccdd_code})` : jobId;
   };
 
   const handleDeleteUser = async (user) => {
@@ -984,7 +984,7 @@ const UserManagement = ({ onViewAs }) => {
                       {allJobs
                         .filter(j => !j.organization_id || j.organization_id === PPA_ORG_ID)
                         .map(j => (
-                          <option key={j.id} value={j.id}>{j.name} ({j.ccdd})</option>
+                          <option key={j.id} value={j.id}>{j.job_name} ({j.ccdd_code})</option>
                         ))}
                     </select>
                   </div>
@@ -1000,7 +1000,7 @@ const UserManagement = ({ onViewAs }) => {
                       {allJobs
                         .filter(j => j.organization_id && j.organization_id !== PPA_ORG_ID)
                         .map(j => (
-                          <option key={j.id} value={j.id}>{j.name} ({j.ccdd})</option>
+                          <option key={j.id} value={j.id}>{j.job_name} ({j.ccdd_code})</option>
                         ))}
                     </select>
                   </div>
