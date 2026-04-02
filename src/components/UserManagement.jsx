@@ -349,9 +349,15 @@ const UserManagement = ({ onViewAs }) => {
     setError('');
     setSuccessMessage('');
     try {
+      // Validate all required fields
+      if (!newGrant.grantee_employee_id) throw new Error('Please select a grantee employee');
+      if (!newGrant.source_job_id) throw new Error('Please select a source job');
+      if (!newGrant.target_job_id) throw new Error('Please select a target job');
+
       // Get CCDD from the source job
       const sourceJob = allJobs.find(j => j.id === newGrant.source_job_id);
       if (!sourceJob) throw new Error('Source job not found');
+      if (!sourceJob.ccdd_code) throw new Error('Source job has no CCDD code assigned');
 
       const { data: { session } } = await supabase.auth.getSession();
       const currentUserId = session?.user?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad';
@@ -363,20 +369,27 @@ const UserManagement = ({ onViewAs }) => {
         .eq('email', session?.user?.email)
         .maybeSingle();
 
+      const grantPayload = {
+        grantee_employee_id: newGrant.grantee_employee_id,
+        source_job_id: newGrant.source_job_id,
+        target_job_id: newGrant.target_job_id,
+        ccdd: sourceJob.ccdd_code,
+        granted_by: grantorEmp?.id || currentUserId,
+        expires_at: newGrant.expires_at || null,
+        notes: newGrant.notes || null,
+        is_active: true
+      };
+
+      console.log('Inserting grant with payload:', grantPayload);
+
       const { error } = await supabase
         .from('job_access_grants')
-        .insert({
-          grantee_employee_id: newGrant.grantee_employee_id,
-          source_job_id: newGrant.source_job_id,
-          target_job_id: newGrant.target_job_id,
-          ccdd: sourceJob.ccdd_code,
-          granted_by: grantorEmp?.id || currentUserId,
-          expires_at: newGrant.expires_at || null,
-          notes: newGrant.notes || null,
-          is_active: true
-        });
+        .insert(grantPayload);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
 
       setNewGrant({ grantee_employee_id: '', source_job_id: '', target_job_id: '', expires_at: '', notes: '' });
       setShowAddGrant(false);
@@ -384,7 +397,8 @@ const UserManagement = ({ onViewAs }) => {
       setSuccessMessage('Access grant created successfully');
     } catch (err) {
       console.error('Error creating grant:', err);
-      setError('Failed to create grant: ' + err.message);
+      const errorMsg = err?.message || err?.error?.message || JSON.stringify(err);
+      setError('Failed to create grant: ' + errorMsg);
     }
   };
 
