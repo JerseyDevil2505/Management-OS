@@ -937,8 +937,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
           return '';
         })(),
-        'Norm Time Value': property.sales_price && property.values_norm_time ?
-          { f: `AT${rowNum}*AU${rowNum}` } : (property.values_norm_time || ''),
+        'Norm Time Value': property.values_norm_time || '',
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           { f: `BI${rowNum}/AV${rowNum}` } : '',
