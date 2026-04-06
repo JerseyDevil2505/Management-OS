@@ -2158,12 +2158,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         let subjectExtCondName, compExtCondName;
 
         if (conditionMethod === 'ncovr_override') {
-          // Use NCOVR percentages to determine condition
-          subjectExtCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
-          compExtCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+          // Use Net Condition percentages to determine condition
+          subjectExtCondName = mapNCOVRToConditionName(subject.net_condition_pct);
+          compExtCondName = mapNCOVRToConditionName(comp.net_condition_pct);
 
-          console.log(`🎯 NCOVR Method: Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectExtCondName}`);
-          console.log(`🎯 NCOVR Method: Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compExtCondName}`);
+          console.log(`🎯 Net Condition Method: Subject ${subject.property_block}/${subject.property_lot} NETCOND=${subject.net_condition_pct} → ${subjectExtCondName}`);
+          console.log(`🎯 Net Condition Method: Comp ${comp.property_block}/${comp.property_lot} NETCOND=${comp.net_condition_pct} → ${compExtCondName}`);
         } else {
           // Use standard condition codes
           subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
@@ -2188,12 +2188,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         let subjectIntCondName, compIntCondName;
 
         if (intConditionMethod === 'ncovr_override') {
-          // Use NCOVR percentages to determine condition
-          subjectIntCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
-          compIntCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+          // Use Net Condition percentages to determine condition
+          subjectIntCondName = mapNCOVRToConditionName(subject.net_condition_pct);
+          compIntCondName = mapNCOVRToConditionName(comp.net_condition_pct);
 
-          console.log(`🎯 NCOVR Method (Interior): Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectIntCondName}`);
-          console.log(`🎯 NCOVR Method (Interior): Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compIntCondName}`);
+          console.log(`🎯 Net Condition Method (Interior): Subject ${subject.property_block}/${subject.property_lot} NETCOND=${subject.net_condition_pct} → ${subjectIntCondName}`);
+          console.log(`🎯 Net Condition Method (Interior): Comp ${comp.property_block}/${comp.property_lot} NETCOND=${comp.net_condition_pct} → ${compIntCondName}`);
         } else {
           // Use standard condition codes
           subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);

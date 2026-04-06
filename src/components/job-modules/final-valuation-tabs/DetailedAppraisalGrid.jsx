@@ -763,7 +763,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
         if (conditionMethod === 'ncovr_override') {
           // Use NCOVR percentage to determine condition
-          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          const conditionName = mapNCOVRToConditionName(prop.net_condition_pct);
           return conditionName || 'N/A';
         }
 
@@ -785,7 +785,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
         if (conditionMethod === 'ncovr_override') {
           // Use NCOVR percentage to determine condition
-          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          const conditionName = mapNCOVRToConditionName(prop.net_condition_pct);
           return conditionName || 'N/A';
         }
 
