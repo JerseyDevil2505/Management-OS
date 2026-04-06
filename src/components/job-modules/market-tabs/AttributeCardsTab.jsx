@@ -1445,7 +1445,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
               />
               <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
-                Using NCOVR Override % (Franklin Scale)
+                Using Net Condition (NETCOND)
               </span>
             </label>
           </div>
@@ -1461,7 +1461,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               fontSize: '12px',
               color: '#0C4A6E'
             }}>
-              <strong>ℹ️ NCOVR Override Selected:</strong> Properties will use NCOVR percentages to determine condition:
+              <strong>ℹ️ Net Condition Selected:</strong> Properties will use NETCOND percentages to determine condition:
               <br/>• Excellent: 86-100% | Good: 71-85% | Average: 56-70% | Fair: 41-55% | Poor: 26-40% | Dilapidated: 1-25%
               <br/>• Default ranking configured below (Baseline: Average, Better: Good/Excellent, Worse: Fair/Poor/Dilapidated)
               <br/>• <strong>Click "Save Configuration" to persist</strong> the condition ranking for CME use
