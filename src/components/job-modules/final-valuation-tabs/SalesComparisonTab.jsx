@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -119,6 +119,49 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       if (onManualSubjectConsumed) onManualSubjectConsumed();
     }
   }, [initialManualSubject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ==================== APPEAL LOG → CME BATCH NAVIGATION ====================
+  useEffect(() => {
+    if (!initialAppealSubjects || initialAppealSubjects.length === 0) return;
+
+    // Convert subjects array to block-lot-qualifier key format
+    // matching existing manualProperties format: "block-lot-qualifier"
+    const keys = initialAppealSubjects.map(s => {
+      const block = (s.block || '').trim();
+      const lot = (s.lot || '').trim();
+      const qual = (s.qualifier || '').trim();
+      return qual ? `${block}-${lot}-${qual}` : `${block}-${lot}-`;
+    }).filter(k => k && k !== '--');
+
+    // Populate manualProperties with all appeal subjects
+    setManualProperties(keys);
+
+    // Pre-set adjustment bracket if provided
+    if (initialBracket) {
+      const bracketIndex = CME_BRACKETS.findIndex(b =>
+        b.label === initialBracket
+      );
+      const bracketKey = bracketIndex >= 0
+        ? `bracket_${bracketIndex}`
+        : null;
+
+      if (bracketKey) {
+        setCompFilters(prev => ({
+          ...prev,
+          adjustmentBracket: bracketKey,
+          autoAdjustment: false
+        }));
+      }
+    }
+
+    // Switch to search tab so user sees the subject list
+    // and can run evaluation
+    setActiveSubTab('search');
+
+    // Clear navigation target
+    if (onManualSubjectConsumed) onManualSubjectConsumed();
+
+  }, [initialAppealSubjects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ==================== SALES POOL STATE ====================
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
@@ -1059,6 +1102,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
+  // ==================== SAVE TO APPEAL LOG ====================
+  const handleSaveToAppealLog = async () => {
+    if (!evaluationResults || evaluationResults.length === 0) return;
+
+    try {
+      let updatedCount = 0;
+
+      for (const result of evaluationResults) {
+        if (!result.projectedAssessment) continue;
+
+        const { error } = await supabase
+          .from('appeal_log')
+          .update({
+            cme_projected_value: result.projectedAssessment,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('property_block', result.subject.property_block)
+          .eq('property_lot', result.subject.property_lot)
+          .eq('property_qualifier',
+            result.subject.property_qualifier || '');
+
+        if (!error) updatedCount++;
+      }
+
+      alert(`✅ Saved ${updatedCount} CME values to Appeal Log`);
+
+    } catch (error) {
+      console.error('Error saving to appeal log:', error);
+      alert('Failed to save to Appeal Log: ' + error.message);
+    }
+  };
+
   // ==================== HELPER: AGGREGATE PROPERTY DATA ACROSS CARDS ====================
   // Helper to check if a card identifier is a main card
   const isMainCard = (cardValue) => {
@@ -1827,9 +1903,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         const cspEnd = new Date(assessmentYear, 11, 31);
 
         const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
+        const subjectSaleCode = String(subject.sales_nu ?? '').trim();
+        const isValidSaleCode = !subjectSaleCode ||
+          compFilters.salesCodes?.includes(subjectSaleCode);
+
         const subjectSoldInCSP = subjectSaleDate &&
           (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
-          (subject.sales_price || 0) > 0;
+          (subject.sales_price || 0) > 0 &&
+          isValidSaleCode;
 
         let priorityComp = null;
         if (subjectSoldInCSP) {
@@ -2158,12 +2239,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         let subjectExtCondName, compExtCondName;
 
         if (conditionMethod === 'ncovr_override') {
-          // Use NCOVR percentages to determine condition
-          subjectExtCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
-          compExtCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+          // Use Net Condition percentages to determine condition
+          subjectExtCondName = mapNCOVRToConditionName(subject.net_condition_pct);
+          compExtCondName = mapNCOVRToConditionName(comp.net_condition_pct);
 
-          console.log(`🎯 NCOVR Method: Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectExtCondName}`);
-          console.log(`🎯 NCOVR Method: Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compExtCondName}`);
+          console.log(`🎯 Net Condition Method: Subject ${subject.property_block}/${subject.property_lot} NETCOND=${subject.net_condition_pct} → ${subjectExtCondName}`);
+          console.log(`🎯 Net Condition Method: Comp ${comp.property_block}/${comp.property_lot} NETCOND=${comp.net_condition_pct} → ${compExtCondName}`);
         } else {
           // Use standard condition codes
           subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
@@ -2188,12 +2269,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         let subjectIntCondName, compIntCondName;
 
         if (intConditionMethod === 'ncovr_override') {
-          // Use NCOVR percentages to determine condition
-          subjectIntCondName = mapNCOVRToConditionName(subject.ncovr_override_pct);
-          compIntCondName = mapNCOVRToConditionName(comp.ncovr_override_pct);
+          // Use Net Condition percentages to determine condition
+          subjectIntCondName = mapNCOVRToConditionName(subject.net_condition_pct);
+          compIntCondName = mapNCOVRToConditionName(comp.net_condition_pct);
 
-          console.log(`🎯 NCOVR Method (Interior): Subject ${subject.property_block}/${subject.property_lot} NCOV=${subject.ncovr_override_pct} → ${subjectIntCondName}`);
-          console.log(`🎯 NCOVR Method (Interior): Comp ${comp.property_block}/${comp.property_lot} NCOV=${comp.ncovr_override_pct} → ${compIntCondName}`);
+          console.log(`🎯 Net Condition Method (Interior): Subject ${subject.property_block}/${subject.property_lot} NETCOND=${subject.net_condition_pct} → ${subjectIntCondName}`);
+          console.log(`🎯 Net Condition Method (Interior): Comp ${comp.property_block}/${comp.property_lot} NETCOND=${comp.net_condition_pct} → ${compIntCondName}`);
         } else {
           // Use standard condition codes
           subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
@@ -4187,6 +4268,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
                       Save Result Set
+                    </button>
+                    <button
+                      onClick={handleSaveToAppealLog}
+                      disabled={!evaluationResults || evaluationResults.length === 0}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                    >
+                      <Scale className="w-4 h-4" />
+                      Save to Appeal Log
                     </button>
                   </div>
                 </div>

@@ -141,7 +141,21 @@ const FinalValuation = ({
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
             tenantConfig={tenantConfig}
-            initialManualSubject={jobData?.navigateToCME || null}
+            initialManualSubject={
+              jobData?.navigateToCME?.fromAppealLog
+                ? null
+                : jobData?.navigateToCME || null
+            }
+            initialAppealSubjects={
+              jobData?.navigateToCME?.fromAppealLog
+                ? jobData.navigateToCME.subjects
+                : null
+            }
+            initialBracket={
+              jobData?.navigateToCME?.fromAppealLog
+                ? jobData.navigateToCME.bracket
+                : null
+            }
             onManualSubjectConsumed={() => {
               // Clear the navigation target from jobData
               if (jobData?.navigateToCME && jobData?._clearNavigateToCME) {
