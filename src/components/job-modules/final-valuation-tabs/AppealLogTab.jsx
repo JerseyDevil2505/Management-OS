@@ -783,8 +783,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                           className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
                         >
                           <option value="">-</option>
-                          <option value="Online">Online</option>
-                          <option value="Paper/Mail">Paper/Mail</option>
+                          <option value="ONLINE">Online</option>
+                          <option value="PAPER">Paper/Mail</option>
+                          <option value="ELECTRONIC">Electronic</option>
                         </select>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">
@@ -1126,8 +1127,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
                       >
                         <option value="">-</option>
-                        <option value="Online">Online</option>
-                        <option value="Paper/Mail">Paper/Mail</option>
+                        <option value="ONLINE">Online</option>
+                        <option value="PAPER">Paper/Mail</option>
+                        <option value="ELECTRONIC">Electronic</option>
                       </select>
                     </div>
                     <div>
