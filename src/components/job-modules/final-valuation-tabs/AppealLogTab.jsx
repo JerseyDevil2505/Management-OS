@@ -27,7 +27,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     searchText: '',
     statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
     types: new Set(['petitioner', 'represented', 'assessor', 'cross', null]),
-    classes: new Set(['2', '3A', '4A', '4B', '4C', '1', '3B', 'other']),
+    classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']), // Match category strings from getClassCategory()
     attorney: 'all',
     vcs: 'all',
     taxCourtOnly: false
@@ -89,6 +89,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (error) throw error;
 
+        // DEBUG: Log raw data from DB
+        console.log('DEBUG: Raw appeals from DB:', data?.length);
+
         // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -115,6 +118,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         });
 
         setAppeals(enrichedAppeals);
+        console.log('DEBUG: Appeals state set with:', enrichedAppeals.length, 'records');
 
         // Build unique years from data + current year
         const yearsFromData = [...new Set(enrichedAppeals.map(a => a.appeal_year).filter(Boolean))];
@@ -169,6 +173,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Filter and sort appeals
   const filteredAppeals = useMemo(() => {
     let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
+    console.log('DEBUG: After year filter:', result.length);
 
     // Apply active filters
     result = result.filter(a => {
@@ -188,14 +193,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       }
 
       // Status filter
-      if (!filters.statuses.has(a.status || 'NA')) return false;
+      if (!filters.statuses.has(a.status || 'NA')) {
+        console.log('DEBUG: Filtered out by status:', a.appeal_number, 'status=', a.status, 'has?', filters.statuses.has(a.status || 'NA'));
+        return false;
+      }
 
       // Type filter
-      if (!filters.types.has(a.appeal_type)) return false;
+      if (!filters.types.has(a.appeal_type)) {
+        console.log('DEBUG: Filtered out by type:', a.appeal_number, 'appeal_type=', a.appeal_type, 'has?', filters.types.has(a.appeal_type));
+        return false;
+      }
 
       // Class filter
       const classCategory = getClassCategory(a.property_m4_class);
-      if (!filters.classes.has(classCategory)) return false;
+      if (!filters.classes.has(classCategory)) {
+        console.log('DEBUG: Filtered out by class:', a.appeal_number, 'class=', a.property_m4_class, 'category=', classCategory, 'has?', filters.classes.has(classCategory));
+        return false;
+      }
 
       // Attorney filter
       if (filters.attorney !== 'all' && a.attorney !== filters.attorney) return false;
@@ -208,6 +222,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       return true;
     });
+
+    console.log('DEBUG: After all filters:', result.length);
 
     // Apply sorting
     if (sortState.column) {
@@ -773,6 +789,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   return (
     <div className="space-y-6">
+      {/* DEBUG PANEL */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
+        <p className="font-bold text-yellow-900 mb-2">DEBUG INFO:</p>
+        <div className="grid grid-cols-2 gap-4 text-yellow-800">
+          <div>Raw appeals from DB: {appeals.length}</div>
+          <div>After filtering: {filteredAppeals.length}</div>
+          <div>Selected year: {selectedYear}</div>
+          <div>Filter.statuses size: {filters.statuses.size}</div>
+          <div>Filter.types size: {filters.types.size}</div>
+          <div>Filter.classes size: {filters.classes.size}</div>
+        </div>
+      </div>
+
       {/* TOOLBAR */}
       <div className="flex justify-between items-center">
         <button
