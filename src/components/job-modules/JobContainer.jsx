@@ -1121,11 +1121,11 @@ const JobContainer = ({
     if (activeModule === 'appeal-log') {
       return {
         ...baseProps,
-        onNavigateToCME: (blq) => {
+        onNavigateToCME: (payload) => {
           // Set navigation target in jobData so FinalValuation can pick it up
           setJobData(prev => prev ? {
             ...prev,
-            navigateToCME: blq,
+            navigateToCME: payload,
             _clearNavigateToCME: () => setJobData(p => p ? { ...p, navigateToCME: null, _clearNavigateToCME: null } : p)
           } : prev);
           // Switch to Final Valuation module
