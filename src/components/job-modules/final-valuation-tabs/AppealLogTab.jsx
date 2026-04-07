@@ -28,7 +28,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [formData, setFormData] = useState({
     appeal_number: '',
     appeal_year: new Date().getFullYear(),
-    status: 'Pending',
+    status: 'D',
     petitioner_name: '',
     taxpayer_name: '',
     attorney: '',
@@ -111,11 +111,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Calculate statistics
   const stats = useMemo(() => {
     const filtered = filteredAppeals;
-    
+
     const totalAppeals = filtered.length;
     const totalAssessmentExposure = filtered.reduce((sum, a) => sum + (a.current_assessment || 0), 0);
-    const totalPossibleLoss = filtered.reduce((sum, a) => sum + (a.possible_loss || 0), 0);
-    const totalActualLoss = filtered.reduce((sum, a) => sum + (a.loss || 0), 0);
+
+    // Total Actual Loss: only include where judgment_value is not null
+    const settledAppeals = filtered.filter(a => a.judgment_value !== null && a.judgment_value !== undefined);
+    const totalActualLoss = settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0);
+
+    // Avg % Loss: weighted average of loss_pct for settled appeals
+    const avgLossPercent = settledAppeals.length > 0
+      ? settledAppeals.reduce((sum, a) => sum + (a.loss_pct || 0), 0) / settledAppeals.length
+      : 0;
 
     // Status counts
     const statusCounts = {
@@ -137,8 +144,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     return {
       totalAppeals,
       totalAssessmentExposure,
-      totalPossibleLoss,
       totalActualLoss,
+      avgLossPercent,
       statusCounts,
       residentialCount,
       commercialCount,
@@ -247,7 +254,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     setFormData({
       appeal_number: '',
       appeal_year: new Date().getFullYear(),
-      status: 'Pending',
+      status: 'D',
       petitioner_name: '',
       taxpayer_name: '',
       attorney: '',
@@ -360,7 +367,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       setIsSaving(true);
 
       // Calculate derived fields
-      const possible_loss = (formData.current_assessment || 0) - (formData.requested_value || 0);
       const calculatedEvidenceDueDate = formData.hearing_date
         ? new Date(new Date(formData.hearing_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
         : null;
@@ -368,8 +374,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       const appealData = {
         job_id: jobData.id,
         ...formData,
-        possible_loss,
-        status: formData.status || 'Pending',
+        status: formData.status || 'D',
         // Sanitize date fields
         hearing_date: sanitizeDate(formData.hearing_date),
         evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
@@ -432,12 +437,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       if (!appeal) return;
 
       // Recalculate dependent fields
-      if (field === 'current_assessment' || field === 'requested_value') {
-        const current = field === 'current_assessment' ? parseFloat(value) : appeal.current_assessment;
-        const requested = field === 'requested_value' ? parseFloat(value) : appeal.requested_value;
-        updateData.possible_loss = current - requested;
-      }
-
       if (field === 'hearing_date' && value) {
         const date = new Date(value);
         date.setDate(date.getDate() - 7);
@@ -576,12 +575,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <p className="text-xl font-bold text-blue-600 mt-2">{formatCurrency(stats.totalAssessmentExposure)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Possible Loss</p>
-          <p className="text-xl font-bold text-orange-600 mt-2">{formatCurrency(stats.totalPossibleLoss)}</p>
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Judgment Loss</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Avg % Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{stats.avgLossPercent !== null ? `${Math.round(stats.avgLossPercent * 10) / 10}%` : '-'}</p>
         </div>
       </div>
 
@@ -691,11 +690,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {/* VALUATION GROUP (always visible) */}
               <th className="px-3 py-2 text-left font-medium text-gray-700">Current Assessment</th>
               <th className="px-3 py-2 text-left font-medium text-gray-700">Requested</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Possible Loss</th>
               <th className="px-3 py-2 text-left font-medium text-gray-700 text-blue-600">CME Value</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">AC%</th>
               <th className="px-3 py-2 text-left font-medium text-gray-700">Judgment</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Loss</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Actual Loss</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">% Loss</th>
 
               {/* NOTES GROUP */}
               {expandedGroups.notes && (
@@ -837,16 +835,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
                     {renderEditableCell(appeal.id, 'requested_value', appeal.requested_value, 'number')}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.possible_loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {formatCurrency(appeal.possible_loss)}
-                  </td>
                   <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold">{formatCurrency(appeal.cme_projected_value)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{acPercent !== null ? `${acPercent}%` : '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
                     {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {formatCurrency(appeal.loss)}
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.judgment_value !== null && appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? formatCurrency(appeal.loss) : '-'}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                    {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? `${acPercent}%` : '-'}
                   </td>
 
                   {/* NOTES GROUP */}
@@ -878,11 +875,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {expandedGroups.workflow && <td colSpan="6"></td>}
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.requested_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.possible_loss || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap">-</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
               {expandedGroups.notes && <td></td>}
               <td></td>
             </tr>
@@ -1033,14 +1029,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         onChange={(e) => handleFormChange('status', e.target.value)}
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
                       >
-                        <option>S</option>
-                        <option>D</option>
-                        <option>H</option>
-                        <option>W</option>
-                        <option>A</option>
-                        <option>AP</option>
-                        <option>AWP</option>
-                        <option>Pending</option>
+                        <option value="S">S - Settled</option>
+                        <option value="D">D - Defend</option>
+                        <option value="H">H - Hearing</option>
+                        <option value="W">W - Withdrawn</option>
+                        <option value="A">A - Appeal</option>
+                        <option value="AP">AP - Appeal Pending</option>
+                        <option value="AWP">AWP - Appeal Withdrawn Pending</option>
                       </select>
                     </div>
                     <div>
