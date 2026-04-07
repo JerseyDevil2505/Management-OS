@@ -77,6 +77,110 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [editValue, setEditValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Bracket column state
+  const [vcsBracketMap, setVcsBracketMap] = useState({});
+  const [cmeBracketMappings, setCmeBracketMappings] = useState({});
+
+  // CME Brackets constant
+  const CME_BRACKETS = [
+    { min: 0, max: 99999, label: 'Under $100K' },
+    { min: 100000, max: 199999, label: '$100K-$199K' },
+    { min: 200000, max: 299999, label: '$200K-$299K' },
+    { min: 300000, max: 399999, label: '$300K-$399K' },
+    { min: 400000, max: 499999, label: '$400K-$499K' },
+    { min: 500000, max: 749999, label: '$500K-$749K' },
+    { min: 750000, max: 999999, label: '$750K-$999K' },
+    { min: 1000000, max: 1499999, label: '$1M-$1.49M' },
+    { min: 1500000, max: 1999999, label: '$1.5M-$1.99M' },
+    { min: 2000000, max: Infinity, label: '$2M+' }
+  ];
+
+  // Compute VCS to bracket mapping on mount
+  useEffect(() => {
+    if (!jobData?.end_date || properties.length === 0) return;
+
+    // Helper: Get bracket label for a given price value
+    const getBracketLabel = (priceValue) => {
+      const bracket = CME_BRACKETS.find(b => priceValue >= b.min && priceValue <= b.max);
+      return bracket ? bracket.label : null;
+    };
+
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
+
+    // Define period boundaries
+    const cspStart = new Date(`${assessmentYear - 1}-10-01`);
+    const cspEnd = new Date(`${assessmentYear}-12-31`);
+    const pspStart = new Date(`${assessmentYear - 2}-10-01`);
+    const pspEnd = new Date(`${assessmentYear - 1}-09-30`);
+    const hspStart = new Date(`${assessmentYear - 3}-10-01`);
+    const hspEnd = new Date(`${assessmentYear - 2}-09-30`);
+
+    const inPeriod = (saleDate, start, end) => {
+      const date = new Date(saleDate);
+      return date >= start && date <= end;
+    };
+
+    // Build bracket map
+    const newMap = {};
+    const vcsValues = [...new Set(properties
+      .filter(p => p.new_vcs && p.values_norm_time > 0)
+      .map(p => p.new_vcs))];
+
+    vcsValues.forEach(vcs => {
+      const vcsProps = properties.filter(p => p.new_vcs === vcs && p.values_norm_time > 0);
+
+      // Try to find >= 3 sales in CSP/PSP/HSP periods
+      const periodSales = vcsProps.filter(p =>
+        inPeriod(p.sales_date, cspStart, cspEnd) ||
+        inPeriod(p.sales_date, pspStart, pspEnd) ||
+        inPeriod(p.sales_date, hspStart, hspEnd)
+      );
+
+      let avgPrice;
+      if (periodSales.length >= 3) {
+        avgPrice = periodSales.reduce((sum, p) => sum + (p.values_norm_time || 0), 0) / periodSales.length;
+      } else {
+        // Fallback to all values
+        avgPrice = vcsProps.reduce((sum, p) => sum + (p.values_norm_time || 0), 0) / vcsProps.length;
+      }
+
+      newMap[vcs] = getBracketLabel(avgPrice);
+    });
+
+    setVcsBracketMap(newMap);
+  }, [jobData?.end_date, properties]);
+
+  // Load CME bracket mappings for fallback
+  useEffect(() => {
+    if (!jobData?.id) return;
+
+    const loadMappings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('job_cme_bracket_mappings')
+          .select('vcs_codes, bracket_value')
+          .eq('job_id', jobData.id);
+
+        if (error) throw error;
+
+        const mappingObj = {};
+        (data || []).forEach(row => {
+          if (row.vcs_codes && Array.isArray(row.vcs_codes)) {
+            row.vcs_codes.forEach(vcs => {
+              mappingObj[vcs] = row.bracket_value;
+            });
+          }
+        });
+
+        setCmeBracketMappings(mappingObj);
+      } catch (error) {
+        console.error('Error loading CME bracket mappings:', error);
+      }
+    };
+
+    loadMappings();
+  }, [jobData?.id]);
+
   // Load appeals from database
   useEffect(() => {
     if (!jobData?.id) return;
@@ -152,6 +256,62 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       .filter(Boolean))];
     return vcs.sort();
   }, [appeals]);
+
+  // Helper: Render bracket cell content
+  const renderBracketCell = (appeal) => {
+    // Check if manual override exists
+    if (appeal.cme_bracket) {
+      return (
+        <div className="inline-flex items-center gap-1">
+          <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+            {appeal.cme_bracket}
+          </span>
+          <span className="text-xs text-gray-500">(manual)</span>
+        </div>
+      );
+    }
+
+    // Find matching property and VCS
+    const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+    if (!property || !property.new_vcs) {
+      return <span className="text-gray-400">-</span>;
+    }
+
+    // Use vcsBracketMap
+    const bracket = vcsBracketMap[property.new_vcs];
+    if (bracket) {
+      return (
+        <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+          {bracket}
+        </span>
+      );
+    }
+
+    // Fallback to cmeBracketMappings
+    const fallbackBracket = cmeBracketMappings[property.new_vcs];
+    if (fallbackBracket) {
+      return (
+        <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+          {fallbackBracket}
+        </span>
+      );
+    }
+
+    return <span className="text-gray-400">-</span>;
+  };
+
+  // Helper: Render inspected cell content
+  const renderInspectedCell = (appeal) => {
+    const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+
+    if (property && property.inspection_list_by && property.inspection_list_date) {
+      const date = new Date(property.inspection_list_date);
+      const formatted = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear()}`;
+      return <span className="text-green-600 font-medium">{formatted}</span>;
+    }
+
+    return <span className="text-gray-400">No</span>;
+  };
 
   // Helper: Determine class category
   const getClassCategory = (classCode) => {
