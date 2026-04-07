@@ -59,9 +59,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [editValue, setEditValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Status dropdown state
-  const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // appealId or null
-
   // Load appeals from database
   useEffect(() => {
     if (!jobData?.id) return;
@@ -77,11 +74,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (error) throw error;
 
-        // Enrich with property data
+        // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+
+          // Re-parse appeal_type for existing records where it's null but appeal_number exists
+          let appealType = appeal.appeal_type;
+          if (!appealType && appeal.appeal_number) {
+            const parsed = parseAppealNumber(appeal.appeal_number);
+            appealType = parsed.appealType;
+          }
+
           return {
             ...appeal,
+            appeal_type: appealType,
             // Derived fields from property match
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
             new_vcs: property?.new_vcs || null,
@@ -148,9 +154,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Calculate % of ratables
     const ratablePercent = totalRatables > 0 ? (totalAssessmentExposure / totalRatables) * 100 : 0;
 
-    // Status counts
+    // Status counts (X is included for display purposes in tiles)
     const statusCounts = {
-      S: 0, D: 0, H: 0, W: 0, A: 0, AP: 0, AWP: 0, NA: 0
+      S: 0, D: 0, H: 0, W: 0, A: 0, AP: 0, AWP: 0, NA: 0, X: 0
     };
     filtered.forEach(a => {
       const status = a.status?.toUpperCase() || 'NA';
@@ -201,21 +207,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(value);
-  };
-
-  // Helper: Get status badge styling
-  const getStatusStyle = (status) => {
-    const s = status?.toUpperCase() || 'NA';
-    switch (s) {
-      case 'S': return { bg: 'bg-green-50', text: 'text-green-700', badge: 'bg-green-600 text-white' };
-      case 'D':
-      case 'H': return { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-600 text-white' };
-      case 'W': return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-600 text-white' };
-      case 'A':
-      case 'AP':
-      case 'AWP': return { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-600 text-white' };
-      default: return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-600 text-white' };
-    }
   };
 
   // Helper: Check owner mismatch
@@ -287,7 +278,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     }
 
     // Extract suffix (trailing letter(s): D, L, A, X - case insensitive)
-    const suffix = appealNumber.trim().match(/([DLAXdlax]+)$/)?.[1]?.toUpperCase();
+    // Using the exact regex format with proper anchoring
+    const suffix = appealNumber.trim().match(/([DLAXdlax]+)$/)
+      ?.[1]?.toUpperCase();
 
     // Map suffix to appeal_type
     const appealTypeMap = {
@@ -505,8 +498,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       const enrichedAppeals = (fetchData || []).map(appeal => {
         const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+
+        // Re-parse appeal_type for existing records where it's null but appeal_number exists
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+
         return {
           ...appeal,
+          appeal_type: appealType,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
@@ -709,19 +711,74 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         </div>
       </div>
 
-      {/* STATS ROW 2 - STATUS BADGES */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">By Status</p>
-        <div className="flex gap-2 flex-wrap">
-          {['S', 'D', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => {
-            const count = stats.statusCounts[status] || 0;
-            const style = getStatusStyle(status);
-            return (
-              <div key={status} className={`${style.badge} ${style.text} px-3 py-1 rounded-full text-sm font-medium`}>
-                {status}: <span className="font-bold">{count}</span>
-              </div>
-            );
-          })}
+      {/* STATS ROW 2 - BY STATUS TILES */}
+      <div className="grid grid-cols-5 gap-4">
+        {/* Tile 1: Defend / Heard */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Defend / Heard</p>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">D:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['D'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">H:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['H'] || 0}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tile 2: Stipulated */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Stipulated</p>
+          <div className="text-center">
+            <span className="text-lg font-bold text-gray-900">S: {stats.statusCounts['S'] || 0}</span>
+          </div>
+        </div>
+
+        {/* Tile 3: Assessor / Cross */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Assessor / Cross</p>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">A:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['A'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">X:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['X'] || 0}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tile 4: Withdrawn / Non Appearance */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Withdrawn / Non Appearance</p>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">W:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['W'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">NA:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['NA'] || 0}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tile 5: Affirmed */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Affirmed</p>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">AP:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['AP'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">AWP:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['AWP'] || 0}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -860,39 +917,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
               return (
                 <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                  {/* FROZEN LEFT COLUMNS - STATUS BADGE */}
-                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 relative">
-                    {openStatusDropdown === appeal.id ? (
-                      <select
-                        autoFocus
-                        value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
-                        onChange={(e) => {
-                          handleDropdownChange(appeal.id, 'status', e.target.value || 'NA');
-                          setOpenStatusDropdown(null);
-                        }}
-                        onBlur={() => setOpenStatusDropdown(null)}
-                        className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer absolute left-3 top-2 z-20"
-                      >
-                        <option value="D">D</option>
-                        <option value="S">S</option>
-                        <option value="H">H</option>
-                        <option value="W">W</option>
-                        <option value="A">A</option>
-                        <option value="AP">AP</option>
-                        <option value="AWP">AWP</option>
-                        <option value="NA">NA</option>
-                      </select>
-                    ) : (
-                      <button
-                        onClick={() => setOpenStatusDropdown(appeal.id)}
-                        className={`px-2.5 py-1 rounded text-xs font-semibold ${
-                          getStatusStyle(appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')).badge
-                        } cursor-pointer hover:opacity-80 transition-opacity`}
-                        title="Click to change status"
-                      >
-                        {appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
-                      </button>
-                    )}
+                  {/* FROZEN LEFT COLUMNS */}
+                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200">
+                    <select
+                      value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
+                      onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
+                      className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                      style={{ minWidth: '140px' }}
+                    >
+                      <option value="D">D - Defend</option>
+                      <option value="S">S - Stipulated</option>
+                      <option value="H">H - Heard</option>
+                      <option value="W">W - Withdrawn</option>
+                      <option value="A">A - Assessor</option>
+                      <option value="AP">AP - Affirmed w/ Prejudice</option>
+                      <option value="AWP">AWP - Affirmed w/o Prejudice</option>
+                      <option value="NA">NA - Non Appearance</option>
+                    </select>
                   </td>
                   <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
                   <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">
