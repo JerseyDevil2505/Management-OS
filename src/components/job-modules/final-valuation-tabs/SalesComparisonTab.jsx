@@ -1870,9 +1870,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         const cspEnd = new Date(assessmentYear, 11, 31);
 
         const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
+        const subjectSaleCode = String(subject.sales_nu ?? '').trim();
+        const isValidSaleCode = !subjectSaleCode ||
+          compFilters.salesCodes?.includes(subjectSaleCode);
+
         const subjectSoldInCSP = subjectSaleDate &&
           (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
-          (subject.sales_price || 0) > 0;
+          (subject.sales_price || 0) > 0 &&
+          isValidSaleCode;
 
         let priorityComp = null;
         if (subjectSoldInCSP) {
