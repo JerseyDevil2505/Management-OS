@@ -138,11 +138,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
     // Pre-set adjustment bracket if provided
     if (initialBracket) {
-      setCompFilters(prev => ({
-        ...prev,
-        adjustmentBracket: initialBracket,
-        autoAdjustment: false
-      }));
+      const bracketIndex = CME_BRACKETS.findIndex(b =>
+        b.label === initialBracket
+      );
+      const bracketKey = bracketIndex >= 0
+        ? `bracket_${bracketIndex}`
+        : null;
+
+      if (bracketKey) {
+        setCompFilters(prev => ({
+          ...prev,
+          adjustmentBracket: bracketKey,
+          autoAdjustment: false
+        }));
+      }
     }
 
     // Switch to search tab so user sees the subject list
