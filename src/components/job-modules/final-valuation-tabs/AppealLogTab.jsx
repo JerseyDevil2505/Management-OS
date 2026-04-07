@@ -21,7 +21,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Modal and add appeal state
   const [showModal, setShowModal] = useState(false);
   const [modalStep, setModalStep] = useState(1); // 1 = property search, 2 = appeal details
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchBlock, setSearchBlock] = useState('');
+  const [searchLot, setSearchLot] = useState('');
+  const [searchQualifier, setSearchQualifier] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [formData, setFormData] = useState({
     appeal_number: '',
@@ -235,7 +237,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const handleOpenModal = () => {
     setShowModal(true);
     setModalStep(1);
-    setSearchQuery('');
+    setSearchBlock('');
+    setSearchLot('');
+    setSearchQualifier('');
     setSearchResults([]);
     setFormData({
       appeal_number: '',
@@ -268,18 +272,47 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     setModalStep(1);
   };
 
-  const handleSearchProperty = (query) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
+  // Filter properties based on block, lot, and qualifier fields
+  const performPropertySearch = (block, lot, qualifier) => {
+    // If both block and lot are empty, show no results
+    if (!block.trim() && !lot.trim()) {
       setSearchResults([]);
       return;
     }
 
+    const blockTrimmed = block.trim().toLowerCase();
+    const lotTrimmed = lot.trim().toLowerCase();
+    const qualTrimmed = qualifier.trim().toLowerCase();
+
     const results = properties.filter(p => {
-      const blockMatch = (p.property_block || '').toString().includes(query);
-      const lotMatch = (p.property_lot || '').toString().includes(query);
-      const locMatch = (p.property_location || '').toLowerCase().includes(query.toLowerCase());
-      return blockMatch || lotMatch || locMatch;
+      const pBlock = (p.property_block || '').toString().toLowerCase().trim();
+      const pLot = (p.property_lot || '').toString().toLowerCase().trim();
+      const pQual = (p.property_qualifier || '').toString().toLowerCase().trim();
+
+      // If only block is entered, match only block
+      if (blockTrimmed && !lotTrimmed) {
+        const blockMatches = pBlock === blockTrimmed;
+        if (!blockMatches) return false;
+        // If qualifier is specified, it must match too
+        if (qualTrimmed) {
+          return pQual === qualTrimmed;
+        }
+        return true;
+      }
+
+      // If both block and lot are entered, match both
+      if (blockTrimmed && lotTrimmed) {
+        const blockMatches = pBlock === blockTrimmed;
+        const lotMatches = pLot === lotTrimmed;
+        if (!blockMatches || !lotMatches) return false;
+        // If qualifier is specified, it must match too
+        if (qualTrimmed) {
+          return pQual === qualTrimmed;
+        }
+        return true;
+      }
+
+      return false;
     });
 
     setSearchResults(results.slice(0, 20)); // Limit to 20 results
@@ -301,6 +334,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   };
 
   const handleSkipSearch = () => {
+    // Pre-populate form with manually entered block/lot/qualifier
+    setFormData(prev => ({
+      ...prev,
+      property_block: searchBlock.trim() || '',
+      property_lot: searchLot.trim() || '',
+      property_qualifier: searchQualifier.trim() || '',
+      property_composite_key: '' // Will be empty since property not in our records
+    }));
     setModalStep(2);
   };
 
@@ -854,14 +895,48 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 // STEP 1: PROPERTY SEARCH
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Search for Property</label>
-                    <input
-                      type="text"
-                      placeholder="Block, Lot, or Location"
-                      value={searchQuery}
-                      onChange={(e) => handleSearchProperty(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Search for Property</label>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Block</label>
+                        <input
+                          type="text"
+                          placeholder="Enter block"
+                          value={searchBlock}
+                          onChange={(e) => {
+                            setSearchBlock(e.target.value);
+                            performPropertySearch(e.target.value, searchLot, searchQualifier);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Lot</label>
+                        <input
+                          type="text"
+                          placeholder="Enter lot"
+                          value={searchLot}
+                          onChange={(e) => {
+                            setSearchLot(e.target.value);
+                            performPropertySearch(searchBlock, e.target.value, searchQualifier);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Qualifier <span className="text-gray-400">(optional)</span></label>
+                        <input
+                          type="text"
+                          placeholder="Enter qualifier"
+                          value={searchQualifier}
+                          onChange={(e) => {
+                            setSearchQualifier(e.target.value);
+                            performPropertySearch(searchBlock, searchLot, e.target.value);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {searchResults.length > 0 && (
