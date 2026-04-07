@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
@@ -8,7 +8,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
-  
+
   // Column group visibility toggles
   const [expandedGroups, setExpandedGroups] = useState({
     propertyInfo: true,
@@ -17,6 +17,41 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     valuation: true,
     notes: true
   });
+
+  // Modal and add appeal state
+  const [showModal, setShowModal] = useState(false);
+  const [modalStep, setModalStep] = useState(1); // 1 = property search, 2 = appeal details
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [formData, setFormData] = useState({
+    appeal_number: '',
+    appeal_year: new Date().getFullYear(),
+    status: 'Pending',
+    petitioner_name: '',
+    taxpayer_name: '',
+    attorney: '',
+    attorney_address: '',
+    attorney_city_state: '',
+    current_assessment: 0,
+    requested_value: 0,
+    hearing_date: '',
+    submission_type: '',
+    evidence_status: '',
+    stip_status: 'not_started',
+    inspected: false,
+    tax_court_pending: false,
+    comments: '',
+    property_block: '',
+    property_lot: '',
+    property_qualifier: '',
+    property_location: '',
+    property_composite_key: ''
+  });
+
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState(null); // { appealId, field }
+  const [editValue, setEditValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load appeals from database
   useEffect(() => {
@@ -144,6 +179,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     return pet !== own;
   };
 
+  // Helper: Render editable cell with proper formatting
+  const renderEditableCell = (appealId, field, value, type = 'text') => {
+    const isEditing = editingCell?.appealId === appealId && editingCell?.field === field;
+    const isCurrencyField = ['current_assessment', 'requested_value', 'judgment_value', 'possible_loss', 'loss', 'cme_projected_value'].includes(field);
+
+    if (isEditing) {
+      return (
+        <input
+          autoFocus
+          type={type}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={() => handleSaveEdit(appealId, field, editValue)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSaveEdit(appealId, field, editValue);
+            if (e.key === 'Escape') setEditingCell(null);
+          }}
+          className="w-full px-1 py-0.5 border border-blue-500 rounded text-xs"
+        />
+      );
+    }
+
+    const displayValue = isCurrencyField ? formatCurrency(value) : (value || '-');
+    const isCurrency = isCurrencyField;
+
+    return (
+      <div
+        onClick={() => handleStartEdit(appealId, field, value)}
+        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded whitespace-nowrap ${isCurrency ? 'text-right' : ''}`}
+        title="Click to edit"
+      >
+        {displayValue}
+      </div>
+    );
+  };
+
   // Helper: Calculate AC%
   const calculateACPercent = (appeal) => {
     if (!appeal.current_assessment || !appeal.judgment_value) return null;
@@ -159,6 +230,237 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // ==================== MODAL & ADD APPEAL HANDLERS ====================
+
+  const handleOpenModal = () => {
+    setShowModal(true);
+    setModalStep(1);
+    setSearchQuery('');
+    setSearchResults([]);
+    setFormData({
+      appeal_number: '',
+      appeal_year: new Date().getFullYear(),
+      status: 'Pending',
+      petitioner_name: '',
+      taxpayer_name: '',
+      attorney: '',
+      attorney_address: '',
+      attorney_city_state: '',
+      current_assessment: 0,
+      requested_value: 0,
+      hearing_date: '',
+      submission_type: '',
+      evidence_status: '',
+      stip_status: 'not_started',
+      inspected: false,
+      tax_court_pending: false,
+      comments: '',
+      property_block: '',
+      property_lot: '',
+      property_qualifier: '',
+      property_location: '',
+      property_composite_key: ''
+    });
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setModalStep(1);
+  };
+
+  const handleSearchProperty = (query) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const results = properties.filter(p => {
+      const blockMatch = (p.property_block || '').toString().includes(query);
+      const lotMatch = (p.property_lot || '').toString().includes(query);
+      const locMatch = (p.property_location || '').toLowerCase().includes(query.toLowerCase());
+      return blockMatch || lotMatch || locMatch;
+    });
+
+    setSearchResults(results.slice(0, 20)); // Limit to 20 results
+  };
+
+  const handleSelectProperty = (property) => {
+    setFormData(prev => ({
+      ...prev,
+      property_block: property.property_block || '',
+      property_lot: property.property_lot || '',
+      property_qualifier: property.property_qualifier || '',
+      property_location: property.property_location || '',
+      property_composite_key: property.property_composite_key || '',
+      current_assessment: property.values_mod_total || 0,
+      petitioner_name: property.owner_name || '',
+      taxpayer_name: property.owner_name || ''
+    }));
+    setModalStep(2);
+  };
+
+  const handleSkipSearch = () => {
+    setModalStep(2);
+  };
+
+  const handleFormChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSaveAppeal = async () => {
+    try {
+      setIsSaving(true);
+
+      // Calculate derived fields
+      const possible_loss = (formData.current_assessment || 0) - (formData.requested_value || 0);
+      const evidence_due_date = formData.hearing_date
+        ? new Date(new Date(formData.hearing_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        : null;
+
+      const appealData = {
+        job_id: jobData.id,
+        ...formData,
+        possible_loss,
+        evidence_due_date,
+        status: formData.status || 'Pending'
+      };
+
+      const { error } = await supabase
+        .from('appeal_log')
+        .insert([appealData]);
+
+      if (error) throw error;
+
+      // Reload appeals
+      const { data, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (data || []).map(appeal => {
+        const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+        return {
+          ...appeal,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error saving appeal:', error);
+      alert(`Failed to save appeal: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ==================== INLINE EDITING HANDLERS ====================
+
+  const handleStartEdit = (appealId, field, currentValue) => {
+    setEditingCell({ appealId, field });
+    setEditValue(currentValue || '');
+  };
+
+  const handleSaveEdit = async (appealId, field, value) => {
+    try {
+      setIsSaving(true);
+
+      // Handle calculated fields
+      let updateData = { [field]: value };
+
+      const appeal = appeals.find(a => a.id === appealId);
+      if (!appeal) return;
+
+      // Recalculate dependent fields
+      if (field === 'current_assessment' || field === 'requested_value') {
+        const current = field === 'current_assessment' ? parseFloat(value) : appeal.current_assessment;
+        const requested = field === 'requested_value' ? parseFloat(value) : appeal.requested_value;
+        updateData.possible_loss = current - requested;
+      }
+
+      if (field === 'hearing_date' && value) {
+        const date = new Date(value);
+        date.setDate(date.getDate() - 7);
+        updateData.evidence_due_date = date.toISOString().split('T')[0];
+      }
+
+      if (field === 'judgment_value') {
+        const jv = parseFloat(value) || 0;
+        const loss = (appeal.current_assessment || 0) - jv;
+        updateData.loss = loss;
+        updateData.loss_pct = appeal.current_assessment ? (loss / appeal.current_assessment) * 100 : null;
+      }
+
+      const { error } = await supabase
+        .from('appeal_log')
+        .update(updateData)
+        .eq('id', appealId);
+
+      if (error) throw error;
+
+      // Update local state
+      setAppeals(prev => prev.map(a =>
+        a.id === appealId ? { ...a, ...updateData } : a
+      ));
+      setEditingCell(null);
+    } catch (error) {
+      console.error('Error saving field:', error);
+      alert(`Failed to save: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAppeal = async (appealId) => {
+    if (!window.confirm('Are you sure you want to delete this appeal?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('appeal_log')
+        .delete()
+        .eq('id', appealId);
+
+      if (error) throw error;
+
+      setAppeals(prev => prev.filter(a => a.id !== appealId));
+    } catch (error) {
+      console.error('Error deleting appeal:', error);
+      alert(`Failed to delete: ${error.message}`);
+    }
+  };
+
+  const handleDropdownChange = async (appealId, field, value) => {
+    // Status and Stip Status dropdowns save immediately
+    try {
+      const { error } = await supabase
+        .from('appeal_log')
+        .update({ [field]: value })
+        .eq('id', appealId);
+
+      if (error) throw error;
+
+      setAppeals(prev => prev.map(a =>
+        a.id === appealId ? { ...a, [field]: value } : a
+      ));
+    } catch (error) {
+      console.error('Error updating field:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -167,35 +469,47 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     );
   }
 
-  if (filteredAppeals.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <AlertCircle className="w-12 h-12 text-gray-300 mb-3" />
-        <p className="text-gray-500 font-medium">No Appeals Logged</p>
-        <p className="text-sm text-gray-400 mt-1">Appeals will appear here once logged</p>
-      </div>
-    );
-  }
-
   // ==================== RENDER ====================
 
   return (
     <div className="space-y-6">
-      {/* YEAR FILTER */}
-      <div className="flex justify-end">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      {/* TOOLBAR */}
+      <div className="flex justify-between items-center">
+        <button
+          onClick={handleOpenModal}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
+        >
+          + Add Appeal
+        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
-            {availableYears.map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
+            📊 Export to Excel
+          </button>
         </div>
       </div>
+
+      {/* EMPTY STATE */}
+      {filteredAppeals.length === 0 && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-12 bg-white rounded-lg border border-gray-200">
+          <AlertCircle className="w-12 h-12 text-gray-300 mb-3" />
+          <p className="text-gray-500 font-medium">No Appeals Logged</p>
+          <p className="text-sm text-gray-400 mt-1">Click \"+ Add Appeal\" to create one</p>
+        </div>
+      )}
 
       {/* STATS ROW 1 - TOTALS */}
       <div className="grid grid-cols-4 gap-4">
@@ -273,6 +587,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       </div>
 
       {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
+      {filteredAppeals.length > 0 && (
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
         <table className="w-full text-xs border-collapse">
           <thead>
@@ -332,6 +647,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {expandedGroups.notes && (
                 <th className="px-3 py-2 text-left font-medium text-gray-700">Comments</th>
               )}
+
+              {/* DELETE COLUMN */}
+              <th className="px-3 py-2 text-center font-medium text-gray-700">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -350,7 +668,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     </span>
                   </td>
                   <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
-                  <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">{appeal.appeal_number || '-'}</td>
+                  <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">
+                    {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
+                  </td>
                   <td className="sticky left-48 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_block || '-'}</td>
                   <td className="sticky left-64 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_lot || '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_qualifier || '-'}</td>
@@ -361,8 +681,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     <>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_m4_class || '-'}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.new_vcs || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.cme_bracket || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.inspected ? 'Yes' : 'No'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'cme_bracket', appeal.cme_bracket, 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={appeal.inspected || false}
+                            onChange={(e) => handleDropdownChange(appeal.id, 'inspected', e.target.checked)}
+                            className="w-4 h-4"
+                          />
+                        </label>
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1">
                         {appeal.owner_name || '-'}
                         {ownerMismatch && <span className="text-yellow-600">⚠️</span>}
@@ -373,38 +704,113 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {/* LEGAL GROUP */}
                   {expandedGroups.legal && (
                     <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.petitioner_name || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney_address || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney_city_state || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'petitioner_name', appeal.petitioner_name, 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'attorney_address', appeal.attorney_address, 'text')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'attorney_city_state', appeal.attorney_city_state, 'text')}
+                      </td>
                     </>
                   )}
 
                   {/* WORKFLOW GROUP */}
                   {expandedGroups.workflow && (
                     <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.submission_type || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.evidence_status || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        <select
+                          value={appeal.submission_type || ''}
+                          onChange={(e) => handleDropdownChange(appeal.id, 'submission_type', e.target.value)}
+                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                        >
+                          <option value="">-</option>
+                          <option value="Online">Online</option>
+                          <option value="Paper/Mail">Paper/Mail</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        <select
+                          value={appeal.evidence_status || ''}
+                          onChange={(e) => handleDropdownChange(appeal.id, 'evidence_status', e.target.value)}
+                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                        >
+                          <option value="">-</option>
+                          <option value="None">None</option>
+                          <option value="Submitted">Submitted</option>
+                          <option value="Exchanged">Exchanged</option>
+                        </select>
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">{evidenceDue || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.stip_status || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.tax_court_pending ? 'Yes' : 'No'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        <select
+                          value={appeal.stip_status || 'not_started'}
+                          onChange={(e) => handleDropdownChange(appeal.id, 'stip_status', e.target.value)}
+                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                        >
+                          <option value="not_started">Not Started</option>
+                          <option value="drafted">Drafted</option>
+                          <option value="sent">Sent</option>
+                          <option value="signed">Signed</option>
+                          <option value="filed">Filed</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={appeal.tax_court_pending || false}
+                            onChange={(e) => handleDropdownChange(appeal.id, 'tax_court_pending', e.target.checked)}
+                            className="w-4 h-4"
+                          />
+                        </label>
+                      </td>
                     </>
                   )}
 
                   {/* VALUATION GROUP */}
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.current_assessment)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.requested_value)}</td>
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.possible_loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>{formatCurrency(appeal.possible_loss)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                    {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                    {renderEditableCell(appeal.id, 'requested_value', appeal.requested_value, 'number')}
+                  </td>
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.possible_loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {formatCurrency(appeal.possible_loss)}
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold">{formatCurrency(appeal.cme_projected_value)}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{acPercent !== null ? `${acPercent}%` : '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.judgment_value)}</td>
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>{formatCurrency(appeal.loss)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                    {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
+                  </td>
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {formatCurrency(appeal.loss)}
+                  </td>
 
                   {/* NOTES GROUP */}
                   {expandedGroups.notes && (
-                    <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{appeal.comments || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {renderEditableCell(appeal.id, 'comments', appeal.comments, 'text')}
+                    </td>
                   )}
+
+                  {/* DELETE BUTTON */}
+                  <td className="px-3 py-2 whitespace-nowrap text-center">
+                    <button
+                      onClick={() => handleDeleteAppeal(appeal.id)}
+                      className="text-gray-400 hover:text-red-600 transition-colors p-1 hover:bg-red-50 rounded"
+                      title="Delete appeal"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -423,10 +829,312 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
               {expandedGroups.notes && <td></td>}
+              <td></td>
             </tr>
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* MODAL */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">
+                {modalStep === 1 ? 'Add Appeal - Select Property' : 'Add Appeal - Enter Details'}
+              </h2>
+              <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {modalStep === 1 ? (
+                // STEP 1: PROPERTY SEARCH
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Search for Property</label>
+                    <input
+                      type="text"
+                      placeholder="Block, Lot, or Location"
+                      value={searchQuery}
+                      onChange={(e) => handleSearchProperty(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {searchResults.length > 0 && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Qual</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Location</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Owner Name</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">Assessment</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {searchResults.map((prop, idx) => (
+                            <tr
+                              key={idx}
+                              className="border-t border-gray-200 hover:bg-gray-50 cursor-pointer"
+                              onClick={() => handleSelectProperty(prop)}
+                            >
+                              <td className="px-3 py-2">{prop.property_block || '-'}</td>
+                              <td className="px-3 py-2">{prop.property_lot || '-'}</td>
+                              <td className="px-3 py-2">{prop.property_qualifier || '-'}</td>
+                              <td className="px-3 py-2 truncate">{prop.property_location || '-'}</td>
+                              <td className="px-3 py-2 truncate">{prop.owner_name || '-'}</td>
+                              <td className="px-3 py-2">{prop.property_m4_class || '-'}</td>
+                              <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 justify-end mt-4">
+                    <button
+                      onClick={handleCloseModal}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSkipSearch}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"
+                    >
+                      Skip Search
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // STEP 2: APPEAL DETAILS
+                <div className="grid grid-cols-2 gap-6 max-h-80 overflow-y-auto">
+                  {/* LEFT COLUMN */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Appeal Number</label>
+                      <input
+                        type="text"
+                        value={formData.appeal_number}
+                        onChange={(e) => handleFormChange('appeal_number', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Appeal Year</label>
+                      <input
+                        type="number"
+                        value={formData.appeal_year}
+                        onChange={(e) => handleFormChange('appeal_year', parseInt(e.target.value))}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => handleFormChange('status', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option>S</option>
+                        <option>D</option>
+                        <option>H</option>
+                        <option>W</option>
+                        <option>A</option>
+                        <option>AP</option>
+                        <option>AWP</option>
+                        <option>Pending</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Petitioner Name</label>
+                      <input
+                        type="text"
+                        value={formData.petitioner_name}
+                        onChange={(e) => handleFormChange('petitioner_name', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Taxpayer Name</label>
+                      <input
+                        type="text"
+                        value={formData.taxpayer_name}
+                        onChange={(e) => handleFormChange('taxpayer_name', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Attorney</label>
+                      <input
+                        type="text"
+                        value={formData.attorney}
+                        onChange={(e) => handleFormChange('attorney', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Attorney Address</label>
+                      <input
+                        type="text"
+                        value={formData.attorney_address}
+                        onChange={(e) => handleFormChange('attorney_address', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Attorney City/State</label>
+                      <input
+                        type="text"
+                        value={formData.attorney_city_state}
+                        onChange={(e) => handleFormChange('attorney_city_state', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* RIGHT COLUMN */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Current Assessment</label>
+                      <input
+                        type="number"
+                        value={formData.current_assessment}
+                        onChange={(e) => handleFormChange('current_assessment', parseFloat(e.target.value))}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Requested Value</label>
+                      <input
+                        type="number"
+                        value={formData.requested_value}
+                        onChange={(e) => handleFormChange('requested_value', parseFloat(e.target.value))}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Hearing Date</label>
+                      <input
+                        type="date"
+                        value={formData.hearing_date}
+                        onChange={(e) => handleFormChange('hearing_date', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Submission Type</label>
+                      <select
+                        value={formData.submission_type}
+                        onChange={(e) => handleFormChange('submission_type', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="">-</option>
+                        <option value="Online">Online</option>
+                        <option value="Paper/Mail">Paper/Mail</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Evidence Status</label>
+                      <select
+                        value={formData.evidence_status}
+                        onChange={(e) => handleFormChange('evidence_status', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="">-</option>
+                        <option value="None">None</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Exchanged">Exchanged</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Stip Status</label>
+                      <select
+                        value={formData.stip_status}
+                        onChange={(e) => handleFormChange('stip_status', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="not_started">Not Started</option>
+                        <option value="drafted">Drafted</option>
+                        <option value="sent">Sent to Taxpayer</option>
+                        <option value="signed">Signed</option>
+                        <option value="filed">Filed</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.inspected}
+                          onChange={(e) => handleFormChange('inspected', e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-xs text-gray-700">Inspected</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.tax_court_pending}
+                          onChange={(e) => handleFormChange('tax_court_pending', e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-xs text-gray-700">Tax Court</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {modalStep === 2 && (
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">Comments</label>
+                  <textarea
+                    value={formData.comments}
+                    onChange={(e) => handleFormChange('comments', e.target.value)}
+                    className="w-full px-2 py-2 border border-gray-300 rounded text-xs"
+                    rows="2"
+                    placeholder="Add any comments"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 p-6 border-t border-gray-200 bg-gray-50">
+              {modalStep === 2 && (
+                <button
+                  onClick={() => setModalStep(1)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+                >
+                  Back
+                </button>
+              )}
+              <button
+                onClick={handleCloseModal}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              {modalStep === 2 && (
+                <button
+                  onClick={handleSaveAppeal}
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSaving ? 'Saving...' : 'Save Appeal'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
