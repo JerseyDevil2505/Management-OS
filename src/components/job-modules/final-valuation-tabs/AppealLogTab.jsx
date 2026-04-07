@@ -232,6 +232,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Helper: Sanitize date fields (convert empty string to null)
+  const sanitizeDate = (val) => (val && val.trim() !== '' ? val : null);
+
   // ==================== MODAL & ADD APPEAL HANDLERS ====================
 
   const handleOpenModal = () => {
@@ -358,7 +361,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       // Calculate derived fields
       const possible_loss = (formData.current_assessment || 0) - (formData.requested_value || 0);
-      const evidence_due_date = formData.hearing_date
+      const calculatedEvidenceDueDate = formData.hearing_date
         ? new Date(new Date(formData.hearing_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
         : null;
 
@@ -366,8 +369,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         job_id: jobData.id,
         ...formData,
         possible_loss,
-        evidence_due_date,
-        status: formData.status || 'Pending'
+        status: formData.status || 'Pending',
+        // Sanitize date fields
+        hearing_date: sanitizeDate(formData.hearing_date),
+        evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
       };
 
       const { error } = await supabase
@@ -444,6 +449,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const loss = (appeal.current_assessment || 0) - jv;
         updateData.loss = loss;
         updateData.loss_pct = appeal.current_assessment ? (loss / appeal.current_assessment) * 100 : null;
+      }
+
+      // Sanitize date fields before sending to Supabase
+      if (updateData.hearing_date !== undefined) {
+        updateData.hearing_date = sanitizeDate(updateData.hearing_date);
+      }
+      if (updateData.evidence_due_date !== undefined) {
+        updateData.evidence_due_date = sanitizeDate(updateData.evidence_due_date);
       }
 
       const { error } = await supabase
