@@ -83,16 +83,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // CME Brackets constant
   const CME_BRACKETS = [
-    { min: 0, max: 99999, label: 'Under $100K' },
-    { min: 100000, max: 199999, label: '$100K-$199K' },
-    { min: 200000, max: 299999, label: '$200K-$299K' },
-    { min: 300000, max: 399999, label: '$300K-$399K' },
-    { min: 400000, max: 499999, label: '$400K-$499K' },
-    { min: 500000, max: 749999, label: '$500K-$749K' },
-    { min: 750000, max: 999999, label: '$750K-$999K' },
-    { min: 1000000, max: 1499999, label: '$1M-$1.49M' },
-    { min: 1500000, max: 1999999, label: '$1.5M-$1.99M' },
-    { min: 2000000, max: Infinity, label: '$2M+' }
+    { min: 0, max: 99999, label: 'Under $100K', color: '#6B7280' },
+    { min: 100000, max: 199999, label: '$100K-$199K', color: '#3B82F6' },
+    { min: 200000, max: 299999, label: '$200K-$299K', color: '#10B981' },
+    { min: 300000, max: 399999, label: '$300K-$399K', color: '#F59E0B' },
+    { min: 400000, max: 499999, label: '$400K-$499K', color: '#EF4444' },
+    { min: 500000, max: 749999, label: '$500K-$749K', color: '#8B5CF6' },
+    { min: 750000, max: 999999, label: '$750K-$999K', color: '#EC4899' },
+    { min: 1000000, max: 1499999, label: '$1M-$1.49M', color: '#F97316' },
+    { min: 1500000, max: 1999999, label: '$1.5M-$1.99M', color: '#14B8A6' },
+    { min: 2000000, max: Infinity, label: '$2M+', color: '#6366F1' }
   ];
 
   // Compute VCS to bracket mapping on mount
@@ -260,11 +260,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // Helper: Render bracket cell content
   const renderBracketCell = (appeal) => {
+    // Helper to get bracket color by label
+    const getBracketColor = (label) => {
+      const bracket = CME_BRACKETS.find(b => b.label === label);
+      return bracket ? bracket.color : '#6B7280';
+    };
+
     // Check if manual override exists
     if (appeal.cme_bracket) {
+      const color = getBracketColor(appeal.cme_bracket);
       return (
         <div className="inline-flex items-center gap-1">
-          <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+          <span
+            className="inline-block px-2 py-0.5 rounded text-xs font-medium text-white"
+            style={{ backgroundColor: color }}
+          >
             {appeal.cme_bracket}
           </span>
           <span className="text-xs text-gray-500">(manual)</span>
@@ -281,8 +291,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Use vcsBracketMap
     const bracket = vcsBracketMap[property.new_vcs];
     if (bracket) {
+      const color = getBracketColor(bracket);
       return (
-        <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+        <span
+          className="inline-block px-2 py-0.5 rounded text-xs font-medium text-white"
+          style={{ backgroundColor: color }}
+        >
           {bracket}
         </span>
       );
@@ -291,8 +305,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Fallback to cmeBracketMappings
     const fallbackBracket = cmeBracketMappings[property.new_vcs];
     if (fallbackBracket) {
+      const color = getBracketColor(fallbackBracket);
       return (
-        <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+        <span
+          className="inline-block px-2 py-0.5 rounded text-xs font-medium text-white"
+          style={{ backgroundColor: color }}
+        >
           {fallbackBracket}
         </span>
       );
