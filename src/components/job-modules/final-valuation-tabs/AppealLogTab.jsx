@@ -22,7 +22,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [sortState, setSortState] = useState({ column: null, direction: 'asc' });
 
   // Filter state
-  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     searchText: '',
     statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
@@ -168,6 +167,39 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     if (a < b) return -multiplier;
     if (a > b) return multiplier;
     return 0;
+  };
+
+  // Helper: Render sortable column header
+  const SortableHeader = ({ label, columnKey, sticky = false, left = '0' }) => {
+    const isActive = sortState.column === columnKey;
+    const handleClick = () => {
+      if (sortState.column === columnKey) {
+        // Toggle direction
+        setSortState({ column: columnKey, direction: sortState.direction === 'asc' ? 'desc' : 'asc' });
+      } else {
+        // New column, default to asc
+        setSortState({ column: columnKey, direction: 'asc' });
+      }
+    };
+
+    const baseClass = sticky
+      ? `sticky z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200 cursor-pointer hover:bg-blue-100`
+      : `px-3 py-2 text-left font-medium text-gray-700 cursor-pointer hover:bg-blue-100`;
+
+    const stickyStyle = sticky ? { left } : {};
+
+    return (
+      <th className={baseClass} onClick={handleClick} style={stickyStyle}>
+        <div className="flex items-center gap-1">
+          <span>{label}</span>
+          {isActive && (
+            <span className="text-xs font-bold">
+              {sortState.direction === 'asc' ? '↑' : '↓'}
+            </span>
+          )}
+        </div>
+      </th>
+    );
   };
 
   // Filter and sort appeals
@@ -792,7 +824,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       {/* DEBUG PANEL */}
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
         <p className="font-bold text-yellow-900 mb-2">DEBUG INFO:</p>
-        <div className="grid grid-cols-2 gap-4 text-yellow-800">
+        <div className="grid grid-cols-2 gap-4 text-yellow-800 mb-3">
           <div>Raw appeals from DB: {appeals.length}</div>
           <div>After filtering: {filteredAppeals.length}</div>
           <div>Selected year: {selectedYear}</div>
@@ -800,6 +832,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <div>Filter.types size: {filters.types.size}</div>
           <div>Filter.classes size: {filters.classes.size}</div>
         </div>
+        {appeals.length > filteredAppeals.length && (
+          <div className="bg-yellow-100 p-2 rounded text-yellow-900 text-xs border border-yellow-300 max-h-40 overflow-y-auto">
+            <p className="font-bold mb-1">Appeals being filtered out:</p>
+            {appeals.filter(a => !filteredAppeals.find(f => f.id === a.id)).map(a => (
+              <div key={a.id} className="mb-1">
+                {a.appeal_number} - year: {a.appeal_year}, status: {a.status}, type: {a.appeal_type}, class: {a.property_m4_class}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* TOOLBAR */}
@@ -827,6 +869,124 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
+          </button>
+        </div>
+      </div>
+
+      {/* FILTER BAR */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-3">
+        <div className="grid grid-cols-4 gap-3">
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search appeal #, block, lot, location..."
+            value={filters.searchText}
+            onChange={(e) => setFilters(prev => ({ ...prev, searchText: e.target.value }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+
+          {/* Status Multi-select */}
+          <select
+            multiple
+            value={Array.from(filters.statuses)}
+            onChange={(e) => setFilters(prev => ({
+              ...prev,
+              statuses: new Set(Array.from(e.target.selectedOptions, option => option.value))
+            }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            title="Hold Ctrl to select multiple"
+          >
+            {['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+
+          {/* Type Multi-select */}
+          <select
+            multiple
+            value={Array.from(filters.types).filter(t => t !== null)}
+            onChange={(e) => {
+              const selected = new Set(Array.from(e.target.selectedOptions, option => option.value));
+              if (filters.types.has(null)) selected.add(null);
+              setFilters(prev => ({ ...prev, types: selected }));
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            title="Hold Ctrl to select multiple"
+          >
+            <option value="petitioner">Petitioner</option>
+            <option value="represented">Represented</option>
+            <option value="assessor">Assessor</option>
+            <option value="cross">Cross</option>
+          </select>
+
+          {/* Class Multi-select */}
+          <select
+            multiple
+            value={Array.from(filters.classes)}
+            onChange={(e) => setFilters(prev => ({
+              ...prev,
+              classes: new Set(Array.from(e.target.selectedOptions, option => option.value))
+            }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            title="Hold Ctrl to select multiple"
+          >
+            <option value="2,3A">2, 3A (Residential)</option>
+            <option value="4A,4B,4C">4A, 4B, 4C (Commercial)</option>
+            <option value="1,3B">1, 3B (Vacant Land)</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3">
+          {/* Attorney Single-select */}
+          <select
+            value={filters.attorney}
+            onChange={(e) => setFilters(prev => ({ ...prev, attorney: e.target.value }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Attorneys</option>
+            {uniqueAttorneys.map(atty => (
+              <option key={atty} value={atty}>{atty}</option>
+            ))}
+          </select>
+
+          {/* VCS Single-select */}
+          <select
+            value={filters.vcs}
+            onChange={(e) => setFilters(prev => ({ ...prev, vcs: e.target.value }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All VCS</option>
+            {uniqueVCS.map(vcs => (
+              <option key={vcs} value={vcs}>{vcs}</option>
+            ))}
+          </select>
+
+          {/* Tax Court Checkbox */}
+          <label className="flex items-center gap-2 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={filters.taxCourtOnly}
+              onChange={(e) => setFilters(prev => ({ ...prev, taxCourtOnly: e.target.checked }))}
+              className="rounded"
+            />
+            <span className="text-sm font-medium text-gray-700">Tax Court Only</span>
+          </label>
+
+          {/* Clear Filters Button */}
+          <button
+            onClick={() => setFilters({
+              searchText: '',
+              statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+              types: new Set(['petitioner', 'represented', 'assessor', 'cross', null]),
+              classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
+              attorney: 'all',
+              vcs: 'all',
+              taxCourtOnly: false
+            })}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+          >
+            Clear Filters
           </button>
         </div>
       </div>
@@ -1014,19 +1174,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
               {/* FROZEN LEFT COLUMNS */}
-              <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Status</th>
-              <th className="sticky left-16 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Year</th>
-              <th className="sticky left-28 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Appeal #</th>
-              <th className="sticky left-48 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Block</th>
-              <th className="sticky left-64 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Lot</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Qual</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Location</th>
+              <SortableHeader label="Status" columnKey="status" sticky={true} left="0" />
+              <SortableHeader label="Year" columnKey="year" sticky={true} left="4rem" />
+              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="7rem" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="12rem" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="16rem" />
+              <SortableHeader label="Qual" columnKey="qualifier" />
+              <SortableHeader label="Location" columnKey="location" />
 
               {/* PROPERTY INFO GROUP */}
               {expandedGroups.propertyInfo && (
                 <>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">VCS</th>
+                  <SortableHeader label="Class" columnKey="class" />
+                  <SortableHeader label="VCS" columnKey="vcs" />
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Bracket</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Inspected</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Owner</th>
@@ -1037,7 +1197,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {expandedGroups.legal && (
                 <>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Petitioner</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attorney</th>
+                  <SortableHeader label="Attorney" columnKey="attorney" />
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Attny Address</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Attny City/State</th>
                 </>
@@ -1049,19 +1209,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Submission</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence Due</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Hearing</th>
+                  <SortableHeader label="Hearing" columnKey="hearing_date" />
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Stip</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-700">Tax Court</th>
                 </>
               )}
 
               {/* VALUATION GROUP (always visible) */}
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Current Assessment</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Requested</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700 text-blue-600">CME Value</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Judgment</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">Actual Loss</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-700">% Loss</th>
+              <SortableHeader label="Current Assessment" columnKey="current_assessment" />
+              <SortableHeader label="Requested" columnKey="requested" />
+              <SortableHeader label="CME Value" columnKey="cme_value" />
+              <SortableHeader label="Judgment" columnKey="judgment" />
+              <SortableHeader label="Actual Loss" columnKey="actual_loss" />
+              <SortableHeader label="% Loss" columnKey="loss_pct" />
 
               {/* NOTES GROUP */}
               {expandedGroups.notes && (
