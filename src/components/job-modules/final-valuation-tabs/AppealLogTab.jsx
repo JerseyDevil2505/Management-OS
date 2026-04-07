@@ -124,6 +124,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       ? settledAppeals.reduce((sum, a) => sum + (a.loss_pct || 0), 0) / settledAppeals.length
       : 0;
 
+    // Calculate total ratables (same logic as RatableComparisonTab)
+    const totalRatables = properties.reduce((sum, p) => {
+      // Exclude EXEMPT properties
+      if (p.property_facility === 'EXEMPT') return sum;
+
+      // Only count main cards: '1' (BRT), 'M' (Microsystems), or null/empty
+      const cardType = p.property_addl_card;
+      const isMainCard = cardType === '1' || cardType?.toUpperCase() === 'M' || !cardType;
+
+      if (!isMainCard) return sum;
+
+      return sum + (p.values_mod_total || 0);
+    }, 0);
+
+    // Calculate % of ratables
+    const ratablePercent = totalRatables > 0 ? (totalAssessmentExposure / totalRatables) * 100 : 0;
+
     // Status counts
     const statusCounts = {
       S: 0, D: 0, H: 0, W: 0, A: 0, AP: 0, AWP: 0, NA: 0
@@ -146,13 +163,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       totalAssessmentExposure,
       totalActualLoss,
       avgLossPercent,
+      totalRatables,
+      ratablePercent,
       statusCounts,
       residentialCount,
       commercialCount,
       vacantCount,
       otherCount
     };
-  }, [filteredAppeals]);
+  }, [filteredAppeals, properties]);
 
   // Helper: Format currency
   const formatCurrency = (value) => {
@@ -565,7 +584,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       )}
 
       {/* STATS ROW 1 - TOTALS */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Appeals</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">{stats.totalAppeals}</p>
@@ -573,6 +592,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Assessment Exposure</p>
           <p className="text-xl font-bold text-blue-600 mt-2">{formatCurrency(stats.totalAssessmentExposure)}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% of Ratables</p>
+          <p className={`text-xl font-bold mt-2 ${
+            stats.totalRatables === 0 ? 'text-gray-600' :
+            stats.ratablePercent < 5 ? 'text-blue-600' :
+            stats.ratablePercent < 10 ? 'text-amber-600' :
+            'text-red-600'
+          }`}>
+            {stats.totalRatables === 0 ? 'N/A' : `${Math.round(stats.ratablePercent * 100) / 100}%`}
+          </p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
