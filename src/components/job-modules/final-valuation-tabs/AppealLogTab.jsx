@@ -81,6 +81,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [vcsBracketMap, setVcsBracketMap] = useState({});
   const [cmeBracketMappings, setCmeBracketMappings] = useState({});
 
+  // Selection state for Send to CME
+  const [selectedAppeals, setSelectedAppeals] = useState(new Set());
+  const [showMixedBracketModal, setShowMixedBracketModal] = useState(false);
+  const [mixedBracketInfo, setMixedBracketInfo] = useState({});
+  const [isSendingToCME, setIsSendingToCME] = useState(false);
+
   // CME Brackets constant
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'Under $100K', color: '#FF9999', textColor: 'black' },
@@ -629,6 +635,104 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       suffix: suffix || '',
       appealType: appealTypeMap[suffix] || null
     };
+  };
+
+  // Helper: Get bracket for an appeal
+  const getBracketForAppeal = (appeal) => {
+    if (appeal.cme_bracket) return appeal.cme_bracket;
+    const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+    if (!property || !property.new_vcs) return null;
+    const bracket = vcsBracketMap[property.new_vcs];
+    if (bracket) return bracket;
+    return cmeBracketMappings[property.new_vcs] || null;
+  };
+
+  // Helper: Get brackets for selected appeals
+  const getSelectedAppealsBrackets = () => {
+    const brackets = {};
+    selectedAppeals.forEach(appealId => {
+      const appeal = filteredAppeals.find(a => a.id === appealId);
+      if (appeal) {
+        const bracket = getBracketForAppeal(appeal);
+        if (bracket) {
+          brackets[bracket] = (brackets[bracket] || 0) + 1;
+        }
+      }
+    });
+    return brackets;
+  };
+
+  // Handle checkbox selection
+  const handleToggleAppealSelection = (appealId) => {
+    setSelectedAppeals(prev => {
+      const next = new Set(prev);
+      if (next.has(appealId)) {
+        next.delete(appealId);
+      } else {
+        next.add(appealId);
+      }
+      return next;
+    });
+  };
+
+  // Handle select all checkbox
+  const handleToggleSelectAll = () => {
+    if (selectedAppeals.size === filteredAppeals.length) {
+      setSelectedAppeals(new Set());
+    } else {
+      setSelectedAppeals(new Set(filteredAppeals.map(a => a.id)));
+    }
+  };
+
+  // Handle Send to CME
+  const handleSendToCME = () => {
+    if (selectedAppeals.size === 0) return;
+
+    const bracketCounts = getSelectedAppealsBrackets();
+    const distinctBrackets = Object.keys(bracketCounts);
+
+    // If multiple brackets, show warning modal
+    if (distinctBrackets.length > 1) {
+      setMixedBracketInfo({
+        brackets: bracketCounts,
+        count: distinctBrackets.length
+      });
+      setShowMixedBracketModal(true);
+      return;
+    }
+
+    // Proceed with single bracket
+    proceedWithCMENavigation(distinctBrackets[0]);
+  };
+
+  // Proceed with CME navigation
+  const proceedWithCMENavigation = (dominantBracket) => {
+    setIsSendingToCME(true);
+
+    try {
+      const subjects = Array.from(selectedAppeals).map(appealId => {
+        const appeal = filteredAppeals.find(a => a.id === appealId);
+        return {
+          block: appeal.property_block,
+          lot: appeal.property_lot,
+          qualifier: appeal.property_qualifier,
+          property_composite_key: appeal.property_composite_key
+        };
+      });
+
+      const payload = {
+        source: 'appeal_log',
+        subjects,
+        bracket: dominantBracket,
+        fromAppealLog: true
+      };
+
+      onNavigateToCME(payload);
+      setSelectedAppeals(new Set());
+      setShowMixedBracketModal(false);
+    } finally {
+      setIsSendingToCME(false);
+    }
   };
 
   // ==================== MODAL & ADD APPEAL HANDLERS ====================
@@ -1421,6 +1525,67 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         </div>
       </div>
 
+      {/* SEND TO CME TOOLBAR */}
+      {selectedAppeals.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedAppeals.size} selected
+            </span>
+            <button
+              onClick={handleSendToCME}
+              disabled={isSendingToCME}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSendingToCME ? '...' : 'Send to CME'}
+            </button>
+          </div>
+          <button
+            onClick={() => setSelectedAppeals(new Set())}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
+      {/* MIXED BRACKET WARNING MODAL */}
+      {showMixedBracketModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Mixed Brackets Detected</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              You have selected properties across {mixedBracketInfo.count} different brackets:
+            </p>
+            <div className="space-y-2 mb-6 bg-gray-50 rounded p-3">
+              {Object.entries(mixedBracketInfo.brackets || {}).map(([bracket, count]) => (
+                <div key={bracket} className="flex justify-between text-sm">
+                  <span className="text-gray-700">{bracket}</span>
+                  <span className="font-medium text-gray-900">{count} {count === 1 ? 'property' : 'properties'}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              CME adjustments are bracket-specific. Mixing brackets may produce inaccurate results.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => proceedWithCMENavigation(Object.keys(mixedBracketInfo.brackets || {})[0])}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700"
+              >
+                Proceed Anyway
+              </button>
+              <button
+                onClick={() => setShowMixedBracketModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* COLUMN GROUP TOGGLES */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex gap-2 flex-wrap">
         {[
@@ -1451,11 +1616,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
+              {/* CHECKBOX COLUMN */}
+              <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-center border-r border-gray-200" style={{ minWidth: '50px', maxWidth: '50px' }}>
+                <input
+                  type="checkbox"
+                  checked={filteredAppeals.length > 0 && selectedAppeals.size === filteredAppeals.length}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                />
+              </th>
               {/* FROZEN LEFT COLUMNS */}
-              <SortableHeader label="Status" columnKey="status" sticky={true} left="0" minWidth="70px" maxWidth="70px" />
-              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="4rem" minWidth="120px" maxWidth="120px" />
-              <SortableHeader label="Block" columnKey="block" sticky={true} left="9rem" minWidth="60px" maxWidth="60px" />
-              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="13rem" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="70px" maxWidth="70px" />
+              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="120px" minWidth="120px" maxWidth="120px" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="240px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="300px" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
 
@@ -1516,9 +1690,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               const evidenceDue = getEvidenceDueDate(appeal);
 
               return (
-                <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr key={idx} className={`border-b border-gray-100 ${selectedAppeals.has(appeal.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                  {/* CHECKBOX COLUMN */}
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedAppeals.has(appeal.id)}
+                      onChange={() => handleToggleAppealSelection(appeal.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                    />
+                  </td>
                   {/* FROZEN LEFT COLUMNS */}
-                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ minWidth: '70px', maxWidth: '70px' }}>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '70px', maxWidth: '70px' }}>
                     <select
                       value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
@@ -1535,11 +1718,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <option value="NA">NA</option>
                     </select>
                   </td>
-                  <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ minWidth: '120px', maxWidth: '120px' }}>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ left: '120px', minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className="sticky left-36 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
-                  <td className="sticky left-52 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '240px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '300px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
 
