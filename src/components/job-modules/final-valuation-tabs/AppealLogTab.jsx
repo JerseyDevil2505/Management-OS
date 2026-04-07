@@ -487,14 +487,34 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
       };
 
-      const { error } = await supabase
-        .from('appeal_log')
-        .insert([appealData]);
+      // DEBUG: Check job_id
+      console.log('DEBUG: job_id present?', !!appealData.job_id, 'value:', appealData.job_id);
 
-      if (error) throw error;
+      // DEBUG: Log payload keys before insert
+      console.log('DEBUG: Payload keys:', Object.keys(appealData).sort());
+
+      // DEBUG: Log full payload
+      console.log('DEBUG: Attempting insert with payload:', JSON.stringify(appealData, null, 2));
+
+      const { data, error } = await supabase
+        .from('appeal_log')
+        .insert([appealData])
+        .select()
+        .single();
+
+      // DEBUG: Log insert results
+      console.log('DEBUG: Insert result - data:', data);
+      console.log('DEBUG: Insert result - error:', error);
+
+      if (error) {
+        console.error('SUPABASE INSERT ERROR:', error);
+        throw error;
+      }
+
+      console.log('DEBUG: Insert succeeded, reloading appeals...');
 
       // Reload appeals
-      const { data, error: fetchError } = await supabase
+      const { data: fetchData, error: fetchError } = await supabase
         .from('appeal_log')
         .select('*')
         .eq('job_id', jobData.id)
@@ -502,7 +522,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (fetchError) throw fetchError;
 
-      const enrichedAppeals = (data || []).map(appeal => {
+      console.log('DEBUG: Fetched appeals count:', fetchData?.length || 0);
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
         const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
         return {
           ...appeal,
@@ -517,6 +539,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
+      console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
       handleCloseModal();
     } catch (error) {
       console.error('Error saving appeal:', error);
