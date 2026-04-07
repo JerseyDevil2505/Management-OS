@@ -148,6 +148,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     });
 
     setVcsBracketMap(newMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.end_date, properties]);
 
   // Load CME bracket mappings for fallback
@@ -1529,17 +1530,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_m4_class || '-'}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.new_vcs || '-'}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                        {renderEditableCell(appeal.id, 'cme_bracket', appeal.cme_bracket, 'text')}
+                        {renderBracketCell(appeal)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={appeal.inspected || false}
-                            onChange={(e) => handleDropdownChange(appeal.id, 'inspected', e.target.checked)}
-                            className="w-4 h-4"
-                          />
-                        </label>
+                        {renderInspectedCell(appeal)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1">
                         {appeal.owner_name || '-'}
