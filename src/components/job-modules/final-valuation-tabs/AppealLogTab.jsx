@@ -1,863 +1,432 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Search, Plus, Trash2, Upload, Download, Save, ExternalLink, FileText, AlertCircle, CheckCircle, XCircle, Scale } from 'lucide-react';
 
-const AppealLogTab = ({ jobData, properties, onNavigateToCME }) => {
-  // ==================== STATE ====================
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
+  // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [directorRatio, setDirectorRatio] = useState('');
-  const [ratioSaved, setRatioSaved] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([]);
+  
+  // Column group visibility toggles
+  const [expandedGroups, setExpandedGroups] = useState({
+    propertyInfo: true,
+    legal: true,
+    workflow: true,
+    valuation: true,
+    notes: true
+  });
 
-  // Search/add state
-  const [searchBlock, setSearchBlock] = useState('');
-  const [searchLot, setSearchLot] = useState('');
-  const [searchQualifier, setSearchQualifier] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showSearch, setShowSearch] = useState(false);
-
-  // Editing state
-  const [editingCell, setEditingCell] = useState(null); // { id, field }
-  const [editValue, setEditValue] = useState('');
-
-  // ==================== LOAD DATA ====================
+  // Load appeals from database
   useEffect(() => {
-    if (jobData?.id) {
-      loadAppeals();
-      loadDirectorRatio();
-    }
-  }, [jobData?.id]);
-
-  const loadAppeals = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('appeal_log')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setAppeals(data || []);
-    } catch (err) {
-      console.error('Error loading appeals:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadDirectorRatio = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('director_ratio')
-        .eq('id', jobData.id)
-        .single();
-
-      if (error) throw error;
-      if (data?.director_ratio != null) {
-        setDirectorRatio(String(data.director_ratio));
-      }
-    } catch (err) {
-      console.error('Error loading director ratio:', err);
-    }
-  };
-
-  // ==================== DIRECTOR'S RATIO ====================
-  const saveDirectorRatio = async () => {
-    const val = parseFloat(directorRatio);
-    if (isNaN(val) || val <= 0 || val > 2) {
-      alert('Please enter a valid ratio (e.g. 0.8734 or 87.34). Values > 2 are not valid.');
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const { error } = await supabase
-        .from('jobs')
-        .update({ director_ratio: val })
-        .eq('id', jobData.id);
-
-      if (error) throw error;
-      setRatioSaved(true);
-      setTimeout(() => setRatioSaved(false), 2000);
-
-      // Recalculate Chapter 123 for all appeals
-      recalculateAllAppeals(val);
-    } catch (err) {
-      console.error('Error saving director ratio:', err);
-      alert('Failed to save director ratio');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // ==================== CLR CALCULATIONS ====================
-  const parsedRatio = useMemo(() => {
-    const val = parseFloat(directorRatio);
-    return isNaN(val) || val <= 0 ? null : val;
-  }, [directorRatio]);
-
-  const clrBounds = useMemo(() => {
-    if (!parsedRatio) return null;
-    return {
-      lower: parsedRatio * 0.85,
-      upper: parsedRatio * 1.15
-    };
-  }, [parsedRatio]);
-
-  const getChapter123Result = useCallback((currentAssessment, cmeProjectedValue) => {
-    if (!parsedRatio || !currentAssessment || !cmeProjectedValue || cmeProjectedValue === 0) {
-      return { ratio: null, result: 'N/A' };
-    }
-    const ratio = currentAssessment / cmeProjectedValue;
-    const lower = parsedRatio * 0.85;
-    const upper = parsedRatio * 1.15;
-
-    if (ratio >= lower && ratio <= upper) {
-      return { ratio, result: 'Within CLR' };
-    } else if (ratio > upper) {
-      return { ratio, result: 'Exceeds CLR' };
-    } else {
-      return { ratio, result: 'Below CLR' };
-    }
-  }, [parsedRatio]);
-
-  // ==================== SEARCH PROPERTIES ====================
-  const handleSearch = () => {
-    if (!searchBlock && !searchLot) return;
-
-    const results = properties.filter(p => {
-      const blockMatch = !searchBlock || (p.property_block || '').trim().toUpperCase().includes(searchBlock.trim().toUpperCase());
-      const lotMatch = !searchLot || (p.property_lot || '').trim().toUpperCase().includes(searchLot.trim().toUpperCase());
-      const qualMatch = !searchQualifier || (p.property_qualifier || '').trim().toUpperCase().includes(searchQualifier.trim().toUpperCase());
-      return blockMatch && lotMatch && qualMatch;
-    });
-
-    setSearchResults(results.slice(0, 20));
-  };
-
-  // ==================== ADD PROPERTY TO LOG ====================
-  const addPropertyToLog = async (property) => {
-    // Check if already in log
-    const exists = appeals.some(a =>
-      a.property_block === property.property_block &&
-      a.property_lot === property.property_lot &&
-      (a.property_qualifier || '') === (property.property_qualifier || '')
-    );
-
-    if (exists) {
-      alert('This property is already in the appeal log.');
-      return;
-    }
-
-    const currentAssessment = parseFloat(property.total_assessed_value || property.assessed_total || 0);
-    // Try to get CME projected value from evaluation results or property data
-    const cmeProjected = parseFloat(property.cme_projected_assessment || property.projected_assessment || 0);
-    const ch123 = getChapter123Result(currentAssessment, cmeProjected);
-
-    const newAppeal = {
-      job_id: jobData.id,
-      appeal_number: '',
-      property_block: property.property_block || '',
-      property_lot: property.property_lot || '',
-      property_qualifier: property.property_qualifier || '',
-      property_location: property.property_location || '',
-      current_assessment: currentAssessment || null,
-      requested_value: null,
-      cme_projected_value: cmeProjected || null,
-      assessment_ratio: ch123.ratio,
-      chapter_123_result: ch123.result,
-      taxpayer_name: property.owner_name || property.taxpayer_name || '',
-      attorney: '',
-      hearing_date: null,
-      status: 'Pending',
-      result: '',
-      comments: ''
-    };
-
-    try {
-      const { data, error } = await supabase
-        .from('appeal_log')
-        .insert(newAppeal)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setAppeals(prev => [...prev, data]);
-    } catch (err) {
-      console.error('Error adding appeal:', err);
-      alert('Failed to add property to appeal log');
-    }
-  };
-
-  // ==================== DELETE APPEAL ====================
-  const deleteAppeal = async (id) => {
-    if (!window.confirm('Remove this property from the appeal log?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('appeal_log')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      setAppeals(prev => prev.filter(a => a.id !== id));
-    } catch (err) {
-      console.error('Error deleting appeal:', err);
-    }
-  };
-
-  // ==================== INLINE EDIT ====================
-  const startEdit = (id, field, currentValue) => {
-    setEditingCell({ id, field });
-    setEditValue(currentValue || '');
-  };
-
-  const saveEdit = async () => {
-    if (!editingCell) return;
-    const { id, field } = editingCell;
-
-    let value = editValue;
-    // Parse numeric fields
-    if (['current_assessment', 'requested_value', 'cme_projected_value'].includes(field)) {
-      value = parseFloat(editValue) || null;
-    }
-
-    try {
-      const updateData = { [field]: value, updated_at: new Date().toISOString() };
-
-      // Recalculate Chapter 123 if assessment or CME value changed
-      const appeal = appeals.find(a => a.id === id);
-      if (appeal && (field === 'current_assessment' || field === 'cme_projected_value')) {
-        const assessment = field === 'current_assessment' ? value : appeal.current_assessment;
-        const cme = field === 'cme_projected_value' ? value : appeal.cme_projected_value;
-        const ch123 = getChapter123Result(assessment, cme);
-        updateData.assessment_ratio = ch123.ratio;
-        updateData.chapter_123_result = ch123.result;
-      }
-
-      const { error } = await supabase
-        .from('appeal_log')
-        .update(updateData)
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setAppeals(prev => prev.map(a => a.id === id ? { ...a, ...updateData } : a));
-    } catch (err) {
-      console.error('Error updating appeal:', err);
-    }
-
-    setEditingCell(null);
-    setEditValue('');
-  };
-
-  const cancelEdit = () => {
-    setEditingCell(null);
-    setEditValue('');
-  };
-
-  // ==================== RECALCULATE ALL ====================
-  const recalculateAllAppeals = async (ratio) => {
-    const updates = appeals.map(a => {
-      const ch123 = getChapter123Result(a.current_assessment, a.cme_projected_value);
-      return { ...a, assessment_ratio: ch123.ratio, chapter_123_result: ch123.result };
-    });
-
-    setAppeals(updates);
-
-    // Batch update in DB
-    for (const a of updates) {
-      if (a.assessment_ratio !== null) {
-        await supabase
+    if (!jobData?.id) return;
+    
+    const loadAppeals = async () => {
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
           .from('appeal_log')
-          .update({
-            assessment_ratio: a.assessment_ratio,
-            chapter_123_result: a.chapter_123_result,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', a.id);
+          .select('*')
+          .eq('job_id', jobData.id)
+          .order('appeal_number', { ascending: true });
+
+        if (error) throw error;
+
+        // Enrich with property data
+        const enrichedAppeals = (data || []).map(appeal => {
+          const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+          return {
+            ...appeal,
+            // Derived fields from property match
+            property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+            new_vcs: property?.new_vcs || null,
+            owner_name: property?.owner_name || null,
+            property_block: appeal.property_block || property?.property_block || null,
+            property_lot: appeal.property_lot || property?.property_lot || null,
+            property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+            property_location: appeal.property_location || property?.property_location || null
+          };
+        });
+
+        setAppeals(enrichedAppeals);
+
+        // Build unique years from data + current year
+        const yearsFromData = [...new Set(enrichedAppeals.map(a => a.appeal_year).filter(Boolean))];
+        const currentYear = new Date().getFullYear();
+        const allYears = [...new Set([...yearsFromData, currentYear])].sort((a, b) => b - a);
+        setAvailableYears(allYears.length > 0 ? allYears : [currentYear]);
+      } catch (error) {
+        console.error('Error loading appeals:', error);
+      } finally {
+        setIsLoading(false);
       }
+    };
+
+    loadAppeals();
+  }, [jobData?.id, properties]);
+
+  // Filter appeals by selected year
+  const filteredAppeals = useMemo(() => {
+    return appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
+  }, [appeals, selectedYear]);
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const filtered = filteredAppeals;
+    
+    const totalAppeals = filtered.length;
+    const totalAssessmentExposure = filtered.reduce((sum, a) => sum + (a.current_assessment || 0), 0);
+    const totalPossibleLoss = filtered.reduce((sum, a) => sum + (a.possible_loss || 0), 0);
+    const totalActualLoss = filtered.reduce((sum, a) => sum + (a.loss || 0), 0);
+
+    // Status counts
+    const statusCounts = {
+      S: 0, D: 0, H: 0, W: 0, A: 0, AP: 0, AWP: 0, NA: 0
+    };
+    filtered.forEach(a => {
+      const status = a.status?.toUpperCase() || 'NA';
+      if (statusCounts.hasOwnProperty(status)) {
+        statusCounts[status]++;
+      }
+    });
+
+    // Class counts
+    const residentialCount = filtered.filter(a => ['2', '3A'].includes(a.property_m4_class)).length;
+    const commercialCount = filtered.filter(a => ['4A', '4B', '4C'].includes(a.property_m4_class)).length;
+    const vacantCount = filtered.filter(a => ['1', '3B'].includes(a.property_m4_class)).length;
+    const otherCount = totalAppeals - residentialCount - commercialCount - vacantCount;
+
+    return {
+      totalAppeals,
+      totalAssessmentExposure,
+      totalPossibleLoss,
+      totalActualLoss,
+      statusCounts,
+      residentialCount,
+      commercialCount,
+      vacantCount,
+      otherCount
+    };
+  }, [filteredAppeals]);
+
+  // Helper: Format currency
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined || isNaN(value)) return '-';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
+  // Helper: Get status badge styling
+  const getStatusStyle = (status) => {
+    const s = status?.toUpperCase() || 'NA';
+    switch (s) {
+      case 'S': return { bg: 'bg-green-50', text: 'text-green-700', badge: 'bg-green-100' };
+      case 'D':
+      case 'H': return { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100' };
+      case 'W': return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100' };
+      case 'A':
+      case 'AP':
+      case 'AWP': return { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100' };
+      default: return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100' };
     }
   };
 
-  // ==================== PDF IMPORT PLACEHOLDER ====================
-  const handlePDFImport = () => {
-    alert('PDF Import will be available in May. When ready, you\'ll be able to upload a County Tax Board appeal list PDF and it will automatically parse the properties into this log.');
+  // Helper: Check owner mismatch
+  const hasOwnerMismatch = (appeal) => {
+    if (!appeal.petitioner_name || !appeal.owner_name) return false;
+    const pet = appeal.petitioner_name.toLowerCase().trim();
+    const own = appeal.owner_name.toLowerCase().trim();
+    return pet !== own;
   };
 
-  // ==================== NAVIGATE TO CME ====================
-  const handleNavigateToCME = (appeal) => {
-    if (onNavigateToCME) {
-      onNavigateToCME({
-        block: appeal.property_block,
-        lot: appeal.property_lot,
-        qualifier: appeal.property_qualifier || ''
-      });
-    }
+  // Helper: Calculate AC%
+  const calculateACPercent = (appeal) => {
+    if (!appeal.current_assessment || !appeal.judgment_value) return null;
+    const pct = ((appeal.current_assessment - appeal.judgment_value) / appeal.current_assessment) * 100;
+    return Math.round(pct * 10) / 10;
   };
 
-  // ==================== STATUS COLORS ====================
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Scheduled': return 'bg-blue-100 text-blue-800';
-      case 'Settled': return 'bg-green-100 text-green-800';
-      case 'Dismissed': return 'bg-gray-100 text-gray-800';
-      case 'Withdrawn': return 'bg-gray-100 text-gray-600';
-      case 'Judgment': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  // Helper: Calculate evidence due (hearing_date - 7 days)
+  const getEvidenceDueDate = (appeal) => {
+    if (!appeal.hearing_date) return null;
+    const date = new Date(appeal.hearing_date);
+    date.setDate(date.getDate() - 7);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  const getCh123Color = (result) => {
-    if (result === 'Within CLR') return 'text-green-700 bg-green-50';
-    if (result === 'Exceeds CLR') return 'text-red-700 bg-red-50';
-    if (result === 'Below CLR') return 'text-amber-700 bg-amber-50';
-    return 'text-gray-500';
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-gray-500">Loading appeals...</p>
+      </div>
+    );
+  }
+
+  if (filteredAppeals.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="w-12 h-12 text-gray-300 mb-3" />
+        <p className="text-gray-500 font-medium">No Appeals Logged</p>
+        <p className="text-sm text-gray-400 mt-1">Appeals will appear here once logged</p>
+      </div>
+    );
+  }
 
   // ==================== RENDER ====================
-  const fmt = (val) => val != null ? Number(val).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—';
-  const fmtPct = (val) => val != null ? (val * 100).toFixed(2) + '%' : '—';
 
   return (
     <div className="space-y-6">
-      {/* Director's Ratio Card */}
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg p-5">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <Scale className="w-6 h-6 text-indigo-600" />
-            <div>
-              <h3 className="text-lg font-bold text-indigo-900">Director's Ratio — Chapter 123</h3>
-              <p className="text-sm text-indigo-700 mt-0.5">
-                N.J.S.A. 54:51A-6 · Common Level Range = Ratio ± 15%
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Ratio:</label>
-              <input
-                type="text"
-                value={directorRatio}
-                onChange={(e) => setDirectorRatio(e.target.value)}
-                placeholder="e.g. 0.8734"
-                className="w-28 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <button
-              onClick={saveDirectorRatio}
-              disabled={isSaving || !directorRatio}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-            {ratioSaved && (
-              <span className="inline-flex items-center gap-1 text-sm text-green-600">
-                <CheckCircle className="w-4 h-4" /> Saved
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* CLR Display */}
-        {clrBounds && (
-          <div className="mt-3 flex items-center gap-6 text-sm">
-            <div className="bg-white rounded-lg px-4 py-2 border border-indigo-100">
-              <span className="text-gray-500">Lower Bound:</span>{' '}
-              <span className="font-semibold text-indigo-800">{fmtPct(clrBounds.lower)}</span>
-            </div>
-            <div className="bg-white rounded-lg px-4 py-2 border border-indigo-100">
-              <span className="text-gray-500">Director's Ratio:</span>{' '}
-              <span className="font-bold text-indigo-900">{fmtPct(parsedRatio)}</span>
-            </div>
-            <div className="bg-white rounded-lg px-4 py-2 border border-indigo-100">
-              <span className="text-gray-500">Upper Bound:</span>{' '}
-              <span className="font-semibold text-indigo-800">{fmtPct(clrBounds.upper)}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Action Bar */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+      {/* YEAR FILTER */}
+      <div className="flex justify-end">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <Plus className="w-4 h-4" />
-            Add Property
-          </button>
-          <button
-            onClick={handlePDFImport}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
-          >
-            <Upload className="w-4 h-4" />
-            Import PDF
-          </button>
-        </div>
-        <div className="text-sm text-gray-500">
-          {appeals.length} {appeals.length === 1 ? 'appeal' : 'appeals'} logged
+            {availableYears.map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Property Search Panel */}
-      {showSearch && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-blue-900 mb-3">Search Properties by Block / Lot / Qualifier</h4>
-          <div className="flex items-end gap-3 flex-wrap">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Block</label>
-              <input
-                type="text"
-                value={searchBlock}
-                onChange={(e) => setSearchBlock(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Block"
-                className="w-24 px-3 py-1.5 border border-gray-300 rounded text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Lot</label>
-              <input
-                type="text"
-                value={searchLot}
-                onChange={(e) => setSearchLot(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Lot"
-                className="w-24 px-3 py-1.5 border border-gray-300 rounded text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Qualifier</label>
-              <input
-                type="text"
-                value={searchQualifier}
-                onChange={(e) => setSearchQualifier(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Qual"
-                className="w-20 px-3 py-1.5 border border-gray-300 rounded text-sm"
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-            >
-              <Search className="w-4 h-4" />
-              Search
-            </button>
-            <button
-              onClick={() => { setShowSearch(false); setSearchResults([]); }}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-          </div>
-
-          {/* Search Results */}
-          {searchResults.length > 0 && (
-            <div className="mt-3 max-h-48 overflow-y-auto">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="bg-blue-100">
-                    <th className="px-2 py-1 text-left">Block</th>
-                    <th className="px-2 py-1 text-left">Lot</th>
-                    <th className="px-2 py-1 text-left">Qual</th>
-                    <th className="px-2 py-1 text-left">Location</th>
-                    <th className="px-2 py-1 text-left">Owner</th>
-                    <th className="px-2 py-1 text-right">Assessment</th>
-                    <th className="px-2 py-1"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {searchResults.map((p, idx) => (
-                    <tr key={idx} className="border-b border-blue-100 hover:bg-blue-50">
-                      <td className="px-2 py-1.5 font-medium">{p.property_block}</td>
-                      <td className="px-2 py-1.5">{p.property_lot}</td>
-                      <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
-                      <td className="px-2 py-1.5">{p.property_location || ''}</td>
-                      <td className="px-2 py-1.5">{p.owner_name || p.taxpayer_name || ''}</td>
-                      <td className="px-2 py-1.5 text-right font-mono">${fmt(p.total_assessed_value || p.assessed_total || 0)}</td>
-                      <td className="px-2 py-1.5">
-                        <button
-                          onClick={() => addPropertyToLog(p)}
-                          className="px-2 py-0.5 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                        >
-                          + Add
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {searchResults.length === 0 && searchBlock && (
-            <p className="mt-3 text-sm text-gray-500">No properties found. Try a different search.</p>
-          )}
+      {/* STATS ROW 1 - TOTALS */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Appeals</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.totalAppeals}</p>
         </div>
-      )}
-
-      {/* Appeal Log Table */}
-      {isLoading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-blue-600 mx-auto"></div>
-          <p className="text-sm text-gray-500 mt-3">Loading appeal log...</p>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Assessment Exposure</p>
+          <p className="text-xl font-bold text-blue-600 mt-2">{formatCurrency(stats.totalAssessmentExposure)}</p>
         </div>
-      ) : appeals.length === 0 ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-          <Scale className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <h4 className="text-lg font-medium text-gray-700">No Appeals Logged</h4>
-          <p className="text-sm text-gray-500 mt-1">
-            Use "Add Property" to search and add properties to the appeal log, or import a PDF when available.
-          </p>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Possible Loss</p>
+          <p className="text-xl font-bold text-orange-600 mt-2">{formatCurrency(stats.totalPossibleLoss)}</p>
         </div>
-      ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
-          <table className="min-w-full text-xs">
-            <thead>
-              <tr className="bg-gray-100 border-b border-gray-200">
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Appeal #</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Block</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Lot</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Qual</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Property Location</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Taxpayer</th>
-                <th className="px-2 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Current Assessment</th>
-                <th className="px-2 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Requested Value</th>
-                <th className="px-2 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">CME Projected</th>
-                <th className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">A/V Ratio</th>
-                <th className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">Ch. 123</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Attorney</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Hearing Date</th>
-                <th className="px-2 py-2 text-center font-semibold text-gray-700">Status</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Result</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-700">Comments</th>
-                <th className="px-2 py-2 text-center font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appeals.map((appeal, idx) => (
-                <tr
-                  key={appeal.id}
-                  className={`border-b border-gray-100 hover:bg-blue-50 ${
-                    appeal.chapter_123_result === 'Exceeds CLR' ? 'bg-red-50' :
-                    appeal.chapter_123_result === 'Within CLR' ? 'bg-green-50' : ''
-                  }`}
-                >
-                  {/* Appeal Number - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'appeal_number' ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-20 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:underline text-blue-600"
-                        onClick={() => startEdit(appeal.id, 'appeal_number', appeal.appeal_number)}
-                      >
-                        {appeal.appeal_number || '—'}
-                      </span>
-                    )}
-                  </td>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Judgment Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
+        </div>
+      </div>
 
-                  {/* Block/Lot/Qual - clickable to CME */}
-                  <td className="px-2 py-1.5 font-medium">
-                    <button
-                      onClick={() => handleNavigateToCME(appeal)}
-                      className="text-blue-700 hover:underline font-semibold"
-                      title="Open in CME"
-                    >
-                      {appeal.property_block}
-                    </button>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <button
-                      onClick={() => handleNavigateToCME(appeal)}
-                      className="text-blue-700 hover:underline"
-                      title="Open in CME"
-                    >
-                      {appeal.property_lot}
-                    </button>
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-500">{appeal.property_qualifier || ''}</td>
+      {/* STATS ROW 2 - STATUS BADGES */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">By Status</p>
+        <div className="flex gap-2 flex-wrap">
+          {['S', 'D', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => {
+            const count = stats.statusCounts[status] || 0;
+            const style = getStatusStyle(status);
+            return (
+              <div key={status} className={`${style.badge} ${style.text} px-3 py-1 rounded-full text-sm font-medium`}>
+                {status}: <span className="font-bold">{count}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-                  {/* Location */}
-                  <td className="px-2 py-1.5 whitespace-nowrap">{appeal.property_location || '—'}</td>
+      {/* STATS ROW 3 - BY CLASS */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Residential</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.residentialCount}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Commercial</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.commercialCount}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Vacant Land</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.vacantCount}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Other</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.otherCount}</p>
+        </div>
+      </div>
 
-                  {/* Taxpayer - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'taxpayer_name' ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-32 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'taxpayer_name', appeal.taxpayer_name)}
-                      >
-                        {appeal.taxpayer_name || '—'}
-                      </span>
-                    )}
-                  </td>
+      {/* COLUMN GROUP TOGGLES */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex gap-2 flex-wrap">
+        {[
+          { key: 'propertyInfo', label: 'Property Info' },
+          { key: 'legal', label: 'Legal' },
+          { key: 'workflow', label: 'Workflow' },
+          { key: 'notes', label: 'Notes' }
+        ].map(group => (
+          <button
+            key={group.key}
+            onClick={() => setExpandedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+            className="text-xs font-medium px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
+          >
+            {group.label}
+            {expandedGroups[group.key] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        ))}
+      </div>
 
-                  {/* Current Assessment - editable */}
-                  <td className="px-2 py-1.5 text-right font-mono">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'current_assessment' ? (
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-24 px-1 py-0.5 border rounded text-xs text-right"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'current_assessment', appeal.current_assessment)}
-                      >
-                        {appeal.current_assessment != null ? `$${fmt(appeal.current_assessment)}` : '—'}
-                      </span>
-                    )}
-                  </td>
+      {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
+              {/* FROZEN LEFT COLUMNS */}
+              <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Status</th>
+              <th className="sticky left-16 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Year</th>
+              <th className="sticky left-28 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Appeal #</th>
+              <th className="sticky left-48 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Block</th>
+              <th className="sticky left-64 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-left font-medium text-gray-700 border-r border-gray-200">Lot</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Qual</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Location</th>
 
-                  {/* Requested Value - editable */}
-                  <td className="px-2 py-1.5 text-right font-mono">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'requested_value' ? (
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-24 px-1 py-0.5 border rounded text-xs text-right"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'requested_value', appeal.requested_value)}
-                      >
-                        {appeal.requested_value != null ? `$${fmt(appeal.requested_value)}` : '—'}
-                      </span>
-                    )}
-                  </td>
+              {/* PROPERTY INFO GROUP */}
+              {expandedGroups.propertyInfo && (
+                <>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">VCS</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Bracket</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Inspected</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Owner</th>
+                </>
+              )}
 
-                  {/* CME Projected - editable */}
-                  <td className="px-2 py-1.5 text-right font-mono">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'cme_projected_value' ? (
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-24 px-1 py-0.5 border rounded text-xs text-right"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'cme_projected_value', appeal.cme_projected_value)}
-                      >
-                        {appeal.cme_projected_value != null ? `$${fmt(appeal.cme_projected_value)}` : '—'}
-                      </span>
-                    )}
-                  </td>
+              {/* LEGAL GROUP */}
+              {expandedGroups.legal && (
+                <>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Petitioner</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attorney</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attny Address</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attny City/State</th>
+                </>
+              )}
 
-                  {/* A/V Ratio */}
-                  <td className="px-2 py-1.5 text-center font-mono">
-                    {appeal.assessment_ratio != null ? fmtPct(appeal.assessment_ratio) : '—'}
-                  </td>
+              {/* WORKFLOW GROUP */}
+              {expandedGroups.workflow && (
+                <>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Submission</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence Due</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Hearing</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Stip</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700">Tax Court</th>
+                </>
+              )}
 
-                  {/* Chapter 123 Result */}
-                  <td className="px-2 py-1.5 text-center">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getCh123Color(appeal.chapter_123_result)}`}>
-                      {appeal.chapter_123_result || 'N/A'}
+              {/* VALUATION GROUP (always visible) */}
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Current Assessment</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Requested</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Possible Loss</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700 text-blue-600">CME Value</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">AC%</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Judgment</th>
+              <th className="px-3 py-2 text-left font-medium text-gray-700">Loss</th>
+
+              {/* NOTES GROUP */}
+              {expandedGroups.notes && (
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Comments</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAppeals.map((appeal, idx) => {
+              const statusStyle = getStatusStyle(appeal.status);
+              const ownerMismatch = hasOwnerMismatch(appeal);
+              const acPercent = calculateACPercent(appeal);
+              const evidenceDue = getEvidenceDueDate(appeal);
+
+              return (
+                <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                  {/* FROZEN LEFT COLUMNS */}
+                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200">
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusStyle.badge} ${statusStyle.text}`}>
+                      {appeal.status || 'NA'}
                     </span>
                   </td>
+                  <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
+                  <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">{appeal.appeal_number || '-'}</td>
+                  <td className="sticky left-48 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_block || '-'}</td>
+                  <td className="sticky left-64 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_lot || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_qualifier || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_location || '-'}</td>
 
-                  {/* Attorney - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'attorney' ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-28 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'attorney', appeal.attorney)}
-                      >
-                        {appeal.attorney || '—'}
-                      </span>
-                    )}
-                  </td>
+                  {/* PROPERTY INFO GROUP */}
+                  {expandedGroups.propertyInfo && (
+                    <>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_m4_class || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.new_vcs || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.cme_bracket || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.inspected ? 'Yes' : 'No'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1">
+                        {appeal.owner_name || '-'}
+                        {ownerMismatch && <span className="text-yellow-600">⚠️</span>}
+                      </td>
+                    </>
+                  )}
 
-                  {/* Hearing Date - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'hearing_date' ? (
-                      <input
-                        type="date"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-32 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'hearing_date', appeal.hearing_date || '')}
-                      >
-                        {appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '—'}
-                      </span>
-                    )}
-                  </td>
+                  {/* LEGAL GROUP */}
+                  {expandedGroups.legal && (
+                    <>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.petitioner_name || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney_address || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.attorney_city_state || '-'}</td>
+                    </>
+                  )}
 
-                  {/* Status - dropdown */}
-                  <td className="px-2 py-1.5 text-center">
-                    <select
-                      value={appeal.status || 'Pending'}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        await supabase.from('appeal_log').update({ status: newStatus }).eq('id', appeal.id);
-                        setAppeals(prev => prev.map(a => a.id === appeal.id ? { ...a, status: newStatus } : a));
-                      }}
-                      className={`text-xs px-1.5 py-0.5 rounded border-0 font-medium ${getStatusColor(appeal.status)}`}
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Scheduled">Scheduled</option>
-                      <option value="Settled">Settled</option>
-                      <option value="Dismissed">Dismissed</option>
-                      <option value="Withdrawn">Withdrawn</option>
-                      <option value="Judgment">Judgment</option>
-                    </select>
-                  </td>
+                  {/* WORKFLOW GROUP */}
+                  {expandedGroups.workflow && (
+                    <>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.submission_type || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.evidence_status || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{evidenceDue || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.stip_status || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.tax_court_pending ? 'Yes' : 'No'}</td>
+                    </>
+                  )}
 
-                  {/* Result - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'result' ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-28 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded"
-                        onClick={() => startEdit(appeal.id, 'result', appeal.result)}
-                      >
-                        {appeal.result || '—'}
-                      </span>
-                    )}
-                  </td>
+                  {/* VALUATION GROUP */}
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.current_assessment)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.requested_value)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.possible_loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>{formatCurrency(appeal.possible_loss)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold">{formatCurrency(appeal.cme_projected_value)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{acPercent !== null ? `${acPercent}%` : '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{formatCurrency(appeal.judgment_value)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>{formatCurrency(appeal.loss)}</td>
 
-                  {/* Comments - editable */}
-                  <td className="px-2 py-1.5">
-                    {editingCell?.id === appeal.id && editingCell?.field === 'comments' ? (
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={saveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' ? saveEdit() : e.key === 'Escape' && cancelEdit()}
-                        className="w-40 px-1 py-0.5 border rounded text-xs"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:bg-gray-100 px-1 rounded max-w-[160px] truncate inline-block"
-                        onClick={() => startEdit(appeal.id, 'comments', appeal.comments)}
-                        title={appeal.comments || ''}
-                      >
-                        {appeal.comments || '—'}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => handleNavigateToCME(appeal)}
-                        className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                        title="View in CME"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => deleteAppeal(appeal.id)}
-                        className="p-1 text-red-500 hover:bg-red-100 rounded"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+                  {/* NOTES GROUP */}
+                  {expandedGroups.notes && (
+                    <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{appeal.comments || '-'}</td>
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              );
+            })}
 
-      {/* Summary Stats */}
-      {appeals.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white border border-gray-200 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-gray-800">{appeals.length}</div>
-            <div className="text-xs text-gray-500">Total Appeals</div>
-          </div>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-green-700">
-              {appeals.filter(a => a.chapter_123_result === 'Within CLR').length}
-            </div>
-            <div className="text-xs text-green-600">Within CLR</div>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-red-700">
-              {appeals.filter(a => a.chapter_123_result === 'Exceeds CLR').length}
-            </div>
-            <div className="text-xs text-red-600">Exceeds CLR</div>
-          </div>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-yellow-700">
-              {appeals.filter(a => a.status === 'Pending').length}
-            </div>
-            <div className="text-xs text-yellow-600">Pending</div>
-          </div>
-        </div>
-      )}
+            {/* TOTALS ROW */}
+            <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
+              <td colSpan="7" className="px-3 py-3 text-right">TOTALS:</td>
+              {expandedGroups.propertyInfo && <td colSpan="5"></td>}
+              {expandedGroups.legal && <td colSpan="4"></td>}
+              {expandedGroups.workflow && <td colSpan="6"></td>}
+              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.requested_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.possible_loss || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap">-</td>
+              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              {expandedGroups.notes && <td></td>}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
