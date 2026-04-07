@@ -277,29 +277,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Helper: Sanitize date fields (convert empty string to null)
   const sanitizeDate = (val) => (val && val.trim() !== '' ? val : null);
 
-  // Helper: Parse appeal number and extract suffix, year, and appeal type
+  // Helper: Parse appeal number and extract only the suffix (D, L, A, X)
   const parseAppealNumber = (appealNumber) => {
     if (!appealNumber || appealNumber.trim() === '') {
-      return { suffix: '', year: null, appealType: '' };
+      return { suffix: '', appealType: null };
     }
 
-    const upperNum = appealNumber.trim().toUpperCase();
-
-    // Extract suffix (last letter: D, L, A, X)
-    const suffix = upperNum.slice(-1);
-    const isValidSuffix = ['D', 'L', 'A', 'X'].includes(suffix) ? suffix : '';
-
-    // Extract year (look for 4-digit or 2-digit number)
-    let year = null;
-    const fourDigitMatch = upperNum.match(/\b(20[2-9]\d)\b/);
-    if (fourDigitMatch) {
-      year = parseInt(fourDigitMatch[1]);
-    } else {
-      const twoDigitMatch = upperNum.match(/\b(\d{2})\b/);
-      if (twoDigitMatch) {
-        year = 2000 + parseInt(twoDigitMatch[1]);
-      }
-    }
+    // Extract suffix (trailing letter(s): D, L, A, X - case insensitive)
+    const suffix = appealNumber.trim().match(/([DLAXdlax]+)$/)?.[1]?.toUpperCase();
 
     // Map suffix to appeal_type
     const appealTypeMap = {
@@ -310,9 +295,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     return {
-      suffix: isValidSuffix,
-      year,
-      appealType: appealTypeMap[isValidSuffix] || ''
+      suffix: suffix || '',
+      appealType: appealTypeMap[suffix] || null
     };
   };
 
@@ -441,19 +425,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const handleAppealNumberBlur = () => {
     const parsed = parseAppealNumber(formData.appeal_number);
 
-    // Auto-populate appeal_year if extracted
-    if (parsed.year) {
-      setFormData(prev => ({
-        ...prev,
-        appeal_year: parsed.year,
-        appeal_type: parsed.appealType
-      }));
-    } else if (parsed.appealType) {
-      setFormData(prev => ({
-        ...prev,
-        appeal_type: parsed.appealType
-      }));
-    }
+    // Update appeal_type based on suffix
+    setFormData(prev => ({
+      ...prev,
+      appeal_type: parsed.appealType
+    }));
 
     // Disable attorney fields if suffix is D (Pro Se)
     if (parsed.suffix === 'D') {
@@ -575,9 +551,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (field === 'appeal_number') {
         const parsed = parseAppealNumber(value);
-        if (parsed.appealType) {
-          updateData.appeal_type = parsed.appealType;
-        }
+        updateData.appeal_type = parsed.appealType;
       }
 
       if (field === 'judgment_value') {
