@@ -106,6 +106,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Calculated adjustments based on edited values
   const [editedAdjustments, setEditedAdjustments] = useState({});
   const [hasEdits, setHasEdits] = useState(false);
+  const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
 
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
@@ -1227,6 +1228,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       };
     });
 
+    // Calculate weighted average projected assessment based on recalculated adjustments
+    const validComps = comps.filter(c => c && newAdjustments[`comp_${comps.indexOf(c)}`]);
+    if (validComps.length > 0) {
+      // Calculate weights based on closeness to 0% adjustment (inverse adjustment percentage)
+      const totalInverseAdjPct = validComps.reduce((sum, comp) => {
+        const idx = comps.indexOf(comp);
+        const adjPct = Math.abs(newAdjustments[`comp_${idx}`]?.adjustmentPercent || 0);
+        return sum + (1 / (adjPct + 1)); // +1 to avoid division by zero
+      }, 0);
+
+      // Calculate weighted average of adjusted prices
+      let newProjectedAssessment = 0;
+      validComps.forEach((comp) => {
+        const idx = comps.indexOf(comp);
+        const adjData = newAdjustments[`comp_${idx}`];
+        const adjPct = Math.abs(adjData.adjustmentPercent || 0);
+        const weight = (1 / (adjPct + 1)) / totalInverseAdjPct;
+        newProjectedAssessment += adjData.adjustedPrice * weight;
+      });
+
+      setRecalculatedProjectedAssessment(Math.round(newProjectedAssessment));
+    }
+
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
   }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
@@ -1234,6 +1258,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const openExportModal = useCallback(() => {
     setEditableProperties({});
     setEditedAdjustments({});
+    setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
     setShowExportModal(true);
   }, []);
@@ -1446,8 +1471,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Add Adjusted Valuation row if visible and showing adjustments
     if (showAdjustments && rowVisibility['adjusted_valuation']) {
       const valRow = ['Adjusted Valuation'];
-      // Subject gets projected assessment
-      valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+      // Subject gets projected assessment (use recalculated if available, otherwise original)
+      const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
+      valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
         const compKey = `comp_${i}`;
@@ -1609,7 +1635,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
       if (showAdjustments && rowVisibility['adjusted_valuation']) {
         const valRow = ['Adjusted Valuation'];
-        valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+        const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
+        valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
           const compKey = `comp_${i}`;
@@ -1701,7 +1728,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // Gather data for the Chapter 123 test
     const currentAssessment = subject.values_mod4_total || subject.values_mod_total || subject.values_cama_total || 0;
-    const projectedValue = result.projectedAssessment || 0;
+    const projectedValue = (recalculatedProjectedAssessment || result.projectedAssessment) || 0;
 
     // Get comparable adjusted prices for the weighted average
     const compAdjustedPrices = [];
@@ -1820,7 +1847,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS, jobData]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2334,7 +2361,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
                       <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300 font-bold text-green-700">
-                        {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                        {(recalculatedProjectedAssessment || result.projectedAssessment) ? `$${(recalculatedProjectedAssessment || result.projectedAssessment).toLocaleString()}` : '-'}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
