@@ -224,10 +224,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         if (!searchableFields.includes(searchLower)) return false;
       }
 
-      // Status filter - treat "Pending" as 'D' (Defend)
-      const statusToCheck = a.status === 'Pending' ? 'D' : (a.status || 'NA');
-      if (!filters.statuses.has(statusToCheck)) {
-        console.log('DEBUG: Filtered out by status:', a.appeal_number, 'status=', a.status, 'normalized to=', statusToCheck, 'has?', filters.statuses.has(statusToCheck));
+      // Status filter
+      if (!filters.statuses.has(a.status || 'NA')) {
+        console.log('DEBUG: Filtered out by status:', a.appeal_number, 'status=', a.status, 'has?', filters.statuses.has(a.status || 'NA'));
         return false;
       }
 
@@ -264,10 +263,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         let aVal, bVal;
 
         switch (sortState.column) {
-          case 'status':
-            aVal = a.status === 'Pending' ? 'D' : (a.status || 'NA');
-            bVal = b.status === 'Pending' ? 'D' : (b.status || 'NA');
-            break;
+          case 'status': aVal = a.status || 'NA'; bVal = b.status || 'NA'; break;
           case 'year': aVal = a.appeal_year; bVal = b.appeal_year; break;
           case 'appeal_number': aVal = a.appeal_number; bVal = b.appeal_number; break;
           case 'block': aVal = parseInt(a.property_block) || 0; bVal = parseInt(b.property_block) || 0; break;
