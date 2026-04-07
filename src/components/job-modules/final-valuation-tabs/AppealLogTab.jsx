@@ -28,7 +28,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [formData, setFormData] = useState({
     appeal_number: '',
     appeal_year: new Date().getFullYear(),
-    status: 'D',
+    status: '',
+    appeal_type: '',
     petitioner_name: '',
     taxpayer_name: '',
     attorney: '',
@@ -49,6 +50,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     property_location: '',
     property_composite_key: ''
   });
+
+  // Track if attorney fields should be disabled (for Pro Se)
+  const [attorneyFieldsDisabled, setAttorneyFieldsDisabled] = useState(false);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState(null); // { appealId, field }
@@ -158,6 +162,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const vacantCount = filtered.filter(a => ['1', '3B'].includes(a.property_m4_class)).length;
     const otherCount = totalAppeals - residentialCount - commercialCount - vacantCount;
 
+    // Appeal type counts
+    const petitionerCount = filtered.filter(a => a.appeal_type === 'petitioner').length;
+    const representedCount = filtered.filter(a => a.appeal_type === 'represented').length;
+    const assessorCount = filtered.filter(a => a.appeal_type === 'assessor').length;
+    const crossCount = filtered.filter(a => a.appeal_type === 'cross').length;
+    const unknownTypeCount = totalAppeals - petitionerCount - representedCount - assessorCount - crossCount;
+
     return {
       totalAppeals,
       totalAssessmentExposure,
@@ -169,7 +180,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       residentialCount,
       commercialCount,
       vacantCount,
-      otherCount
+      otherCount,
+      petitionerCount,
+      representedCount,
+      assessorCount,
+      crossCount,
+      unknownTypeCount
     };
   }, [filteredAppeals, properties]);
 
@@ -261,6 +277,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Helper: Sanitize date fields (convert empty string to null)
   const sanitizeDate = (val) => (val && val.trim() !== '' ? val : null);
 
+  // Helper: Parse appeal number and extract suffix, year, and appeal type
+  const parseAppealNumber = (appealNumber) => {
+    if (!appealNumber || appealNumber.trim() === '') {
+      return { suffix: '', year: null, appealType: '' };
+    }
+
+    const upperNum = appealNumber.trim().toUpperCase();
+
+    // Extract suffix (last letter: D, L, A, X)
+    const suffix = upperNum.slice(-1);
+    const isValidSuffix = ['D', 'L', 'A', 'X'].includes(suffix) ? suffix : '';
+
+    // Extract year (look for 4-digit or 2-digit number)
+    let year = null;
+    const fourDigitMatch = upperNum.match(/\b(20[2-9]\d)\b/);
+    if (fourDigitMatch) {
+      year = parseInt(fourDigitMatch[1]);
+    } else {
+      const twoDigitMatch = upperNum.match(/\b(\d{2})\b/);
+      if (twoDigitMatch) {
+        year = 2000 + parseInt(twoDigitMatch[1]);
+      }
+    }
+
+    // Map suffix to appeal_type
+    const appealTypeMap = {
+      'D': 'petitioner',
+      'L': 'represented',
+      'A': 'assessor',
+      'X': 'cross'
+    };
+
+    return {
+      suffix: isValidSuffix,
+      year,
+      appealType: appealTypeMap[isValidSuffix] || ''
+    };
+  };
+
   // ==================== MODAL & ADD APPEAL HANDLERS ====================
 
   const handleOpenModal = () => {
@@ -270,10 +325,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     setSearchLot('');
     setSearchQualifier('');
     setSearchResults([]);
+    setAttorneyFieldsDisabled(false);
     setFormData({
       appeal_number: '',
       appeal_year: new Date().getFullYear(),
-      status: 'D',
+      status: '',
+      appeal_type: '',
       petitioner_name: '',
       taxpayer_name: '',
       attorney: '',
@@ -381,6 +438,37 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     }));
   };
 
+  const handleAppealNumberBlur = () => {
+    const parsed = parseAppealNumber(formData.appeal_number);
+
+    // Auto-populate appeal_year if extracted
+    if (parsed.year) {
+      setFormData(prev => ({
+        ...prev,
+        appeal_year: parsed.year,
+        appeal_type: parsed.appealType
+      }));
+    } else if (parsed.appealType) {
+      setFormData(prev => ({
+        ...prev,
+        appeal_type: parsed.appealType
+      }));
+    }
+
+    // Disable attorney fields if suffix is D (Pro Se)
+    if (parsed.suffix === 'D') {
+      setAttorneyFieldsDisabled(true);
+      setFormData(prev => ({
+        ...prev,
+        attorney: '',
+        attorney_address: '',
+        attorney_city_state: ''
+      }));
+    } else {
+      setAttorneyFieldsDisabled(false);
+    }
+  };
+
   const handleSaveAppeal = async () => {
     try {
       setIsSaving(true);
@@ -460,6 +548,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const date = new Date(value);
         date.setDate(date.getDate() - 7);
         updateData.evidence_due_date = date.toISOString().split('T')[0];
+      }
+
+      if (field === 'appeal_number') {
+        const parsed = parseAppealNumber(value);
+        if (parsed.appealType) {
+          updateData.appeal_type = parsed.appealType;
+        }
       }
 
       if (field === 'judgment_value') {
@@ -650,6 +745,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         </div>
       </div>
 
+      {/* STATS ROW 4 - BY TYPE */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">By Type</p>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { type: 'Petitioner', count: stats.petitionerCount, badge: 'bg-blue-100', text: 'text-blue-700' },
+            { type: 'Represented', count: stats.representedCount, badge: 'bg-green-100', text: 'text-green-700' },
+            { type: 'Assessor', count: stats.assessorCount, badge: 'bg-purple-100', text: 'text-purple-700' },
+            { type: 'Cross', count: stats.crossCount, badge: 'bg-amber-100', text: 'text-amber-700' },
+            { type: 'Unknown', count: stats.unknownTypeCount, badge: 'bg-gray-100', text: 'text-gray-700' }
+          ].map(item => (
+            <div key={item.type} className={`${item.badge} ${item.text} px-3 py-1 rounded-full text-sm font-medium`}>
+              {item.type}: <span className="font-bold">{item.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* COLUMN GROUP TOGGLES */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex gap-2 flex-wrap">
         {[
@@ -736,7 +849,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           </thead>
           <tbody>
             {filteredAppeals.map((appeal, idx) => {
-              const statusStyle = getStatusStyle(appeal.status);
               const ownerMismatch = hasOwnerMismatch(appeal);
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
@@ -745,9 +857,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                   {/* FROZEN LEFT COLUMNS */}
                   <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200">
-                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusStyle.badge} ${statusStyle.text}`}>
-                      {appeal.status || 'NA'}
-                    </span>
+                    <select
+                      value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
+                      onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
+                      className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                    >
+                      <option value="D">D - Defend</option>
+                      <option value="S">S - Stipulated</option>
+                      <option value="H">H - Heard</option>
+                      <option value="W">W - Withdrawn</option>
+                      <option value="A">A - Assessor</option>
+                      <option value="AP">AP - Affirmed with Prejudice</option>
+                      <option value="AWP">AWP - Affirmed without Prejudice</option>
+                      <option value="NA">NA - Non Appearance</option>
+                    </select>
                   </td>
                   <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
                   <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">
@@ -1040,6 +1163,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         type="text"
                         value={formData.appeal_number}
                         onChange={(e) => handleFormChange('appeal_number', e.target.value)}
+                        onBlur={handleAppealNumberBlur}
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
                       />
                     </div>
@@ -1059,13 +1183,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         onChange={(e) => handleFormChange('status', e.target.value)}
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
                       >
-                        <option value="S">S - Settled</option>
+                        <option value="">Select status...</option>
                         <option value="D">D - Defend</option>
-                        <option value="H">H - Hearing</option>
+                        <option value="S">S - Stipulated</option>
+                        <option value="H">H - Heard</option>
                         <option value="W">W - Withdrawn</option>
-                        <option value="A">A - Appeal</option>
-                        <option value="AP">AP - Appeal Pending</option>
-                        <option value="AWP">AWP - Appeal Withdrawn Pending</option>
+                        <option value="A">A - Assessor</option>
+                        <option value="AP">AP - Affirmed with Prejudice</option>
+                        <option value="AWP">AWP - Affirmed without Prejudice</option>
+                        <option value="NA">NA - Non Appearance</option>
                       </select>
                     </div>
                     <div>
@@ -1092,7 +1218,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         type="text"
                         value={formData.attorney}
                         onChange={(e) => handleFormChange('attorney', e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                        disabled={attorneyFieldsDisabled}
+                        placeholder={attorneyFieldsDisabled ? 'Pro Se — no legal rep' : ''}
+                        className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs ${
+                          attorneyFieldsDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                     <div>
@@ -1101,7 +1231,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         type="text"
                         value={formData.attorney_address}
                         onChange={(e) => handleFormChange('attorney_address', e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                        disabled={attorneyFieldsDisabled}
+                        placeholder={attorneyFieldsDisabled ? 'Pro Se — no legal rep' : ''}
+                        className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs ${
+                          attorneyFieldsDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                     <div>
@@ -1110,7 +1244,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                         type="text"
                         value={formData.attorney_city_state}
                         onChange={(e) => handleFormChange('attorney_city_state', e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs"
+                        disabled={attorneyFieldsDisabled}
+                        placeholder={attorneyFieldsDisabled ? 'Pro Se — no legal rep' : ''}
+                        className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs ${
+                          attorneyFieldsDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                   </div>
