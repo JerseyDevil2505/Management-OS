@@ -83,16 +83,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // CME Brackets constant
   const CME_BRACKETS = [
-    { min: 0, max: 99999, label: 'up to $99,999', color: '#FF9999', textColor: 'black' },
-    { min: 100000, max: 199999, label: '$100,000-$199,999', color: '#FFB366', textColor: 'black' },
-    { min: 200000, max: 299999, label: '$200,000-$299,999', color: '#FFCC99', textColor: 'black' },
-    { min: 300000, max: 399999, label: '$300,000-$399,999', color: '#FFFF99', textColor: 'black' },
-    { min: 400000, max: 499999, label: '$400,000-$499,999', color: '#CCFF99', textColor: 'black' },
-    { min: 500000, max: 749999, label: '$500,000-$749,999', color: '#99FF99', textColor: 'black' },
-    { min: 750000, max: 999999, label: '$750,000-$999,999', color: '#99CCFF', textColor: 'black' },
-    { min: 1000000, max: 1499999, label: '$1,000,000-$1,499,999', color: '#9999FF', textColor: 'black' },
-    { min: 1500000, max: 1999999, label: '$1,500,000-$1,999,999', color: '#CC99FF', textColor: 'black' },
-    { min: 2000000, max: 99999999, label: 'Over $2,000,000', color: '#FF99FF', textColor: 'black' }
+    { min: 0, max: 99999, label: 'Under $100K', color: '#FF9999', textColor: 'black' },
+    { min: 100000, max: 199999, label: '$100K-$199K', color: '#FFB366', textColor: 'black' },
+    { min: 200000, max: 299999, label: '$200K-$299K', color: '#FFCC99', textColor: 'black' },
+    { min: 300000, max: 399999, label: '$300K-$399K', color: '#FFFF99', textColor: 'black' },
+    { min: 400000, max: 499999, label: '$400K-$499K', color: '#CCFF99', textColor: 'black' },
+    { min: 500000, max: 749999, label: '$500K-$749K', color: '#99FF99', textColor: 'black' },
+    { min: 750000, max: 999999, label: '$750K-$999K', color: '#99CCFF', textColor: 'black' },
+    { min: 1000000, max: 1499999, label: '$1M-$1.49M', color: '#9999FF', textColor: 'black' },
+    { min: 1500000, max: 1999999, label: '$1.5M-$1.99M', color: '#CC99FF', textColor: 'black' },
+    { min: 2000000, max: 99999999, label: '$2M+', color: '#FF99FF', textColor: 'black' }
   ];
 
   // Compute VCS to bracket mapping on mount
@@ -353,7 +353,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   };
 
   // Helper: Render sortable column header
-  const SortableHeader = ({ label, columnKey, sticky = false, left = '0' }) => {
+  const SortableHeader = ({ label, columnKey, sticky = false, left = '0', minWidth = null, maxWidth = null }) => {
     const isActive = sortState.column === columnKey;
     const handleClick = () => {
       if (sortState.column === columnKey) {
@@ -370,9 +370,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       : `px-3 py-2 text-left font-medium text-gray-700 cursor-pointer hover:bg-blue-100`;
 
     const stickyStyle = sticky ? { left } : {};
+    const widthStyle = { ...stickyStyle };
+    if (minWidth) widthStyle.minWidth = minWidth;
+    if (maxWidth) widthStyle.maxWidth = maxWidth;
 
     return (
-      <th className={baseClass} onClick={handleClick} style={stickyStyle}>
+      <th className={baseClass} onClick={handleClick} style={widthStyle}>
         <div className="flex items-center gap-1">
           <span>{label}</span>
           {isActive && (
@@ -1449,54 +1452,53 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
               {/* FROZEN LEFT COLUMNS */}
-              <SortableHeader label="Status" columnKey="status" sticky={true} left="0" />
-              <SortableHeader label="Year" columnKey="year" sticky={true} left="4rem" />
-              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="7rem" />
-              <SortableHeader label="Block" columnKey="block" sticky={true} left="12rem" />
-              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="16rem" />
-              <SortableHeader label="Qual" columnKey="qualifier" />
-              <SortableHeader label="Location" columnKey="location" />
+              <SortableHeader label="Status" columnKey="status" sticky={true} left="0" minWidth="70px" maxWidth="70px" />
+              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="4rem" minWidth="120px" maxWidth="120px" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="9rem" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="13rem" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
+              <SortableHeader label="Location" columnKey="location" minWidth="120px" />
 
               {/* PROPERTY INFO GROUP */}
               {expandedGroups.propertyInfo && (
                 <>
-                  <SortableHeader label="Class" columnKey="class" />
-                  <SortableHeader label="VCS" columnKey="vcs" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Bracket</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Inspected</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Owner</th>
+                  <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
+                  <SortableHeader label="VCS" columnKey="vcs" minWidth="60px" maxWidth="60px" />
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '110px', maxWidth: '110px' }}>Bracket</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '90px', maxWidth: '90px' }}>Inspected</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Owner</th>
                 </>
               )}
 
               {/* LEGAL GROUP */}
               {expandedGroups.legal && (
                 <>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Petitioner</th>
-                  <SortableHeader label="Attorney" columnKey="attorney" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attny Address</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Attny City/State</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Petitioner</th>
+                  <SortableHeader label="Attorney" columnKey="attorney" minWidth="100px" />
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Attny Address</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Attny City/State</th>
                 </>
               )}
 
               {/* WORKFLOW GROUP */}
               {expandedGroups.workflow && (
                 <>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Submission</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Evidence Due</th>
-                  <SortableHeader label="Hearing" columnKey="hearing_date" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Stip</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700">Tax Court</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Submission</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Evidence</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Evidence Due</th>
+                  <SortableHeader label="Hearing" columnKey="hearing_date" minWidth="120px" />
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Stip</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Tax Court</th>
                 </>
               )}
 
               {/* VALUATION GROUP (always visible) */}
-              <SortableHeader label="Current Assessment" columnKey="current_assessment" />
-              <SortableHeader label="Requested" columnKey="requested" />
-              <SortableHeader label="CME Value" columnKey="cme_value" />
-              <SortableHeader label="Judgment" columnKey="judgment" />
-              <SortableHeader label="Actual Loss" columnKey="actual_loss" />
-              <SortableHeader label="% Loss" columnKey="loss_pct" />
+              <SortableHeader label="Current Assessment" columnKey="current_assessment" minWidth="120px" maxWidth="120px" />
+              <SortableHeader label="Requested" columnKey="requested" minWidth="100px" maxWidth="100px" />
+              <SortableHeader label="CME Value" columnKey="cme_value" minWidth="100px" maxWidth="100px" />
+              <SortableHeader label="Judgment" columnKey="judgment" minWidth="100px" maxWidth="100px" />
+              <SortableHeader label="Actual Loss" columnKey="actual_loss" minWidth="100px" maxWidth="100px" />
+              <SortableHeader label="% Loss" columnKey="loss_pct" minWidth="70px" maxWidth="70px" />
 
               {/* NOTES GROUP */}
               {expandedGroups.notes && (
@@ -1516,44 +1518,43 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               return (
                 <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                   {/* FROZEN LEFT COLUMNS */}
-                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200">
+                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ minWidth: '70px', maxWidth: '70px' }}>
                     <select
                       value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
                       className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                      style={{ minWidth: '140px' }}
+                      style={{ width: '70px' }}
                     >
-                      <option value="D">D - Defend</option>
-                      <option value="S">S - Stipulated</option>
-                      <option value="H">H - Heard</option>
-                      <option value="W">W - Withdrawn</option>
-                      <option value="A">A - Assessor</option>
-                      <option value="AP">AP - Affirmed w/ Prejudice</option>
-                      <option value="AWP">AWP - Affirmed w/o Prejudice</option>
-                      <option value="NA">NA - Non Appearance</option>
+                      <option value="D">D</option>
+                      <option value="S">S</option>
+                      <option value="H">H</option>
+                      <option value="W">W</option>
+                      <option value="A">A</option>
+                      <option value="AP">AP</option>
+                      <option value="AWP">AWP</option>
+                      <option value="NA">NA</option>
                     </select>
                   </td>
-                  <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
-                  <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">
+                  <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className="sticky left-48 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_block || '-'}</td>
-                  <td className="sticky left-64 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.property_lot || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_qualifier || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_location || '-'}</td>
+                  <td className="sticky left-36 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
+                  <td className="sticky left-52 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
 
                   {/* PROPERTY INFO GROUP */}
                   {expandedGroups.propertyInfo && (
                     <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.property_m4_class || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{appeal.new_vcs || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '110px', maxWidth: '110px' }}>
                         {renderBracketCell(appeal)}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '90px', maxWidth: '90px' }}>
                         {renderInspectedCell(appeal)}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1" style={{ minWidth: '100px' }}>
                         {appeal.owner_name || '-'}
                         {ownerMismatch && <span className="text-yellow-600">⚠️</span>}
                       </td>
@@ -1563,16 +1564,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {/* LEGAL GROUP */}
                   {expandedGroups.legal && (
                     <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
                         {renderEditableCell(appeal.id, 'petitioner_name', appeal.petitioner_name, 'text')}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                         {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
                         {renderEditableCell(appeal.id, 'attorney_address', appeal.attorney_address, 'text')}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
                         {renderEditableCell(appeal.id, 'attorney_city_state', appeal.attorney_city_state, 'text')}
                       </td>
                     </>
@@ -1581,7 +1582,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {/* WORKFLOW GROUP */}
                   {expandedGroups.workflow && (
                     <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                         <select
                           value={appeal.submission_type || ''}
                           onChange={(e) => handleDropdownChange(appeal.id, 'submission_type', e.target.value)}
@@ -1593,7 +1594,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                           <option value="ELECTRONIC">Electronic</option>
                         </select>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                         <select
                           value={appeal.evidence_status || ''}
                           onChange={(e) => handleDropdownChange(appeal.id, 'evidence_status', e.target.value)}
@@ -1605,11 +1606,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                           <option value="Exchanged">Exchanged</option>
                         </select>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">{evidenceDue || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>{evidenceDue || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
                         {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                         <select
                           value={appeal.stip_status || 'not_started'}
                           onChange={(e) => handleDropdownChange(appeal.id, 'stip_status', e.target.value)}
@@ -1636,20 +1637,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   )}
 
                   {/* VALUATION GROUP */}
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'requested_value', appeal.requested_value, 'number')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold">{formatCurrency(appeal.cme_projected_value)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">
+                  <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.judgment_value !== null && appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.judgment_value !== null && appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`} style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? formatCurrency(appeal.loss) : '-'}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '70px', maxWidth: '70px' }}>
                     {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? `${acPercent}%` : '-'}
                   </td>
 
@@ -1676,7 +1677,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
             {/* TOTALS ROW */}
             <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
-              <td colSpan="7" className="px-3 py-3 text-right">TOTALS:</td>
+              <td colSpan="6" className="px-3 py-3 text-right">TOTALS:</td>
               {expandedGroups.propertyInfo && <td colSpan="5"></td>}
               {expandedGroups.legal && <td colSpan="4"></td>}
               {expandedGroups.workflow && <td colSpan="6"></td>}
