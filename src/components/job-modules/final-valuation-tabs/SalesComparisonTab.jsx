@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -119,6 +119,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       if (onManualSubjectConsumed) onManualSubjectConsumed();
     }
   }, [initialManualSubject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ==================== APPEAL LOG → CME BATCH NAVIGATION ====================
+  useEffect(() => {
+    if (!initialAppealSubjects || initialAppealSubjects.length === 0) return;
+
+    // Convert subjects array to block-lot-qualifier key format
+    // matching existing manualProperties format: "block-lot-qualifier"
+    const keys = initialAppealSubjects.map(s => {
+      const block = (s.block || '').trim();
+      const lot = (s.lot || '').trim();
+      const qual = (s.qualifier || '').trim();
+      return qual ? `${block}-${lot}-${qual}` : `${block}-${lot}-`;
+    }).filter(k => k && k !== '--');
+
+    // Populate manualProperties with all appeal subjects
+    setManualProperties(keys);
+
+    // Pre-set adjustment bracket if provided
+    if (initialBracket) {
+      setCompFilters(prev => ({
+        ...prev,
+        adjustmentBracket: initialBracket,
+        autoAdjustment: false
+      }));
+    }
+
+    // Switch to search tab so user sees the subject list
+    // and can run evaluation
+    setActiveSubTab('search');
+
+    // Clear navigation target
+    if (onManualSubjectConsumed) onManualSubjectConsumed();
+
+  }, [initialAppealSubjects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ==================== SALES POOL STATE ====================
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
