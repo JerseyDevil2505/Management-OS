@@ -976,129 +976,235 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         </div>
       </div>
 
-      {/* FILTER BAR - CHIP BASED */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-4">
-        {/* Status Chips */}
-        <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Status</p>
-          <div className="flex gap-2 flex-wrap">
-            {['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => (
-              <button
-                key={status}
-                onClick={() => setPendingFilters(prev => {
-                  const newStatuses = new Set(prev.statuses);
-                  if (newStatuses.has(status)) {
-                    newStatuses.delete(status);
-                  } else {
-                    newStatuses.add(status);
-                  }
-                  return { ...prev, statuses: newStatuses };
-                })}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  pendingFilters.statuses.has(status)
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Class Chips */}
-        <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Class</p>
-          <div className="flex gap-2 flex-wrap">
-            {[
-              { key: '2,3A', label: 'Residential' },
-              { key: '4A,4B,4C', label: 'Commercial' },
-              { key: '1,3B', label: 'Vacant Land' },
-              { key: 'other', label: 'Other' }
-            ].map(cls => (
-              <button
-                key={cls.key}
-                onClick={() => setPendingFilters(prev => {
-                  const newClasses = new Set(prev.classes);
-                  if (newClasses.has(cls.key)) {
-                    newClasses.delete(cls.key);
-                  } else {
-                    newClasses.add(cls.key);
-                  }
-                  return { ...prev, classes: newClasses };
-                })}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  pendingFilters.classes.has(cls.key)
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
-                }`}
-              >
-                {cls.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* VCS Chips */}
-        {uniqueVCS.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">VCS</p>
-            <div className="flex gap-2 flex-wrap">
-              {uniqueVCS.sort().map(vcs => (
-                <button
-                  key={vcs}
-                  onClick={() => setPendingFilters(prev => {
-                    const newVcs = new Set(prev.vcs);
-                    if (newVcs.has(vcs)) {
-                      newVcs.delete(vcs);
-                    } else {
-                      newVcs.add(vcs);
-                    }
-                    return { ...prev, vcs: newVcs };
-                  })}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    pendingFilters.vcs.has(vcs)
-                      ? 'bg-blue-700 text-white'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
-                  }`}
+      {/* FILTER BAR - DROPDOWN WITH CHIPS */}
+      <div className="space-y-4">
+        {/* Filter Cards Grid */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* STATUS FILTER CARD */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  setPendingFilters(prev => ({
+                    ...prev,
+                    statuses: new Set([...prev.statuses, val])
+                  }));
+                  e.target.value = '';
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">+ Add Status</option>
+              {[
+                { code: 'D', label: 'Defend' },
+                { code: 'S', label: 'Stipulated' },
+                { code: 'H', label: 'Heard' },
+                { code: 'W', label: 'Withdrawn' },
+                { code: 'A', label: 'Assessor' },
+                { code: 'AP', label: 'Affirmed w/Prejudice' },
+                { code: 'AWP', label: 'Affirmed w/o Prejudice' },
+                { code: 'NA', label: 'Non Appearance' }
+              ]
+                .filter(s => !pendingFilters.statuses.has(s.code))
+                .map(s => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} - {s.label}
+                  </option>
+                ))}
+            </select>
+            <div className="flex gap-2 flex-wrap mt-3">
+              {Array.from(pendingFilters.statuses).map(status => (
+                <div
+                  key={status}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
                 >
-                  {vcs}
-                </button>
+                  {status}
+                  <button
+                    onClick={() =>
+                      setPendingFilters(prev => {
+                        const newSet = new Set(prev.statuses);
+                        newSet.delete(status);
+                        return { ...prev, statuses: newSet };
+                      })
+                    }
+                    className="text-blue-700 hover:text-blue-900 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
               ))}
             </div>
           </div>
-        )}
 
-        {/* Attorney Chips */}
-        <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Attorney</p>
-          <div className="flex gap-2 flex-wrap">
-            {['Pro Se', ...uniqueAttorneys.sort()].map(attorney => (
-              <button
-                key={attorney}
-                onClick={() => setPendingFilters(prev => {
-                  const newAttorneys = new Set(prev.attorneys);
-                  if (newAttorneys.has(attorney)) {
-                    newAttorneys.delete(attorney);
-                  } else {
-                    newAttorneys.add(attorney);
+          {/* CLASS FILTER CARD */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Class</label>
+            <select
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  setPendingFilters(prev => ({
+                    ...prev,
+                    classes: new Set([...prev.classes, val])
+                  }));
+                  e.target.value = '';
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">+ Add Class</option>
+              {[
+                { key: '2,3A', label: 'Residential' },
+                { key: '4A,4B,4C', label: 'Commercial' },
+                { key: '1,3B', label: 'Vacant Land' },
+                { key: 'other', label: 'Other' }
+              ]
+                .filter(c => !pendingFilters.classes.has(c.key))
+                .map(c => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+            </select>
+            <div className="flex gap-2 flex-wrap mt-3">
+              {Array.from(pendingFilters.classes).map(classKey => {
+                const labels = {
+                  '2,3A': 'Residential',
+                  '4A,4B,4C': 'Commercial',
+                  '1,3B': 'Vacant Land',
+                  'other': 'Other'
+                };
+                return (
+                  <div
+                    key={classKey}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                  >
+                    {labels[classKey]}
+                    <button
+                      onClick={() =>
+                        setPendingFilters(prev => {
+                          const newSet = new Set(prev.classes);
+                          newSet.delete(classKey);
+                          return { ...prev, classes: newSet };
+                        })
+                      }
+                      className="text-blue-700 hover:text-blue-900 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* VCS FILTER CARD */}
+          {uniqueVCS.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">VCS</label>
+              <select
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    setPendingFilters(prev => ({
+                      ...prev,
+                      vcs: new Set([...prev.vcs, val])
+                    }));
+                    e.target.value = '';
                   }
-                  return { ...prev, attorneys: newAttorneys };
-                })}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  pendingFilters.attorneys.has(attorney)
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
-                }`}
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                {attorney}
-              </button>
-            ))}
+                <option value="">+ Add VCS</option>
+                {uniqueVCS
+                  .sort()
+                  .filter(v => !pendingFilters.vcs.has(v))
+                  .map(vcs => (
+                    <option key={vcs} value={vcs}>
+                      {vcs}
+                    </option>
+                  ))}
+              </select>
+              <div className="flex gap-2 flex-wrap mt-3">
+                {Array.from(pendingFilters.vcs).map(vcs => (
+                  <div
+                    key={vcs}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                  >
+                    {vcs}
+                    <button
+                      onClick={() =>
+                        setPendingFilters(prev => {
+                          const newSet = new Set(prev.vcs);
+                          newSet.delete(vcs);
+                          return { ...prev, vcs: newSet };
+                        })
+                      }
+                      className="text-blue-700 hover:text-blue-900 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ATTORNEY FILTER CARD */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Attorney</label>
+            <select
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  setPendingFilters(prev => ({
+                    ...prev,
+                    attorneys: new Set([...prev.attorneys, val])
+                  }));
+                  e.target.value = '';
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">+ Add Attorney</option>
+              {['Pro Se', ...uniqueAttorneys.sort()]
+                .filter(a => !pendingFilters.attorneys.has(a))
+                .map(attorney => (
+                  <option key={attorney} value={attorney}>
+                    {attorney.length > 20 ? attorney.substring(0, 20) + '...' : attorney}
+                  </option>
+                ))}
+            </select>
+            <div className="flex gap-2 flex-wrap mt-3">
+              {Array.from(pendingFilters.attorneys).map(attorney => (
+                <div
+                  key={attorney}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                  title={attorney}
+                >
+                  {attorney.length > 20 ? attorney.substring(0, 20) + '...' : attorney}
+                  <button
+                    onClick={() =>
+                      setPendingFilters(prev => {
+                        const newSet = new Set(prev.attorneys);
+                        newSet.delete(attorney);
+                        return { ...prev, attorneys: newSet };
+                      })
+                    }
+                    className="text-blue-700 hover:text-blue-900 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 items-center pt-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={() => setFilters({
               statuses: new Set(pendingFilters.statuses),
