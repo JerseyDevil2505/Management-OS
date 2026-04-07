@@ -59,6 +59,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [editValue, setEditValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Status dropdown state
+  const [openStatusDropdown, setOpenStatusDropdown] = useState(null); // appealId or null
+
   // Load appeals from database
   useEffect(() => {
     if (!jobData?.id) return;
@@ -204,14 +207,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const getStatusStyle = (status) => {
     const s = status?.toUpperCase() || 'NA';
     switch (s) {
-      case 'S': return { bg: 'bg-green-50', text: 'text-green-700', badge: 'bg-green-100' };
+      case 'S': return { bg: 'bg-green-50', text: 'text-green-700', badge: 'bg-green-600 text-white' };
       case 'D':
-      case 'H': return { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100' };
-      case 'W': return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100' };
+      case 'H': return { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-600 text-white' };
+      case 'W': return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-600 text-white' };
       case 'A':
       case 'AP':
-      case 'AWP': return { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100' };
-      default: return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100' };
+      case 'AWP': return { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-600 text-white' };
+      default: return { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-600 text-white' };
     }
   };
 
@@ -779,6 +782,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         ))}
       </div>
 
+      {/* STATUS LEGEND BAR */}
+      <div className="bg-gray-50 border-t border-b border-gray-200 px-4 py-2 text-xs text-gray-600">
+        <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · NA = Non Appearance
+      </div>
+
       {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
       {filteredAppeals.length > 0 && (
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
@@ -852,22 +860,39 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
               return (
                 <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                  {/* FROZEN LEFT COLUMNS */}
-                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200">
-                    <select
-                      value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
-                      onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
-                      className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                    >
-                      <option value="D">D - Defend</option>
-                      <option value="S">S - Stipulated</option>
-                      <option value="H">H - Heard</option>
-                      <option value="W">W - Withdrawn</option>
-                      <option value="A">A - Assessor</option>
-                      <option value="AP">AP - Affirmed with Prejudice</option>
-                      <option value="AWP">AWP - Affirmed without Prejudice</option>
-                      <option value="NA">NA - Non Appearance</option>
-                    </select>
+                  {/* FROZEN LEFT COLUMNS - STATUS BADGE */}
+                  <td className="sticky left-0 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 relative">
+                    {openStatusDropdown === appeal.id ? (
+                      <select
+                        autoFocus
+                        value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
+                        onChange={(e) => {
+                          handleDropdownChange(appeal.id, 'status', e.target.value || 'NA');
+                          setOpenStatusDropdown(null);
+                        }}
+                        onBlur={() => setOpenStatusDropdown(null)}
+                        className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer absolute left-3 top-2 z-20"
+                      >
+                        <option value="D">D</option>
+                        <option value="S">S</option>
+                        <option value="H">H</option>
+                        <option value="W">W</option>
+                        <option value="A">A</option>
+                        <option value="AP">AP</option>
+                        <option value="AWP">AWP</option>
+                        <option value="NA">NA</option>
+                      </select>
+                    ) : (
+                      <button
+                        onClick={() => setOpenStatusDropdown(appeal.id)}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold ${
+                          getStatusStyle(appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')).badge
+                        } cursor-pointer hover:opacity-80 transition-opacity`}
+                        title="Click to change status"
+                      >
+                        {appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
+                      </button>
+                    )}
                   </td>
                   <td className="sticky left-16 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900">{appeal.appeal_year || '-'}</td>
                   <td className="sticky left-28 z-10 bg-white hover:bg-gray-50 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium">
