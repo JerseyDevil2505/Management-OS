@@ -21,15 +21,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Sort state
   const [sortState, setSortState] = useState({ column: null, direction: 'asc' });
 
-  // Filter state
-  const [filters, setFilters] = useState({
-    searchText: '',
+  // Filter state - separates pending (UI) from active (applied)
+  const [pendingFilters, setPendingFilters] = useState({
     statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
-    types: new Set(['petitioner', 'represented', 'assessor', 'cross', null]),
-    classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']), // Match category strings from getClassCategory()
-    attorney: 'all',
-    vcs: 'all',
-    taxCourtOnly: false
+    classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
+    attorneys: new Set(),
+    vcs: new Set()
+  });
+
+  const [filters, setFilters] = useState({
+    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
+    attorneys: new Set(),
+    vcs: new Set()
   });
 
   // Modal and add appeal state
@@ -209,48 +213,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Apply active filters
     result = result.filter(a => {
-      // Search text filter
-      if (filters.searchText) {
-        const searchLower = filters.searchText.toLowerCase();
-        const searchableFields = [
-          a.appeal_number,
-          a.property_block?.toString(),
-          a.property_lot?.toString(),
-          a.property_location,
-          a.petitioner_name,
-          a.owner_name,
-          a.attorney
-        ].join(' ').toLowerCase();
-        if (!searchableFields.includes(searchLower)) return false;
-      }
-
       // Status filter
-      if (!filters.statuses.has(a.status || 'NA')) {
-        console.log('DEBUG: Filtered out by status:', a.appeal_number, 'status=', a.status, 'has?', filters.statuses.has(a.status || 'NA'));
-        return false;
-      }
-
-      // Type filter
-      if (!filters.types.has(a.appeal_type)) {
-        console.log('DEBUG: Filtered out by type:', a.appeal_number, 'appeal_type=', a.appeal_type, 'has?', filters.types.has(a.appeal_type));
-        return false;
-      }
+      if (filters.statuses.size > 0 && !filters.statuses.has(a.status || 'NA')) return false;
 
       // Class filter
       const classCategory = getClassCategory(a.property_m4_class);
-      if (!filters.classes.has(classCategory)) {
-        console.log('DEBUG: Filtered out by class:', a.appeal_number, 'class=', a.property_m4_class, 'category=', classCategory, 'has?', filters.classes.has(classCategory));
-        return false;
-      }
+      if (filters.classes.size > 0 && !filters.classes.has(classCategory)) return false;
 
       // Attorney filter
-      if (filters.attorney !== 'all' && a.attorney !== filters.attorney) return false;
+      if (filters.attorneys.size > 0) {
+        const attorneyKey = a.attorney || 'Pro Se';
+        if (!filters.attorneys.has(attorneyKey)) return false;
+      }
 
       // VCS filter
-      if (filters.vcs !== 'all' && a.new_vcs !== filters.vcs) return false;
-
-      // Tax court filter
-      if (filters.taxCourtOnly && !a.tax_court_pending) return false;
+      if (filters.vcs.size > 0 && !filters.vcs.has(a.new_vcs)) return false;
 
       return true;
     });
@@ -291,13 +268,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // Helper: Check if any filters are active
   const areFiltersActive = useMemo(() => {
-    return filters.searchText !== '' ||
-           filters.statuses.size < 8 ||
-           filters.types.size < 5 ||
-           filters.classes.size < 8 ||
-           filters.attorney !== 'all' ||
-           filters.vcs !== 'all' ||
-           filters.taxCourtOnly;
+    return filters.statuses.size < 8 ||
+           filters.classes.size < 4 ||
+           filters.attorneys.size > 0 ||
+           filters.vcs.size > 0;
   }, [filters]);
 
   // Calculate statistics
@@ -821,29 +795,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   return (
     <div className="space-y-6">
-      {/* DEBUG PANEL */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
-        <p className="font-bold text-yellow-900 mb-2">DEBUG INFO:</p>
-        <div className="grid grid-cols-2 gap-4 text-yellow-800 mb-3">
-          <div>Raw appeals from DB: {appeals.length}</div>
-          <div>After filtering: {filteredAppeals.length}</div>
-          <div>Selected year: {selectedYear}</div>
-          <div>Filter.statuses size: {filters.statuses.size}</div>
-          <div>Filter.types size: {filters.types.size}</div>
-          <div>Filter.classes size: {filters.classes.size}</div>
-        </div>
-        {appeals.length > filteredAppeals.length && (
-          <div className="bg-yellow-100 p-2 rounded text-yellow-900 text-xs border border-yellow-300 max-h-40 overflow-y-auto">
-            <p className="font-bold mb-1">Appeals being filtered out:</p>
-            {appeals.filter(a => !filteredAppeals.find(f => f.id === a.id)).map(a => (
-              <div key={a.id} className="mb-1">
-                {a.appeal_number} - year: {a.appeal_year}, status: {a.status}, type: {a.appeal_type}, class: {a.property_m4_class}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* TOOLBAR */}
       <div className="flex justify-between items-center">
         <button
@@ -869,124 +820,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
-          </button>
-        </div>
-      </div>
-
-      {/* FILTER BAR */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-3">
-        <div className="grid grid-cols-4 gap-3">
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="Search appeal #, block, lot, location..."
-            value={filters.searchText}
-            onChange={(e) => setFilters(prev => ({ ...prev, searchText: e.target.value }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          {/* Status Multi-select */}
-          <select
-            multiple
-            value={Array.from(filters.statuses)}
-            onChange={(e) => setFilters(prev => ({
-              ...prev,
-              statuses: new Set(Array.from(e.target.selectedOptions, option => option.value))
-            }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            title="Hold Ctrl to select multiple"
-          >
-            {['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
-
-          {/* Type Multi-select */}
-          <select
-            multiple
-            value={Array.from(filters.types).filter(t => t !== null)}
-            onChange={(e) => {
-              const selected = new Set(Array.from(e.target.selectedOptions, option => option.value));
-              if (filters.types.has(null)) selected.add(null);
-              setFilters(prev => ({ ...prev, types: selected }));
-            }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            title="Hold Ctrl to select multiple"
-          >
-            <option value="petitioner">Petitioner</option>
-            <option value="represented">Represented</option>
-            <option value="assessor">Assessor</option>
-            <option value="cross">Cross</option>
-          </select>
-
-          {/* Class Multi-select */}
-          <select
-            multiple
-            value={Array.from(filters.classes)}
-            onChange={(e) => setFilters(prev => ({
-              ...prev,
-              classes: new Set(Array.from(e.target.selectedOptions, option => option.value))
-            }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            title="Hold Ctrl to select multiple"
-          >
-            <option value="2,3A">2, 3A (Residential)</option>
-            <option value="4A,4B,4C">4A, 4B, 4C (Commercial)</option>
-            <option value="1,3B">1, 3B (Vacant Land)</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <div className="grid grid-cols-4 gap-3">
-          {/* Attorney Single-select */}
-          <select
-            value={filters.attorney}
-            onChange={(e) => setFilters(prev => ({ ...prev, attorney: e.target.value }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Attorneys</option>
-            {uniqueAttorneys.map(atty => (
-              <option key={atty} value={atty}>{atty}</option>
-            ))}
-          </select>
-
-          {/* VCS Single-select */}
-          <select
-            value={filters.vcs}
-            onChange={(e) => setFilters(prev => ({ ...prev, vcs: e.target.value }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All VCS</option>
-            {uniqueVCS.map(vcs => (
-              <option key={vcs} value={vcs}>{vcs}</option>
-            ))}
-          </select>
-
-          {/* Tax Court Checkbox */}
-          <label className="flex items-center gap-2 px-3 py-2">
-            <input
-              type="checkbox"
-              checked={filters.taxCourtOnly}
-              onChange={(e) => setFilters(prev => ({ ...prev, taxCourtOnly: e.target.checked }))}
-              className="rounded"
-            />
-            <span className="text-sm font-medium text-gray-700">Tax Court Only</span>
-          </label>
-
-          {/* Clear Filters Button */}
-          <button
-            onClick={() => setFilters({
-              searchText: '',
-              statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
-              types: new Set(['petitioner', 'represented', 'assessor', 'cross', null]),
-              classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
-              attorney: 'all',
-              vcs: 'all',
-              taxCourtOnly: false
-            })}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
-          >
-            Clear Filters
           </button>
         </div>
       </div>
@@ -1140,6 +973,163 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {item.type}: <span className="font-bold">{item.count}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* FILTER BAR - CHIP BASED */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-4">
+        {/* Status Chips */}
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-2">Status</p>
+          <div className="flex gap-2 flex-wrap">
+            {['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'].map(status => (
+              <button
+                key={status}
+                onClick={() => setPendingFilters(prev => {
+                  const newStatuses = new Set(prev.statuses);
+                  if (newStatuses.has(status)) {
+                    newStatuses.delete(status);
+                  } else {
+                    newStatuses.add(status);
+                  }
+                  return { ...prev, statuses: newStatuses };
+                })}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  pendingFilters.statuses.has(status)
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Class Chips */}
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-2">Class</p>
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { key: '2,3A', label: 'Residential' },
+              { key: '4A,4B,4C', label: 'Commercial' },
+              { key: '1,3B', label: 'Vacant Land' },
+              { key: 'other', label: 'Other' }
+            ].map(cls => (
+              <button
+                key={cls.key}
+                onClick={() => setPendingFilters(prev => {
+                  const newClasses = new Set(prev.classes);
+                  if (newClasses.has(cls.key)) {
+                    newClasses.delete(cls.key);
+                  } else {
+                    newClasses.add(cls.key);
+                  }
+                  return { ...prev, classes: newClasses };
+                })}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  pendingFilters.classes.has(cls.key)
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                {cls.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* VCS Chips */}
+        {uniqueVCS.length > 0 && (
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">VCS</p>
+            <div className="flex gap-2 flex-wrap">
+              {uniqueVCS.sort().map(vcs => (
+                <button
+                  key={vcs}
+                  onClick={() => setPendingFilters(prev => {
+                    const newVcs = new Set(prev.vcs);
+                    if (newVcs.has(vcs)) {
+                      newVcs.delete(vcs);
+                    } else {
+                      newVcs.add(vcs);
+                    }
+                    return { ...prev, vcs: newVcs };
+                  })}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    pendingFilters.vcs.has(vcs)
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                  }`}
+                >
+                  {vcs}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Attorney Chips */}
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-2">Attorney</p>
+          <div className="flex gap-2 flex-wrap">
+            {['Pro Se', ...uniqueAttorneys.sort()].map(attorney => (
+              <button
+                key={attorney}
+                onClick={() => setPendingFilters(prev => {
+                  const newAttorneys = new Set(prev.attorneys);
+                  if (newAttorneys.has(attorney)) {
+                    newAttorneys.delete(attorney);
+                  } else {
+                    newAttorneys.add(attorney);
+                  }
+                  return { ...prev, attorneys: newAttorneys };
+                })}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  pendingFilters.attorneys.has(attorney)
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                {attorney}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2 items-center pt-2">
+          <button
+            onClick={() => setFilters({
+              statuses: new Set(pendingFilters.statuses),
+              classes: new Set(pendingFilters.classes),
+              attorneys: new Set(pendingFilters.attorneys),
+              vcs: new Set(pendingFilters.vcs)
+            })}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700"
+          >
+            Apply Filters
+          </button>
+          <button
+            onClick={() => {
+              const defaultPending = {
+                statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+                classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
+                attorneys: new Set(),
+                vcs: new Set()
+              };
+              setPendingFilters(defaultPending);
+              setFilters(defaultPending);
+            }}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+          >
+            Clear All
+          </button>
+          {areFiltersActive && (
+            <p className="text-sm text-gray-500 ml-auto">
+              Filtered: {filteredAppeals.length} of {appeals.length} appeals
+            </p>
+          )}
         </div>
       </div>
 
