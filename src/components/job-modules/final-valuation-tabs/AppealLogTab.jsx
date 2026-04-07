@@ -18,6 +18,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     notes: true
   });
 
+  // Sort state
+  const [sortState, setSortState] = useState({ column: null, direction: 'asc' });
+
+  // Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    searchText: '',
+    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    types: new Set(['petitioner', 'represented', 'assessor', 'cross', null]),
+    classes: new Set(['2', '3A', '4A', '4B', '4C', '1', '3B', 'other']),
+    attorney: 'all',
+    vcs: 'all',
+    taxCourtOnly: false
+  });
+
   // Modal and add appeal state
   const [showModal, setShowModal] = useState(false);
   const [modalStep, setModalStep] = useState(1); // 1 = property search, 2 = appeal details
@@ -116,10 +131,126 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     loadAppeals();
   }, [jobData?.id, properties]);
 
-  // Filter appeals by selected year
+  // Get unique attorney and VCS values from appeals
+  const uniqueAttorneys = useMemo(() => {
+    const attorneys = [...new Set(appeals
+      .map(a => a.attorney)
+      .filter(Boolean))];
+    return attorneys.sort();
+  }, [appeals]);
+
+  const uniqueVCS = useMemo(() => {
+    const vcs = [...new Set(appeals
+      .map(a => a.new_vcs)
+      .filter(Boolean))];
+    return vcs.sort();
+  }, [appeals]);
+
+  // Helper: Determine class category
+  const getClassCategory = (classCode) => {
+    if (!classCode) return 'other';
+    if (['2', '3A'].includes(classCode)) return '2,3A';
+    if (['4A', '4B', '4C'].includes(classCode)) return '4A,4B,4C';
+    if (['1', '3B'].includes(classCode)) return '1,3B';
+    return 'other';
+  };
+
+  // Helper: Compare function for sorting
+  const compareValues = (a, b, direction) => {
+    const multiplier = direction === 'asc' ? 1 : -1;
+    if (a == null && b == null) return 0;
+    if (a == null) return multiplier;
+    if (b == null) return -multiplier;
+    if (a < b) return -multiplier;
+    if (a > b) return multiplier;
+    return 0;
+  };
+
+  // Filter and sort appeals
   const filteredAppeals = useMemo(() => {
-    return appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
-  }, [appeals, selectedYear]);
+    let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
+
+    // Apply active filters
+    result = result.filter(a => {
+      // Search text filter
+      if (filters.searchText) {
+        const searchLower = filters.searchText.toLowerCase();
+        const searchableFields = [
+          a.appeal_number,
+          a.property_block?.toString(),
+          a.property_lot?.toString(),
+          a.property_location,
+          a.petitioner_name,
+          a.owner_name,
+          a.attorney
+        ].join(' ').toLowerCase();
+        if (!searchableFields.includes(searchLower)) return false;
+      }
+
+      // Status filter
+      if (!filters.statuses.has(a.status || 'NA')) return false;
+
+      // Type filter
+      if (!filters.types.has(a.appeal_type)) return false;
+
+      // Class filter
+      const classCategory = getClassCategory(a.property_m4_class);
+      if (!filters.classes.has(classCategory)) return false;
+
+      // Attorney filter
+      if (filters.attorney !== 'all' && a.attorney !== filters.attorney) return false;
+
+      // VCS filter
+      if (filters.vcs !== 'all' && a.new_vcs !== filters.vcs) return false;
+
+      // Tax court filter
+      if (filters.taxCourtOnly && !a.tax_court_pending) return false;
+
+      return true;
+    });
+
+    // Apply sorting
+    if (sortState.column) {
+      result.sort((a, b) => {
+        let aVal, bVal;
+
+        switch (sortState.column) {
+          case 'status': aVal = a.status || 'NA'; bVal = b.status || 'NA'; break;
+          case 'year': aVal = a.appeal_year; bVal = b.appeal_year; break;
+          case 'appeal_number': aVal = a.appeal_number; bVal = b.appeal_number; break;
+          case 'block': aVal = parseInt(a.property_block) || 0; bVal = parseInt(b.property_block) || 0; break;
+          case 'lot': aVal = parseInt(a.property_lot) || 0; bVal = parseInt(b.property_lot) || 0; break;
+          case 'location': aVal = a.property_location; bVal = b.property_location; break;
+          case 'class': aVal = a.property_m4_class; bVal = b.property_m4_class; break;
+          case 'vcs': aVal = a.new_vcs; bVal = b.new_vcs; break;
+          case 'current_assessment': aVal = a.current_assessment; bVal = b.current_assessment; break;
+          case 'requested': aVal = a.requested_value; bVal = b.requested_value; break;
+          case 'cme_value': aVal = a.cme_projected_value; bVal = b.cme_projected_value; break;
+          case 'judgment': aVal = a.judgment_value; bVal = b.judgment_value; break;
+          case 'actual_loss': aVal = a.loss; bVal = b.loss; break;
+          case 'loss_pct': aVal = a.loss_pct; bVal = b.loss_pct; break;
+          case 'hearing_date': aVal = a.hearing_date; bVal = b.hearing_date; break;
+          case 'attorney': aVal = a.attorney; bVal = b.attorney; break;
+          default: return 0;
+        }
+
+        return compareValues(aVal, bVal, sortState.direction);
+      });
+    }
+
+    return result;
+  }, [appeals, selectedYear, filters, sortState]);
+
+  // Helper: Check if any filters are active
+  const areFiltersActive = useMemo(() => {
+    return filters.searchText !== '' ||
+           filters.statuses.size < 8 ||
+           filters.types.size < 5 ||
+           filters.classes.size < 8 ||
+           filters.attorney !== 'all' ||
+           filters.vcs !== 'all' ||
+           filters.taxCourtOnly;
+  }, [filters]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -684,7 +815,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       <div className="grid grid-cols-5 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Appeals</p>
-          <p className="text-2xl font-bold text-gray-900 mt-2">{stats.totalAppeals}</p>
+          <div className="mt-2">
+            <p className="text-2xl font-bold text-gray-900">{stats.totalAppeals}</p>
+            {areFiltersActive && <p className="text-xs text-gray-500 mt-1">(filtered)</p>}
+          </div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Assessment Exposure</p>
