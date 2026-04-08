@@ -1251,7 +1251,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_qualifier: qualifier,
           property_location: getValue(idxLocation),
           property_composite_key: matchedProperty?.property_composite_key || '',
-          property_m4_class: propertyClass || matchedProperty?.property_m4_class || null,
           submission_type: submissionType,
           tax_court_pending: taxCourtPending,
           inspected: false,
