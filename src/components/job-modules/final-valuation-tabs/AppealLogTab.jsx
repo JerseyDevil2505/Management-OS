@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
   // State
@@ -1338,7 +1339,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     setPwrCamaProcessing(true);
     setPwrCamaResult(null);
     try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
       const arrayBuffer = await pwrCamaFile.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
