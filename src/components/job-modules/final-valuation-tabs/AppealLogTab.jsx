@@ -1355,7 +1355,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
-            Import CSV
+            Import MyNJAppeal
           </button>
           <button
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
