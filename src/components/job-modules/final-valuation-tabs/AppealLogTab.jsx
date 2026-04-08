@@ -93,6 +93,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [importProcessing, setImportProcessing] = useState(false);
   const [importResult, setImportResult] = useState(null); // { imported, skipped, unmatched }
 
+  // PWR CAMA state
+  const [showPwrCamaModal, setShowPwrCamaModal] = useState(false);
+  const [pwrCamaFile, setPwrCamaFile] = useState(null);
+  const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
+  const [pwrCamaResult, setPwrCamaResult] = useState(null);
+
   // CME Brackets constant
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'Under $100K', color: '#FF9999', textColor: 'black' },
