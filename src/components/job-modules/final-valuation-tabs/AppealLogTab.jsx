@@ -1216,9 +1216,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         // Map submission type
         const entryRaw = getValue(idxEntry);
-        let submissionType = '';
-        if (entryRaw === 'ONLINE') submissionType = 'ONLINE';
-        else if (entryRaw === 'PAPER') submissionType = 'PAPER';
+        const validSubmissionTypes = ['ONLINE', 'PAPER', 'ELECTRONIC'];
+        const submissionType = validSubmissionTypes.includes(entryRaw) ? entryRaw : null;
 
         // Map tax_court_pending
         const taxCrtRaw = getValue(idxTaxCrt).toUpperCase();
