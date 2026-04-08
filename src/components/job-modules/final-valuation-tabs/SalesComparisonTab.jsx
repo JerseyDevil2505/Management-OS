@@ -208,6 +208,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return 4; // MULTI CAR
   }, [garageThresholds]);
 
+  // Helper: Get adjusted SFLA for Franklin Township (exclude finished basement code "02")
+  const getAdjustedSFLA = useCallback((prop) => {
+    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
+
+    const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
+    if (!isFranklinJob) {
+      return prop.asset_sfla; // No adjustment for other townships
+    }
+
+    // For Franklin: exclude fin_basement_area if code is "02"
+    let sfla = prop.asset_sfla;
+    const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
+    const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
+
+    // If finish code 1 is "02", subtract the corresponding area (fin_basement_area_1)
+    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
+      sfla -= prop.fin_basement_area_1;
+    }
+
+    // If finish code 2 is "02", subtract the corresponding area (fin_basement_area_2)
+    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
+      sfla -= prop.fin_basement_area_2;
+    }
+
+    return Math.max(0, sfla); // Ensure SFLA doesn't go negative
+  }, [jobData?.municipality]);
+
   // Load garage thresholds and detached condition multipliers on mount
   useEffect(() => {
     const loadThresholds = async () => {
@@ -2120,8 +2147,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
     switch (adjustmentDef.adjustment_id) {
       case 'living_area':
-        subjectValue = subject.asset_sfla || 0;
-        compValue = comp.asset_sfla || 0;
+        subjectValue = getAdjustedSFLA(subject);
+        compValue = getAdjustedSFLA(comp);
         break;
 
       case 'bedrooms':
