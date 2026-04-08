@@ -1364,6 +1364,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             Import MyNJAppeal
           </button>
           <button
+            onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import PwrCama Appeals
+          </button>
+          <button
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
