@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
@@ -86,6 +86,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [showMixedBracketModal, setShowMixedBracketModal] = useState(false);
   const [mixedBracketInfo, setMixedBracketInfo] = useState({});
   const [isSendingToCME, setIsSendingToCME] = useState(false);
+
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importProcessing, setImportProcessing] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { imported, skipped, unmatched }
 
   // CME Brackets constant
   const CME_BRACKETS = [
@@ -1077,6 +1083,240 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     );
   }
 
+  // ==================== CSV IMPORT HANDLER ====================
+
+  const handleImportCSV = async () => {
+    if (!importFile) return;
+    setImportProcessing(true);
+    setImportResult(null);
+
+    try {
+      const text = await importFile.text();
+      const lines = text.split('\n');
+
+      // Parse header row — strip BOM if present
+      const rawHeader = lines[0].replace(/^\uFEFF/, '');
+      const headers = rawHeader.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Column index helpers
+      const col = (name) => headers.findIndex(h => h === name);
+
+      const idxBLQ       = col('BLQ');
+      const idxAppealNum = col('Appeal #');
+      const idxName      = col('Name');
+      const idxLocation  = col('Location');
+      const idxClass     = col('Class.');
+      const idxAssess    = col('Assessment');
+      const idxTaxCrt    = col('Tax Crt?');
+      const idxEntry     = col('Entry');
+      const idxContact   = col('Adtl. Contact');
+      const idxAddr      = col('Addl Contact Address');
+      const idxCityState = col('Addl Contact City, State');
+      const idxStatus    = col('Appeal Status');
+
+      // Parse a CSV line respecting quoted fields
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            inQuotes = !inQuotes;
+          } else if (ch === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += ch;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      // Parse BLQ — format: "188-26", "155-7.01", "96-4-C0102"
+      const parseBLQ = (blq) => {
+        if (!blq) return { block: '', lot: '', qualifier: '' };
+
+        // Handle Excel date corruption: "8-Dec" should be "12-8"
+        // Excel converts "12-8" to Dec-8 and displays as "8-Dec"
+        const excelDateMatch = blq.match(/^(\d+)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i);
+        if (excelDateMatch) {
+          const monthMap = {
+            jan:'1', feb:'2', mar:'3', apr:'4', may:'5', jun:'6',
+            jul:'7', aug:'8', sep:'9', oct:'10', nov:'11', dec:'12'
+          };
+          const day = excelDateMatch[1];
+          const month = monthMap[excelDateMatch[2].toLowerCase()];
+          return { block: month, lot: day, qualifier: '' };
+        }
+
+        const parts = blq.split('-');
+        if (parts.length === 3) {
+          // Three segments: block-lot-qualifier (e.g. 96-4-C0102)
+          return { block: parts[0], lot: parts[1], qualifier: parts[2] };
+        } else if (parts.length === 2) {
+          // Two segments: block-lot (qualifier is empty, lot may have decimal)
+          return { block: parts[0], lot: parts[1], qualifier: '' };
+        }
+        return { block: blq, lot: '', qualifier: '' };
+      };
+
+      // Fetch existing appeal numbers for this job to detect duplicates
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+
+      const existingNumbers = new Set(
+        (existingAppeals || []).map(a => a.appeal_number)
+      );
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      // Process data rows (skip header row 0)
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = parseCSVLine(line);
+        const getValue = (idx) => (idx >= 0 && cols[idx] ? cols[idx].replace(/^"|"$/g, '').trim() : '');
+
+        const appealNumber = getValue(idxAppealNum);
+        if (!appealNumber) continue;
+
+        // Skip duplicates
+        if (existingNumbers.has(appealNumber)) {
+          skipped++;
+          continue;
+        }
+
+        const blqRaw = getValue(idxBLQ);
+        const { block, lot, qualifier } = parseBLQ(blqRaw);
+
+        // Attempt property match against in-memory properties array
+        const matchedProperty = properties.find(p => {
+          const pBlock = (p.property_block || '').toString().trim();
+          const pLot = (p.property_lot || '').toString().trim();
+          const pQual = (p.property_qualifier || '').toString().trim();
+          return pBlock === block && pLot === lot && pQual === qualifier;
+        });
+
+        if (!matchedProperty) unmatched++;
+
+        // Parse appeal_type from appeal number suffix
+        const { appealType } = parseAppealNumber(appealNumber);
+
+        // Map submission type
+        const entryRaw = getValue(idxEntry);
+        let submissionType = '';
+        if (entryRaw === 'ONLINE') submissionType = 'ONLINE';
+        else if (entryRaw === 'PAPER') submissionType = 'PAPER';
+
+        // Map tax_court_pending
+        const taxCrtRaw = getValue(idxTaxCrt).toUpperCase();
+        const taxCourtPending = taxCrtRaw === 'TRUE';
+
+        // Attorney fields — only populate when Adtl. Contact column has a value
+        const attorney = getValue(idxContact);
+        const attorneyAddress = attorney ? getValue(idxAddr) : '';
+        const attorneyCityState = attorney ? getValue(idxCityState) : '';
+
+        // Assessment — strip commas just in case
+        const assessmentRaw = getValue(idxAssess).replace(/,/g, '');
+        const currentAssessment = parseFloat(assessmentRaw) || 0;
+
+        // Property class — stored as-is (2, 1, 6A, 15D etc.)
+        const propertyClass = getValue(idxClass);
+
+        const record = {
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: getValue(idxName),
+          taxpayer_name: getValue(idxName),
+          attorney: attorney || '',
+          attorney_address: attorneyAddress,
+          attorney_city_state: attorneyCityState,
+          current_assessment: currentAssessment,
+          requested_value: 0,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: getValue(idxLocation),
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          property_m4_class: propertyClass || matchedProperty?.property_m4_class || null,
+          submission_type: submissionType,
+          tax_court_pending: taxCourtPending,
+          inspected: false,
+          comments: '',
+          hearing_date: null,
+          evidence_due_date: null,
+          evidence_status: ''
+        };
+
+        records.push(record);
+      }
+
+      // Batch insert
+      if (records.length > 0) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .insert(records);
+
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      // Reload appeals
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(
+          p => p.property_composite_key === appeal.property_composite_key
+        );
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setImportResult({ imported, skipped, unmatched });
+      setImportFile(null);
+
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setImportProcessing(false);
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
@@ -1102,6 +1342,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               ))}
             </select>
           </div>
+          <button
+            onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import CSV
+          </button>
           <button
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
@@ -2222,6 +2469,74 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {isSaving ? 'Saving...' : 'Save Appeal'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from CSV</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the BRT online appeal system CSV export format.
+                Duplicate appeal numbers will be skipped automatically.
+              </p>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  id="import-csv-input"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="import-csv-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {importFile ? importFile.name : 'Click to select CSV file'}
+                  </p>
+                </label>
+              </div>
+
+              {importResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {importResult.imported} records imported</p>
+                  {importResult.skipped > 0 && (
+                    <p className="text-amber-700">⚠ {importResult.skipped} skipped (duplicates)</p>
+                  )}
+                  {importResult.unmatched > 0 && (
+                    <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  {importResult ? 'Close' : 'Cancel'}
+                </button>
+                {!importResult && (
+                  <button
+                    onClick={handleImportCSV}
+                    disabled={!importFile || importProcessing}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
