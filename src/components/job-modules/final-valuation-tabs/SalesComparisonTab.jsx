@@ -4,6 +4,7 @@ import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckC
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
+import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -106,6 +107,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
+
+  // Vacant land appraisal state
+  const [vacantLandSubject, setVacantLandSubject] = useState({ block: '', lot: '', qualifier: '' });
+  const [vacantLandComps, setVacantLandComps] = useState([
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' }
+  ]);
+  const [vacantLandEvaluating, setVacantLandEvaluating] = useState(false);
+  const [vacantLandResult, setVacantLandResult] = useState(null);
 
   // ==================== APPEAL LOG → CME NAVIGATION ====================
   useEffect(() => {
@@ -2907,7 +2920,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     { id: 'sales-pool', label: `Sales Pool (${includedSalesCount})`, icon: List },
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
-    { id: 'summary', label: 'Summary', icon: BarChart3 }
+    { id: 'summary', label: 'Summary', icon: BarChart3 },
+    { id: 'vacant-land', label: 'Vacant Land Appraisal', icon: FileText }
   ];
 
   return (
@@ -5220,6 +5234,353 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </>
               );
             })()}
+          </div>
+        )}
+
+        {/* VACANT LAND APPRAISAL TAB */}
+        {activeSubTab === 'vacant-land' && (
+          <VacantLandAppraisalTab
+            properties={properties}
+            jobData={jobData}
+            vacantLandSubject={vacantLandSubject}
+            setVacantLandSubject={setVacantLandSubject}
+            vacantLandComps={vacantLandComps}
+            setVacantLandComps={setVacantLandComps}
+            vacantLandEvaluating={vacantLandEvaluating}
+            setVacantLandEvaluating={setVacantLandEvaluating}
+            vacantLandResult={vacantLandResult}
+            setVacantLandResult={setVacantLandResult}
+          />
+        )}
+
+        {/* OLD PLACEHOLDER - TO BE REMOVED */}
+        {false && (
+          <div className="space-y-4">
+            <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+              {/* Header with title and buttons */}
+              <div className="bg-blue-600 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-white">Vacant Land Appraisal Grid</h4>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        // Save functionality placeholder
+                        alert('Saved vacant land appraisal');
+                      }}
+                      className="px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        // PDF export placeholder
+                        alert('PDF export coming soon');
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50"
+                    >
+                      Export PDF
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input section for subject and comparables */}
+              <div className="p-4 bg-gray-50 border-b border-gray-200">
+                <div className="mb-4">
+                  <h5 className="text-sm font-semibold text-gray-700 mb-3">Subject Property</h5>
+                  <div className="grid grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Block"
+                      value={vacantLandSubject.block}
+                      onChange={(e) => setVacantLandSubject({...vacantLandSubject, block: e.target.value})}
+                      className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Lot"
+                      value={vacantLandSubject.lot}
+                      onChange={(e) => setVacantLandSubject({...vacantLandSubject, lot: e.target.value})}
+                      className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Qualifier (optional)"
+                      value={vacantLandSubject.qualifier}
+                      onChange={(e) => setVacantLandSubject({...vacantLandSubject, qualifier: e.target.value})}
+                      className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h5 className="text-sm font-semibold text-gray-700 mb-3">Comparable Sales (enter block/lot)</h5>
+                  <div className="grid grid-cols-6 gap-2">
+                    {vacantLandComps.map((comp, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Block"
+                          value={comp.block}
+                          onChange={(e) => {
+                            const updated = [...vacantLandComps];
+                            updated[idx].block = e.target.value;
+                            setVacantLandComps(updated);
+                          }}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Lot"
+                          value={comp.lot}
+                          onChange={(e) => {
+                            const updated = [...vacantLandComps];
+                            updated[idx].lot = e.target.value;
+                            setVacantLandComps(updated);
+                          }}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Table */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 border-b-2 border-gray-300">
+                      <th className="sticky left-0 z-10 bg-gray-100 px-3 py-3 text-left font-semibold text-gray-700 border-r-2 border-gray-300 w-32">
+                        Attribute
+                      </th>
+                      <th className="px-3 py-3 text-center font-semibold bg-slate-100 border-l border-gray-300 w-24">
+                        Subject
+                      </th>
+                      {[1, 2, 3].map((compNum) => (
+                        <th key={compNum} className="px-3 py-3 text-center font-semibold bg-blue-50 border-l border-gray-300 w-24">
+                          Comp {compNum}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {/* Block */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Block</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">{vacantLandSubject.block || '-'}</td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">{comp.block || '-'}</td>
+                      ))}
+                    </tr>
+
+                    {/* Lot */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Lot</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">{vacantLandSubject.lot || '-'}</td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">{comp.lot || '-'}</td>
+                      ))}
+                    </tr>
+
+                    {/* Location */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Location</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            return prop?.property_location || '-';
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              return prop?.property_location || '-';
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Lot Size (Acres) */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Lot Size (Acres)</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            return prop?.asset_lot_acre ? parseFloat(prop.asset_lot_acre).toFixed(2) : '-';
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              return prop?.asset_lot_acre ? parseFloat(prop.asset_lot_acre).toFixed(2) : '-';
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Zoning */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Zoning</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            return prop?.property_zoning || '-';
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              return prop?.property_zoning || '-';
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Sales Price */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Sales Price</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            return prop?.sales_price ? '$' + parseInt(prop.sales_price).toLocaleString() : '-';
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              return prop?.sales_price ? '$' + parseInt(prop.sales_price).toLocaleString() : '-';
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Sales Date */}
+                    <tr className="border-b hover:bg-gray-50">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Sales Date</td>
+                      <td className="px-3 py-2 text-center bg-slate-50 text-xs">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            return prop?.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '-';
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-50 text-xs border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              return prop?.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '-';
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* Price Per Acre */}
+                    <tr className="border-b hover:bg-gray-50 font-semibold">
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">Price Per Acre</td>
+                      <td className="px-3 py-2 text-center bg-slate-100 text-xs font-semibold">
+                        {(() => {
+                          if (vacantLandSubject.block && vacantLandSubject.lot) {
+                            const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                            const prop = properties.find(p => p.property_composite_key === composite);
+                            if (prop?.sales_price && prop?.asset_lot_acre && parseFloat(prop.asset_lot_acre) > 0) {
+                              const pricePerAcre = parseFloat(prop.sales_price) / parseFloat(prop.asset_lot_acre);
+                              return '$' + Math.round(pricePerAcre).toLocaleString();
+                            }
+                          }
+                          return '-';
+                        })()}
+                      </td>
+                      {vacantLandComps.slice(0, 3).map((comp, idx) => (
+                        <td key={idx} className="px-3 py-2 text-center bg-blue-100 text-xs font-semibold border-l border-gray-300">
+                          {(() => {
+                            if (comp.block && comp.lot) {
+                              const composite = comp.block + '-' + comp.lot + (comp.qualifier || '');
+                              const prop = properties.find(p => p.property_composite_key === composite);
+                              if (prop?.sales_price && prop?.asset_lot_acre && parseFloat(prop.asset_lot_acre) > 0) {
+                                const pricePerAcre = parseFloat(prop.sales_price) / parseFloat(prop.asset_lot_acre);
+                                return '$' + Math.round(pricePerAcre).toLocaleString();
+                              }
+                            }
+                            return '-';
+                          })()}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Evaluate Button */}
+              <div className="px-4 py-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => {
+                    setVacantLandEvaluating(true);
+                    setTimeout(() => {
+                      setVacantLandResult(125000);
+                      setVacantLandEvaluating(false);
+                    }, 1000);
+                  }}
+                  disabled={!vacantLandSubject.block || !vacantLandSubject.lot || vacantLandEvaluating}
+                  className="w-full px-4 py-2 bg-blue-500 text-white rounded font-medium text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {vacantLandEvaluating ? 'Evaluating...' : 'Evaluate & Calculate Land Value'}
+                </button>
+              </div>
+
+              {/* Results */}
+              {vacantLandResult && (
+                <div className="px-4 py-4 bg-blue-50 border-t border-blue-200">
+                  <p className="text-sm font-semibold text-blue-900">Estimated Land Value</p>
+                  <p className="text-3xl font-bold text-blue-700 mt-2">
+                    ${vacantLandResult.toLocaleString('en-US', {maximumFractionDigits: 0})}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
