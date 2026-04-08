@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
   // State
@@ -86,6 +87,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [showMixedBracketModal, setShowMixedBracketModal] = useState(false);
   const [mixedBracketInfo, setMixedBracketInfo] = useState({});
   const [isSendingToCME, setIsSendingToCME] = useState(false);
+
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importProcessing, setImportProcessing] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { imported, skipped, unmatched }
+
+  // PWR CAMA state
+  const [showPwrCamaModal, setShowPwrCamaModal] = useState(false);
+  const [pwrCamaFile, setPwrCamaFile] = useState(null);
+  const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
+  const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
   // CME Brackets constant
   const CME_BRACKETS = [
@@ -633,7 +646,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     return {
       suffix: suffix || '',
-      appealType: appealTypeMap[suffix] || null
+      appealType: appealTypeMap[suffix] || 'petitioner'
     };
   };
 
@@ -1077,6 +1090,390 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     );
   }
 
+  // ==================== CSV IMPORT HANDLER ====================
+
+  const handleImportCSV = async () => {
+    if (!importFile) return;
+    setImportProcessing(true);
+    setImportResult(null);
+
+    try {
+      const text = await importFile.text();
+      const lines = text.split('\n');
+
+      // Parse header row — strip BOM if present
+      const rawHeader = lines[0].replace(/^\uFEFF/, '');
+      const headers = rawHeader.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Column index helpers
+      const col = (name) => headers.findIndex(h => h === name);
+
+      console.log('CSV Headers:', headers);
+      console.log('Entry col index:', col('Entry'));
+      console.log('Hearing Type col index:', col('Hearing Type'));
+
+      const idxBLQ       = col('BLQ');
+      const idxAppealNum = col('Appeal #');
+      const idxName      = col('Name');
+      const idxLocation  = col('Location');
+      const idxClass     = col('Class.');
+      const idxAssess    = col('Assessment');
+      const idxTaxCrt    = col('Tax Crt?');
+      const idxEntry     = col('Entry');
+      const idxContact   = col('Adtl. Contact');
+      const idxAddr      = col('Addl Contact Address');
+      const idxCityState = col('Addl Contact City, State');
+      const idxStatus    = col('Appeal Status');
+
+      // Parse a CSV line respecting quoted fields
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            inQuotes = !inQuotes;
+          } else if (ch === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += ch;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      // Parse BLQ — format: "188-26", "155-7.01", "96-4-C0102"
+      const parseBLQ = (blq) => {
+        if (!blq) return { block: '', lot: '', qualifier: '' };
+
+        // Handle Excel date corruption: "8-Dec" should be "12-8"
+        // Excel converts "12-8" to Dec-8 and displays as "8-Dec"
+        const excelDateMatch = blq.match(/^(\d+)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i);
+        if (excelDateMatch) {
+          const monthMap = {
+            jan:'1', feb:'2', mar:'3', apr:'4', may:'5', jun:'6',
+            jul:'7', aug:'8', sep:'9', oct:'10', nov:'11', dec:'12'
+          };
+          const day = excelDateMatch[1];
+          const month = monthMap[excelDateMatch[2].toLowerCase()];
+          return { block: month, lot: day, qualifier: '' };
+        }
+
+        const parts = blq.split('-');
+        if (parts.length === 3) {
+          // Three segments: block-lot-qualifier (e.g. 96-4-C0102)
+          return { block: parts[0], lot: parts[1], qualifier: parts[2] };
+        } else if (parts.length === 2) {
+          // Two segments: block-lot (qualifier is empty, lot may have decimal)
+          return { block: parts[0], lot: parts[1], qualifier: '' };
+        }
+        return { block: blq, lot: '', qualifier: '' };
+      };
+
+      // Fetch existing appeal numbers for this job to detect duplicates
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+
+      const existingNumbers = new Set(
+        (existingAppeals || []).map(a => a.appeal_number)
+      );
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      // Process data rows (skip header row 0)
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = parseCSVLine(line);
+        const getValue = (idx) => (idx >= 0 && cols[idx] ? cols[idx].replace(/^"|"$/g, '').trim() : '');
+
+        const rawAppealNumber = getValue(idxAppealNum);
+        if (!rawAppealNumber) continue;
+        const appealNumber = rawAppealNumber.startsWith('20@')
+          ? rawAppealNumber.slice(3)
+          : rawAppealNumber;
+
+        // Skip duplicates
+        if (existingNumbers.has(appealNumber)) {
+          skipped++;
+          continue;
+        }
+
+        const blqRaw = getValue(idxBLQ);
+        const { block, lot, qualifier } = parseBLQ(blqRaw);
+
+        // Attempt property match against in-memory properties array
+        const matchedProperty = properties.find(p => {
+          const pBlock = (p.property_block || '').toString().trim();
+          const pLot = (p.property_lot || '').toString().trim();
+          const pQual = (p.property_qualifier || '').toString().trim();
+          return pBlock === block && pLot === lot && pQual === qualifier;
+        });
+
+        if (!matchedProperty) unmatched++;
+
+        // Parse appeal_type from appeal number suffix
+        const { appealType } = parseAppealNumber(appealNumber);
+
+        // Map submission type
+        const entryRaw = getValue(idxEntry);
+        const validSubmissionTypes = ['ONLINE', 'PAPER', 'ELECTRONIC'];
+        const submissionType = validSubmissionTypes.includes(entryRaw) ? entryRaw : null;
+
+        // Map tax_court_pending
+        const taxCrtRaw = cols.find(c =>
+          c.trim().toUpperCase() === 'TRUE' ||
+          c.trim().toUpperCase() === 'FALSE'
+        )?.trim().toUpperCase();
+        const taxCourtPending = taxCrtRaw === 'TRUE';
+
+        // Attorney fields — only populate when Adtl. Contact column has a value
+        const attorney = getValue(idxContact);
+        const attorneyAddress = attorney ? getValue(idxAddr) : '';
+        const attorneyCityState = attorney ? getValue(idxCityState) : '';
+
+        // Assessment — strip commas just in case
+        const assessmentRaw = getValue(idxAssess).replace(/,/g, '');
+        const currentAssessment = parseFloat(assessmentRaw) || 0;
+
+        // Property class — stored as-is (2, 1, 6A, 15D etc.)
+        const propertyClass = getValue(idxClass);
+
+        const record = {
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: getValue(idxName),
+          taxpayer_name: getValue(idxName),
+          attorney: attorney || '',
+          attorney_address: attorneyAddress,
+          attorney_city_state: attorneyCityState,
+          current_assessment: matchedProperty?.values_mod_total || currentAssessment || 0,
+          requested_value: 0,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: getValue(idxLocation),
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          submission_type: submissionType,
+          tax_court_pending: taxCourtPending,
+          inspected: false,
+          comments: '',
+          hearing_date: null,
+          evidence_due_date: null,
+          evidence_status: ''
+        };
+
+        records.push(record);
+      }
+
+      // Batch insert
+      if (records.length > 0) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .insert(records);
+
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      // Reload appeals
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(
+          p => p.property_composite_key === appeal.property_composite_key
+        );
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setImportResult({ imported, skipped, unmatched });
+      setImportFile(null);
+
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setImportProcessing(false);
+    }
+  };
+
+  // ==================== PWR CAMA IMPORT HANDLER ====================
+
+  const handleImportPwrCama = async () => {
+    if (!pwrCamaFile) return;
+    setPwrCamaProcessing(true);
+    setPwrCamaResult(null);
+    try {
+      const arrayBuffer = await pwrCamaFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+      const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      for (const row of rows) {
+        const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
+        if (!appealNumber) continue;
+        if (existingNumbers.has(appealNumber)) { skipped++; continue; }
+
+        const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
+        const lot = row['PROP_LOT'] != null ? String(row['PROP_LOT']).trim() : '';
+        const qualifier = row['PROP_QUALIFIER'] != null ? String(row['PROP_QUALIFIER']).trim() : '';
+
+        const matchedProperty = properties.find(p =>
+          (p.property_block || '').toString().trim() === block &&
+          (p.property_lot || '').toString().trim() === lot &&
+          (p.property_qualifier || '').toString().trim() === qualifier
+        );
+        if (!matchedProperty) unmatched++;
+
+        const attorney = row['ATTORNEY_NAME'] ? String(row['ATTORNEY_NAME']).trim() : '';
+        const appealType = attorney ? 'represented' : 'petitioner';
+
+        let hearingDate = null;
+        if (row['HEARING_DATE'] && !isNaN(new Date(row['HEARING_DATE']).getTime())) {
+          hearingDate = new Date(row['HEARING_DATE']).toISOString().split('T')[0];
+        }
+        let evidenceDueDate = null;
+        if (hearingDate) {
+          const d = new Date(hearingDate);
+          d.setDate(d.getDate() - 7);
+          evidenceDueDate = d.toISOString().split('T')[0];
+        }
+
+        const taxCourtPending = String(row['ATTRIB_TAXCOURTPENDING'] || '').trim().toUpperCase() === 'Y';
+        const jdgNet = row['ASSESSMENT_JDG.NET'];
+        const judgmentValue = jdgNet != null && !isNaN(Number(jdgNet)) ? Number(jdgNet) : null;
+        const curNet = row['ASSESSMENT_CUR.NET'];
+        const currentAssessment = matchedProperty?.values_mod_total || (curNet != null && !isNaN(Number(curNet)) ? Number(curNet) : 0);
+        let loss = null;
+        let lossPct = null;
+        if (judgmentValue !== null && currentAssessment) {
+          loss = currentAssessment - judgmentValue;
+          lossPct = (loss / currentAssessment) * 100;
+        }
+
+        const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
+        records.push({
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: ownerName,
+          taxpayer_name: ownerName,
+          attorney,
+          attorney_address: row['ATTORNEY_ADDR1'] ? String(row['ATTORNEY_ADDR1']).trim() : '',
+          attorney_city_state: row['ATTORNEY_CITYST'] ? String(row['ATTORNEY_CITYST']).trim() : '',
+          current_assessment: currentAssessment,
+          requested_value: 0,
+          judgment_value: judgmentValue,
+          loss,
+          loss_pct: lossPct,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: row['PROP_LOCATION'] ? String(row['PROP_LOCATION']).trim() : '',
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          hearing_date: hearingDate,
+          evidence_due_date: evidenceDueDate,
+          tax_court_pending: taxCourtPending,
+          submission_type: null,
+          evidence_status: '',
+          inspected: false,
+          comments: row['NOTES'] ? String(row['NOTES']).trim() : ''
+        });
+      }
+
+      if (records.length > 0) {
+        const { error } = await supabase.from('appeal_log').insert(records);
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setPwrCamaResult({ imported, skipped, unmatched });
+      setPwrCamaFile(null);
+    } catch (error) {
+      console.error('PowerCama import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setPwrCamaProcessing(false);
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
@@ -1102,6 +1499,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               ))}
             </select>
           </div>
+          <button
+            onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import MyNJAppeal
+          </button>
+          <button
+            onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import PwrCama Appeals
+          </button>
           <button
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
@@ -2222,6 +2633,130 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {isSaving ? 'Saving...' : 'Save Appeal'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from CSV</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the BRT online appeal system CSV export format.
+                Duplicate appeal numbers will be skipped automatically.
+              </p>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  id="import-csv-input"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="import-csv-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {importFile ? importFile.name : 'Click to select CSV file'}
+                  </p>
+                </label>
+              </div>
+
+              {importResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {importResult.imported} records imported</p>
+                  {importResult.skipped > 0 && (
+                    <p className="text-amber-700">⚠ {importResult.skipped} skipped (duplicates)</p>
+                  )}
+                  {importResult.unmatched > 0 && (
+                    <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  {importResult ? 'Close' : 'Cancel'}
+                </button>
+                {!importResult && (
+                  <button
+                    onClick={handleImportCSV}
+                    disabled={!importFile || importProcessing}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POWERCAMA IMPORT MODAL */}
+      {showPwrCamaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from PowerCama</h2>
+              <button onClick={() => setShowPwrCamaModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the PowerCama appeals export (.xlsx). All imported appeals will be set to status <strong>D (Defend)</strong>. Duplicates are skipped automatically.
+              </p>
+              <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  id="pwrcama-import-input"
+                  className="hidden"
+                  onChange={(e) => setPwrCamaFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="pwrcama-import-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {pwrCamaFile ? pwrCamaFile.name : 'Click to select .xlsx file'}
+                  </p>
+                </label>
+              </div>
+              {pwrCamaResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
+                  {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
+                  {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
+                </div>
+              )}
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => setShowPwrCamaModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                  {pwrCamaResult ? 'Close' : 'Cancel'}
+                </button>
+                {!pwrCamaResult && (
+                  <button
+                    onClick={handleImportPwrCama}
+                    disabled={!pwrCamaFile || pwrCamaProcessing}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {pwrCamaProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

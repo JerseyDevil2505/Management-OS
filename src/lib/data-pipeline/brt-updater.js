@@ -432,19 +432,23 @@ export class BRTUpdater {
             const vcsCode = vcsItem.DATA.VALUE;
             this.vcsLookups.set(vcsCode, vcsItem);
             
-            if (vcsItem.MAP && vcsItem.MAP['8'] && vcsItem.MAP['8'].DATA && vcsItem.MAP['8'].DATA.VALUE === 'URC') {
-              const urcSection = vcsItem.MAP['8'].MAP;
-              if (urcSection) {
-                Object.keys(urcSection).forEach(urcKey => {
-                  const urcItem = urcSection[urcKey];
-                  if (urcItem.MAP && urcItem.MAP['1'] && urcItem.MAP['1'].DATA) {
-                    const description = urcItem.MAP['1'].DATA.VALUE;
-                    const lookupKey = `${sectionName}_URC_${vcsCode}_${urcKey}`;
-                    this.codeLookups.set(lookupKey, description);
-                    this.codeLookups.set(urcKey, description);
-                  }
-                });
-              }
+            if (vcsItem.MAP) {
+              // Search any field for URC section (not just field 8)
+              Object.keys(vcsItem.MAP).forEach(fieldKey => {
+                const field = vcsItem.MAP[fieldKey];
+                if (field.DATA && field.DATA.VALUE === 'URC' && field.MAP) {
+                  const urcSection = field.MAP;
+                  Object.keys(urcSection).forEach(urcKey => {
+                    const urcItem = urcSection[urcKey];
+                    if (urcItem.MAP && urcItem.MAP['1'] && urcItem.MAP['1'].DATA) {
+                      const description = urcItem.MAP['1'].DATA.VALUE;
+                      const lookupKey = `${sectionName}_URC_${vcsCode}_${urcKey}`;
+                      this.codeLookups.set(lookupKey, description);
+                      this.codeLookups.set(urcKey, description);
+                    }
+                  });
+                }
+              });
             }
           }
         });
