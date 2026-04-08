@@ -1425,12 +1425,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         if (comp) {
           const compVal = getDisplayValue(attr, compKey);
 
-          // Get adjustment from edited adjustments or original
-          const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
-            a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
-          );
-          const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-          const adj = editedAdj || origAdj;
+          // Get adjustment from edited adjustments if available
+          // If we have editedAdjustments for this comp, use those; otherwise use original
+          let adj = null;
+          if (editedAdjustments[compKey]) {
+            // If we recalculated this comp, use the recalculated adjustments
+            adj = editedAdjustments[compKey].adjustments?.find(a =>
+              a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+            );
+            // If no matching adjustment found in recalculated, create a zero adjustment
+            // (it was removed because it became zero after recalculation)
+            if (!adj && attr.adjustmentName) {
+              adj = { name: attr.adjustmentName, amount: 0 };
+            }
+          } else {
+            // No recalculation - use original adjustment
+            adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+          }
 
           if (showAdjustments && adj && adj.amount !== 0) {
             const adjSign = adj.amount > 0 ? '+' : '-';
@@ -1593,12 +1604,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           if (comp) {
             const compVal = attr.render(comp);
 
-            // Get adjustment from edited adjustments or original
-            const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
-              a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
-            );
-            const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-            const adj = editedAdj || origAdj;
+            // Get adjustment from edited adjustments if available
+            // If we have editedAdjustments for this comp, use those; otherwise use original
+            let adj = null;
+            if (editedAdjustments[compKey]) {
+              // If we recalculated this comp, use the recalculated adjustments
+              adj = editedAdjustments[compKey].adjustments?.find(a =>
+                a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+              );
+              // If no matching adjustment found in recalculated, create a zero adjustment
+              // (it was removed because it became zero after recalculation)
+              if (!adj && attr.adjustmentName) {
+                adj = { name: attr.adjustmentName, amount: 0 };
+              }
+            } else {
+              // No recalculation - use original adjustment
+              adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+            }
 
             if (showAdjustments && adj && adj.amount !== 0) {
               const adjSign = adj.amount > 0 ? '+' : '-';
