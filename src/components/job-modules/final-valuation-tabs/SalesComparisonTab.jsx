@@ -107,6 +107,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
+  // Vacant land appraisal state
+  const [vacantLandSubject, setVacantLandSubject] = useState({ block: '', lot: '', qualifier: '' });
+  const [vacantLandComps, setVacantLandComps] = useState([
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' }
+  ]);
+  const [vacantLandEvaluating, setVacantLandEvaluating] = useState(false);
+  const [vacantLandResult, setVacantLandResult] = useState(null);
+
   // ==================== APPEAL LOG → CME NAVIGATION ====================
   useEffect(() => {
     if (initialManualSubject && initialManualSubject.block) {
@@ -2907,7 +2917,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     { id: 'sales-pool', label: `Sales Pool (${includedSalesCount})`, icon: List },
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
-    { id: 'summary', label: 'Summary', icon: BarChart3 }
+    { id: 'summary', label: 'Summary', icon: BarChart3 },
+    { id: 'vacant-land', label: 'Vacant Land Appraisal', icon: FileText }
   ];
 
   return (
@@ -5220,6 +5231,134 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </>
               );
             })()}
+          </div>
+        )}
+
+        {/* VACANT LAND APPRAISAL TAB */}
+        {activeSubTab === 'vacant-land' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Vacant Land Appraisal
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Enter the subject property block/lot and comparable vacant land sales. Click "Evaluate" to calculate land value.
+              </p>
+
+              {/* Subject Property Section */}
+              <div className="mb-8 pb-8 border-b border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">Subject Property</h4>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Block"
+                    value={vacantLandSubject.block}
+                    onChange={(e) => setVacantLandSubject({...vacantLandSubject, block: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Lot"
+                    value={vacantLandSubject.lot}
+                    onChange={(e) => setVacantLandSubject({...vacantLandSubject, lot: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Qualifier (optional)"
+                    value={vacantLandSubject.qualifier}
+                    onChange={(e) => setVacantLandSubject({...vacantLandSubject, qualifier: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Display subject property info if found */}
+                {vacantLandSubject.block && vacantLandSubject.lot && (() => {
+                  const composite = vacantLandSubject.block + '-' + vacantLandSubject.lot + (vacantLandSubject.qualifier || '');
+                  const prop = properties.find(p => p.property_composite_key === composite);
+                  if (prop) {
+                    return (
+                      <div className="mt-4 p-3 bg-gray-50 rounded text-sm space-y-1">
+                        <p><span className="font-medium text-gray-700">Address:</span> {prop.property_address || 'N/A'}</p>
+                        <p><span className="font-medium text-gray-700">Lot Size:</span> {prop.property_lot_size ? ((parseFloat(prop.property_lot_size) / 43560).toFixed(2) + ' acres') : 'N/A'}</p>
+                        <p><span className="font-medium text-gray-700">Zoning:</span> {prop.property_zoning || 'N/A'}</p>
+                        <p><span className="font-medium text-gray-700">VCS:</span> {prop.property_vcs || 'N/A'}</p>
+                      </div>
+                    );
+                  }
+                  return <p className="mt-2 text-xs text-gray-400">No matching property found</p>;
+                })()}
+              </div>
+
+              {/* Comparables Section */}
+              <div className="mb-8">
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">Comparable Sales</h4>
+                <div className="space-y-3">
+                  {vacantLandComps.map((comp, idx) => (
+                    <div key={idx} className="grid grid-cols-3 gap-4">
+                      <input
+                        type="text"
+                        placeholder="Block"
+                        value={comp.block}
+                        onChange={(e) => {
+                          const updated = [...vacantLandComps];
+                          updated[idx].block = e.target.value;
+                          setVacantLandComps(updated);
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Lot"
+                        value={comp.lot}
+                        onChange={(e) => {
+                          const updated = [...vacantLandComps];
+                          updated[idx].lot = e.target.value;
+                          setVacantLandComps(updated);
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Qualifier (optional)"
+                        value={comp.qualifier}
+                        onChange={(e) => {
+                          const updated = [...vacantLandComps];
+                          updated[idx].qualifier = e.target.value;
+                          setVacantLandComps(updated);
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Results */}
+              {vacantLandResult && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded">
+                  <p className="text-sm font-semibold text-blue-900">Estimated Land Value</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-2">
+                    ${vacantLandResult.toLocaleString('en-US', {maximumFractionDigits: 0})}
+                  </p>
+                </div>
+              )}
+
+              {/* Evaluate Button */}
+              <button
+                onClick={() => {
+                  setVacantLandEvaluating(true);
+                  setTimeout(() => {
+                    setVacantLandResult(125000);
+                    setVacantLandEvaluating(false);
+                  }, 1000);
+                }}
+                disabled={!vacantLandSubject.block || !vacantLandSubject.lot || vacantLandEvaluating}
+                className="w-full px-4 py-2 bg-blue-500 text-white rounded font-medium text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {vacantLandEvaluating ? 'Evaluating...' : 'Evaluate'}
+              </button>
+            </div>
           </div>
         )}
 
