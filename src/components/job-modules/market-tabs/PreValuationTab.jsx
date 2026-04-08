@@ -589,7 +589,10 @@ useEffect(() => {
 
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
-      const urcMap = entry?.MAP?.['8']?.MAP;
+      const urcEntry = entry?.MAP
+        ? Object.values(entry.MAP).find(v => v?.KEY === 'URC')
+        : null;
+      const urcMap = urcEntry?.MAP;
       if (!urcMap) return;
       Object.keys(urcMap).forEach(k => {
         const e = urcMap[k];
