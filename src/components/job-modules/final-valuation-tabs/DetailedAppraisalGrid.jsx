@@ -412,12 +412,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
     const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
 
-    // If finish code contains "02" or "FIN B W/HEAT", subtract the finished basement area
-    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area) {
-      sfla -= prop.fin_basement_area;
+    // If finish code 1 is "02", subtract the corresponding area (fin_basement_area_1)
+    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
+      sfla -= prop.fin_basement_area_1;
     }
-    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area) {
-      sfla -= prop.fin_basement_area;
+
+    // If finish code 2 is "02", subtract the corresponding area (fin_basement_area_2)
+    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
+      sfla -= prop.fin_basement_area_2;
     }
 
     return Math.max(0, sfla); // Ensure SFLA doesn't go negative
