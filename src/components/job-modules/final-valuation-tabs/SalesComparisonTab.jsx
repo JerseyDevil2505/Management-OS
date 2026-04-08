@@ -4,6 +4,7 @@ import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckC
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
+import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -5236,6 +5237,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
         {/* VACANT LAND APPRAISAL TAB */}
         {activeSubTab === 'vacant-land' && (
+          <VacantLandAppraisalTab
+            properties={properties}
+            jobData={jobData}
+            vacantLandSubject={vacantLandSubject}
+            setVacantLandSubject={setVacantLandSubject}
+            vacantLandComps={vacantLandComps}
+            setVacantLandComps={setVacantLandComps}
+            vacantLandEvaluating={vacantLandEvaluating}
+            setVacantLandEvaluating={setVacantLandEvaluating}
+            vacantLandResult={vacantLandResult}
+            setVacantLandResult={setVacantLandResult}
+          />
+        )}
+
+        {/* OLD PLACEHOLDER - TO BE REMOVED */}
+        {false && (
           <div className="space-y-4">
             <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
               {/* Header with title and buttons */}
