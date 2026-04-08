@@ -1361,8 +1361,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         if (existingNumbers.has(appealNumber)) { skipped++; continue; }
 
         const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
-        const lotRaw = row['PROP_LOT'];
-        const lot = lotRaw != null ? String(Math.floor(Number(lotRaw))) : '';
+        const lot = row['PROP_LOT'] != null ? String(row['PROP_LOT']).trim() : '';
         const qualifier = row['PROP_QUALIFIER'] != null ? String(row['PROP_QUALIFIER']).trim() : '';
 
         const matchedProperty = properties.find(p =>
