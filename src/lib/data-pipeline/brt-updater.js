@@ -724,6 +724,10 @@ export class BRTUpdater {
       fireplace_count: this.extractFireplaceCount(rawRecord),
       basement_area: this.extractBasementArea(rawRecord),
       fin_basement_area: this.extractFinBasementArea(rawRecord),
+      fin_basement_area_1: this.extractFinBasementArea1(rawRecord),
+      fin_basement_area_2: this.extractFinBasementArea2(rawRecord),
+      fin_basement_code_1: this.preserveStringValue(rawRecord.BSMNTFINISH_1),
+      fin_basement_code_2: this.preserveStringValue(rawRecord.BSMNTFINISH_2),
       garage_area: this.extractGarageAreaFromConfig(rawRecord),
       deck_area: this.extractDeckAreaFromConfig(rawRecord),
       patio_area: this.extractPatioAreaFromConfig(rawRecord),
@@ -848,8 +852,8 @@ export class BRTUpdater {
       property_zoning: this.preserveStringValue(rawRecord.PROPERTY_ZONING),
       property_tax_map_page: this.preserveStringValue(rawRecord.PROPERTY_TAXMAPPAGE),
 
-      // Market adjustments and overrides
-      ncovr_override_pct: this.parseNumeric(rawRecord.NCOVR) ? (this.parseNumeric(rawRecord.NCOVR) / 1000) : null,
+      // Market adjustments and overrides (use NETCOND instead of NCOVR for condition assessment)
+      net_condition_pct: this.parseNumeric(rawRecord.NETCOND) || null,
 
       // Processing metadata
       processed_at: new Date().toISOString(),
@@ -1274,6 +1278,44 @@ export class BRTUpdater {
     }
 
     return totalFinished > 0 ? Math.round(totalFinished) : null;
+  }
+
+  /**
+   * Extract individual finished basement area 1
+   * Converts percentage (< 1) to actual SF or returns raw SF value
+   */
+  extractFinBasementArea1(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord.FLA_BSMNT) || 0;
+    const finish1 = this.parseNumeric(rawRecord.BSMNTFINISHAREA_1) || 0;
+
+    if (finish1 <= 0) return null;
+
+    if (finish1 < 1) {
+      // It's a percentage
+      return Math.round(basementArea * finish1);
+    } else {
+      // It's actual SF
+      return Math.round(finish1);
+    }
+  }
+
+  /**
+   * Extract individual finished basement area 2
+   * Converts percentage (< 1) to actual SF or returns raw SF value
+   */
+  extractFinBasementArea2(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord.FLA_BSMNT) || 0;
+    const finish2 = this.parseNumeric(rawRecord.BSMNTFINISHAREA_2) || 0;
+
+    if (finish2 <= 0) return null;
+
+    if (finish2 < 1) {
+      // It's a percentage
+      return Math.round(basementArea * finish2);
+    } else {
+      // It's actual SF
+      return Math.round(finish2);
+    }
   }
 
   /**

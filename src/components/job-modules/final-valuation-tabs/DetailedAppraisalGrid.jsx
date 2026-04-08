@@ -106,6 +106,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Calculated adjustments based on edited values
   const [editedAdjustments, setEditedAdjustments] = useState({});
   const [hasEdits, setHasEdits] = useState(false);
+  const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
 
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
@@ -397,6 +398,33 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return null;
   };
 
+  // Franklin Township: Exclude finished basement with heat (code "02") from SFLA
+  const getAdjustedSFLA = (prop) => {
+    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || null;
+
+    const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
+    if (!isFranklinJob) {
+      return prop.asset_sfla; // No adjustment for other townships
+    }
+
+    // For Franklin: exclude fin_basement_area if code is "02 FIN B W/HEAT" or similar
+    let sfla = prop.asset_sfla;
+    const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
+    const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
+
+    // If finish code 1 is "02", subtract the corresponding area (fin_basement_area_1)
+    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
+      sfla -= prop.fin_basement_area_1;
+    }
+
+    // If finish code 2 is "02", subtract the corresponding area (fin_basement_area_2)
+    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
+      sfla -= prop.fin_basement_area_2;
+    }
+
+    return Math.max(0, sfla); // Ensure SFLA doesn't go negative
+  };
+
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
     {
@@ -545,7 +573,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'liveable_area',
       label: 'Liveable Area',
-      render: (prop) => prop.asset_sfla?.toLocaleString() || 'N/A',
+      render: (prop) => {
+        const adjustedSFLA = getAdjustedSFLA(prop);
+        return adjustedSFLA ? adjustedSFLA.toLocaleString() : 'N/A';
+      },
       adjustmentName: 'Living Area (Sq Ft)',
       bold: true
     },
@@ -763,7 +794,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
         if (conditionMethod === 'ncovr_override') {
           // Use NCOVR percentage to determine condition
-          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          const conditionName = mapNCOVRToConditionName(prop.net_condition_pct);
           return conditionName || 'N/A';
         }
 
@@ -785,7 +816,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const conditionMethod = jobData?.attribute_condition_config?.conditionHandlingMethod;
         if (conditionMethod === 'ncovr_override') {
           // Use NCOVR percentage to determine condition
-          const conditionName = mapNCOVRToConditionName(prop.ncovr_override_pct);
+          const conditionName = mapNCOVRToConditionName(prop.net_condition_pct);
           return conditionName || 'N/A';
         }
 
@@ -1227,6 +1258,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       };
     });
 
+    // Calculate weighted average projected assessment based on recalculated adjustments
+    const validComps = comps.filter(c => c && newAdjustments[`comp_${comps.indexOf(c)}`]);
+    if (validComps.length > 0) {
+      // Calculate weights based on closeness to 0% adjustment (inverse adjustment percentage)
+      const totalInverseAdjPct = validComps.reduce((sum, comp) => {
+        const idx = comps.indexOf(comp);
+        const adjPct = Math.abs(newAdjustments[`comp_${idx}`]?.adjustmentPercent || 0);
+        return sum + (1 / (adjPct + 1)); // +1 to avoid division by zero
+      }, 0);
+
+      // Calculate weighted average of adjusted prices
+      let newProjectedAssessment = 0;
+      validComps.forEach((comp) => {
+        const idx = comps.indexOf(comp);
+        const adjData = newAdjustments[`comp_${idx}`];
+        const adjPct = Math.abs(adjData.adjustmentPercent || 0);
+        const weight = (1 / (adjPct + 1)) / totalInverseAdjPct;
+        newProjectedAssessment += adjData.adjustedPrice * weight;
+      });
+
+      setRecalculatedProjectedAssessment(Math.round(newProjectedAssessment));
+    }
+
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
   }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
@@ -1234,6 +1288,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const openExportModal = useCallback(() => {
     setEditableProperties({});
     setEditedAdjustments({});
+    setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
     setShowExportModal(true);
   }, []);
@@ -1400,12 +1455,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         if (comp) {
           const compVal = getDisplayValue(attr, compKey);
 
-          // Get adjustment from edited adjustments or original
-          const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
-            a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
-          );
-          const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-          const adj = editedAdj || origAdj;
+          // Get adjustment from edited adjustments if available
+          // If we have editedAdjustments for this comp, use those; otherwise use original
+          let adj = null;
+          if (editedAdjustments[compKey]) {
+            // If we recalculated this comp, use the recalculated adjustments
+            adj = editedAdjustments[compKey].adjustments?.find(a =>
+              a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+            );
+            // If no matching adjustment found in recalculated, create a zero adjustment
+            // (it was removed because it became zero after recalculation)
+            if (!adj && attr.adjustmentName) {
+              adj = { name: attr.adjustmentName, amount: 0 };
+            }
+          } else {
+            // No recalculation - use original adjustment
+            adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+          }
 
           if (showAdjustments && adj && adj.amount !== 0) {
             const adjSign = adj.amount > 0 ? '+' : '-';
@@ -1446,8 +1512,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Add Adjusted Valuation row if visible and showing adjustments
     if (showAdjustments && rowVisibility['adjusted_valuation']) {
       const valRow = ['Adjusted Valuation'];
-      // Subject gets projected assessment
-      valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+      // Subject gets projected assessment (use recalculated if available, otherwise original)
+      const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
+      valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
         const compKey = `comp_${i}`;
@@ -1567,12 +1634,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           if (comp) {
             const compVal = attr.render(comp);
 
-            // Get adjustment from edited adjustments or original
-            const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
-              a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
-            );
-            const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-            const adj = editedAdj || origAdj;
+            // Get adjustment from edited adjustments if available
+            // If we have editedAdjustments for this comp, use those; otherwise use original
+            let adj = null;
+            if (editedAdjustments[compKey]) {
+              // If we recalculated this comp, use the recalculated adjustments
+              adj = editedAdjustments[compKey].adjustments?.find(a =>
+                a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+              );
+              // If no matching adjustment found in recalculated, create a zero adjustment
+              // (it was removed because it became zero after recalculation)
+              if (!adj && attr.adjustmentName) {
+                adj = { name: attr.adjustmentName, amount: 0 };
+              }
+            } else {
+              // No recalculation - use original adjustment
+              adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+            }
 
             if (showAdjustments && adj && adj.amount !== 0) {
               const adjSign = adj.amount > 0 ? '+' : '-';
@@ -1609,7 +1687,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
       if (showAdjustments && rowVisibility['adjusted_valuation']) {
         const valRow = ['Adjusted Valuation'];
-        valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+        const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
+        valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
           const compKey = `comp_${i}`;
@@ -1701,7 +1780,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // Gather data for the Chapter 123 test
     const currentAssessment = subject.values_mod4_total || subject.values_mod_total || subject.values_cama_total || 0;
-    const projectedValue = result.projectedAssessment || 0;
+    const projectedValue = (recalculatedProjectedAssessment || result.projectedAssessment) || 0;
 
     // Get comparable adjusted prices for the weighted average
     const compAdjustedPrices = [];
@@ -1820,7 +1899,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS, jobData]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2334,7 +2413,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
                       <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300 font-bold text-green-700">
-                        {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                        {(recalculatedProjectedAssessment || result.projectedAssessment) ? `$${(recalculatedProjectedAssessment || result.projectedAssessment).toLocaleString()}` : '-'}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
