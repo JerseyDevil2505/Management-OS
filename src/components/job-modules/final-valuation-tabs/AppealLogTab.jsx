@@ -639,7 +639,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     return {
       suffix: suffix || '',
-      appealType: appealTypeMap[suffix] || null
+      appealType: appealTypeMap[suffix] || 'petitioner'
     };
   };
 
