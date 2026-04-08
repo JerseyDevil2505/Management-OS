@@ -1189,8 +1189,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const cols = parseCSVLine(line);
         const getValue = (idx) => (idx >= 0 && cols[idx] ? cols[idx].replace(/^"|"$/g, '').trim() : '');
 
-        const appealNumber = getValue(idxAppealNum);
-        if (!appealNumber) continue;
+        const rawAppealNumber = getValue(idxAppealNum);
+        if (!rawAppealNumber) continue;
+        const appealNumber = rawAppealNumber.startsWith('20@')
+          ? rawAppealNumber.slice(3)
+          : rawAppealNumber;
 
         // Skip duplicates
         if (existingNumbers.has(appealNumber)) {
@@ -1220,7 +1223,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const submissionType = validSubmissionTypes.includes(entryRaw) ? entryRaw : null;
 
         // Map tax_court_pending
-        const taxCrtRaw = getValue(idxTaxCrt).toUpperCase();
+        const taxCrtRaw = cols.find(c =>
+          c.trim().toUpperCase() === 'TRUE' ||
+          c.trim().toUpperCase() === 'FALSE'
+        )?.trim().toUpperCase();
         const taxCourtPending = taxCrtRaw === 'TRUE';
 
         // Attorney fields — only populate when Adtl. Contact column has a value
@@ -1247,7 +1253,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           attorney: attorney || '',
           attorney_address: attorneyAddress,
           attorney_city_state: attorneyCityState,
-          current_assessment: currentAssessment,
+          current_assessment: matchedProperty?.values_mod_total || currentAssessment || 0,
           requested_value: 0,
           property_block: block,
           property_lot: lot,
