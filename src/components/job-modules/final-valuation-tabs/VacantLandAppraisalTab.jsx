@@ -136,6 +136,7 @@ const VacantLandAppraisalTab = ({
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, block: e.target.value }))}
                     className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Block"
+                    tabIndex={1}
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
@@ -150,6 +151,7 @@ const VacantLandAppraisalTab = ({
                       }}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Block"
+                      tabIndex={4 + (idx * 3)}
                     />
                   </td>
                 ))}
@@ -165,6 +167,7 @@ const VacantLandAppraisalTab = ({
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, lot: e.target.value }))}
                     className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Lot"
+                    tabIndex={2}
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
@@ -179,6 +182,7 @@ const VacantLandAppraisalTab = ({
                       }}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Lot"
+                      tabIndex={5 + (idx * 3)}
                     />
                   </td>
                 ))}
@@ -194,6 +198,7 @@ const VacantLandAppraisalTab = ({
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, qualifier: e.target.value }))}
                     className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Qual"
+                    tabIndex={3}
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
@@ -208,9 +213,29 @@ const VacantLandAppraisalTab = ({
                       }}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Qual"
+                      tabIndex={6 + (idx * 3)}
                     />
                   </td>
                 ))}
+              </tr>
+
+              {/* Lot Size Acre (Display Only) */}
+              <tr className="border-t border-gray-200 bg-gray-50">
+                <td className="px-3 py-2 font-medium text-gray-700 text-xs">Lot Size (Acre)</td>
+                <td className="px-3 py-2 text-center bg-yellow-50 text-xs font-medium">
+                  {(() => {
+                    const prop = getPropertyData(vacantLandSubject.block, vacantLandSubject.lot, vacantLandSubject.qualifier);
+                    return prop?.asset_lot_acre ? parseFloat(prop.asset_lot_acre).toFixed(3) : '-';
+                  })()}
+                </td>
+                {vacantLandComps.map((comp, idx) => {
+                  const prop = getPropertyData(comp.block, comp.lot, comp.qualifier);
+                  return (
+                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs font-medium">
+                      {prop?.asset_lot_acre ? parseFloat(prop.asset_lot_acre).toFixed(3) : '-'}
+                    </td>
+                  );
+                })}
               </tr>
             </tbody>
           </table>
