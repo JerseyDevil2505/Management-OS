@@ -398,6 +398,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return null;
   };
 
+  // Franklin Township: Exclude finished basement with heat (code "02") from SFLA
+  const getAdjustedSFLA = (prop) => {
+    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || null;
+
+    const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
+    if (!isFranklinJob) {
+      return prop.asset_sfla; // No adjustment for other townships
+    }
+
+    // For Franklin: exclude fin_basement_area if code is "02 FIN B W/HEAT" or similar
+    let sfla = prop.asset_sfla;
+    const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
+    const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
+
+    // If finish code contains "02" or "FIN B W/HEAT", subtract the finished basement area
+    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area) {
+      sfla -= prop.fin_basement_area;
+    }
+    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area) {
+      sfla -= prop.fin_basement_area;
+    }
+
+    return Math.max(0, sfla); // Ensure SFLA doesn't go negative
+  };
+
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
     {
@@ -546,7 +571,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'liveable_area',
       label: 'Liveable Area',
-      render: (prop) => prop.asset_sfla?.toLocaleString() || 'N/A',
+      render: (prop) => {
+        const adjustedSFLA = getAdjustedSFLA(prop);
+        return adjustedSFLA ? adjustedSFLA.toLocaleString() : 'N/A';
+      },
       adjustmentName: 'Living Area (Sq Ft)',
       bold: true
     },

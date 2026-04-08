@@ -628,6 +628,8 @@ export class BRTProcessor {
       fireplace_count: this.extractFireplaceCount(rawRecord),
       basement_area: this.extractBasementArea(rawRecord),
       fin_basement_area: this.extractFinBasementArea(rawRecord),
+      fin_basement_code_1: this.preserveStringValue(rawRecord.BSMNTFINISHCODE_1),
+      fin_basement_code_2: this.preserveStringValue(rawRecord.BSMNTFINISHCODE_2),
       garage_area: this.extractGarageAreaFromConfig(rawRecord),
       deck_area: this.extractDeckAreaFromConfig(rawRecord),
       patio_area: this.extractPatioAreaFromConfig(rawRecord),
