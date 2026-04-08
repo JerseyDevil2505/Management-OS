@@ -1101,6 +1101,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       // Column index helpers
       const col = (name) => headers.findIndex(h => h === name);
 
+      console.log('CSV Headers:', headers);
+      console.log('Entry col index:', col('Entry'));
+      console.log('Hearing Type col index:', col('Hearing Type'));
+
       const idxBLQ       = col('BLQ');
       const idxAppealNum = col('Appeal #');
       const idxName      = col('Name');
