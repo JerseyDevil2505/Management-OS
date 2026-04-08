@@ -113,6 +113,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [vacantLandComps, setVacantLandComps] = useState([
     { block: '', lot: '', qualifier: '' },
     { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
     { block: '', lot: '', qualifier: '' }
   ]);
   const [vacantLandEvaluating, setVacantLandEvaluating] = useState(false);
