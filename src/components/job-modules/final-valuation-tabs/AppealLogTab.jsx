@@ -2706,6 +2706,62 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           </div>
         </div>
       )}
+
+      {/* POWERCAMA IMPORT MODAL */}
+      {showPwrCamaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from PowerCama</h2>
+              <button onClick={() => setShowPwrCamaModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the PowerCama appeals export (.xlsx). All imported appeals will be set to status <strong>D (Defend)</strong>. Duplicates are skipped automatically.
+              </p>
+              <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  id="pwrcama-import-input"
+                  className="hidden"
+                  onChange={(e) => setPwrCamaFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="pwrcama-import-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {pwrCamaFile ? pwrCamaFile.name : 'Click to select .xlsx file'}
+                  </p>
+                </label>
+              </div>
+              {pwrCamaResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
+                  {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
+                  {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
+                </div>
+              )}
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => setShowPwrCamaModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                  {pwrCamaResult ? 'Close' : 'Cancel'}
+                </button>
+                {!pwrCamaResult && (
+                  <button
+                    onClick={handleImportPwrCama}
+                    disabled={!pwrCamaFile || pwrCamaProcessing}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {pwrCamaProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
