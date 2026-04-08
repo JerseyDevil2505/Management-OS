@@ -1331,6 +1331,150 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     }
   };
 
+  // ==================== PWR CAMA IMPORT HANDLER ====================
+
+  const handleImportPwrCama = async () => {
+    if (!pwrCamaFile) return;
+    setPwrCamaProcessing(true);
+    setPwrCamaResult(null);
+    try {
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
+      const arrayBuffer = await pwrCamaFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+      const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      for (const row of rows) {
+        const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
+        if (!appealNumber) continue;
+        if (existingNumbers.has(appealNumber)) { skipped++; continue; }
+
+        const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
+        const lotRaw = row['PROP_LOT'];
+        const lot = lotRaw != null ? String(Math.floor(Number(lotRaw))) : '';
+        const qualifier = row['PROP_QUALIFIER'] != null ? String(row['PROP_QUALIFIER']).trim() : '';
+
+        const matchedProperty = properties.find(p =>
+          (p.property_block || '').toString().trim() === block &&
+          (p.property_lot || '').toString().trim() === lot &&
+          (p.property_qualifier || '').toString().trim() === qualifier
+        );
+        if (!matchedProperty) unmatched++;
+
+        const attorney = row['ATTORNEY_NAME'] ? String(row['ATTORNEY_NAME']).trim() : '';
+        const appealType = attorney ? 'represented' : 'petitioner';
+
+        let hearingDate = null;
+        if (row['HEARING_DATE'] && !isNaN(new Date(row['HEARING_DATE']).getTime())) {
+          hearingDate = new Date(row['HEARING_DATE']).toISOString().split('T')[0];
+        }
+        let evidenceDueDate = null;
+        if (hearingDate) {
+          const d = new Date(hearingDate);
+          d.setDate(d.getDate() - 7);
+          evidenceDueDate = d.toISOString().split('T')[0];
+        }
+
+        const taxCourtPending = String(row['ATTRIB_TAXCOURTPENDING'] || '').trim().toUpperCase() === 'Y';
+        const jdgNet = row['ASSESSMENT_JDG.NET'];
+        const judgmentValue = jdgNet != null && !isNaN(Number(jdgNet)) ? Number(jdgNet) : null;
+        const curNet = row['ASSESSMENT_CUR.NET'];
+        const currentAssessment = matchedProperty?.values_mod_total || (curNet != null && !isNaN(Number(curNet)) ? Number(curNet) : 0);
+        let loss = null;
+        let lossPct = null;
+        if (judgmentValue !== null && currentAssessment) {
+          loss = currentAssessment - judgmentValue;
+          lossPct = (loss / currentAssessment) * 100;
+        }
+
+        const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
+        records.push({
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: ownerName,
+          taxpayer_name: ownerName,
+          attorney,
+          attorney_address: row['ATTORNEY_ADDR1'] ? String(row['ATTORNEY_ADDR1']).trim() : '',
+          attorney_city_state: row['ATTORNEY_CITYST'] ? String(row['ATTORNEY_CITYST']).trim() : '',
+          current_assessment: currentAssessment,
+          requested_value: 0,
+          judgment_value: judgmentValue,
+          loss,
+          loss_pct: lossPct,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: row['PROP_LOCATION'] ? String(row['PROP_LOCATION']).trim() : '',
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          hearing_date: hearingDate,
+          evidence_due_date: evidenceDueDate,
+          tax_court_pending: taxCourtPending,
+          submission_type: null,
+          evidence_status: '',
+          inspected: false,
+          comments: row['NOTES'] ? String(row['NOTES']).trim() : ''
+        });
+      }
+
+      if (records.length > 0) {
+        const { error } = await supabase.from('appeal_log').insert(records);
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setPwrCamaResult({ imported, skipped, unmatched });
+      setPwrCamaFile(null);
+    } catch (error) {
+      console.error('PowerCama import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setPwrCamaProcessing(false);
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
