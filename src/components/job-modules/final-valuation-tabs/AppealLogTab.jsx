@@ -1474,6 +1474,55 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     }
   };
 
+  // ==================== EXPORT HANDLER ====================
+
+  const handleExportToExcel = () => {
+    if (filteredAppeals.length === 0) {
+      alert('No appeals to export');
+      return;
+    }
+
+    // Prepare data for export
+    const exportData = filteredAppeals.map(appeal => ({
+      'Status': appeal.status || '-',
+      'Appeal #': appeal.appeal_number || '-',
+      'Block': appeal.property_block || '-',
+      'Lot': appeal.property_lot || '-',
+      'Qual': appeal.property_qualifier || '-',
+      'Location': appeal.property_location || '-',
+      'Class': appeal.property_m4_class || '-',
+      'VCS': appeal.new_vcs || '-',
+      'Bracket': appeal.cme_bracket || '-',
+      'Inspected': appeal.inspected ? 'Yes' : 'No',
+      'Petitioner': appeal.petitioner_name || '-',
+      'Attorney': appeal.attorney || '-',
+      'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
+      'Tax Court Pending': appeal.tax_court_pending ? 'Yes' : 'No',
+      'Current Assessment': appeal.current_assessment || '-',
+      'CME Value': appeal.cme_projected_value || '-',
+      'Judgment': appeal.judgment_value || '-',
+      '$Loss': appeal.judgment_value !== null ? appeal.loss || '-' : '-'
+    }));
+
+    // Create workbook and add data
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
+
+    // Set column widths
+    const maxWidth = 20;
+    const colWidths = Array(Object.keys(exportData[0] || {}).length).fill(maxWidth);
+    ws['!cols'] = colWidths;
+
+    // Generate filename with job name and date
+    const jobName = jobData?.job_name || 'Appeals';
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, filename);
+  };
+
   // ==================== RENDER ====================
 
   return (
@@ -1514,6 +1563,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             Import PwrCama Appeals
           </button>
           <button
+            onClick={handleExportToExcel}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
