@@ -1508,14 +1508,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'Submission Type': appeal.submission_type || '-',
       'Stip Status': appeal.stip_status || '-',
       'Tax Court': appeal.tax_court_pending ? 'Yes' : 'No',
-      'Current Assessment': appeal.current_assessment || '-',
-      'Requested Value': appeal.requested_value || '-',
-      'CME Value': appeal.cme_projected_value || '-',
-      'CME Assessment': appeal.cme_new_assessment || '-',
-      Judgment: appeal.judgment_value || '-',
-      Loss: appeal.judgment_value !== null ? (appeal.loss || '-') : '-',
-      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? appeal.loss_pct : '-',
-      'Possible Loss': appeal.possible_loss || '-',
+      'Current Assessment': appeal.current_assessment || 0,
+      'Requested Value': appeal.requested_value || 0,
+      'CME Value': appeal.cme_projected_value || 0,
+      'CME Assessment': appeal.cme_new_assessment || 0,
+      Judgment: appeal.judgment_value || 0,
+      Loss: appeal.judgment_value !== null && appeal.loss ? appeal.loss : 0,
+      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? appeal.loss_pct : 0,
+      'Possible Loss': appeal.possible_loss || 0,
       'Appeal Type': appeal.appeal_type || '-',
       'Status Code': appeal.status_code || '-',
       Result: appeal.result || '-',
@@ -1532,6 +1532,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Get headers from first row
     const headers = Object.keys(exportData[0] || {});
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Define styles matching other exports (Leelawadee, size 10)
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      fill: { fgColor: { rgb: 'E2E8F0' } }
+    };
 
     // Set column widths
     ws['!cols'] = headers.map(key => {
@@ -1541,50 +1554,62 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       return { wch: 14 };
     });
 
-    // Format header row (bold, gray background, borders)
-    for (let i = 0; i < headers.length; i++) {
-      const cellRef = XLSX.utils.encode_col(i) + '1';
-      ws[cellRef] = ws[cellRef] || {};
-      ws[cellRef].s = {
-        font: { bold: true, size: 11, color: { rgb: '000000' } },
-        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-        fill: { fgColor: { rgb: 'D3D3D3' } },
-        border: {
-          top: { style: 'thin', color: '000000' },
-          bottom: { style: 'thin', color: '000000' },
-          left: { style: 'thin', color: '000000' },
-          right: { style: 'thin', color: '000000' }
-        }
-      };
+    // Format cells
+    const currencyColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Possible Loss'];
+    const percentColumns = ['Loss %'];
+    const centerColumns = ['Status', 'Inspected', 'Tax Court', 'Stip Status', 'Appeal Year'];
+    const textColumns = ['Block', 'Lot', 'Qual', 'Card'];
+
+    // Format header row
+    for (let C = 0; C < headers.length; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (ws[cellRef]) {
+        ws[cellRef].s = headerStyle;
+      }
     }
 
     // Format data rows
-    const numericColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Loss %', 'Possible Loss'];
-    const dateColumns = ['Hearing Date', 'Evidence Due', 'Inspection Date', 'Import Date'];
-    const centerColumns = ['Status', 'Inspected', 'Tax Court', 'Stip Status', 'Appeal Year'];
-
-    for (let row = 2; row <= exportData.length + 1; row++) {
-      for (let col = 0; col < headers.length; col++) {
-        const cellRef = XLSX.utils.encode_col(col) + row;
-        const cellKey = headers[col];
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C = 0; C < headers.length; C++) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        const columnName = headers[C];
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
-        if (numericColumns.includes(cellKey)) {
+        // Apply base style
+        ws[cellRef].s = { ...baseStyle };
+
+        // Apply text format for block/lot to preserve zeros
+        if (textColumns.includes(columnName)) {
+          ws[cellRef].t = 's';
+          ws[cellRef].v = String(ws[cellRef].v || '');
+        }
+
+        // Apply currency format
+        if (currencyColumns.includes(columnName)) {
+          ws[cellRef].z = '$#,##0';
           ws[cellRef].s = {
+            font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
-            font: { size: 10 },
-            numFmt: '#,##0.00'
+            numFmt: '$#,##0'
           };
-        } else if (dateColumns.includes(cellKey) || centerColumns.includes(cellKey)) {
+        }
+
+        // Apply percent format
+        if (percentColumns.includes(columnName)) {
+          ws[cellRef].z = '0.00%';
           ws[cellRef].s = {
-            alignment: { horizontal: 'center', vertical: 'center' },
-            font: { size: 10 }
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'right', vertical: 'center' },
+            numFmt: '0.00%'
           };
-        } else {
+        }
+
+        // Center align specific columns
+        if (centerColumns.includes(columnName)) {
           ws[cellRef].s = {
-            font: { size: 10 },
-            alignment: { horizontal: 'left', vertical: 'center' }
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'center', vertical: 'center' }
           };
         }
       }
