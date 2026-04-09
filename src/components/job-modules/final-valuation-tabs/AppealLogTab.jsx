@@ -1539,8 +1539,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'CME Value': appeal.cme_projected_value || 0,
         'CME Assessment': appeal.cme_new_assessment || 0,
         Judgment: appeal.judgment_value || 0,
-        Loss: 0,  // Will be set by formula
-        'Loss %': 0,  // Will be set by formula
+        Loss: '',  // Will be populated with formula
+        'Loss %': '',  // Will be populated with formula
         'Possible Loss': appeal.possible_loss || 0,
         'Appeal Type': appeal.appeal_type || '-',
         'Status Code': appeal.status_code || '-',
@@ -1638,46 +1638,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
-        // Default centered style with Leelawadee font
-        ws[cellRef].s = {
-          font: { name: 'Leelawadee', sz: 10 },
-          alignment: { horizontal: 'center', vertical: 'center' },
-          fill: bgFill
-        };
-
-        // Apply text format for block/lot to preserve zeros
-        if (textColumns.includes(columnName)) {
-          ws[cellRef].t = 's';
-          ws[cellRef].v = String(ws[cellRef].v || '');
-        }
-
-        // Apply currency format (right-aligned)
-        if (currencyColumns.includes(columnName)) {
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '$#,##0',
-            fill: bgFill
-          };
-        }
-
-        // Apply percent format (right-aligned)
-        if (percentColumns.includes(columnName)) {
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '0%',
-            fill: bgFill
-          };
-        }
-
-        // Set formulas for Loss and Loss %
+        // Set formulas for Loss FIRST (before applying other styles)
         if (C === lossColIndex && judgmentColIndex >= 0 && currentAssessmentColIndex >= 0) {
           // Loss = Current Assessment - Judgment
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
           ws[cellRef].f = `=${caColLetter}${R}-${judgmentColLetter}${R}`;
-          delete ws[cellRef].v;  // Clear value so formula takes precedence
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
@@ -1689,13 +1655,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           const lossColLetter = XLSX.utils.encode_col(lossColIndex);
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           ws[cellRef].f = `=${lossColLetter}${R}/${caColLetter}${R}`;
-          delete ws[cellRef].v;  // Clear value so formula takes precedence
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
             numFmt: '0%',
             fill: bgFill
           };
+        } else {
+          // Default centered style with Leelawadee font
+          ws[cellRef].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'center', vertical: 'center' },
+            fill: bgFill
+          };
+
+          // Apply text format for block/lot to preserve zeros
+          if (textColumns.includes(columnName)) {
+            ws[cellRef].t = 's';
+            ws[cellRef].v = String(ws[cellRef].v || '');
+          }
+
+          // Apply currency format (right-aligned)
+          if (currencyColumns.includes(columnName)) {
+            ws[cellRef].s = {
+              font: { name: 'Leelawadee', sz: 10 },
+              alignment: { horizontal: 'right', vertical: 'center' },
+              numFmt: '$#,##0',
+              fill: bgFill
+            };
+          }
+
+          // Apply percent format (right-aligned)
+          if (percentColumns.includes(columnName)) {
+            ws[cellRef].s = {
+              font: { name: 'Leelawadee', sz: 10 },
+              alignment: { horizontal: 'right', vertical: 'center' },
+              numFmt: '0%',
+              fill: bgFill
+            };
+          }
         }
       }
     }
