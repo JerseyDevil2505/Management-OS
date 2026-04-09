@@ -1544,7 +1544,7 @@ const App = () => {
 
         {activeView === 'appeals' && (
           <AppealsSummary
-            jobs={filterJobsForUser(appData.jobs)}
+            jobs={filterJobsForUser(appData.jobs).filter(isPpaJob)}
             onJobSelect={handleJobSelect}
           />
         )}
