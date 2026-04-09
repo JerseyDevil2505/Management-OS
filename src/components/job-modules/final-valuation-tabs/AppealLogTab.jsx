@@ -1525,34 +1525,28 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
     }));
 
-    // Create workbook
-    const ws = XLSX.utils.json_to_sheet(exportData, { header: 1 });
+    // Create workbook with data
+    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
-    // Add headers with proper formatting
+    // Get headers from first row
     const headers = Object.keys(exportData[0] || {});
-    const headerRow = headers.map(h => h);
 
-    // Insert header row
-    XLSX.utils.sheet_add_aoa(ws, [headerRow], { origin: 'A1' });
-
-    // Add data
-    XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2', header: 'A' });
-
-    // Set column widths and formatting
-    const colWidths = headers.map(key => {
+    // Set column widths
+    ws['!cols'] = headers.map(key => {
       if (key.includes('Address') || key.includes('Comments') || key.includes('Location')) return { wch: 25 };
       if (key.includes('Phone') || key.includes('Email')) return { wch: 20 };
       if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value')) return { wch: 18 };
       return { wch: 14 };
     });
-    ws['!cols'] = colWidths;
 
-    // Format header row (bold, centered)
+    // Format header row (bold, gray background, borders)
     for (let i = 0; i < headers.length; i++) {
       const cellRef = XLSX.utils.encode_col(i) + '1';
+      ws[cellRef] = ws[cellRef] || {};
       ws[cellRef].s = {
-        font: { bold: true, size: 11 },
+        font: { bold: true, size: 11, color: { rgb: '000000' } },
         alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
         fill: { fgColor: { rgb: 'D3D3D3' } },
         border: {
@@ -1564,49 +1558,37 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       };
     }
 
-    // Format data rows (centered for status, dates; right-aligned for numbers)
+    // Format data rows
     const numericColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Loss %', 'Possible Loss'];
     const dateColumns = ['Hearing Date', 'Evidence Due', 'Inspection Date', 'Import Date'];
+    const centerColumns = ['Status', 'Inspected', 'Tax Court', 'Stip Status', 'Appeal Year'];
 
     for (let row = 2; row <= exportData.length + 1; row++) {
       for (let col = 0; col < headers.length; col++) {
         const cellRef = XLSX.utils.encode_col(col) + row;
         const cellKey = headers[col];
 
-        ws[cellRef] = ws[cellRef] || { v: '' };
+        if (!ws[cellRef]) ws[cellRef] = {};
 
         if (numericColumns.includes(cellKey)) {
           ws[cellRef].s = {
             alignment: { horizontal: 'right', vertical: 'center' },
             font: { size: 10 },
-            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+            numFmt: '#,##0.00'
           };
-          ws[cellRef].z = '#,##0.00';
-        } else if (dateColumns.includes(cellKey) || cellKey === 'Appeal Year') {
+        } else if (dateColumns.includes(cellKey) || centerColumns.includes(cellKey)) {
           ws[cellRef].s = {
             alignment: { horizontal: 'center', vertical: 'center' },
-            font: { size: 10 },
-            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
-          };
-        } else if (cellKey === 'Status' || cellKey === 'Inspected' || cellKey === 'Tax Court' || cellKey === 'Stip Status') {
-          ws[cellRef].s = {
-            alignment: { horizontal: 'center', vertical: 'center' },
-            font: { size: 10 },
-            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+            font: { size: 10 }
           };
         } else {
           ws[cellRef].s = {
             font: { size: 10 },
-            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+            alignment: { horizontal: 'left', vertical: 'center' }
           };
         }
       }
     }
-
-    // Set print area and options
-    ws['!print'] = { orientation: 'landscape', paperSize: 1, scale: 80 };
-
-    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
     // Generate filename with job name and date
     const jobName = jobData?.job_name || 'Appeals';
