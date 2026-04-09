@@ -1483,47 +1483,73 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     }
 
     // Prepare data for export with all available fields
-    const exportData = filteredAppeals.map(appeal => ({
-      Status: appeal.status || '-',
-      'Appeal #': appeal.appeal_number || '-',
-      'Appeal Year': appeal.appeal_year || '-',
-      Block: appeal.property_block || '-',
-      Lot: appeal.property_lot || '-',
-      Qual: appeal.property_qualifier || '-',
-      Location: appeal.property_location || '-',
-      Class: appeal.property_m4_class || '-',
-      VCS: appeal.new_vcs || '-',
-      Bracket: appeal.cme_bracket || '-',
-      Inspected: appeal.inspected ? 'Yes' : 'No',
-      'Last Inspection': appeal.inspection_date ? new Date(appeal.inspection_date).toLocaleDateString() : '-',
-      Petitioner: appeal.petitioner_name || '-',
-      Taxpayer: appeal.taxpayer_name || '-',
-      Attorney: appeal.attorney || '-',
-      'Atty Address': appeal.attorney_address || '-',
-      'Atty City/State': appeal.attorney_city_state || '-',
-      'Atty Phone': appeal.attorney_phone || '-',
-      'Atty Email': appeal.attorney_email || '-',
-      'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
-      'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
-      'Evidence Status': appeal.evidence_status || '-',
-      'Submission Type': appeal.submission_type || '-',
-      'Stip Status': appeal.stip_status || '-',
-      'Tax Court': appeal.tax_court_pending ? 'Yes' : 'No',
-      'Current Assessment': appeal.current_assessment || 0,
-      'Requested Value': appeal.requested_value || 0,
-      'CME Value': appeal.cme_projected_value || 0,
-      'CME Assessment': appeal.cme_new_assessment || 0,
-      Judgment: appeal.judgment_value || 0,
-      Loss: appeal.judgment_value !== null && appeal.loss ? appeal.loss : 0,
-      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? appeal.loss_pct : 0,
-      'Possible Loss': appeal.possible_loss || 0,
-      'Appeal Type': appeal.appeal_type || '-',
-      'Status Code': appeal.status_code || '-',
-      Result: appeal.result || '-',
-      Comments: appeal.comments || '-',
-      'Import Source': appeal.import_source || '-',
-      'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
-    }));
+    const exportData = filteredAppeals.map(appeal => {
+      // Get property for bracket and inspection data
+      const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+
+      // Compute bracket the same way as UI
+      let bracketLabel = appeal.cme_bracket; // Manual override if set
+      if (!bracketLabel && property && property.new_vcs) {
+        // Try vcsBracketMap first
+        bracketLabel = vcsBracketMap[property.new_vcs];
+        // Fall back to cmeBracketMappings
+        if (!bracketLabel) {
+          bracketLabel = cmeBracketMappings[property.new_vcs];
+        }
+      }
+
+      // Get inspection info from property
+      let inspectionDate = null;
+      if (property && property.inspection_list_by && property.inspection_list_date) {
+        const date = new Date(property.inspection_list_date);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        inspectionDate = `${month}/${day}/${year}`;
+      }
+
+      return {
+        Status: appeal.status || '-',
+        'Appeal #': appeal.appeal_number || '-',
+        'Appeal Year': appeal.appeal_year || '-',
+        Block: appeal.property_block || '-',
+        Lot: appeal.property_lot || '-',
+        Qual: appeal.property_qualifier || '-',
+        Location: appeal.property_location || '-',
+        Class: appeal.property_m4_class || '-',
+        VCS: appeal.new_vcs || '-',
+        Bracket: bracketLabel || '-',
+        Inspected: inspectionDate ? 'Yes' : 'No',
+        'Last Inspection': inspectionDate || '-',
+        Petitioner: appeal.petitioner_name || '-',
+        Taxpayer: appeal.taxpayer_name || '-',
+        Attorney: appeal.attorney || '-',
+        'Atty Address': appeal.attorney_address || '-',
+        'Atty City/State': appeal.attorney_city_state || '-',
+        'Atty Phone': appeal.attorney_phone || '-',
+        'Atty Email': appeal.attorney_email || '-',
+        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
+        'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+        'Evidence Status': appeal.evidence_status || '-',
+        'Submission Type': appeal.submission_type || '-',
+        'Stip Status': appeal.stip_status || '-',
+        'Tax Court': appeal.tax_court_pending ? 'Yes' : 'No',
+        'Current Assessment': appeal.current_assessment || 0,
+        'Requested Value': appeal.requested_value || 0,
+        'CME Value': appeal.cme_projected_value || 0,
+        'CME Assessment': appeal.cme_new_assessment || 0,
+        Judgment: appeal.judgment_value || 0,
+        Loss: 0,  // Will be set by formula
+        'Loss %': 0,  // Will be set by formula
+        'Possible Loss': appeal.possible_loss || 0,
+        'Appeal Type': appeal.appeal_type || '-',
+        'Status Code': appeal.status_code || '-',
+        Result: appeal.result || '-',
+        Comments: appeal.comments || '-',
+        'Import Source': appeal.import_source || '-',
+        'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
+      };
+    });
 
     // Create workbook with data
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -1640,7 +1666,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '0.00%',
+            numFmt: '0%',
             fill: bgFill
           };
         }
@@ -1651,6 +1677,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
           ws[cellRef].f = `=${caColLetter}${R}-${judgmentColLetter}${R}`;
+          delete ws[cellRef].v;  // Clear value so formula takes precedence
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
@@ -1662,10 +1689,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           const lossColLetter = XLSX.utils.encode_col(lossColIndex);
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           ws[cellRef].f = `=${lossColLetter}${R}/${caColLetter}${R}`;
+          delete ws[cellRef].v;  // Clear value so formula takes precedence
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '0.00%',
+            numFmt: '0%',
             fill: bgFill
           };
         }
