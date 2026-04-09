@@ -1484,61 +1484,129 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Prepare data for export with all available fields
     const exportData = filteredAppeals.map(appeal => ({
-      'Status': appeal.status || '-',
+      Status: appeal.status || '-',
       'Appeal #': appeal.appeal_number || '-',
       'Appeal Year': appeal.appeal_year || '-',
-      'Block': appeal.property_block || '-',
-      'Lot': appeal.property_lot || '-',
-      'Qual': appeal.property_qualifier || '-',
-      'Location': appeal.property_location || '-',
-      'Class': appeal.property_m4_class || '-',
-      'VCS': appeal.new_vcs || '-',
-      'Bracket': appeal.cme_bracket || '-',
-      'Inspected': appeal.inspected ? 'Yes' : 'No',
-      'Petitioner': appeal.petitioner_name || '-',
-      'Taxpayer': appeal.taxpayer_name || '-',
-      'Attorney': appeal.attorney || '-',
-      'Attorney Address': appeal.attorney_address || '-',
-      'Attorney City/State': appeal.attorney_city_state || '-',
-      'Attorney Phone': appeal.attorney_phone || '-',
-      'Attorney Email': appeal.attorney_email || '-',
+      Block: appeal.property_block || '-',
+      Lot: appeal.property_lot || '-',
+      Qual: appeal.property_qualifier || '-',
+      Location: appeal.property_location || '-',
+      Class: appeal.property_m4_class || '-',
+      VCS: appeal.new_vcs || '-',
+      Bracket: appeal.cme_bracket || '-',
+      Inspected: appeal.inspected ? 'Yes' : 'No',
+      Petitioner: appeal.petitioner_name || '-',
+      Taxpayer: appeal.taxpayer_name || '-',
+      Attorney: appeal.attorney || '-',
+      'Atty Address': appeal.attorney_address || '-',
+      'Atty City/State': appeal.attorney_city_state || '-',
+      'Atty Phone': appeal.attorney_phone || '-',
+      'Atty Email': appeal.attorney_email || '-',
       'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
-      'Evidence Due Date': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+      'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
       'Evidence Status': appeal.evidence_status || '-',
       'Submission Type': appeal.submission_type || '-',
       'Stip Status': appeal.stip_status || '-',
-      'Tax Court Pending': appeal.tax_court_pending ? 'Yes' : 'No',
+      'Tax Court': appeal.tax_court_pending ? 'Yes' : 'No',
       'Current Assessment': appeal.current_assessment || '-',
       'Requested Value': appeal.requested_value || '-',
       'CME Value': appeal.cme_projected_value || '-',
-      'CME Bracket': appeal.cme_bracket || '-',
       'CME Assessment': appeal.cme_new_assessment || '-',
-      'Judgment': appeal.judgment_value || '-',
-      'Loss': appeal.judgment_value !== null ? appeal.loss || '-' : '-',
-      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? `${Math.round(appeal.loss_pct * 10) / 10}%` : '-',
+      Judgment: appeal.judgment_value || '-',
+      Loss: appeal.judgment_value !== null ? (appeal.loss || '-') : '-',
+      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? appeal.loss_pct : '-',
       'Possible Loss': appeal.possible_loss || '-',
       'Appeal Type': appeal.appeal_type || '-',
       'Status Code': appeal.status_code || '-',
-      'Result': appeal.result || '-',
-      'Comments': appeal.comments || '-',
+      Result: appeal.result || '-',
+      Comments: appeal.comments || '-',
       'Inspection Date': appeal.inspection_date ? new Date(appeal.inspection_date).toLocaleDateString() : '-',
       'Import Source': appeal.import_source || '-',
-      'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-',
-      'Created': appeal.created_at ? new Date(appeal.created_at).toLocaleString() : '-'
+      'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
     }));
 
-    // Create workbook and add data
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: 1 });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
-    // Set column widths - wider for address fields
-    const colWidths = Object.keys(exportData[0] || {}).map(key => {
-      if (key.includes('Address') || key.includes('Comments') || key.includes('Location')) return 25;
-      if (key.includes('Phone') || key.includes('Email')) return 20;
-      return 15;
+    // Add headers with proper formatting
+    const headers = Object.keys(exportData[0] || {});
+    const headerRow = headers.map(h => h);
+
+    // Insert header row
+    XLSX.utils.sheet_add_aoa(ws, [headerRow], { origin: 'A1' });
+
+    // Add data
+    XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A2', header: 'A' });
+
+    // Set column widths and formatting
+    const colWidths = headers.map(key => {
+      if (key.includes('Address') || key.includes('Comments') || key.includes('Location')) return { wch: 25 };
+      if (key.includes('Phone') || key.includes('Email')) return { wch: 20 };
+      if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value')) return { wch: 18 };
+      return { wch: 14 };
     });
     ws['!cols'] = colWidths;
+
+    // Format header row (bold, centered)
+    for (let i = 0; i < headers.length; i++) {
+      const cellRef = XLSX.utils.encode_col(i) + '1';
+      ws[cellRef].s = {
+        font: { bold: true, size: 11 },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        fill: { fgColor: { rgb: 'D3D3D3' } },
+        border: {
+          top: { style: 'thin', color: '000000' },
+          bottom: { style: 'thin', color: '000000' },
+          left: { style: 'thin', color: '000000' },
+          right: { style: 'thin', color: '000000' }
+        }
+      };
+    }
+
+    // Format data rows (centered for status, dates; right-aligned for numbers)
+    const numericColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Loss %', 'Possible Loss'];
+    const dateColumns = ['Hearing Date', 'Evidence Due', 'Inspection Date', 'Import Date'];
+
+    for (let row = 2; row <= exportData.length + 1; row++) {
+      for (let col = 0; col < headers.length; col++) {
+        const cellRef = XLSX.utils.encode_col(col) + row;
+        const cellKey = headers[col];
+
+        ws[cellRef] = ws[cellRef] || { v: '' };
+
+        if (numericColumns.includes(cellKey)) {
+          ws[cellRef].s = {
+            alignment: { horizontal: 'right', vertical: 'center' },
+            font: { size: 10 },
+            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+          };
+          ws[cellRef].z = '#,##0.00';
+        } else if (dateColumns.includes(cellKey) || cellKey === 'Appeal Year') {
+          ws[cellRef].s = {
+            alignment: { horizontal: 'center', vertical: 'center' },
+            font: { size: 10 },
+            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+          };
+        } else if (cellKey === 'Status' || cellKey === 'Inspected' || cellKey === 'Tax Court' || cellKey === 'Stip Status') {
+          ws[cellRef].s = {
+            alignment: { horizontal: 'center', vertical: 'center' },
+            font: { size: 10 },
+            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+          };
+        } else {
+          ws[cellRef].s = {
+            font: { size: 10 },
+            border: { right: { style: 'thin', color: 'CCCCCC' }, bottom: { style: 'thin', color: 'EEEEEE' } }
+          };
+        }
+      }
+    }
+
+    // Set print area and options
+    ws['!print'] = { orientation: 'landscape', paperSize: 1, scale: 80 };
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
     // Generate filename with job name and date
     const jobName = jobData?.job_name || 'Appeals';
@@ -2072,25 +2140,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           </div>
         </div>
       )}
-
-      {/* COLUMN GROUP TOGGLES */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex gap-2 flex-wrap">
-        {[
-          { key: 'propertyInfo', label: 'Property Info' },
-          { key: 'legal', label: 'Legal' },
-          { key: 'workflow', label: 'Workflow' },
-          { key: 'notes', label: 'Notes' }
-        ].map(group => (
-          <button
-            key={group.key}
-            onClick={() => setExpandedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
-            className="text-xs font-medium px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
-          >
-            {group.label}
-            {expandedGroups[group.key] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        ))}
-      </div>
 
       {/* STATUS LEGEND BAR */}
       <div className="bg-gray-50 border-t border-b border-gray-200 px-4 py-2 text-xs text-gray-600">
