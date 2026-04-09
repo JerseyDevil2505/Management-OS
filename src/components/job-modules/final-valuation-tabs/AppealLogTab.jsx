@@ -1593,6 +1593,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       }
     }
 
+    // Find column indices for Loss and Loss % and Judgment/Current Assessment
+    const lossColIndex = headers.indexOf('Loss');
+    const lossPctColIndex = headers.indexOf('Loss %');
+    const judgmentColIndex = headers.indexOf('Judgment');
+    const currentAssessmentColIndex = headers.indexOf('Current Assessment');
+
     // Format data rows
     for (let R = 1; R <= range.e.r; R++) {
       // Use Judgment value for bracket color determination
@@ -1631,6 +1637,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         // Apply percent format (right-aligned)
         if (percentColumns.includes(columnName)) {
+          ws[cellRef].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'right', vertical: 'center' },
+            numFmt: '0.00%',
+            fill: bgFill
+          };
+        }
+
+        // Set formulas for Loss and Loss %
+        if (C === lossColIndex && judgmentColIndex >= 0 && currentAssessmentColIndex >= 0) {
+          // Loss = Current Assessment - Judgment
+          const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
+          const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
+          ws[cellRef].f = `=${caColLetter}${R}-${judgmentColLetter}${R}`;
+          ws[cellRef].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'right', vertical: 'center' },
+            numFmt: '$#,##0',
+            fill: bgFill
+          };
+        } else if (C === lossPctColIndex && lossColIndex >= 0 && currentAssessmentColIndex >= 0) {
+          // Loss % = Loss / Current Assessment
+          const lossColLetter = XLSX.utils.encode_col(lossColIndex);
+          const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
+          ws[cellRef].f = `=${lossColLetter}${R}/${caColLetter}${R}`;
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
