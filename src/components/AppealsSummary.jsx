@@ -3,31 +3,84 @@ import { supabase } from '../lib/supabaseClient';
 import { AlertCircle, Calendar, FileText, TrendingUp } from 'lucide-react';
 
 const AppealsSummary = ({ jobs = [], onJobSelect }) => {
-  const [appeals, setAppeals] = useState([]);
+  const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [sortBy, setSortBy] = useState('deadline');
 
   useEffect(() => {
-    loadAppeals();
+    if (jobs && jobs.length > 0) {
+      loadAppealsByJob();
+    } else {
+      setJobAppealsSummary([]);
+      setLoading(false);
+    }
   }, [jobs]);
 
-  const loadAppeals = async () => {
+  const loadAppealsByJob = async () => {
     try {
       setLoading(true);
-      // For now, placeholder - will load from appeal_log table
-      // This will aggregate appeal data from all PPA jobs
-      
-      if (jobs && jobs.length > 0) {
-        // Temporary: create dummy appeal data from jobs for now
-        // Later: Load from database appeal_log table
-        const appealList = [];
-        
-        // This is a placeholder - we'll enhance once appeal data is in the database
-        setAppeals(appealList);
-      } else {
-        setAppeals([]);
+      const summaryData = [];
+
+      // For each active job, load appeal_log data
+      for (const job of jobs) {
+        try {
+          const { data: appeals, error } = await supabase
+            .from('appeal_log')
+            .select('*')
+            .eq('job_id', job.id);
+
+          if (error) {
+            console.error(`Error loading appeals for job ${job.id}:`, error);
+            continue;
+          }
+
+          if (appeals && appeals.length > 0) {
+            // Calculate breakdowns
+            const classBreakdown = {
+              residential: 0,    // 2, 3A
+              commercial: 0,     // 4A, 4B, 4C
+              vacant: 0,         // 1, 3B
+              other: 0           // other
+            };
+
+            let proSeCount = 0;
+            let attorneyCount = 0;
+
+            appeals.forEach(appeal => {
+              // Classify by class
+              const classCode = appeal.property_m4_class;
+              if (['2', '3A'].includes(classCode)) {
+                classBreakdown.residential++;
+              } else if (['4A', '4B', '4C'].includes(classCode)) {
+                classBreakdown.commercial++;
+              } else if (['1', '3B'].includes(classCode)) {
+                classBreakdown.vacant++;
+              } else {
+                classBreakdown.other++;
+              }
+
+              // Count pro se vs attorney
+              if (appeal.attorney && appeal.attorney.trim() && appeal.attorney.toLowerCase() !== 'pro se') {
+                attorneyCount++;
+              } else {
+                proSeCount++;
+              }
+            });
+
+            summaryData.push({
+              jobId: job.id,
+              jobName: job.job_name || 'Unnamed Job',
+              totalAppeals: appeals.length,
+              classBreakdown,
+              proSeCount,
+              attorneyCount
+            });
+          }
+        } catch (err) {
+          console.error(`Error processing job ${job.id}:`, err);
+        }
       }
+
+      setJobAppealsSummary(summaryData);
     } catch (error) {
       console.error('Error loading appeals:', error);
     } finally {
@@ -35,39 +88,20 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     }
   };
 
-  const getDeadlineStatus = (deadline) => {
-    if (!deadline) return 'unknown';
-    const today = new Date();
-    const deadlineDate = new Date(deadline);
-    const daysRemaining = Math.floor((deadlineDate - today) / (1000 * 60 * 60 * 24));
-    
-    if (daysRemaining < 0) return 'overdue';
-    if (daysRemaining <= 7) return 'urgent';
-    if (daysRemaining <= 30) return 'soon';
-    return 'scheduled';
-  };
+  // Calculate totals
+  const totals = jobAppealsSummary.reduce(
+    (acc, row) => ({
+      totalAppeals: acc.totalAppeals + row.totalAppeals,
+      residential: acc.residential + row.classBreakdown.residential,
+      commercial: acc.commercial + row.classBreakdown.commercial,
+      vacant: acc.vacant + row.classBreakdown.vacant,
+      other: acc.other + row.classBreakdown.other,
+      proSe: acc.proSe + row.proSeCount,
+      attorney: acc.attorney + row.attorneyCount
+    }),
+    { totalAppeals: 0, residential: 0, commercial: 0, vacant: 0, other: 0, proSe: 0, attorney: 0 }
+  );
 
-  const getStatusColor = (status) => {
-    const colors = {
-      overdue: 'bg-red-50 border-red-200 text-red-800',
-      urgent: 'bg-orange-50 border-orange-200 text-orange-800',
-      soon: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-      scheduled: 'bg-green-50 border-green-200 text-green-800',
-      unknown: 'bg-gray-50 border-gray-200 text-gray-800'
-    };
-    return colors[status] || colors.unknown;
-  };
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      overdue: 'OVERDUE',
-      urgent: 'DUE SOON',
-      soon: 'UPCOMING',
-      scheduled: 'SCHEDULED',
-      unknown: 'UNKNOWN'
-    };
-    return labels[status] || labels.unknown;
-  };
 
   if (loading) {
     return (
@@ -84,95 +118,72 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <AlertCircle className="w-8 h-8 text-amber-600" />
-              Appeals Summary
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Track appeal deadlines and defense status across all jobs
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Controls */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by Status
-            </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Appeals</option>
-              <option value="overdue">Overdue</option>
-              <option value="urgent">Due Soon</option>
-              <option value="pending">Pending</option>
-              <option value="filed">Filed</option>
-              <option value="decided">Decided</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Sort By
-            </label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="deadline">Deadline (Nearest)</option>
-              <option value="job">Job Name</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
-        </div>
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+          <AlertCircle className="w-8 h-8 text-amber-600" />
+          Appeals Summary by Job
+        </h2>
+        <p className="text-sm text-gray-600 mt-1">
+          Overview of all appeals by job with class and representation breakdown
+        </p>
       </div>
 
       {/* Content */}
-      <div className="px-6 py-8">
-        {appeals && appeals.length === 0 ? (
-          <div className="text-center py-12">
+      <div className="overflow-x-auto">
+        {jobAppealsSummary.length === 0 ? (
+          <div className="px-6 py-12 text-center">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
-              No Appeals Yet
+              No Appeals Logged Yet
             </h3>
-            <p className="text-gray-500 max-w-md mx-auto">
-              Appeal data will appear here as jobs are completed and appeal deadlines are tracked. 
-              Select a job's Appeal Log tab to manage appeal details.
+            <p className="text-gray-500">
+              Appeals data will appear here once you add appeals to job Appeal Log tabs.
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Appeals Grid - placeholder structure */}
-            <div className="grid gap-4">
-              <p className="text-center text-gray-500 py-8">
-                Appeal tracking coming soon. Access individual job appeals via the Appeal Log tab in each job.
-              </p>
-            </div>
-          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Total Appeals</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Vacant Land</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobAppealsSummary.map((row, idx) => (
+                <tr
+                  key={row.jobId}
+                  className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => onJobSelect && onJobSelect(row.jobId)}
+                >
+                  <td className="px-6 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.residential}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.commercial}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.vacant}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.other}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
+                </tr>
+              ))}
+              {/* Totals Row */}
+              <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
+                <td className="px-6 py-3 text-sm text-gray-900">TOTALS</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.other}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
+              </tr>
+            </tbody>
+          </table>
         )}
-      </div>
-
-      {/* Info Box */}
-      <div className="px-6 py-4 bg-blue-50 border-t border-blue-200 rounded-b-lg">
-        <div className="flex gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">Quick Tips:</p>
-            <ul className="list-disc list-inside space-y-1 text-blue-700">
-              <li>Appeals due April 1st and May 1st for most municipalities</li>
-              <li>Use the CME (Comparable Market Evaluation) tool in Final Valuation for appeal defense</li>
-              <li>Access appeal details from the Appeal Log tab within each job workspace</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   );
