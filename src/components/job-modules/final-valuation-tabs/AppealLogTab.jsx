@@ -486,9 +486,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const settledAppeals = filtered.filter(a => a.judgment_value !== null && a.judgment_value !== undefined);
     const totalActualLoss = settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0);
 
-    // Avg % Loss: weighted average of loss_pct for settled appeals
-    const avgLossPercent = settledAppeals.length > 0
-      ? settledAppeals.reduce((sum, a) => sum + (a.loss_pct || 0), 0) / settledAppeals.length
+    // Total % Loss: (Total Actual Loss / Total Assessment Exposure) × 100
+    const totalLossPercent = totalAssessmentExposure > 0
+      ? (totalActualLoss / totalAssessmentExposure) * 100
       : 0;
 
     // Calculate total ratables (same logic as RatableComparisonTab)
@@ -536,7 +536,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       totalAppeals,
       totalAssessmentExposure,
       totalActualLoss,
-      avgLossPercent,
+      totalLossPercent,
       totalRatables,
       ratablePercent,
       statusCounts,
@@ -1559,8 +1559,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Avg % Loss</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{stats.avgLossPercent !== null ? `${Math.round(stats.avgLossPercent * 10) / 10}%` : '-'}</p>
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total % Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{stats.totalLossPercent !== null ? `${Math.round(stats.totalLossPercent * 10) / 10}%` : '-'}</p>
         </div>
       </div>
 
