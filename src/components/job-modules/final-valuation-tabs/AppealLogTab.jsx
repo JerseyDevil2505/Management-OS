@@ -1342,7 +1342,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       const arrayBuffer = await pwrCamaFile.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, cellDates: true, raw: false });
 
       const { data: existingAppeals } = await supabase
         .from('appeal_log')
