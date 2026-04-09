@@ -1482,10 +1482,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       return;
     }
 
-    // Prepare data for export
+    // Prepare data for export with all available fields
     const exportData = filteredAppeals.map(appeal => ({
       'Status': appeal.status || '-',
       'Appeal #': appeal.appeal_number || '-',
+      'Appeal Year': appeal.appeal_year || '-',
       'Block': appeal.property_block || '-',
       'Lot': appeal.property_lot || '-',
       'Qual': appeal.property_qualifier || '-',
@@ -1495,13 +1496,35 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'Bracket': appeal.cme_bracket || '-',
       'Inspected': appeal.inspected ? 'Yes' : 'No',
       'Petitioner': appeal.petitioner_name || '-',
+      'Taxpayer': appeal.taxpayer_name || '-',
       'Attorney': appeal.attorney || '-',
+      'Attorney Address': appeal.attorney_address || '-',
+      'Attorney City/State': appeal.attorney_city_state || '-',
+      'Attorney Phone': appeal.attorney_phone || '-',
+      'Attorney Email': appeal.attorney_email || '-',
       'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
+      'Evidence Due Date': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+      'Evidence Status': appeal.evidence_status || '-',
+      'Submission Type': appeal.submission_type || '-',
+      'Stip Status': appeal.stip_status || '-',
       'Tax Court Pending': appeal.tax_court_pending ? 'Yes' : 'No',
       'Current Assessment': appeal.current_assessment || '-',
+      'Requested Value': appeal.requested_value || '-',
       'CME Value': appeal.cme_projected_value || '-',
+      'CME Bracket': appeal.cme_bracket || '-',
+      'CME Assessment': appeal.cme_new_assessment || '-',
       'Judgment': appeal.judgment_value || '-',
-      '$Loss': appeal.judgment_value !== null ? appeal.loss || '-' : '-'
+      'Loss': appeal.judgment_value !== null ? appeal.loss || '-' : '-',
+      'Loss %': appeal.judgment_value !== null && appeal.loss_pct !== null ? `${Math.round(appeal.loss_pct * 10) / 10}%` : '-',
+      'Possible Loss': appeal.possible_loss || '-',
+      'Appeal Type': appeal.appeal_type || '-',
+      'Status Code': appeal.status_code || '-',
+      'Result': appeal.result || '-',
+      'Comments': appeal.comments || '-',
+      'Inspection Date': appeal.inspection_date ? new Date(appeal.inspection_date).toLocaleDateString() : '-',
+      'Import Source': appeal.import_source || '-',
+      'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-',
+      'Created': appeal.created_at ? new Date(appeal.created_at).toLocaleString() : '-'
     }));
 
     // Create workbook and add data
@@ -1509,9 +1532,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
-    // Set column widths
-    const maxWidth = 20;
-    const colWidths = Array(Object.keys(exportData[0] || {}).length).fill(maxWidth);
+    // Set column widths - wider for address fields
+    const colWidths = Object.keys(exportData[0] || {}).map(key => {
+      if (key.includes('Address') || key.includes('Comments') || key.includes('Location')) return 25;
+      if (key.includes('Phone') || key.includes('Email')) return 20;
+      return 15;
+    });
     ws['!cols'] = colWidths;
 
     // Generate filename with job name and date
