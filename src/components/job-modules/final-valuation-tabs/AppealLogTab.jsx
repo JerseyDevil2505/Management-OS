@@ -1572,12 +1572,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       fill: { fgColor: { rgb: 'E2E8F0' } }
     };
 
-    // Set column widths
+    // Set column widths - expand for readability
     ws['!cols'] = headers.map(key => {
-      if (key.includes('Address') || key.includes('Comments') || key.includes('Location')) return { wch: 25 };
-      if (key.includes('Phone') || key.includes('Email')) return { wch: 20 };
-      if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value')) return { wch: 18 };
-      return { wch: 14 };
+      if (key.includes('Address') || key.includes('Comments')) return { wch: 30 };
+      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney')) return { wch: 28 };
+      if (key.includes('Phone') || key.includes('Email') || key.includes('Inspection')) return { wch: 22 };
+      if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value') || key.includes('CME')) return { wch: 20 };
+      if (key.includes('Bracket')) return { wch: 18 };
+      if (key.includes('Date')) return { wch: 16 };
+      return { wch: 16 };
     });
 
     // CME Brackets with colors matching AdjustmentsTab definitions
@@ -1625,12 +1628,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const judgmentColIndex = headers.indexOf('Judgment');
     const currentAssessmentColIndex = headers.indexOf('Current Assessment');
 
+    // Helper: Get bracket color by bracket label (not judgment value)
+    const getBracketColorByLabel = (label) => {
+      const bracket = CME_BRACKETS.find(b => b.label === label);
+      return bracket ? bracket.color.substring(1) : 'FFFFFF';  // Remove # and convert to hex
+    };
+
     // Format data rows
     for (let R = 1; R <= range.e.r; R++) {
-      // Use Judgment value for bracket color determination
+      // Use Judgment value for default row color
       const judgmentValue = exportData[R - 1]?.Judgment || 0;
-      const bracketColor = getBracketColor(judgmentValue);
-      const bgFill = { fgColor: { rgb: bracketColor } };
+      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) } };
 
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
@@ -1638,35 +1646,43 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
+        // For Bracket column, use bracket-specific color
+        let cellBgFill = defaultBgFill;
+        if (C === headers.indexOf('Bracket')) {
+          const bracketLabel = exportData[R - 1]?.Bracket || '-';
+          const bracketColorHex = getBracketColorByLabel(bracketLabel);
+          cellBgFill = { fgColor: { rgb: bracketColorHex } };
+        }
+
         // Set formulas for Loss FIRST (before applying other styles)
         if (C === lossColIndex && judgmentColIndex >= 0 && currentAssessmentColIndex >= 0) {
-          // Loss = Current Assessment - Judgment
+          // Loss = Current Assessment - Judgment (using R+1 because R=1 is first data row = Excel row 2)
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
-          ws[cellRef].f = `=${caColLetter}${R}-${judgmentColLetter}${R}`;
+          ws[cellRef].f = `=${caColLetter}${R + 1}-${judgmentColLetter}${R + 1}`;
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'right', vertical: 'center' },
+            alignment: { horizontal: 'center', vertical: 'center' },
             numFmt: '$#,##0',
-            fill: bgFill
+            fill: cellBgFill
           };
         } else if (C === lossPctColIndex && lossColIndex >= 0 && currentAssessmentColIndex >= 0) {
-          // Loss % = Loss / Current Assessment
+          // Loss % = Loss / Current Assessment (using R+1 for correct Excel row)
           const lossColLetter = XLSX.utils.encode_col(lossColIndex);
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
-          ws[cellRef].f = `=${lossColLetter}${R}/${caColLetter}${R}`;
+          ws[cellRef].f = `=${lossColLetter}${R + 1}/${caColLetter}${R + 1}`;
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'right', vertical: 'center' },
+            alignment: { horizontal: 'center', vertical: 'center' },
             numFmt: '0%',
-            fill: bgFill
+            fill: cellBgFill
           };
         } else {
           // Default centered style with Leelawadee font
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'center', vertical: 'center' },
-            fill: bgFill
+            fill: cellBgFill
           };
 
           // Apply text format for block/lot to preserve zeros
@@ -1675,23 +1691,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             ws[cellRef].v = String(ws[cellRef].v || '');
           }
 
-          // Apply currency format (right-aligned)
+          // Apply currency format (center-aligned)
           if (currencyColumns.includes(columnName)) {
             ws[cellRef].s = {
               font: { name: 'Leelawadee', sz: 10 },
-              alignment: { horizontal: 'right', vertical: 'center' },
+              alignment: { horizontal: 'center', vertical: 'center' },
               numFmt: '$#,##0',
-              fill: bgFill
+              fill: cellBgFill
             };
           }
 
-          // Apply percent format (right-aligned)
+          // Apply percent format (center-aligned)
           if (percentColumns.includes(columnName)) {
             ws[cellRef].s = {
               font: { name: 'Leelawadee', sz: 10 },
-              alignment: { horizontal: 'right', vertical: 'center' },
+              alignment: { horizontal: 'center', vertical: 'center' },
               numFmt: '0%',
-              fill: bgFill
+              fill: cellBgFill
             };
           }
         }
