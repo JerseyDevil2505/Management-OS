@@ -1567,9 +1567,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     const headerStyle = {
-      font: { name: 'Leelawadee', sz: 10, bold: true },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: 'E2E8F0' } }
+      font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
+      fill: { fgColor: { rgb: 'E2E8F0' }, patternType: 'solid' },
+      border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
     };
 
     // Set column widths - expand for readability
@@ -1614,6 +1615,27 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const percentColumns = ['Loss %'];
     const textColumns = ['Block', 'Lot', 'Qual', 'Card'];
 
+    // Define a function to create proper cell style
+    const getCellStyle = (columnName, bgFill, isFormula = false) => {
+      const baseStyle = {
+        font: { name: 'Leelawadee', sz: 10, color: { rgb: '000000' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
+        fill: bgFill
+      };
+
+      if (currencyColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '$#,##0' };
+      }
+      if (percentColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '0%' };
+      }
+      if (textColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '@' };  // Text format
+      }
+
+      return baseStyle;
+    };
+
     // Format header row
     for (let C = 0; C < headers.length; C++) {
       const cellRef = XLSX.utils.encode_cell({ r: 0, c: C });
@@ -1638,7 +1660,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     for (let R = 1; R <= range.e.r; R++) {
       // Use Judgment value for default row color
       const judgmentValue = exportData[R - 1]?.Judgment || 0;
-      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) } };
+      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) }, patternType: 'solid' };
 
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
@@ -1651,65 +1673,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         if (C === headers.indexOf('Bracket')) {
           const bracketLabel = exportData[R - 1]?.Bracket || '-';
           const bracketColorHex = getBracketColorByLabel(bracketLabel);
-          cellBgFill = { fgColor: { rgb: bracketColorHex } };
+          cellBgFill = { fgColor: { rgb: bracketColorHex }, patternType: 'solid' };
         }
 
-        // Set formulas for Loss FIRST (before applying other styles)
+        // Get appropriate cell style
+        const cellStyle = getCellStyle(columnName, cellBgFill);
+
+        // Set formulas for Loss columns
         if (C === lossColIndex && judgmentColIndex >= 0 && currentAssessmentColIndex >= 0) {
           // Loss = Current Assessment - Judgment (using R+1 because R=1 is first data row = Excel row 2)
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
           ws[cellRef].f = `=${caColLetter}${R + 1}-${judgmentColLetter}${R + 1}`;
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center' },
-            numFmt: '$#,##0',
-            fill: cellBgFill
-          };
+          ws[cellRef].s = cellStyle;
         } else if (C === lossPctColIndex && lossColIndex >= 0 && currentAssessmentColIndex >= 0) {
           // Loss % = Loss / Current Assessment (using R+1 for correct Excel row)
           const lossColLetter = XLSX.utils.encode_col(lossColIndex);
           const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
           ws[cellRef].f = `=${lossColLetter}${R + 1}/${caColLetter}${R + 1}`;
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center' },
-            numFmt: '0%',
-            fill: cellBgFill
-          };
+          ws[cellRef].s = cellStyle;
         } else {
-          // Default centered style with Leelawadee font
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center' },
-            fill: cellBgFill
-          };
-
-          // Apply text format for block/lot to preserve zeros
+          // For text columns, ensure text format is preserved
           if (textColumns.includes(columnName)) {
             ws[cellRef].t = 's';
-            ws[cellRef].v = String(ws[cellRef].v || '');
           }
-
-          // Apply currency format (center-aligned)
-          if (currencyColumns.includes(columnName)) {
-            ws[cellRef].s = {
-              font: { name: 'Leelawadee', sz: 10 },
-              alignment: { horizontal: 'center', vertical: 'center' },
-              numFmt: '$#,##0',
-              fill: cellBgFill
-            };
-          }
-
-          // Apply percent format (center-aligned)
-          if (percentColumns.includes(columnName)) {
-            ws[cellRef].s = {
-              font: { name: 'Leelawadee', sz: 10 },
-              alignment: { horizontal: 'center', vertical: 'center' },
-              numFmt: '0%',
-              fill: cellBgFill
-            };
-          }
+          ws[cellRef].s = cellStyle;
         }
       }
     }
