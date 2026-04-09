@@ -1554,21 +1554,36 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       return { wch: 14 };
     });
 
+    // CME Brackets with colors matching AdjustmentsTab definitions
+    const CME_BRACKETS_COLORS = [
+      { min: 0, max: 99999, color: 'FF9999' },           // up to $99,999
+      { min: 100000, max: 199999, color: 'FFB366' },     // $100K-$199K
+      { min: 200000, max: 299999, color: 'FFCC99' },     // $200K-$299K
+      { min: 300000, max: 399999, color: 'FFFF99' },     // $300K-$399K
+      { min: 400000, max: 499999, color: 'CCFF99' },     // $400K-$499K
+      { min: 500000, max: 749999, color: '99FF99' },     // $500K-$749K
+      { min: 750000, max: 999999, color: '99CCFF' },     // $750K-$999K
+      { min: 1000000, max: 1499999, color: '9999FF' },   // $1M-$1.5M
+      { min: 1500000, max: 1999999, color: 'CC99FF' },   // $1.5M-$2M
+      { min: 2000000, max: 99999999, color: 'FF99FF' }   // Over $2M
+    ];
+
+    // Function to get bracket color based on judgment value
+    const getBracketColor = (value) => {
+      if (!value || value === 0) return 'FFFFFF';
+      const numValue = Number(value);
+      for (let bracket of CME_BRACKETS_COLORS) {
+        if (numValue >= bracket.min && numValue <= bracket.max) {
+          return bracket.color;
+        }
+      }
+      return 'FFFFFF';
+    };
+
     // Format cells
     const currencyColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Possible Loss'];
     const percentColumns = ['Loss %'];
     const textColumns = ['Block', 'Lot', 'Qual', 'Card'];
-
-    // Bracket colors
-    const bracketColors = {
-      'PSP': { fgColor: { rgb: 'DBEAFE' } }, // Light blue
-      'HSP': { fgColor: { rgb: 'FED7AA' } }, // Light orange
-      'CSP': { fgColor: { rgb: 'F3F4F6' } }, // Light gray
-      'ALL': { fgColor: { rgb: 'F3F4F6' } }  // Light gray
-    };
-
-    // Get bracket column index
-    const bracketColIndex = headers.indexOf('Bracket');
 
     // Format header row
     for (let C = 0; C < headers.length; C++) {
@@ -1580,8 +1595,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Format data rows
     for (let R = 1; R <= range.e.r; R++) {
-      const bracketValue = exportData[R - 1]?.Bracket || '-';
-      const bracketColor = bracketColors[bracketValue] || { fgColor: { rgb: 'FFFFFF' } };
+      // Use Judgment value for bracket color determination
+      const judgmentValue = exportData[R - 1]?.Judgment || 0;
+      const bracketColor = getBracketColor(judgmentValue);
+      const bgFill = { fgColor: { rgb: bracketColor } };
 
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
@@ -1593,7 +1610,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         ws[cellRef].s = {
           font: { name: 'Leelawadee', sz: 10 },
           alignment: { horizontal: 'center', vertical: 'center' },
-          fill: bracketColor
+          fill: bgFill
         };
 
         // Apply text format for block/lot to preserve zeros
@@ -1608,7 +1625,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
             numFmt: '$#,##0',
-            fill: bracketColor
+            fill: bgFill
           };
         }
 
@@ -1618,7 +1635,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
             numFmt: '0.00%',
-            fill: bracketColor
+            fill: bgFill
           };
         }
       }
