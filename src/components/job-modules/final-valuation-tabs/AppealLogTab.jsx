@@ -1495,6 +1495,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       VCS: appeal.new_vcs || '-',
       Bracket: appeal.cme_bracket || '-',
       Inspected: appeal.inspected ? 'Yes' : 'No',
+      'Last Inspection': appeal.inspection_date ? new Date(appeal.inspection_date).toLocaleDateString() : '-',
       Petitioner: appeal.petitioner_name || '-',
       Taxpayer: appeal.taxpayer_name || '-',
       Attorney: appeal.attorney || '-',
@@ -1520,7 +1521,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'Status Code': appeal.status_code || '-',
       Result: appeal.result || '-',
       Comments: appeal.comments || '-',
-      'Inspection Date': appeal.inspection_date ? new Date(appeal.inspection_date).toLocaleDateString() : '-',
       'Import Source': appeal.import_source || '-',
       'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
     }));
@@ -1557,8 +1557,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Format cells
     const currencyColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Possible Loss'];
     const percentColumns = ['Loss %'];
-    const centerColumns = ['Status', 'Inspected', 'Tax Court', 'Stip Status', 'Appeal Year'];
     const textColumns = ['Block', 'Lot', 'Qual', 'Card'];
+
+    // Bracket colors
+    const bracketColors = {
+      'PSP': { fgColor: { rgb: 'DBEAFE' } }, // Light blue
+      'HSP': { fgColor: { rgb: 'FED7AA' } }, // Light orange
+      'CSP': { fgColor: { rgb: 'F3F4F6' } }, // Light gray
+      'ALL': { fgColor: { rgb: 'F3F4F6' } }  // Light gray
+    };
+
+    // Get bracket column index
+    const bracketColIndex = headers.indexOf('Bracket');
 
     // Format header row
     for (let C = 0; C < headers.length; C++) {
@@ -1570,14 +1580,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Format data rows
     for (let R = 1; R <= range.e.r; R++) {
+      const bracketValue = exportData[R - 1]?.Bracket || '-';
+      const bracketColor = bracketColors[bracketValue] || { fgColor: { rgb: 'FFFFFF' } };
+
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
         const columnName = headers[C];
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
-        // Apply base style
-        ws[cellRef].s = { ...baseStyle };
+        // Default centered style with Leelawadee font
+        ws[cellRef].s = {
+          font: { name: 'Leelawadee', sz: 10 },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          fill: bracketColor
+        };
 
         // Apply text format for block/lot to preserve zeros
         if (textColumns.includes(columnName)) {
@@ -1585,31 +1602,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           ws[cellRef].v = String(ws[cellRef].v || '');
         }
 
-        // Apply currency format
+        // Apply currency format (right-aligned)
         if (currencyColumns.includes(columnName)) {
-          ws[cellRef].z = '$#,##0';
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '$#,##0'
+            numFmt: '$#,##0',
+            fill: bracketColor
           };
         }
 
-        // Apply percent format
+        // Apply percent format (right-aligned)
         if (percentColumns.includes(columnName)) {
-          ws[cellRef].z = '0.00%';
           ws[cellRef].s = {
             font: { name: 'Leelawadee', sz: 10 },
             alignment: { horizontal: 'right', vertical: 'center' },
-            numFmt: '0.00%'
-          };
-        }
-
-        // Center align specific columns
-        if (centerColumns.includes(columnName)) {
-          ws[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center' }
+            numFmt: '0.00%',
+            fill: bracketColor
           };
         }
       }
