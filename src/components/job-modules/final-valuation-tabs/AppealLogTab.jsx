@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +118,36 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     { min: 1500000, max: 1999999, label: '$1.5M-$1.99M', color: '#CC99FF', textColor: 'black' },
     { min: 2000000, max: 99999999, label: '$2M+', color: '#FF99FF', textColor: 'black' }
   ];
+
+  // ==================== STATS COMPUTATION ====================
+
+  const computeAndEmitStats = useCallback((currentAppeals) => {
+    if (typeof onAppealsStatUpdate !== 'function') return;
+
+    const stats = {
+      total_appeals: currentAppeals.length,
+      open: currentAppeals.filter(a => a.status !== 'C').length,
+      closed: currentAppeals.filter(a => a.status === 'C').length,
+      total_current_assessment_at_risk: currentAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0),
+      total_projected_loss: currentAppeals.reduce((sum, a) => sum + (a.loss || 0), 0),
+      hearing_date: currentAppeals.find(a => a.hearing_date)?.hearing_date || null,
+      evidence_due_date: currentAppeals.find(a => a.evidence_due_date)?.evidence_due_date || null,
+      stip_status_breakdown: currentAppeals.reduce((acc, a) => {
+        const s = a.stip_status || 'not_started';
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      }, {}),
+      by_class: currentAppeals.reduce((acc, a) => {
+        const cls = a.property_m4_class || 'Unknown';
+        if (!acc[cls]) acc[cls] = { count: 0, loss: 0 };
+        acc[cls].count++;
+        acc[cls].loss += (a.loss || 0);
+        return acc;
+      }, {})
+    };
+
+    onAppealsStatUpdate(stats);
+  }, [onAppealsStatUpdate]);
 
   // Compute VCS to bracket mapping on mount
   useEffect(() => {
@@ -252,6 +282,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         setAppeals(enrichedAppeals);
         console.log('DEBUG: Appeals state set with:', enrichedAppeals.length, 'records');
 
+        // Emit stats on initial load
+        computeAndEmitStats(enrichedAppeals);
+
         // Build unique years from data + current year
         const yearsFromData = [...new Set(enrichedAppeals.map(a => a.appeal_year).filter(Boolean))];
         const currentYear = new Date().getFullYear();
@@ -265,7 +298,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     loadAppeals();
-  }, [jobData?.id, properties]);
+  }, [jobData?.id, properties, computeAndEmitStats]);
 
   // Get unique attorney and VCS values from appeals
   const uniqueAttorneys = useMemo(() => {
@@ -1002,6 +1035,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       setAppeals(enrichedAppeals);
       console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
+      computeAndEmitStats(enrichedAppeals);
       handleCloseModal();
     } catch (error) {
       console.error('Error saving appeal:', error);
@@ -1068,9 +1102,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       if (error) throw error;
 
       // Update local state
-      setAppeals(prev => prev.map(a =>
+      const updatedAppeals = appeals.map(a =>
         a.id === appealId ? { ...a, ...updateData } : a
-      ));
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
       setEditingCell(null);
     } catch (error) {
       console.error('Error saving field:', error);
@@ -1091,7 +1127,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (error) throw error;
 
-      setAppeals(prev => prev.filter(a => a.id !== appealId));
+      const updatedAppeals = appeals.filter(a => a.id !== appealId);
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
     } catch (error) {
       console.error('Error deleting appeal:', error);
       alert(`Failed to delete: ${error.message}`);
@@ -1108,9 +1146,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (error) throw error;
 
-      setAppeals(prev => prev.map(a =>
+      const updatedAppeals = appeals.map(a =>
         a.id === appealId ? { ...a, [field]: value } : a
-      ));
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
     } catch (error) {
       console.error('Error updating field:', error);
     }
@@ -1156,11 +1196,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       }
 
       // Update local state
-      setAppeals(prev => prev.map(a =>
+      const updatedAppeals = appeals.map(a =>
         selectedAppeals.has(a.id)
           ? { ...a, hearing_date: bulkHearingDate, evidence_due_date: evidenceDueDateStr }
           : a
-      ));
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
 
       setShowBulkDateModal(false);
       setBulkHearingDate('');

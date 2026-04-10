@@ -99,7 +99,8 @@ const JobContainer = ({
   const [hpiData, setHpiData] = useState([]);
   const [checklistItems, setChecklistItems] = useState([]);
   const [checklistStatus, setChecklistStatus] = useState([]);
-  const [employees, setEmployees] = useState([]); 
+  const [employees, setEmployees] = useState([]);
+  const [appealStats, setAppealStats] = useState(null);
 
   // NEW: Data update notification for child components
   const [dataUpdateNotification, setDataUpdateNotification] = useState({
@@ -1004,6 +1005,7 @@ const JobContainer = ({
       checklistItems,  // NEW: Pass checklist items
       checklistStatus,  // NEW: Pass checklist status
       employees,  // NEW: Pass employees data
+      appealStats,  // NEW: Pass appeal log statistics
       tenantConfig: jobTenantConfig,  // Tenant configuration for module behavior
       onBackToJobs,
       activeSubModule: activeModule,
@@ -1117,7 +1119,7 @@ const JobContainer = ({
       };
     }
 
-    // Appeal Log: provide CME navigation callback
+    // Appeal Log: provide CME navigation callback and stats update callback
     if (activeModule === 'appeal-log') {
       return {
         ...baseProps,
@@ -1130,7 +1132,8 @@ const JobContainer = ({
           } : prev);
           // Switch to Final Valuation module
           setActiveModule('final-valuation');
-        }
+        },
+        onAppealsStatUpdate: (stats) => setAppealStats(stats)
       };
     }
 
