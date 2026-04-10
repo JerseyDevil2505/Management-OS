@@ -52,7 +52,10 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       return { earliest: null, hasMultiple: false };
     }
 
-    const earliest = new Date(hearingDates[0]).toLocaleDateString('en-US', {
+    // Parse date locally to avoid timezone drift (same as AppealLogTab)
+    const [year, month, day] = hearingDates[0].split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const earliest = date.toLocaleDateString('en-US', {
       month: 'numeric',
       day: 'numeric',
       year: '2-digit'
