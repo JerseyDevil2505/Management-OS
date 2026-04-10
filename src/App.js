@@ -1545,10 +1545,15 @@ const App = () => {
         {activeView === 'appeals' && (
           <AppealsSummary
             jobs={[
-              // Include archived PPA jobs plus Maplewood and Jackson
-              ...filterJobsForUser(appData.archivedJobs || []).filter(job =>
-                isPpaJob(job) || job.job_name === 'Maplewood' || job.job_name === 'Jackson'
-              )
+              // Include archived PPA jobs plus Maplewood and Jackson from any job list
+              ...filterJobsForUser([
+                ...(appData.archivedJobs || []),
+                ...(appData.activeJobs || []),
+                ...(appData.planningJobs || [])
+              ]).filter(job => {
+                const jobName = (job.job_name || '').toLowerCase().trim();
+                return isPpaJob(job) || jobName === 'maplewood' || jobName === 'jackson';
+              })
             ]}
             onJobSelect={handleJobSelect}
           />
