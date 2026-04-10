@@ -123,7 +123,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
           Appeals Summary by Job
         </h2>
         <p className="text-sm text-gray-600 mt-1">
-          Overview of all appeals by job with class and representation breakdown
+          Overview of all PPA appeals (active, archived, draft) with class and representation breakdown
         </p>
       </div>
 
