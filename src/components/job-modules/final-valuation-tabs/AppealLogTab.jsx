@@ -149,6 +149,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     onAppealsStatUpdate(stats);
   }, [onAppealsStatUpdate]);
 
+  // ==================== SNAPSHOT SAVE ====================
+
+  const saveSnapshot = useCallback(async (currentAppeals) => {
+    if (!jobData?.id) return;
+    try {
+      await supabase
+        .from('jobs')
+        .update({ appeal_summary_snapshot: currentAppeals })
+        .eq('id', jobData.id);
+    } catch (e) {
+      console.warn('Appeal snapshot save failed:', e);
+    }
+  }, [jobData?.id]);
+
   // Compute VCS to bracket mapping on mount
   useEffect(() => {
     if (!jobData?.end_date || properties.length === 0) return;
@@ -285,6 +299,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         // Emit stats on initial load
         computeAndEmitStats(enrichedAppeals);
 
+        // Save snapshot on initial load
+        saveSnapshot(enrichedAppeals);
+
         // Build unique years from data + current year
         const yearsFromData = [...new Set(enrichedAppeals.map(a => a.appeal_year).filter(Boolean))];
         const currentYear = new Date().getFullYear();
@@ -298,6 +315,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     loadAppeals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties]);
 
   // Get unique attorney and VCS values from appeals
@@ -1036,6 +1054,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       setAppeals(enrichedAppeals);
       console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
       computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       handleCloseModal();
     } catch (error) {
       console.error('Error saving appeal:', error);
@@ -1107,6 +1126,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       );
       setAppeals(updatedAppeals);
       computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
       setEditingCell(null);
     } catch (error) {
       console.error('Error saving field:', error);
@@ -1130,6 +1150,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       const updatedAppeals = appeals.filter(a => a.id !== appealId);
       setAppeals(updatedAppeals);
       computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
     } catch (error) {
       console.error('Error deleting appeal:', error);
       alert(`Failed to delete: ${error.message}`);
@@ -1151,6 +1172,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       );
       setAppeals(updatedAppeals);
       computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
     } catch (error) {
       console.error('Error updating field:', error);
     }
@@ -1203,6 +1225,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       );
       setAppeals(updatedAppeals);
       computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
 
       setShowBulkDateModal(false);
       setBulkHearingDate('');
@@ -1455,6 +1478,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
+      computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       setImportResult({ imported, skipped, unmatched });
       setImportFile(null);
 
@@ -1598,6 +1623,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
+      computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       setPwrCamaResult({ imported, skipped, unmatched });
       setPwrCamaFile(null);
     } catch (error) {

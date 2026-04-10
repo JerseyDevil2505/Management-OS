@@ -1006,6 +1006,7 @@ const JobContainer = ({
       checklistStatus,  // NEW: Pass checklist status
       employees,  // NEW: Pass employees data
       appealStats,  // NEW: Pass appeal log statistics
+      appealSummarySnapshot: jobData?.appeal_summary_snapshot || null,  // NEW: Pass appeal snapshot for AppealSummary
       tenantConfig: jobTenantConfig,  // Tenant configuration for module behavior
       onBackToJobs,
       activeSubModule: activeModule,

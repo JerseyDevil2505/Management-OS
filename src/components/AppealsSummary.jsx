@@ -15,22 +15,73 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     }
   }, [jobs]);
 
+  const computeClassBreakdown = (snapshot) => {
+    if (!snapshot || !Array.isArray(snapshot)) {
+      return { residential: 0, commercial: 0, other: 0 };
+    }
+
+    const residential = snapshot.filter(a => {
+      const cls = String(a.property_m4_class || '');
+      return cls.startsWith('2') || cls === '3A';
+    }).length;
+
+    const commercial = snapshot.filter(a => {
+      const cls = String(a.property_m4_class || '');
+      return cls.startsWith('4A') || cls.startsWith('4B') || cls.startsWith('4C') || cls.startsWith('4');
+    }).length;
+
+    const other = snapshot.length - residential - commercial;
+
+    return { residential, commercial, other };
+  };
+
+  const getHearingDates = (snapshot) => {
+    if (!snapshot || !Array.isArray(snapshot)) {
+      return { earliest: null, hasMultiple: false };
+    }
+
+    const hearingDates = [...new Set(
+      snapshot
+        .map(a => a.hearing_date)
+        .filter(Boolean)
+        .sort()
+    )];
+
+    if (hearingDates.length === 0) {
+      return { earliest: null, hasMultiple: false };
+    }
+
+    const earliest = new Date(hearingDates[0]).toLocaleDateString('en-US', {
+      month: 'numeric',
+      day: 'numeric',
+      year: '2-digit'
+    });
+
+    return { earliest, hasMultiple: hearingDates.length > 1 };
+  };
+
   const loadAppealsByJob = async () => {
     try {
       setLoading(true);
       const summaryData = [];
 
-      // For each active job, load appeal_log data
+      // For each active job, use appeal_summary_snapshot if available, otherwise load from DB
       for (const job of jobs) {
         try {
-          const { data: appeals, error } = await supabase
-            .from('appeal_log')
-            .select('*')
-            .eq('job_id', job.id);
+          let appeals = job.appeal_summary_snapshot;
 
-          if (error) {
-            console.error(`Error loading appeals for job ${job.id}:`, error);
-            continue;
+          // Fall back to database query if snapshot is not available
+          if (!appeals) {
+            const { data: fetchedAppeals, error } = await supabase
+              .from('appeal_log')
+              .select('*')
+              .eq('job_id', job.id);
+
+            if (error) {
+              console.error(`Error loading appeals for job ${job.id}:`, error);
+              continue;
+            }
+            appeals = fetchedAppeals || [];
           }
 
           if (appeals && appeals.length > 0) {
@@ -71,13 +122,41 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               }
             });
 
+            // Compute class breakdown and hearing dates from snapshot
+            const classBreakdown = computeClassBreakdown(appeals);
+            const hearingInfo = getHearingDates(appeals);
+
             summaryData.push({
               jobId: job.id,
               jobName: job.job_name || 'Unnamed Job',
               totalAppeals: appeals.length,
               statusBreakdown,
               proSeCount,
-              attorneyCount
+              attorneyCount,
+              residential: classBreakdown.residential,
+              commercial: classBreakdown.commercial,
+              other: classBreakdown.other,
+              hearingDate: hearingInfo.earliest,
+              hasMultipleHearings: hearingInfo.hasMultiple,
+              snapshotAvailable: !!job.appeal_summary_snapshot
+            });
+          } else {
+            // Job exists but has no appeals - add row with all zeros/blanks
+            summaryData.push({
+              jobId: job.id,
+              jobName: job.job_name || 'Unnamed Job',
+              totalAppeals: 0,
+              statusBreakdown: {
+                defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0
+              },
+              proSeCount: 0,
+              attorneyCount: 0,
+              residential: job.appeal_summary_snapshot ? 0 : null,
+              commercial: job.appeal_summary_snapshot ? 0 : null,
+              other: job.appeal_summary_snapshot ? 0 : null,
+              hearingDate: job.appeal_summary_snapshot ? null : null,
+              hasMultipleHearings: false,
+              snapshotAvailable: !!job.appeal_summary_snapshot
             });
           }
         } catch (err) {
@@ -105,9 +184,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       affirmed: acc.affirmed + row.statusBreakdown.affirmed,
       hasCME: acc.hasCME + row.statusBreakdown.hasCME,
       proSe: acc.proSe + row.proSeCount,
-      attorney: acc.attorney + row.attorneyCount
+      attorney: acc.attorney + row.attorneyCount,
+      residential: acc.residential + (row.residential !== null ? row.residential : 0),
+      commercial: acc.commercial + (row.commercial !== null ? row.commercial : 0),
+      other: acc.other + (row.other !== null ? row.other : 0)
     }),
-    { totalAppeals: 0, defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0, proSe: 0, attorney: 0 }
+    { totalAppeals: 0, defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0, proSe: 0, attorney: 0, residential: 0, commercial: 0, other: 0 }
   );
 
 
@@ -148,7 +230,8 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             </p>
           </div>
         ) : (
-          <table className="w-full">
+          <>
+            <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
@@ -162,6 +245,10 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
                 <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
                 <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
               </tr>
             </thead>
             <tbody>
@@ -182,6 +269,10 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.hasCME}</td>
                   <td className="px-6 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
                   <td className="px-6 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.other !== null ? row.other : '—'}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'}</td>
                 </tr>
               ))}
               {/* Totals Row */}
@@ -197,9 +288,19 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.other}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">—</td>
               </tr>
             </tbody>
           </table>
+
+            {/* Legend */}
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-xs text-gray-600">
+              <p>* Multiple hearing dates on file</p>
+            </div>
+          </>
         )}
       </div>
     </div>
