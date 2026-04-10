@@ -165,8 +165,15 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         }
       }
 
-      // Only show jobs that have appeals
-      const jobsWithAppeals = summaryData.filter(row => row.totalAppeals > 0);
+      // Only show jobs that have appeals, sorted by CCDD code
+      const jobsWithAppeals = summaryData
+        .filter(row => row.totalAppeals > 0)
+        .sort((a, b) => {
+          // Sort by CCDD code (from job object if available)
+          const ccddA = jobs.find(j => j.id === a.jobId)?.ccdd_code || '';
+          const ccddB = jobs.find(j => j.id === b.jobId)?.ccdd_code || '';
+          return ccddA.localeCompare(ccddB);
+        });
       setJobAppealsSummary(jobsWithAppeals);
     } catch (error) {
       console.error('Error loading appeals:', error);
