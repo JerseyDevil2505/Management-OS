@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
   // State
@@ -86,6 +87,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [showMixedBracketModal, setShowMixedBracketModal] = useState(false);
   const [mixedBracketInfo, setMixedBracketInfo] = useState({});
   const [isSendingToCME, setIsSendingToCME] = useState(false);
+
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importProcessing, setImportProcessing] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { imported, skipped, unmatched }
+
+  // PWR CAMA state
+  const [showPwrCamaModal, setShowPwrCamaModal] = useState(false);
+  const [pwrCamaFile, setPwrCamaFile] = useState(null);
+  const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
+  const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
   // CME Brackets constant
   const CME_BRACKETS = [
@@ -473,9 +486,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const settledAppeals = filtered.filter(a => a.judgment_value !== null && a.judgment_value !== undefined);
     const totalActualLoss = settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0);
 
-    // Avg % Loss: weighted average of loss_pct for settled appeals
-    const avgLossPercent = settledAppeals.length > 0
-      ? settledAppeals.reduce((sum, a) => sum + (a.loss_pct || 0), 0) / settledAppeals.length
+    // Total % Loss: (Total Actual Loss / Total Assessment Exposure) × 100
+    const totalLossPercent = totalAssessmentExposure > 0
+      ? (totalActualLoss / totalAssessmentExposure) * 100
       : 0;
 
     // Calculate total ratables (same logic as RatableComparisonTab)
@@ -523,7 +536,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       totalAppeals,
       totalAssessmentExposure,
       totalActualLoss,
-      avgLossPercent,
+      totalLossPercent,
       totalRatables,
       ratablePercent,
       statusCounts,
@@ -633,7 +646,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     return {
       suffix: suffix || '',
-      appealType: appealTypeMap[suffix] || null
+      appealType: appealTypeMap[suffix] || 'petitioner'
     };
   };
 
@@ -1077,6 +1090,627 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     );
   }
 
+  // ==================== CSV IMPORT HANDLER ====================
+
+  const handleImportCSV = async () => {
+    if (!importFile) return;
+    setImportProcessing(true);
+    setImportResult(null);
+
+    try {
+      const text = await importFile.text();
+      const lines = text.split('\n');
+
+      // Parse header row — strip BOM if present
+      const rawHeader = lines[0].replace(/^\uFEFF/, '');
+      const headers = rawHeader.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Column index helpers
+      const col = (name) => headers.findIndex(h => h === name);
+
+      console.log('CSV Headers:', headers);
+      console.log('Entry col index:', col('Entry'));
+      console.log('Hearing Type col index:', col('Hearing Type'));
+
+      const idxBLQ       = col('BLQ');
+      const idxAppealNum = col('Appeal #');
+      const idxName      = col('Name');
+      const idxLocation  = col('Location');
+      const idxClass     = col('Class.');
+      const idxAssess    = col('Assessment');
+      const idxTaxCrt    = col('Tax Crt?');
+      const idxEntry     = col('Entry');
+      const idxContact   = col('Adtl. Contact');
+      const idxAddr      = col('Addl Contact Address');
+      const idxCityState = col('Addl Contact City, State');
+      const idxStatus    = col('Appeal Status');
+
+      // Parse a CSV line respecting quoted fields
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            inQuotes = !inQuotes;
+          } else if (ch === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += ch;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      // Parse BLQ — format: "188-26", "155-7.01", "96-4-C0102"
+      const parseBLQ = (blq) => {
+        if (!blq) return { block: '', lot: '', qualifier: '' };
+
+        // Handle Excel date corruption: "8-Dec" should be "12-8"
+        // Excel converts "12-8" to Dec-8 and displays as "8-Dec"
+        const excelDateMatch = blq.match(/^(\d+)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i);
+        if (excelDateMatch) {
+          const monthMap = {
+            jan:'1', feb:'2', mar:'3', apr:'4', may:'5', jun:'6',
+            jul:'7', aug:'8', sep:'9', oct:'10', nov:'11', dec:'12'
+          };
+          const day = excelDateMatch[1];
+          const month = monthMap[excelDateMatch[2].toLowerCase()];
+          return { block: month, lot: day, qualifier: '' };
+        }
+
+        const parts = blq.split('-');
+        if (parts.length === 3) {
+          // Three segments: block-lot-qualifier (e.g. 96-4-C0102)
+          return { block: parts[0], lot: parts[1], qualifier: parts[2] };
+        } else if (parts.length === 2) {
+          // Two segments: block-lot (qualifier is empty, lot may have decimal)
+          return { block: parts[0], lot: parts[1], qualifier: '' };
+        }
+        return { block: blq, lot: '', qualifier: '' };
+      };
+
+      // Fetch existing appeal numbers for this job to detect duplicates
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+
+      const existingNumbers = new Set(
+        (existingAppeals || []).map(a => a.appeal_number)
+      );
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      // Process data rows (skip header row 0)
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = parseCSVLine(line);
+        const getValue = (idx) => (idx >= 0 && cols[idx] ? cols[idx].replace(/^"|"$/g, '').trim() : '');
+
+        const rawAppealNumber = getValue(idxAppealNum);
+        if (!rawAppealNumber) continue;
+        const appealNumber = rawAppealNumber.startsWith('20@')
+          ? rawAppealNumber.slice(3)
+          : rawAppealNumber;
+
+        // Skip duplicates
+        if (existingNumbers.has(appealNumber)) {
+          skipped++;
+          continue;
+        }
+
+        const blqRaw = getValue(idxBLQ);
+        const { block, lot, qualifier } = parseBLQ(blqRaw);
+
+        // Attempt property match against in-memory properties array
+        const matchedProperty = properties.find(p => {
+          const pBlock = (p.property_block || '').toString().trim();
+          const pLot = (p.property_lot || '').toString().trim();
+          const pQual = (p.property_qualifier || '').toString().trim();
+          return pBlock === block && pLot === lot && pQual === qualifier;
+        });
+
+        if (!matchedProperty) unmatched++;
+
+        // Parse appeal_type from appeal number suffix
+        const { appealType } = parseAppealNumber(appealNumber);
+
+        // Map submission type
+        const entryRaw = getValue(idxEntry);
+        const validSubmissionTypes = ['ONLINE', 'PAPER', 'ELECTRONIC'];
+        const submissionType = validSubmissionTypes.includes(entryRaw) ? entryRaw : null;
+
+        // Map tax_court_pending
+        const taxCrtRaw = cols.find(c =>
+          c.trim().toUpperCase() === 'TRUE' ||
+          c.trim().toUpperCase() === 'FALSE'
+        )?.trim().toUpperCase();
+        const taxCourtPending = taxCrtRaw === 'TRUE';
+
+        // Attorney fields — only populate when Adtl. Contact column has a value
+        const attorney = getValue(idxContact);
+        const attorneyAddress = attorney ? getValue(idxAddr) : '';
+        const attorneyCityState = attorney ? getValue(idxCityState) : '';
+
+        // Assessment — strip commas just in case
+        const assessmentRaw = getValue(idxAssess).replace(/,/g, '');
+        const currentAssessment = parseFloat(assessmentRaw) || 0;
+
+        // Property class — stored as-is (2, 1, 6A, 15D etc.)
+        const propertyClass = getValue(idxClass);
+
+        const record = {
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: getValue(idxName),
+          taxpayer_name: getValue(idxName),
+          attorney: attorney || '',
+          attorney_address: attorneyAddress,
+          attorney_city_state: attorneyCityState,
+          current_assessment: matchedProperty?.values_mod_total || currentAssessment || 0,
+          requested_value: 0,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: getValue(idxLocation),
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          submission_type: submissionType,
+          tax_court_pending: taxCourtPending,
+          inspected: false,
+          comments: '',
+          hearing_date: null,
+          evidence_due_date: null,
+          evidence_status: ''
+        };
+
+        records.push(record);
+      }
+
+      // Batch insert
+      if (records.length > 0) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .insert(records);
+
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      // Reload appeals
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(
+          p => p.property_composite_key === appeal.property_composite_key
+        );
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setImportResult({ imported, skipped, unmatched });
+      setImportFile(null);
+
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setImportProcessing(false);
+    }
+  };
+
+  // ==================== PWR CAMA IMPORT HANDLER ====================
+
+  const handleImportPwrCama = async () => {
+    if (!pwrCamaFile) return;
+    setPwrCamaProcessing(true);
+    setPwrCamaResult(null);
+    try {
+      const arrayBuffer = await pwrCamaFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, cellDates: true, raw: false });
+
+      const { data: existingAppeals } = await supabase
+        .from('appeal_log')
+        .select('appeal_number')
+        .eq('job_id', jobData.id);
+      const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
+
+      let imported = 0;
+      let skipped = 0;
+      let unmatched = 0;
+      const records = [];
+
+      for (const row of rows) {
+        const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
+        if (!appealNumber) continue;
+        if (existingNumbers.has(appealNumber)) { skipped++; continue; }
+
+        const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
+        const lot = row['PROP_LOT'] != null ? String(row['PROP_LOT']).trim() : '';
+        const qualifier = row['PROP_QUALIFIER'] != null ? String(row['PROP_QUALIFIER']).trim() : '';
+
+        const matchedProperty = properties.find(p =>
+          (p.property_block || '').toString().trim() === block &&
+          (p.property_lot || '').toString().trim() === lot &&
+          (p.property_qualifier || '').toString().trim() === qualifier
+        );
+        if (!matchedProperty) unmatched++;
+
+        const attorney = row['ATTORNEY_NAME'] ? String(row['ATTORNEY_NAME']).trim() : '';
+        const appealType = attorney ? 'represented' : 'petitioner';
+
+        let hearingDate = null;
+        if (row['HEARING_DATE'] && !isNaN(new Date(row['HEARING_DATE']).getTime())) {
+          hearingDate = new Date(row['HEARING_DATE']).toISOString().split('T')[0];
+        }
+        let evidenceDueDate = null;
+        if (hearingDate) {
+          const d = new Date(hearingDate);
+          d.setDate(d.getDate() - 7);
+          evidenceDueDate = d.toISOString().split('T')[0];
+        }
+
+        const taxCourtPending = String(row['ATTRIB_TAXCOURTPENDING'] || '').trim().toUpperCase() === 'Y';
+        const jdgNet = row['ASSESSMENT_JDG.NET'];
+        const judgmentValue = jdgNet != null && !isNaN(Number(jdgNet)) ? Number(jdgNet) : null;
+        const curNet = row['ASSESSMENT_CUR.NET'];
+        const currentAssessment = matchedProperty?.values_mod_total || (curNet != null && !isNaN(Number(curNet)) ? Number(curNet) : 0);
+        let loss = null;
+        let lossPct = null;
+        if (judgmentValue !== null && currentAssessment) {
+          loss = currentAssessment - judgmentValue;
+          lossPct = (loss / currentAssessment) * 100;
+        }
+
+        const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
+        records.push({
+          job_id: jobData.id,
+          appeal_number: appealNumber,
+          appeal_year: new Date().getFullYear(),
+          appeal_type: appealType,
+          status: 'D',
+          stip_status: 'not_started',
+          petitioner_name: ownerName,
+          taxpayer_name: ownerName,
+          attorney,
+          attorney_address: row['ATTORNEY_ADDR1'] ? String(row['ATTORNEY_ADDR1']).trim() : '',
+          attorney_city_state: row['ATTORNEY_CITYST'] ? String(row['ATTORNEY_CITYST']).trim() : '',
+          current_assessment: currentAssessment,
+          requested_value: 0,
+          judgment_value: judgmentValue,
+          loss,
+          loss_pct: lossPct,
+          property_block: block,
+          property_lot: lot,
+          property_qualifier: qualifier,
+          property_location: row['PROP_LOCATION'] ? String(row['PROP_LOCATION']).trim() : '',
+          property_composite_key: matchedProperty?.property_composite_key || '',
+          hearing_date: hearingDate,
+          evidence_due_date: evidenceDueDate,
+          tax_court_pending: taxCourtPending,
+          submission_type: null,
+          evidence_status: '',
+          inspected: false,
+          comments: row['NOTES'] ? String(row['NOTES']).trim() : ''
+        });
+      }
+
+      if (records.length > 0) {
+        const { error } = await supabase.from('appeal_log').insert(records);
+        if (error) throw error;
+        imported = records.length;
+      }
+
+      const { data: fetchData, error: fetchError } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('appeal_number', { ascending: true });
+      if (fetchError) throw fetchError;
+
+      const enrichedAppeals = (fetchData || []).map(appeal => {
+        const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+        let appealType = appeal.appeal_type;
+        if (!appealType && appeal.appeal_number) {
+          const parsed = parseAppealNumber(appeal.appeal_number);
+          appealType = parsed.appealType;
+        }
+        return {
+          ...appeal,
+          appeal_type: appealType,
+          property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          new_vcs: property?.new_vcs || null,
+          owner_name: property?.owner_name || null,
+          property_block: appeal.property_block || property?.property_block || null,
+          property_lot: appeal.property_lot || property?.property_lot || null,
+          property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+          property_location: appeal.property_location || property?.property_location || null
+        };
+      });
+
+      setAppeals(enrichedAppeals);
+      setPwrCamaResult({ imported, skipped, unmatched });
+      setPwrCamaFile(null);
+    } catch (error) {
+      console.error('PowerCama import error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setPwrCamaProcessing(false);
+    }
+  };
+
+  // ==================== EXPORT HANDLER ====================
+
+  const handleExportToExcel = () => {
+    if (filteredAppeals.length === 0) {
+      alert('No appeals to export');
+      return;
+    }
+
+    // Prepare data for export with all available fields
+    const exportData = filteredAppeals.map(appeal => {
+      // Get property for bracket and inspection data
+      const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+
+      // Compute bracket the same way as UI
+      let bracketLabel = appeal.cme_bracket; // Manual override if set
+      if (!bracketLabel && property && property.new_vcs) {
+        // Try vcsBracketMap first
+        bracketLabel = vcsBracketMap[property.new_vcs];
+        // Fall back to cmeBracketMappings
+        if (!bracketLabel) {
+          bracketLabel = cmeBracketMappings[property.new_vcs];
+        }
+      }
+
+      // Get inspection info from property
+      let inspectionDate = null;
+      if (property && property.inspection_list_by && property.inspection_list_date) {
+        const date = new Date(property.inspection_list_date);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        inspectionDate = `${month}/${day}/${year}`;
+      }
+
+      return {
+        Status: appeal.status || '-',
+        'Appeal #': appeal.appeal_number || '-',
+        'Appeal Year': appeal.appeal_year || '-',
+        Block: appeal.property_block || '-',
+        Lot: appeal.property_lot || '-',
+        Qual: appeal.property_qualifier || '-',
+        Location: appeal.property_location || '-',
+        Class: appeal.property_m4_class || '-',
+        VCS: appeal.new_vcs || '-',
+        Bracket: bracketLabel || '-',
+        Inspected: inspectionDate ? 'Yes' : 'No',
+        'Last Inspection': inspectionDate || '-',
+        Petitioner: appeal.petitioner_name || '-',
+        Taxpayer: appeal.taxpayer_name || '-',
+        Attorney: appeal.attorney || '-',
+        'Atty Address': appeal.attorney_address || '-',
+        'Atty City/State': appeal.attorney_city_state || '-',
+        'Atty Phone': appeal.attorney_phone || '-',
+        'Atty Email': appeal.attorney_email || '-',
+        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
+        'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+        'Evidence Status': appeal.evidence_status || '-',
+        'Submission Type': appeal.submission_type || '-',
+        'Stip Status': appeal.stip_status || '-',
+        'Tax Court': appeal.tax_court_pending ? 'Yes' : 'No',
+        'Current Assessment': appeal.current_assessment || 0,
+        'Requested Value': appeal.requested_value || 0,
+        'CME Value': appeal.cme_projected_value || 0,
+        'CME Assessment': appeal.cme_new_assessment || 0,
+        Judgment: appeal.judgment_value || 0,
+        Loss: '',  // Will be populated with formula
+        'Loss %': '',  // Will be populated with formula
+        'Possible Loss': appeal.possible_loss || 0,
+        'Appeal Type': appeal.appeal_type || '-',
+        'Status Code': appeal.status_code || '-',
+        Result: appeal.result || '-',
+        Comments: appeal.comments || '-',
+        'Import Source': appeal.import_source || '-',
+        'Import Date': appeal.import_date ? new Date(appeal.import_date).toLocaleDateString() : '-'
+      };
+    });
+
+    // Create workbook with data
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
+
+    // Get headers from first row
+    const headers = Object.keys(exportData[0] || {});
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Define styles matching other exports (Leelawadee, size 10)
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: '000000' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
+      fill: { fgColor: { rgb: 'E2E8F0' }, patternType: 'solid' },
+      border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
+    };
+
+    // Set column widths - expand for readability
+    ws['!cols'] = headers.map(key => {
+      if (key.includes('Address') || key.includes('Comments')) return { wch: 30 };
+      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney')) return { wch: 28 };
+      if (key.includes('Phone') || key.includes('Email') || key.includes('Inspection')) return { wch: 22 };
+      if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value') || key.includes('CME')) return { wch: 20 };
+      if (key.includes('Bracket')) return { wch: 18 };
+      if (key.includes('Date')) return { wch: 16 };
+      return { wch: 16 };
+    });
+
+    // CME Brackets with colors matching AdjustmentsTab definitions
+    const CME_BRACKETS_COLORS = [
+      { min: 0, max: 99999, color: 'FF9999' },           // up to $99,999
+      { min: 100000, max: 199999, color: 'FFB366' },     // $100K-$199K
+      { min: 200000, max: 299999, color: 'FFCC99' },     // $200K-$299K
+      { min: 300000, max: 399999, color: 'FFFF99' },     // $300K-$399K
+      { min: 400000, max: 499999, color: 'CCFF99' },     // $400K-$499K
+      { min: 500000, max: 749999, color: '99FF99' },     // $500K-$749K
+      { min: 750000, max: 999999, color: '99CCFF' },     // $750K-$999K
+      { min: 1000000, max: 1499999, color: '9999FF' },   // $1M-$1.5M
+      { min: 1500000, max: 1999999, color: 'CC99FF' },   // $1.5M-$2M
+      { min: 2000000, max: 99999999, color: 'FF99FF' }   // Over $2M
+    ];
+
+    // Function to get bracket color based on judgment value
+    const getBracketColor = (value) => {
+      if (!value || value === 0) return 'FFFFFF';
+      const numValue = Number(value);
+      for (let bracket of CME_BRACKETS_COLORS) {
+        if (numValue >= bracket.min && numValue <= bracket.max) {
+          return bracket.color;
+        }
+      }
+      return 'FFFFFF';
+    };
+
+    // Format cells
+    const currencyColumns = ['Current Assessment', 'Requested Value', 'CME Value', 'CME Assessment', 'Judgment', 'Loss', 'Possible Loss'];
+    const percentColumns = ['Loss %'];
+    const textColumns = ['Block', 'Lot', 'Qual', 'Card'];
+
+    // Define a function to create proper cell style
+    const getCellStyle = (columnName, bgFill, isFormula = false) => {
+      const baseStyle = {
+        font: { name: 'Leelawadee', sz: 10, color: { rgb: '000000' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
+        fill: bgFill
+      };
+
+      if (currencyColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '$#,##0' };
+      }
+      if (percentColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '0%' };
+      }
+      if (textColumns.includes(columnName)) {
+        return { ...baseStyle, numFmt: '@' };  // Text format
+      }
+
+      return baseStyle;
+    };
+
+    // Format header row
+    for (let C = 0; C < headers.length; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (ws[cellRef]) {
+        ws[cellRef].s = headerStyle;
+      }
+    }
+
+    // Find column indices for Loss and Loss % and Judgment/Current Assessment
+    const lossColIndex = headers.indexOf('Loss');
+    const lossPctColIndex = headers.indexOf('Loss %');
+    const judgmentColIndex = headers.indexOf('Judgment');
+    const currentAssessmentColIndex = headers.indexOf('Current Assessment');
+
+    // Helper: Get bracket color by bracket label (not judgment value)
+    const getBracketColorByLabel = (label) => {
+      const bracket = CME_BRACKETS.find(b => b.label === label);
+      return bracket ? bracket.color.substring(1) : 'FFFFFF';  // Remove # and convert to hex
+    };
+
+    // Format data rows
+    for (let R = 1; R <= range.e.r; R++) {
+      // Use Judgment value for default row color
+      const judgmentValue = exportData[R - 1]?.Judgment || 0;
+      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) }, patternType: 'solid' };
+
+      for (let C = 0; C < headers.length; C++) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        const columnName = headers[C];
+
+        if (!ws[cellRef]) ws[cellRef] = {};
+
+        // For Bracket column, use bracket-specific color
+        let cellBgFill = defaultBgFill;
+        if (C === headers.indexOf('Bracket')) {
+          const bracketLabel = exportData[R - 1]?.Bracket || '-';
+          const bracketColorHex = getBracketColorByLabel(bracketLabel);
+          cellBgFill = { fgColor: { rgb: bracketColorHex }, patternType: 'solid' };
+        }
+
+        // Get appropriate cell style
+        const cellStyle = getCellStyle(columnName, cellBgFill);
+
+        // Set formulas for Loss columns
+        if (C === lossColIndex && judgmentColIndex >= 0 && currentAssessmentColIndex >= 0) {
+          // Loss = Current Assessment - Judgment (using R+1 because R=1 is first data row = Excel row 2)
+          const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
+          const judgmentColLetter = XLSX.utils.encode_col(judgmentColIndex);
+          ws[cellRef].f = `=${caColLetter}${R + 1}-${judgmentColLetter}${R + 1}`;
+          ws[cellRef].s = cellStyle;
+        } else if (C === lossPctColIndex && lossColIndex >= 0 && currentAssessmentColIndex >= 0) {
+          // Loss % = Loss / Current Assessment (using R+1 for correct Excel row)
+          const lossColLetter = XLSX.utils.encode_col(lossColIndex);
+          const caColLetter = XLSX.utils.encode_col(currentAssessmentColIndex);
+          ws[cellRef].f = `=${lossColLetter}${R + 1}/${caColLetter}${R + 1}`;
+          ws[cellRef].s = cellStyle;
+        } else {
+          // For text columns, ensure text format is preserved
+          if (textColumns.includes(columnName)) {
+            ws[cellRef].t = 's';
+          }
+          ws[cellRef].s = cellStyle;
+        }
+      }
+    }
+
+    // Generate filename with job name and date
+    const jobName = jobData?.job_name || 'Appeals';
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, filename);
+  };
+
   // ==================== RENDER ====================
 
   return (
@@ -1103,6 +1737,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             </select>
           </div>
           <button
+            onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import MyNJAppeal
+          </button>
+          <button
+            onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import PwrCama Appeals
+          </button>
+          <button
+            onClick={handleExportToExcel}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
@@ -1148,8 +1797,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Avg % Loss</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{stats.avgLossPercent !== null ? `${Math.round(stats.avgLossPercent * 10) / 10}%` : '-'}</p>
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total % Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{stats.totalLossPercent !== null ? `${Math.round(stats.totalLossPercent * 10) / 10}%` : '-'}</p>
         </div>
       </div>
 
@@ -1586,25 +2235,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         </div>
       )}
 
-      {/* COLUMN GROUP TOGGLES */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex gap-2 flex-wrap">
-        {[
-          { key: 'propertyInfo', label: 'Property Info' },
-          { key: 'legal', label: 'Legal' },
-          { key: 'workflow', label: 'Workflow' },
-          { key: 'notes', label: 'Notes' }
-        ].map(group => (
-          <button
-            key={group.key}
-            onClick={() => setExpandedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
-            className="text-xs font-medium px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 flex items-center gap-1"
-          >
-            {group.label}
-            {expandedGroups[group.key] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        ))}
-      </div>
-
       {/* STATUS LEGEND BAR */}
       <div className="bg-gray-50 border-t border-b border-gray-200 px-4 py-2 text-xs text-gray-600">
         <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · NA = Non Appearance
@@ -1626,58 +2256,26 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 />
               </th>
               {/* FROZEN LEFT COLUMNS */}
-              <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="70px" maxWidth="70px" />
-              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="120px" minWidth="120px" maxWidth="120px" />
-              <SortableHeader label="Block" columnKey="block" sticky={true} left="240px" minWidth="60px" maxWidth="60px" />
-              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="300px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="85px" maxWidth="85px" />
+              <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="135px" minWidth="120px" maxWidth="120px" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="255px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="315px" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
-
-              {/* PROPERTY INFO GROUP */}
-              {expandedGroups.propertyInfo && (
-                <>
-                  <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
-                  <SortableHeader label="VCS" columnKey="vcs" minWidth="60px" maxWidth="60px" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '110px', maxWidth: '110px' }}>Bracket</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '90px', maxWidth: '90px' }}>Inspected</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Owner</th>
-                </>
-              )}
-
-              {/* LEGAL GROUP */}
-              {expandedGroups.legal && (
-                <>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Petitioner</th>
-                  <SortableHeader label="Attorney" columnKey="attorney" minWidth="100px" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Attny Address</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '120px' }}>Attny City/State</th>
-                </>
-              )}
-
-              {/* WORKFLOW GROUP */}
-              {expandedGroups.workflow && (
-                <>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Submission</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Evidence</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Evidence Due</th>
-                  <SortableHeader label="Hearing" columnKey="hearing_date" minWidth="120px" />
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Stip</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-700" style={{ minWidth: '100px' }}>Tax Court</th>
-                </>
-              )}
+              <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
+              <SortableHeader label="VCS" columnKey="vcs" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Bracket" columnKey="bracket" minWidth="110px" maxWidth="110px" />
+              <SortableHeader label="Inspected" columnKey="inspected" minWidth="90px" maxWidth="90px" />
+              <SortableHeader label="Petitioner" columnKey="petitioner_name" minWidth="120px" />
+              <SortableHeader label="Attorney" columnKey="attorney" minWidth="100px" />
+              <SortableHeader label="Hearing" columnKey="hearing_date" minWidth="120px" />
+              <SortableHeader label="Tax Court" columnKey="tax_court_pending" minWidth="100px" />
 
               {/* VALUATION GROUP (always visible) */}
               <SortableHeader label="Current Assessment" columnKey="current_assessment" minWidth="120px" maxWidth="120px" />
-              <SortableHeader label="Requested" columnKey="requested" minWidth="100px" maxWidth="100px" />
               <SortableHeader label="CME Value" columnKey="cme_value" minWidth="100px" maxWidth="100px" />
               <SortableHeader label="Judgment" columnKey="judgment" minWidth="100px" maxWidth="100px" />
-              <SortableHeader label="Actual Loss" columnKey="actual_loss" minWidth="100px" maxWidth="100px" />
-              <SortableHeader label="% Loss" columnKey="loss_pct" minWidth="70px" maxWidth="70px" />
-
-              {/* NOTES GROUP */}
-              {expandedGroups.notes && (
-                <th className="px-3 py-2 text-left font-medium text-gray-700">Comments</th>
-              )}
+              <SortableHeader label="$Loss" columnKey="actual_loss" minWidth="100px" maxWidth="100px" />
 
               {/* DELETE COLUMN */}
               <th className="px-3 py-2 text-center font-medium text-gray-700">Action</th>
@@ -1701,7 +2299,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     />
                   </td>
                   {/* FROZEN LEFT COLUMNS */}
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '70px', maxWidth: '70px' }}>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '85px', maxWidth: '85px' }}>
                     <select
                       value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
@@ -1718,113 +2316,44 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <option value="NA">NA</option>
                     </select>
                   </td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ left: '120px', minWidth: '120px', maxWidth: '120px' }}>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ left: '135px', minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '240px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '300px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '255px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
+                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '315px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
-
-                  {/* PROPERTY INFO GROUP */}
-                  {expandedGroups.propertyInfo && (
-                    <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '110px', maxWidth: '110px' }}>
-                        {renderBracketCell(appeal)}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '90px', maxWidth: '90px' }}>
-                        {renderInspectedCell(appeal)}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600 flex items-center gap-1" style={{ minWidth: '100px' }}>
-                        {appeal.owner_name || '-'}
-                        {ownerMismatch && <span className="text-yellow-600">⚠️</span>}
-                      </td>
-                    </>
-                  )}
-
-                  {/* LEGAL GROUP */}
-                  {expandedGroups.legal && (
-                    <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                        {renderEditableCell(appeal.id, 'petitioner_name', appeal.petitioner_name, 'text')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
-                        {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                        {renderEditableCell(appeal.id, 'attorney_address', appeal.attorney_address, 'text')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                        {renderEditableCell(appeal.id, 'attorney_city_state', appeal.attorney_city_state, 'text')}
-                      </td>
-                    </>
-                  )}
-
-                  {/* WORKFLOW GROUP */}
-                  {expandedGroups.workflow && (
-                    <>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
-                        <select
-                          value={appeal.submission_type || ''}
-                          onChange={(e) => handleDropdownChange(appeal.id, 'submission_type', e.target.value)}
-                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                        >
-                          <option value="">-</option>
-                          <option value="ONLINE">Online</option>
-                          <option value="PAPER">Paper/Mail</option>
-                          <option value="ELECTRONIC">Electronic</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
-                        <select
-                          value={appeal.evidence_status || ''}
-                          onChange={(e) => handleDropdownChange(appeal.id, 'evidence_status', e.target.value)}
-                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                        >
-                          <option value="">-</option>
-                          <option value="None">None</option>
-                          <option value="Submitted">Submitted</option>
-                          <option value="Exchanged">Exchanged</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>{evidenceDue || '-'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                        {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
-                        <select
-                          value={appeal.stip_status || 'not_started'}
-                          onChange={(e) => handleDropdownChange(appeal.id, 'stip_status', e.target.value)}
-                          className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                        >
-                          <option value="not_started">Not Started</option>
-                          <option value="drafted">Drafted</option>
-                          <option value="sent">Sent</option>
-                          <option value="signed">Signed</option>
-                          <option value="filed">Filed</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={appeal.tax_court_pending || false}
-                            onChange={(e) => handleDropdownChange(appeal.id, 'tax_court_pending', e.target.checked)}
-                            className="w-4 h-4"
-                          />
-                        </label>
-                      </td>
-                    </>
-                  )}
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '110px', maxWidth: '110px' }}>
+                    {renderBracketCell(appeal)}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '90px', maxWidth: '90px' }}>
+                    {renderInspectedCell(appeal)}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
+                    {renderEditableCell(appeal.id, 'petitioner_name', appeal.petitioner_name, 'text')}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
+                    {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
+                    {appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-'}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={appeal.tax_court_pending || false}
+                        onChange={(e) => handleDropdownChange(appeal.id, 'tax_court_pending', e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                    </label>
+                  </td>
 
                   {/* VALUATION GROUP */}
                   <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '100px', maxWidth: '100px' }}>
-                    {renderEditableCell(appeal.id, 'requested_value', appeal.requested_value, 'number')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '100px', maxWidth: '100px' }}>
@@ -1833,16 +2362,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.judgment_value !== null && appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`} style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? formatCurrency(appeal.loss) : '-'}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '70px', maxWidth: '70px' }}>
-                    {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? `${acPercent}%` : '-'}
-                  </td>
-
-                  {/* NOTES GROUP */}
-                  {expandedGroups.notes && (
-                    <td className="px-3 py-2 text-gray-600">
-                      {renderEditableCell(appeal.id, 'comments', appeal.comments, 'text')}
-                    </td>
-                  )}
 
                   {/* DELETE BUTTON */}
                   <td className="px-3 py-2 whitespace-nowrap text-center">
@@ -1860,17 +2379,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
             {/* TOTALS ROW */}
             <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
-              <td colSpan="6" className="px-3 py-3 text-right">TOTALS:</td>
-              {expandedGroups.propertyInfo && <td colSpan="5"></td>}
-              {expandedGroups.legal && <td colSpan="4"></td>}
-              {expandedGroups.workflow && <td colSpan="6"></td>}
+              <td colSpan="10" className="px-3 py-3 text-right">TOTALS:</td>
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.requested_value || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap">-</td>
-              {expandedGroups.notes && <td></td>}
               <td></td>
             </tr>
           </tbody>
@@ -2222,6 +2735,130 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   {isSaving ? 'Saving...' : 'Save Appeal'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from CSV</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the BRT online appeal system CSV export format.
+                Duplicate appeal numbers will be skipped automatically.
+              </p>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  id="import-csv-input"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="import-csv-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {importFile ? importFile.name : 'Click to select CSV file'}
+                  </p>
+                </label>
+              </div>
+
+              {importResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {importResult.imported} records imported</p>
+                  {importResult.skipped > 0 && (
+                    <p className="text-amber-700">⚠ {importResult.skipped} skipped (duplicates)</p>
+                  )}
+                  {importResult.unmatched > 0 && (
+                    <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  {importResult ? 'Close' : 'Cancel'}
+                </button>
+                {!importResult && (
+                  <button
+                    onClick={handleImportCSV}
+                    disabled={!importFile || importProcessing}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POWERCAMA IMPORT MODAL */}
+      {showPwrCamaModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Appeals from PowerCama</h2>
+              <button onClick={() => setShowPwrCamaModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supports the PowerCama appeals export (.xlsx). All imported appeals will be set to status <strong>D (Defend)</strong>. Duplicates are skipped automatically.
+              </p>
+              <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  id="pwrcama-import-input"
+                  className="hidden"
+                  onChange={(e) => setPwrCamaFile(e.target.files[0] || null)}
+                />
+                <label htmlFor="pwrcama-import-input" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    {pwrCamaFile ? pwrCamaFile.name : 'Click to select .xlsx file'}
+                  </p>
+                </label>
+              </div>
+              {pwrCamaResult && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+                  <p className="font-semibold text-gray-800">Import Complete</p>
+                  <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
+                  {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
+                  {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
+                </div>
+              )}
+              <div className="flex gap-3 justify-end pt-2">
+                <button onClick={() => setShowPwrCamaModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                  {pwrCamaResult ? 'Close' : 'Cancel'}
+                </button>
+                {!pwrCamaResult && (
+                  <button
+                    onClick={handleImportPwrCama}
+                    disabled={!pwrCamaFile || pwrCamaProcessing}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {pwrCamaProcessing ? 'Importing...' : 'Import'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
