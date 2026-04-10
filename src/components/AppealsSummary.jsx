@@ -165,9 +165,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         }
       }
 
-      // Only show jobs that have appeals, sorted by CCDD code
+      // Show jobs that have appeals, plus Maplewood and Jackson as special cases, sorted by CCDD code
       const jobsWithAppeals = summaryData
-        .filter(row => row.totalAppeals > 0)
+        .filter(row => row.totalAppeals > 0 || row.jobName === 'Maplewood' || row.jobName === 'Jackson')
         .sort((a, b) => {
           // Sort by CCDD code (from job object if available)
           const ccddA = jobs.find(j => j.id === a.jobId)?.ccdd_code || '';
