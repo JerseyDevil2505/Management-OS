@@ -165,7 +165,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         }
       }
 
-      setJobAppealsSummary(summaryData);
+      // Only show jobs that have appeals
+      const jobsWithAppeals = summaryData.filter(row => row.totalAppeals > 0);
+      setJobAppealsSummary(jobsWithAppeals);
     } catch (error) {
       console.error('Error loading appeals:', error);
     } finally {
@@ -206,7 +208,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
         <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -219,7 +221,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       </div>
 
       {/* Content */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto flex-1">
         {jobAppealsSummary.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -236,20 +238,20 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Withdrawn</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Assessor</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Affirmed</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Withdrawn</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Assessor</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Affirmed</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
               </tr>
             </thead>
             <tbody>
@@ -259,40 +261,40 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
                   onClick={() => onJobSelect && onJobSelect(row.jobId)}
                 >
-                  <td className="px-6 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.hasCME}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.other !== null ? row.other : '—'}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.other !== null ? row.other : '—'}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.hasCME}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'}</td>
                 </tr>
               ))}
               {/* Totals Row */}
               <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
-                <td className="px-6 py-3 text-sm text-gray-900">TOTALS</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.other}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">—</td>
+                <td className="px-4 py-3 text-sm text-gray-900">TOTALS</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.other}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">—</td>
               </tr>
             </tbody>
           </table>
