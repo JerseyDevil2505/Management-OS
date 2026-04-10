@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,6 +100,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
   const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
+  // Bulk apply hearing date state
+  const [showBulkDateModal, setShowBulkDateModal] = useState(false);
+  const [bulkHearingDate, setBulkHearingDate] = useState('');
+  const [isApplyingBulkDate, setIsApplyingBulkDate] = useState(false);
+
   // CME Brackets constant
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'Under $100K', color: '#FF9999', textColor: 'black' },
@@ -113,6 +118,50 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     { min: 1500000, max: 1999999, label: '$1.5M-$1.99M', color: '#CC99FF', textColor: 'black' },
     { min: 2000000, max: 99999999, label: '$2M+', color: '#FF99FF', textColor: 'black' }
   ];
+
+  // ==================== STATS COMPUTATION ====================
+
+  const computeAndEmitStats = useCallback((currentAppeals) => {
+    if (typeof onAppealsStatUpdate !== 'function') return;
+
+    const stats = {
+      total_appeals: currentAppeals.length,
+      open: currentAppeals.filter(a => a.status !== 'C').length,
+      closed: currentAppeals.filter(a => a.status === 'C').length,
+      total_current_assessment_at_risk: currentAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0),
+      total_projected_loss: currentAppeals.reduce((sum, a) => sum + (a.loss || 0), 0),
+      hearing_date: currentAppeals.find(a => a.hearing_date)?.hearing_date || null,
+      evidence_due_date: currentAppeals.find(a => a.evidence_due_date)?.evidence_due_date || null,
+      stip_status_breakdown: currentAppeals.reduce((acc, a) => {
+        const s = a.stip_status || 'not_started';
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      }, {}),
+      by_class: currentAppeals.reduce((acc, a) => {
+        const cls = a.property_m4_class || 'Unknown';
+        if (!acc[cls]) acc[cls] = { count: 0, loss: 0 };
+        acc[cls].count++;
+        acc[cls].loss += (a.loss || 0);
+        return acc;
+      }, {})
+    };
+
+    onAppealsStatUpdate(stats);
+  }, [onAppealsStatUpdate]);
+
+  // ==================== SNAPSHOT SAVE ====================
+
+  const saveSnapshot = useCallback(async (currentAppeals) => {
+    if (!jobData?.id) return;
+    try {
+      await supabase
+        .from('jobs')
+        .update({ appeal_summary_snapshot: currentAppeals })
+        .eq('id', jobData.id);
+    } catch (e) {
+      console.warn('Appeal snapshot save failed:', e);
+    }
+  }, [jobData?.id]);
 
   // Compute VCS to bracket mapping on mount
   useEffect(() => {
@@ -247,6 +296,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         setAppeals(enrichedAppeals);
         console.log('DEBUG: Appeals state set with:', enrichedAppeals.length, 'records');
 
+        // Emit stats on initial load
+        computeAndEmitStats(enrichedAppeals);
+
+        // Save snapshot on initial load
+        saveSnapshot(enrichedAppeals);
+
         // Build unique years from data + current year
         const yearsFromData = [...new Set(enrichedAppeals.map(a => a.appeal_year).filter(Boolean))];
         const currentYear = new Date().getFullYear();
@@ -260,6 +315,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     loadAppeals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties]);
 
   // Get unique attorney and VCS values from appeals
@@ -575,13 +631,26 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const renderEditableCell = (appealId, field, value, type = 'text') => {
     const isEditing = editingCell?.appealId === appealId && editingCell?.field === field;
     const isCurrencyField = ['current_assessment', 'requested_value', 'judgment_value', 'possible_loss', 'loss', 'cme_projected_value'].includes(field);
+    const isDateField = type === 'date';
+
+    // Convert date to YYYY-MM-DD format for input (without timezone conversion)
+    const getDateInputValue = (dateVal) => {
+      if (!dateVal) return '';
+      // If it's already in YYYY-MM-DD format, use it directly
+      if (typeof dateVal === 'string' && dateVal.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return dateVal.split('T')[0];
+      }
+      // Otherwise parse and format
+      const date = new Date(dateVal);
+      return date.toISOString().split('T')[0];
+    };
 
     if (isEditing) {
       return (
         <input
           autoFocus
           type={type}
-          value={editValue}
+          value={isDateField ? getDateInputValue(editValue) : editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={() => handleSaveEdit(appealId, field, editValue)}
           onKeyDown={(e) => {
@@ -593,13 +662,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       );
     }
 
-    const displayValue = isCurrencyField ? formatCurrency(value) : (value || '-');
-    const isCurrency = isCurrencyField;
+    let displayValue = '-';
+    if (isDateField && value) {
+      // Parse YYYY-MM-DD format directly without timezone conversion
+      const parts = value.split('-');
+      if (parts.length === 3) {
+        const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        displayValue = date.toLocaleDateString();
+      }
+    } else if (isCurrencyField && value) {
+      displayValue = formatCurrency(value);
+    } else if (value) {
+      displayValue = value;
+    }
 
     return (
       <div
         onClick={() => handleStartEdit(appealId, field, value)}
-        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded whitespace-nowrap ${isCurrency ? 'text-right' : ''}`}
+        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded whitespace-nowrap ${isCurrencyField ? 'text-right' : ''}`}
         title="Click to edit"
       >
         {displayValue}
@@ -973,6 +1053,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       setAppeals(enrichedAppeals);
       console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
+      computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       handleCloseModal();
     } catch (error) {
       console.error('Error saving appeal:', error);
@@ -1001,9 +1083,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       // Recalculate dependent fields
       if (field === 'hearing_date' && value) {
-        const date = new Date(value);
+        // Parse date string (YYYY-MM-DD) without timezone conversion
+        const [year, month, day] = value.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
         date.setDate(date.getDate() - 7);
-        updateData.evidence_due_date = date.toISOString().split('T')[0];
+        const evidenceDueYear = date.getFullYear();
+        const evidenceDueMonth = String(date.getMonth() + 1).padStart(2, '0');
+        const evidenceDueDay = String(date.getDate()).padStart(2, '0');
+        updateData.evidence_due_date = `${evidenceDueYear}-${evidenceDueMonth}-${evidenceDueDay}`;
       }
 
       if (field === 'appeal_number') {
@@ -1034,9 +1121,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       if (error) throw error;
 
       // Update local state
-      setAppeals(prev => prev.map(a =>
+      const updatedAppeals = appeals.map(a =>
         a.id === appealId ? { ...a, ...updateData } : a
-      ));
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
       setEditingCell(null);
     } catch (error) {
       console.error('Error saving field:', error);
@@ -1057,7 +1147,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (error) throw error;
 
-      setAppeals(prev => prev.filter(a => a.id !== appealId));
+      const updatedAppeals = appeals.filter(a => a.id !== appealId);
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
     } catch (error) {
       console.error('Error deleting appeal:', error);
       alert(`Failed to delete: ${error.message}`);
@@ -1074,11 +1167,75 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       if (error) throw error;
 
-      setAppeals(prev => prev.map(a =>
+      const updatedAppeals = appeals.map(a =>
         a.id === appealId ? { ...a, [field]: value } : a
-      ));
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
     } catch (error) {
       console.error('Error updating field:', error);
+    }
+  };
+
+  const handleApplyBulkHearingDate = async () => {
+    if (!bulkHearingDate || selectedAppeals.size === 0) {
+      alert('Please select appeals and enter a hearing date');
+      return;
+    }
+
+    try {
+      setIsApplyingBulkDate(true);
+      const selectedAppealIds = Array.from(selectedAppeals);
+
+      // Calculate evidence due date (7 days before hearing) without timezone conversion
+      const [year, month, day] = bulkHearingDate.split('-').map(Number);
+      const hearingDate = new Date(year, month - 1, day);
+      const evidenceDueDate = new Date(hearingDate);
+      evidenceDueDate.setDate(evidenceDueDate.getDate() - 7);
+      const evidenceDueYear = evidenceDueDate.getFullYear();
+      const evidenceDueMonth = String(evidenceDueDate.getMonth() + 1).padStart(2, '0');
+      const evidenceDueDay = String(evidenceDueDate.getDate()).padStart(2, '0');
+      const evidenceDueDateStr = `${evidenceDueYear}-${evidenceDueMonth}-${evidenceDueDay}`;
+
+      // Update all selected appeals in parallel
+      const updates = selectedAppealIds.map(appealId =>
+        supabase
+          .from('appeal_log')
+          .update({
+            hearing_date: bulkHearingDate,
+            evidence_due_date: evidenceDueDateStr
+          })
+          .eq('id', appealId)
+      );
+
+      const results = await Promise.all(updates);
+
+      // Check for errors
+      const hasError = results.some(result => result.error);
+      if (hasError) {
+        throw new Error('Failed to update some appeals');
+      }
+
+      // Update local state
+      const updatedAppeals = appeals.map(a =>
+        selectedAppeals.has(a.id)
+          ? { ...a, hearing_date: bulkHearingDate, evidence_due_date: evidenceDueDateStr }
+          : a
+      );
+      setAppeals(updatedAppeals);
+      computeAndEmitStats(updatedAppeals);
+      saveSnapshot(updatedAppeals);
+
+      setShowBulkDateModal(false);
+      setBulkHearingDate('');
+      setSelectedAppeals(new Set());
+      alert(`Successfully updated ${selectedAppealIds.length} appeals with hearing date ${new Date(bulkHearingDate).toLocaleDateString()}`);
+    } catch (error) {
+      console.error('Error applying bulk hearing date:', error);
+      alert(`Failed to apply bulk hearing date: ${error.message}`);
+    } finally {
+      setIsApplyingBulkDate(false);
     }
   };
 
@@ -1321,6 +1478,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
+      computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       setImportResult({ imported, skipped, unmatched });
       setImportFile(null);
 
@@ -1464,6 +1623,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
+      computeAndEmitStats(enrichedAppeals);
+      saveSnapshot(enrichedAppeals);
       setPwrCamaResult({ imported, skipped, unmatched });
       setPwrCamaFile(null);
     } catch (error) {
@@ -2182,6 +2343,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {selectedAppeals.size} selected
             </span>
             <button
+              onClick={() => setShowBulkDateModal(true)}
+              disabled={isSendingToCME}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Bulk Apply Hearing Date
+            </button>
+            <button
               onClick={handleSendToCME}
               disabled={isSendingToCME}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -2229,6 +2397,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK APPLY HEARING DATE MODAL */}
+      {showBulkDateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Apply Hearing Date to Selected Appeals</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This will apply the hearing date to all {selectedAppeals.size} selected appeal{selectedAppeals.size !== 1 ? 's' : ''} and automatically set the evidence due date 7 days prior.
+            </p>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Hearing Date</label>
+              <input
+                type="date"
+                value={bulkHearingDate}
+                onChange={(e) => setBulkHearingDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkDateModal(false);
+                  setBulkHearingDate('');
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyBulkHearingDate}
+                disabled={isApplyingBulkDate || !bulkHearingDate}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isApplyingBulkDate ? 'Applying...' : 'Apply to All'}
               </button>
             </div>
           </div>
@@ -2338,7 +2545,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                    {appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-'}
+                    {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -2379,11 +2586,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
             {/* TOTALS ROW */}
             <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
-              <td colSpan="10" className="px-3 py-3 text-right">TOTALS:</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              {/* Checkbox column */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* Status */}
+              <td style={{ minWidth: '85px', maxWidth: '85px' }}></td>
+              {/* Appeal # */}
+              <td style={{ minWidth: '120px', maxWidth: '120px' }}></td>
+              {/* Block */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Lot */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Qualifier */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* Location */}
+              <td style={{ minWidth: '120px' }}></td>
+              {/* Class */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* VCS */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Bracket */}
+              <td style={{ minWidth: '110px', maxWidth: '110px' }}></td>
+              {/* Inspected */}
+              <td style={{ minWidth: '90px', maxWidth: '90px' }}></td>
+              {/* Petitioner */}
+              <td style={{ minWidth: '120px' }}></td>
+              {/* Attorney */}
+              <td style={{ minWidth: '100px' }}></td>
+              {/* Hearing - TOTALS label goes here */}
+              <td className="px-3 py-3 text-right" style={{ minWidth: '120px' }}>TOTALS:</td>
+              {/* Tax Court */}
+              <td style={{ minWidth: '100px' }}></td>
+              {/* Current Assessment */}
+              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '120px', maxWidth: '120px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
+              {/* CME Value */}
+              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              {/* Judgment */}
+              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
+              {/* Loss */}
+              <td className="px-3 py-3 whitespace-nowrap text-red-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              {/* Action */}
               <td></td>
             </tr>
           </tbody>
