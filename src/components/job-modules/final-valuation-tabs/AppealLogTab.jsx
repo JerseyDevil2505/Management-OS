@@ -2517,11 +2517,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
             {/* TOTALS ROW */}
             <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
-              <td colSpan="15" className="px-3 py-3 text-right">TOTALS:</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
-              <td className="px-3 py-3 whitespace-nowrap text-red-600">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              {/* Checkbox column */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* Status */}
+              <td style={{ minWidth: '85px', maxWidth: '85px' }}></td>
+              {/* Appeal # */}
+              <td style={{ minWidth: '120px', maxWidth: '120px' }}></td>
+              {/* Block */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Lot */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Qualifier */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* Location */}
+              <td style={{ minWidth: '120px' }}></td>
+              {/* Class */}
+              <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* VCS */}
+              <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
+              {/* Bracket */}
+              <td style={{ minWidth: '110px', maxWidth: '110px' }}></td>
+              {/* Inspected */}
+              <td style={{ minWidth: '90px', maxWidth: '90px' }}></td>
+              {/* Petitioner */}
+              <td style={{ minWidth: '120px' }}></td>
+              {/* Attorney */}
+              <td style={{ minWidth: '100px' }}></td>
+              {/* Hearing - TOTALS label goes here */}
+              <td className="px-3 py-3 text-right" style={{ minWidth: '120px' }}>TOTALS:</td>
+              {/* Tax Court */}
+              <td style={{ minWidth: '100px' }}></td>
+              {/* Current Assessment */}
+              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '120px', maxWidth: '120px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
+              {/* CME Value */}
+              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              {/* Judgment */}
+              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
+              {/* Loss */}
+              <td className="px-3 py-3 whitespace-nowrap text-red-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              {/* Action */}
               <td></td>
             </tr>
           </tbody>
