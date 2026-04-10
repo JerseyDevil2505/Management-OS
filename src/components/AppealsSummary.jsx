@@ -34,28 +34,33 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
           }
 
           if (appeals && appeals.length > 0) {
-            // Calculate breakdowns
-            const classBreakdown = {
-              residential: 0,    // 2, 3A
-              commercial: 0,     // 4A, 4B, 4C
-              vacant: 0,         // 1, 3B
-              other: 0           // other
+            // Calculate status breakdowns
+            const statusBreakdown = {
+              defend: 0,         // D
+              stipulated: 0,     // S
+              heard: 0,          // H
+              withdrawn: 0,      // W
+              assessor: 0,       // A or appeal_type = 'assessor'
+              affirmed: 0,       // AP, AWP
+              hasCME: 0          // cme_projected_value or cme_new_assessment
             };
 
             let proSeCount = 0;
             let attorneyCount = 0;
 
             appeals.forEach(appeal => {
-              // Classify by class
-              const classCode = appeal.property_m4_class;
-              if (['2', '3A'].includes(classCode)) {
-                classBreakdown.residential++;
-              } else if (['4A', '4B', '4C'].includes(classCode)) {
-                classBreakdown.commercial++;
-              } else if (['1', '3B'].includes(classCode)) {
-                classBreakdown.vacant++;
-              } else {
-                classBreakdown.other++;
+              // Count by status
+              const status = appeal.status?.toUpperCase();
+              if (status === 'D') statusBreakdown.defend++;
+              else if (status === 'S') statusBreakdown.stipulated++;
+              else if (status === 'H') statusBreakdown.heard++;
+              else if (status === 'W') statusBreakdown.withdrawn++;
+              else if (status === 'A') statusBreakdown.assessor++;
+              else if (status === 'AP' || status === 'AWP') statusBreakdown.affirmed++;
+
+              // Count CME valuations
+              if (appeal.cme_projected_value || appeal.cme_new_assessment) {
+                statusBreakdown.hasCME++;
               }
 
               // Count pro se vs attorney
@@ -70,7 +75,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               jobId: job.id,
               jobName: job.job_name || 'Unnamed Job',
               totalAppeals: appeals.length,
-              classBreakdown,
+              statusBreakdown,
               proSeCount,
               attorneyCount
             });
@@ -92,14 +97,17 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   const totals = jobAppealsSummary.reduce(
     (acc, row) => ({
       totalAppeals: acc.totalAppeals + row.totalAppeals,
-      residential: acc.residential + row.classBreakdown.residential,
-      commercial: acc.commercial + row.classBreakdown.commercial,
-      vacant: acc.vacant + row.classBreakdown.vacant,
-      other: acc.other + row.classBreakdown.other,
+      defend: acc.defend + row.statusBreakdown.defend,
+      stipulated: acc.stipulated + row.statusBreakdown.stipulated,
+      heard: acc.heard + row.statusBreakdown.heard,
+      withdrawn: acc.withdrawn + row.statusBreakdown.withdrawn,
+      assessor: acc.assessor + row.statusBreakdown.assessor,
+      affirmed: acc.affirmed + row.statusBreakdown.affirmed,
+      hasCME: acc.hasCME + row.statusBreakdown.hasCME,
       proSe: acc.proSe + row.proSeCount,
       attorney: acc.attorney + row.attorneyCount
     }),
-    { totalAppeals: 0, residential: 0, commercial: 0, vacant: 0, other: 0, proSe: 0, attorney: 0 }
+    { totalAppeals: 0, defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0, proSe: 0, attorney: 0 }
   );
 
 
@@ -144,11 +152,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Total Appeals</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Vacant Land</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Withdrawn</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Assessor</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Affirmed</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
                 <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
                 <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
               </tr>
@@ -162,10 +173,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 >
                   <td className="px-6 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
                   <td className="px-6 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.residential}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.commercial}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.vacant}</td>
-                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.classBreakdown.other}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
+                  <td className="px-6 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.hasCME}</td>
                   <td className="px-6 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
                   <td className="px-6 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
                 </tr>
@@ -174,10 +188,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
                 <td className="px-6 py-3 text-sm text-gray-900">TOTALS</td>
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
-                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.other}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
+                <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
                 <td className="px-6 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
               </tr>
