@@ -20,14 +20,15 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       return { residential: 0, commercial: 0, other: 0 };
     }
 
+    // Match AppealLogTab logic: Residential = '2' or '3A', Commercial = '4A', '4B', '4C'
     const residential = snapshot.filter(a => {
-      const cls = String(a.property_m4_class || '');
-      return cls.startsWith('2') || cls === '3A';
+      const cls = String(a.property_m4_class || '').trim();
+      return cls === '2' || cls === '3A';
     }).length;
 
     const commercial = snapshot.filter(a => {
-      const cls = String(a.property_m4_class || '');
-      return cls.startsWith('4A') || cls.startsWith('4B') || cls.startsWith('4C') || cls.startsWith('4');
+      const cls = String(a.property_m4_class || '').trim();
+      return cls === '4A' || cls === '4B' || cls === '4C';
     }).length;
 
     const other = snapshot.length - residential - commercial;
