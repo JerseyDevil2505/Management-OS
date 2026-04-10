@@ -100,6 +100,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
   const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
+  // Bulk apply hearing date state
+  const [showBulkDateModal, setShowBulkDateModal] = useState(false);
+  const [bulkHearingDate, setBulkHearingDate] = useState('');
+  const [isApplyingBulkDate, setIsApplyingBulkDate] = useState(false);
+
   // CME Brackets constant
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'Under $100K', color: '#FF9999', textColor: 'black' },
@@ -575,13 +580,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const renderEditableCell = (appealId, field, value, type = 'text') => {
     const isEditing = editingCell?.appealId === appealId && editingCell?.field === field;
     const isCurrencyField = ['current_assessment', 'requested_value', 'judgment_value', 'possible_loss', 'loss', 'cme_projected_value'].includes(field);
+    const isDateField = type === 'date';
+
+    // Convert date to YYYY-MM-DD format for input
+    const getDateInputValue = (dateVal) => {
+      if (!dateVal) return '';
+      const date = new Date(dateVal);
+      return date.toISOString().split('T')[0];
+    };
 
     if (isEditing) {
       return (
         <input
           autoFocus
           type={type}
-          value={editValue}
+          value={isDateField ? getDateInputValue(editValue) : editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={() => handleSaveEdit(appealId, field, editValue)}
           onKeyDown={(e) => {
@@ -593,13 +606,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       );
     }
 
-    const displayValue = isCurrencyField ? formatCurrency(value) : (value || '-');
-    const isCurrency = isCurrencyField;
+    let displayValue = '-';
+    if (isDateField && value) {
+      displayValue = new Date(value).toLocaleDateString();
+    } else if (isCurrencyField && value) {
+      displayValue = formatCurrency(value);
+    } else if (value) {
+      displayValue = value;
+    }
 
     return (
       <div
         onClick={() => handleStartEdit(appealId, field, value)}
-        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded whitespace-nowrap ${isCurrency ? 'text-right' : ''}`}
+        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded whitespace-nowrap ${isCurrencyField ? 'text-right' : ''}`}
         title="Click to edit"
       >
         {displayValue}
@@ -1079,6 +1098,60 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       ));
     } catch (error) {
       console.error('Error updating field:', error);
+    }
+  };
+
+  const handleApplyBulkHearingDate = async () => {
+    if (!bulkHearingDate || selectedAppeals.size === 0) {
+      alert('Please select appeals and enter a hearing date');
+      return;
+    }
+
+    try {
+      setIsApplyingBulkDate(true);
+      const selectedAppealIds = Array.from(selectedAppeals);
+
+      // Calculate evidence due date (7 days before hearing)
+      const hearingDate = new Date(bulkHearingDate);
+      const evidenceDueDate = new Date(hearingDate);
+      evidenceDueDate.setDate(evidenceDueDate.getDate() - 7);
+      const evidenceDueDateStr = evidenceDueDate.toISOString().split('T')[0];
+
+      // Update all selected appeals in parallel
+      const updates = selectedAppealIds.map(appealId =>
+        supabase
+          .from('appeal_log')
+          .update({
+            hearing_date: bulkHearingDate,
+            evidence_due_date: evidenceDueDateStr
+          })
+          .eq('id', appealId)
+      );
+
+      const results = await Promise.all(updates);
+
+      // Check for errors
+      const hasError = results.some(result => result.error);
+      if (hasError) {
+        throw new Error('Failed to update some appeals');
+      }
+
+      // Update local state
+      setAppeals(prev => prev.map(a =>
+        selectedAppeals.has(a.id)
+          ? { ...a, hearing_date: bulkHearingDate, evidence_due_date: evidenceDueDateStr }
+          : a
+      ));
+
+      setShowBulkDateModal(false);
+      setBulkHearingDate('');
+      setSelectedAppeals(new Set());
+      alert(`Successfully updated ${selectedAppealIds.length} appeals with hearing date ${new Date(bulkHearingDate).toLocaleDateString()}`);
+    } catch (error) {
+      console.error('Error applying bulk hearing date:', error);
+      alert(`Failed to apply bulk hearing date: ${error.message}`);
+    } finally {
+      setIsApplyingBulkDate(false);
     }
   };
 
@@ -2182,6 +2255,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {selectedAppeals.size} selected
             </span>
             <button
+              onClick={() => setShowBulkDateModal(true)}
+              disabled={isSendingToCME}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Bulk Apply Hearing Date
+            </button>
+            <button
               onClick={handleSendToCME}
               disabled={isSendingToCME}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -2229,6 +2309,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK APPLY HEARING DATE MODAL */}
+      {showBulkDateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Apply Hearing Date to Selected Appeals</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This will apply the hearing date to all {selectedAppeals.size} selected appeal{selectedAppeals.size !== 1 ? 's' : ''} and automatically set the evidence due date 7 days prior.
+            </p>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Hearing Date</label>
+              <input
+                type="date"
+                value={bulkHearingDate}
+                onChange={(e) => setBulkHearingDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkDateModal(false);
+                  setBulkHearingDate('');
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyBulkHearingDate}
+                disabled={isApplyingBulkDate || !bulkHearingDate}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isApplyingBulkDate ? 'Applying...' : 'Apply to All'}
               </button>
             </div>
           </div>
@@ -2338,7 +2457,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
-                    {appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-'}
+                    {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
                     <label className="flex items-center gap-2 cursor-pointer">
