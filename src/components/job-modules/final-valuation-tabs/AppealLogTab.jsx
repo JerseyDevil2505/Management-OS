@@ -1020,9 +1020,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       // Recalculate dependent fields
       if (field === 'hearing_date' && value) {
-        const date = new Date(value);
+        // Parse date string (YYYY-MM-DD) without timezone conversion
+        const [year, month, day] = value.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
         date.setDate(date.getDate() - 7);
-        updateData.evidence_due_date = date.toISOString().split('T')[0];
+        const evidenceDueYear = date.getFullYear();
+        const evidenceDueMonth = String(date.getMonth() + 1).padStart(2, '0');
+        const evidenceDueDay = String(date.getDate()).padStart(2, '0');
+        updateData.evidence_due_date = `${evidenceDueYear}-${evidenceDueMonth}-${evidenceDueDay}`;
       }
 
       if (field === 'appeal_number') {
@@ -1111,11 +1116,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       setIsApplyingBulkDate(true);
       const selectedAppealIds = Array.from(selectedAppeals);
 
-      // Calculate evidence due date (7 days before hearing)
-      const hearingDate = new Date(bulkHearingDate);
+      // Calculate evidence due date (7 days before hearing) without timezone conversion
+      const [year, month, day] = bulkHearingDate.split('-').map(Number);
+      const hearingDate = new Date(year, month - 1, day);
       const evidenceDueDate = new Date(hearingDate);
       evidenceDueDate.setDate(evidenceDueDate.getDate() - 7);
-      const evidenceDueDateStr = evidenceDueDate.toISOString().split('T')[0];
+      const evidenceDueYear = evidenceDueDate.getFullYear();
+      const evidenceDueMonth = String(evidenceDueDate.getMonth() + 1).padStart(2, '0');
+      const evidenceDueDay = String(evidenceDueDate.getDate()).padStart(2, '0');
+      const evidenceDueDateStr = `${evidenceDueYear}-${evidenceDueMonth}-${evidenceDueDay}`;
 
       // Update all selected appeals in parallel
       const updates = selectedAppealIds.map(appealId =>
