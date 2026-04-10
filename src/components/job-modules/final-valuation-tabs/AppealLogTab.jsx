@@ -298,7 +298,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     loadAppeals();
-  }, [jobData?.id, properties, computeAndEmitStats]);
+  }, [jobData?.id, properties]);
 
   // Get unique attorney and VCS values from appeals
   const uniqueAttorneys = useMemo(() => {
