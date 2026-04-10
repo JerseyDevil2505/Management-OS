@@ -1543,29 +1543,31 @@ const App = () => {
           />
         )}
 
-        {activeView === 'appeals' && (
-          <AppealsSummary
-            jobs={[
-              // Include archived PPA jobs plus Maplewood and Jackson from any job list
-              // Note: Jackson and Maplewood are LOJIK clients but should be visible in Appeals Summary
-              ...filterJobsForUser([
-                ...(appData.archivedJobs || []),
-                ...(appData.activeJobs || []),
-                ...(appData.planningJobs || [])
-              ]),
-              // Add Maplewood and Jackson explicitly if not already in filtered list
-              ...([
-                ...(appData.archivedJobs || []),
-                ...(appData.activeJobs || []),
-                ...(appData.planningJobs || [])
-              ].filter(job => {
-                const jobName = (job.job_name || '').toLowerCase().trim();
-                return jobName === 'maplewood' || jobName === 'jackson';
-              }))
-            ]}
-            onJobSelect={handleJobSelect}
-          />
-        )}
+        {activeView === 'appeals' && (() => {
+          const filteredPpaJobs = filterJobsForUser([
+            ...(appData.archivedJobs || []),
+            ...(appData.activeJobs || []),
+            ...(appData.planningJobs || [])
+          ]);
+          const ppaJobIds = new Set(filteredPpaJobs.map(j => j.id));
+
+          // Add Jackson and Maplewood only if they're not already in the PPA jobs list
+          const specialJobs = [
+            ...(appData.archivedJobs || []),
+            ...(appData.activeJobs || []),
+            ...(appData.planningJobs || [])
+          ].filter(job => {
+            const jobName = (job.job_name || '').toLowerCase().trim();
+            return (jobName === 'maplewood' || jobName === 'jackson') && !ppaJobIds.has(job.id);
+          });
+
+          return (
+            <AppealsSummary
+              jobs={[...filteredPpaJobs, ...specialJobs]}
+              onJobSelect={handleJobSelect}
+            />
+          );
+        })()}
 
         {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
