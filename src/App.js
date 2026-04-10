@@ -487,6 +487,7 @@ const App = () => {
             source_file_uploaded_at,
             unit_rate_config,
             staged_unit_rate_config,
+            appeal_summary_snapshot,
             job_responsibilities(count),
             job_contracts(
               id,
@@ -1545,8 +1546,15 @@ const App = () => {
         {activeView === 'appeals' && (
           <AppealsSummary
             jobs={[
-              ...filterJobsForUser(appData.jobs).filter(job => isPpaJob(job) || job.job_name === 'Jackson' || job.job_name === 'Maplewood'),
-              ...filterJobsForUser(appData.archivedJobs || []).filter(job => isPpaJob(job) || job.job_name === 'Jackson' || job.job_name === 'Maplewood')
+              // Include archived PPA jobs plus Maplewood and Jackson from any job list
+              ...filterJobsForUser([
+                ...(appData.archivedJobs || []),
+                ...(appData.activeJobs || []),
+                ...(appData.planningJobs || [])
+              ]).filter(job => {
+                const jobName = (job.job_name || '').toLowerCase().trim();
+                return isPpaJob(job) || jobName === 'maplewood' || jobName === 'jackson';
+              })
             ]}
             onJobSelect={handleJobSelect}
           />
