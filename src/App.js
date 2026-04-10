@@ -1544,19 +1544,12 @@ const App = () => {
         )}
 
         {activeView === 'appeals' && (() => {
-          const filteredPpaJobs = filterJobsForUser([
-            ...(appData.archivedJobs || []),
-            ...(appData.activeJobs || []),
-            ...(appData.planningJobs || [])
-          ]);
+          // Appeals Summary is PPA archived jobs only (appeals happen post-completion)
+          const filteredPpaJobs = filterJobsForUser(appData.archivedJobs || []);
           const ppaJobIds = new Set(filteredPpaJobs.map(j => j.id));
 
-          // Add Jackson and Maplewood only if they're not already in the PPA jobs list
-          const specialJobs = [
-            ...(appData.archivedJobs || []),
-            ...(appData.activeJobs || []),
-            ...(appData.planningJobs || [])
-          ].filter(job => {
+          // Add Jackson and Maplewood from archived jobs only if not already in list
+          const specialJobs = (appData.archivedJobs || []).filter(job => {
             const jobName = (job.job_name || '').toLowerCase().trim();
             return (jobName === 'maplewood' || jobName === 'jackson') && !ppaJobIds.has(job.id);
           });
