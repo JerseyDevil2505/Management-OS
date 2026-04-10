@@ -1547,14 +1547,21 @@ const App = () => {
           <AppealsSummary
             jobs={[
               // Include archived PPA jobs plus Maplewood and Jackson from any job list
+              // Note: Jackson and Maplewood are LOJIK clients but should be visible in Appeals Summary
               ...filterJobsForUser([
                 ...(appData.archivedJobs || []),
                 ...(appData.activeJobs || []),
                 ...(appData.planningJobs || [])
-              ]).filter(job => {
+              ]),
+              // Add Maplewood and Jackson explicitly if not already in filtered list
+              ...([
+                ...(appData.archivedJobs || []),
+                ...(appData.activeJobs || []),
+                ...(appData.planningJobs || [])
+              ].filter(job => {
                 const jobName = (job.job_name || '').toLowerCase().trim();
-                return isPpaJob(job) || jobName === 'maplewood' || jobName === 'jackson';
-              })
+                return jobName === 'maplewood' || jobName === 'jackson';
+              }))
             ]}
             onJobSelect={handleJobSelect}
           />
