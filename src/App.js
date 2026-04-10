@@ -1545,8 +1545,8 @@ const App = () => {
         {activeView === 'appeals' && (
           <AppealsSummary
             jobs={[
-              ...filterJobsForUser(appData.jobs).filter(isPpaJob),
-              ...filterJobsForUser(appData.archivedJobs || []).filter(isPpaJob)
+              ...filterJobsForUser(appData.jobs).filter(job => isPpaJob(job) || job.job_name === 'Jackson' || job.job_name === 'Maplewood'),
+              ...filterJobsForUser(appData.archivedJobs || []).filter(job => isPpaJob(job) || job.job_name === 'Jackson' || job.job_name === 'Maplewood')
             ]}
             onJobSelect={handleJobSelect}
           />
