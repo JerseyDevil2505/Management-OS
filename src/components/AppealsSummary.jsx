@@ -17,10 +17,10 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
 
   const computeClassBreakdown = (snapshot) => {
     if (!snapshot || !Array.isArray(snapshot)) {
-      return { residential: 0, commercial: 0, other: 0 };
+      return { residential: 0, commercial: 0, vacant: 0 };
     }
 
-    // Match AppealLogTab logic: Residential = '2' or '3A', Commercial = '4A', '4B', '4C'
+    // Match AppealLogTab logic: Residential = '2' or '3A', Commercial = '4A', '4B', '4C', Vacant Land = everything else
     const residential = snapshot.filter(a => {
       const cls = String(a.property_m4_class || '').trim();
       return cls === '2' || cls === '3A';
@@ -31,9 +31,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       return cls === '4A' || cls === '4B' || cls === '4C';
     }).length;
 
-    const other = snapshot.length - residential - commercial;
+    const vacant = snapshot.length - residential - commercial;
 
-    return { residential, commercial, other };
+    return { residential, commercial, vacant };
   };
 
   const getHearingDates = (snapshot) => {
@@ -136,7 +136,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               attorneyCount,
               residential: classBreakdown.residential,
               commercial: classBreakdown.commercial,
-              other: classBreakdown.other,
+              vacant: classBreakdown.vacant,
               hearingDate: hearingInfo.earliest,
               hasMultipleHearings: hearingInfo.hasMultiple,
               snapshotAvailable: !!job.appeal_summary_snapshot
@@ -154,7 +154,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               attorneyCount: 0,
               residential: job.appeal_summary_snapshot ? 0 : null,
               commercial: job.appeal_summary_snapshot ? 0 : null,
-              other: job.appeal_summary_snapshot ? 0 : null,
+              vacant: job.appeal_summary_snapshot ? 0 : null,
               hearingDate: job.appeal_summary_snapshot ? null : null,
               hasMultipleHearings: false,
               snapshotAvailable: !!job.appeal_summary_snapshot
@@ -197,9 +197,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       attorney: acc.attorney + row.attorneyCount,
       residential: acc.residential + (row.residential !== null ? row.residential : 0),
       commercial: acc.commercial + (row.commercial !== null ? row.commercial : 0),
-      other: acc.other + (row.other !== null ? row.other : 0)
+      vacant: acc.vacant + (row.vacant !== null ? row.vacant : 0)
     }),
-    { totalAppeals: 0, defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0, proSe: 0, attorney: 0, residential: 0, commercial: 0, other: 0 }
+    { totalAppeals: 0, defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0, proSe: 0, attorney: 0, residential: 0, commercial: 0, vacant: 0 }
   );
 
 
@@ -248,7 +248,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Other</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Vacant Land</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
@@ -272,7 +272,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.other !== null ? row.other : '—'}</td>
+                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.vacant !== null ? row.vacant : '—'}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
@@ -291,7 +291,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.other}</td>
+                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
                 <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
