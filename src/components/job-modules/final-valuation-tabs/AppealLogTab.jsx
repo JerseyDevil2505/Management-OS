@@ -582,9 +582,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const isCurrencyField = ['current_assessment', 'requested_value', 'judgment_value', 'possible_loss', 'loss', 'cme_projected_value'].includes(field);
     const isDateField = type === 'date';
 
-    // Convert date to YYYY-MM-DD format for input
+    // Convert date to YYYY-MM-DD format for input (without timezone conversion)
     const getDateInputValue = (dateVal) => {
       if (!dateVal) return '';
+      // If it's already in YYYY-MM-DD format, use it directly
+      if (typeof dateVal === 'string' && dateVal.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return dateVal.split('T')[0];
+      }
+      // Otherwise parse and format
       const date = new Date(dateVal);
       return date.toISOString().split('T')[0];
     };
@@ -608,7 +613,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     let displayValue = '-';
     if (isDateField && value) {
-      displayValue = new Date(value).toLocaleDateString();
+      // Parse YYYY-MM-DD format directly without timezone conversion
+      const parts = value.split('-');
+      if (parts.length === 3) {
+        const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        displayValue = date.toLocaleDateString();
+      }
     } else if (isCurrencyField && value) {
       displayValue = formatCurrency(value);
     } else if (value) {
@@ -2507,7 +2517,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
             {/* TOTALS ROW */}
             <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
-              <td colSpan="10" className="px-3 py-3 text-right">TOTALS:</td>
+              <td colSpan="15" className="px-3 py-3 text-right">TOTALS:</td>
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap text-blue-600">{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
               <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
