@@ -3148,7 +3148,7 @@ const editCustomCheck = (check) => {
                           {property?.property_qualifier || ''}
                         </td>
                         <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
-                          {property?.property_card || ''}
+                          {property?.property_addl_card || ''}
                         </td>
                         <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_location || ''}
