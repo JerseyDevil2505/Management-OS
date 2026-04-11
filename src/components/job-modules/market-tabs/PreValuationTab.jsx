@@ -27,7 +27,11 @@ const PreValuationTab = ({
   codeDefinitions,
   vendorType,
   onDataChange,
-  onUpdateJobCache 
+  onUpdateJobCache,
+  blockAnalysisCache = null,
+  dataVersion = 0,
+  onCacheBlockAnalysis = () => {},
+  bumpDataVersion = () => {}
 }) => {
     if (false) console.log('PreValuationTab MOUNTED/UPDATED:', {
     jobId: jobData?.id,
@@ -240,6 +244,7 @@ const PreValuationTab = ({
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
       console.log(`✅ Generated lot sizes for ${updated} properties`);
+      bumpDataVersion();
       if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
@@ -1738,6 +1743,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await worksheetService.saveTimeNormalizedSales(jobData.id, trimmedForSave, newStats);
 
       // After time normalization save - use callRefresh to ensure forceRefresh is passed
+      bumpDataVersion();
       if (onUpdateJobCache) {
         setTimeout(() => {
           console.log('🔄 PreValuationTab requesting parent refresh after time normalization...');
@@ -2247,6 +2253,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       await saveSizeNormalizedValues(acceptedSales);
 
       // After size normalization save - use callRefresh to ensure forceRefresh is passed
+      bumpDataVersion();
       if (onUpdateJobCache) {
         setTimeout(() => {
           console.log('🔄 PreValuationTab requesting parent refresh after size normalization...');
@@ -2456,6 +2463,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
       
       setMarketAnalysisData(blockData);
+
+      // Cache in parent so tab switches don't recompute
+      onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement }, dataVersion);
     } catch (error) {
       console.error('Error processing block analysis:', error);
       alert('Error processing block analysis. Please check the console.');
@@ -2528,10 +2538,20 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     return mode;
   };
   
-  // Auto-process when filter or scale changes
+  // Auto-process when filter or scale changes — use cache when available and fresh
+  const blockCacheRestoredRef = useRef(false);
   useEffect(() => {
     if (isMounted && normalizationStats.sizeNormalized > 0) {
-      // processBlockAnalysis is stable (useCallback). Don't include it in deps to avoid recreating this effect when it changes.
+      // On first mount, try to restore from parent cache if data hasn't changed
+      if (!blockCacheRestoredRef.current && blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion
+          && blockAnalysisCache.data?.blockTypeFilter === blockTypeFilter
+          && blockAnalysisCache.data?.colorScaleStart === colorScaleStart
+          && blockAnalysisCache.data?.colorScaleIncrement === colorScaleIncrement) {
+        blockCacheRestoredRef.current = true;
+        setMarketAnalysisData(blockAnalysisCache.data.blockData);
+        return;
+      }
+      blockCacheRestoredRef.current = true;
       processBlockAnalysis();
     }
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
@@ -2663,6 +2683,7 @@ const handleSalesDecision = (saleId, decision) => {
       }
 
       // FOURTH: Clear cache to prevent stale data issues
+      bumpDataVersion();
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('����️ Clearing cache after batch save to prevent stale data');
         callRefresh(null);
@@ -2899,6 +2920,7 @@ const processSelectedProperties = async () => {
 
       setTimeout(() => {
         alert(`✅ Successfully processed ${toProcess.length} properties`);
+        bumpDataVersion();
         setReadyProperties(new Set());
         updateWorksheetStats(worksheetProperties);
         setIsProcessingProperties(false);
@@ -5914,7 +5936,8 @@ const analyzeImportFile = async (file) => {
                       if (error) throw error;
 
                       //Clear cache after saving zoning
-                      if (onUpdateJobCache && jobData?.id) { 
+                      bumpDataVersion();
+                      if (onUpdateJobCache && jobData?.id) {
                         if (false) console.log('🗑️ Clearing cache after saving zoning');
                         callRefresh(null);
                       }

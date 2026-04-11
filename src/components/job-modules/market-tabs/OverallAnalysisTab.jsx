@@ -8,10 +8,13 @@ import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
-  properties = [], 
-  jobData = {}, 
+  properties = [],
+  jobData = {},
   marketLandData = {},
-  onDataChange = () => {}
+  onDataChange = () => {},
+  analysisCache = null,
+  dataVersion = 0,
+  onCacheAnalysis = () => {}
 }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('market');
@@ -1762,6 +1765,11 @@ const OverallAnalysisTab = ({
       setAnalysis(results);
       setLastProcessed(new Date());
 
+      // Cache results in parent so tab switches don't recompute
+      if (selectedVCS === 'ALL') {
+        onCacheAnalysis(results, dataVersion);
+      }
+
       // Notify parent of changes
       onDataChange();
 
@@ -1826,10 +1834,16 @@ const OverallAnalysisTab = ({
     }
   }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange, filteredProperties, vendorType, codeDefinitions]);
 
-  // Run analysis on mount and when properties change
+  // Run analysis on mount — use cached results if data hasn't changed
   useEffect(() => {
     if (filteredProperties.length > 0) {
-      runAnalysis();
+      if (analysisCache && analysisCache.dataVersion === dataVersion && selectedVCS === 'ALL') {
+        // Cache is fresh and VCS filter hasn't changed — restore without recomputing
+        setAnalysis(analysisCache.results);
+        setLastProcessed(new Date(analysisCache.results.timestamp));
+      } else {
+        runAnalysis();
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredProperties.length]); // Only re-run when count changes
