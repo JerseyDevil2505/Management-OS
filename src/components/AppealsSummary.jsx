@@ -5,6 +5,8 @@ import { AlertCircle, Calendar, FileText, TrendingUp } from 'lucide-react';
 const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = useState([]);
 
   useEffect(() => {
     if (jobs && jobs.length > 0) {
@@ -13,7 +15,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       setJobAppealsSummary([]);
       setLoading(false);
     }
-  }, [jobs]);
+  }, [jobs, selectedYear]);
 
   const computeClassBreakdown = (snapshot) => {
     if (!snapshot || !Array.isArray(snapshot)) {
@@ -89,6 +91,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
           }
 
           if (appeals && appeals.length > 0) {
+            // Filter appeals by selected year (exclude appeals without a year)
+            const yearFilteredAppeals = appeals.filter(a => a.appeal_year === selectedYear);
+
+            if (yearFilteredAppeals.length === 0) {
+              // No appeals for this year, skip this job
+              continue;
+            }
+
             // Calculate status breakdowns
             const statusBreakdown = {
               defend: 0,         // D
@@ -103,7 +113,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             let proSeCount = 0;
             let attorneyCount = 0;
 
-            appeals.forEach(appeal => {
+            yearFilteredAppeals.forEach(appeal => {
               // Count by status
               const status = appeal.status?.toUpperCase();
               if (status === 'D') statusBreakdown.defend++;
@@ -126,14 +136,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               }
             });
 
-            // Compute class breakdown and hearing dates from snapshot
-            const classBreakdown = computeClassBreakdown(appeals);
-            const hearingInfo = getHearingDates(appeals);
+            // Compute class breakdown and hearing dates from year-filtered appeals
+            const classBreakdown = computeClassBreakdown(yearFilteredAppeals);
+            const hearingInfo = getHearingDates(yearFilteredAppeals);
 
             summaryData.push({
               jobId: job.id,
               jobName: job.job_name || 'Unnamed Job',
-              totalAppeals: appeals.length,
+              totalAppeals: yearFilteredAppeals.length,
               statusBreakdown,
               proSeCount,
               attorneyCount,
@@ -178,6 +188,26 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
           return ccddA.localeCompare(ccddB);
         });
       setJobAppealsSummary(jobsWithAppeals);
+
+      // Build available years from all appeal data
+      const allYearsSet = new Set();
+      for (const job of jobs) {
+        let appeals = job.appeal_summary_snapshot;
+        if (!appeals) {
+          const { data: fetchedAppeals } = await supabase
+            .from('appeal_log')
+            .select('*')
+            .eq('job_id', job.id);
+          appeals = fetchedAppeals || [];
+        }
+        if (appeals && appeals.length > 0) {
+          appeals
+            .filter(a => a.appeal_year)
+            .forEach(a => allYearsSet.add(a.appeal_year));
+        }
+      }
+      const yearsArray = [...allYearsSet].sort((a, b) => b - a);
+      setAvailableYears(yearsArray.length > 0 ? yearsArray : [new Date().getFullYear()]);
     } catch (error) {
       console.error('Error loading appeals:', error);
     } finally {
@@ -221,13 +251,31 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-          <AlertCircle className="w-8 h-8 text-amber-600" />
-          Appeals Summary by Job
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Overview of all PPA appeals (active, archived, draft) with class and representation breakdown
-        </p>
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <AlertCircle className="w-8 h-8 text-amber-600" />
+              Appeals Summary by Job
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Overview of all PPA appeals (active, archived, draft) with class and representation breakdown
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Year:</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {availableYears.map(year => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Content */}
