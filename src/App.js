@@ -1543,22 +1543,39 @@ const App = () => {
           />
         )}
 
-        {activeView === 'appeals' && (
-          <AppealsSummary
-            jobs={[
-              // Include archived PPA jobs plus Maplewood and Jackson from any job list
-              ...filterJobsForUser([
-                ...(appData.archivedJobs || []),
-                ...(appData.activeJobs || []),
-                ...(appData.planningJobs || [])
-              ]).filter(job => {
-                const jobName = (job.job_name || '').toLowerCase().trim();
-                return isPpaJob(job) || jobName === 'maplewood' || jobName === 'jackson';
-              })
-            ]}
-            onJobSelect={handleJobSelect}
-          />
-        )}
+        {activeView === 'appeals' && (() => {
+          // Appeals Summary is PPA archived jobs only (appeals happen post-completion)
+          const filteredPpaJobs = filterJobsForUser(appData.archivedJobs || []);
+          const ppaJobIds = new Set(filteredPpaJobs.map(j => j.id));
+
+          // Hardcode Jackson and Maplewood (LOJIK clients with their own org_id where the appeal data lives)
+          // The PPA archived drafts are dead weight; the real data is in their LOJIK entries
+          const allJobs = [
+            ...(appData.archivedJobs || []),
+            ...(appData.activeJobs || []),
+            ...(appData.planningJobs || []),
+            ...(appData.jobs || [])
+          ];
+
+          // Deduplicate jobs by ID to avoid React key warnings
+          const jobsSeenById = new Set(ppaJobIds);
+          const specialJobs = allJobs.filter(job => {
+            if (jobsSeenById.has(job.id)) return false; // Skip if already added
+            const jobName = (job.job_name || '').toLowerCase().trim();
+            if (jobName === 'maplewood' || jobName === 'jackson') {
+              jobsSeenById.add(job.id); // Mark as seen
+              return true;
+            }
+            return false;
+          });
+
+          return (
+            <AppealsSummary
+              jobs={[...filteredPpaJobs, ...specialJobs]}
+              onJobSelect={handleJobSelect}
+            />
+          );
+        })()}
 
         {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
