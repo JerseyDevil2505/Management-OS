@@ -46,6 +46,7 @@ const DataQualityTab = ({
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
+  const [modalSelectedKeys, setModalSelectedKeys] = useState(new Set());
 
   // Helper: filter out ignored issues from results for display
   const filterIgnoredResults = (results, ignoredSet = ignoredIssues) => {
@@ -1899,6 +1900,7 @@ const generateQCFormPDF = () => {
       properties: issues
     });
     setShowDetailsModal(true);
+    setModalSelectedKeys(new Set());
   };
 
   const saveCustomChecksToDb = async (checks) => {
@@ -2969,27 +2971,98 @@ const editCustomCheck = (check) => {
             style={{ maxHeight: 'calc(100vh - 100px)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-              <div className="flex items-center gap-4">
-                <h3 className="text-lg font-semibold text-gray-800">
-                  {modalData.title}
-                </h3>
-                <span className="text-sm text-gray-500">
-                  ({modalData.properties.length} properties)
-                </span>
+            <div className="p-6 border-b border-gray-200 flex-shrink-0">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {modalData.title}
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    ({modalData.properties.length} properties)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl leading-none p-2"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl leading-none p-2"
-              >
-                ×
-              </button>
+              {/* Bulk actions bar */}
+              {(() => {
+                const nonIgnoredProps = modalData.properties.filter(p => !ignoredIssues.has(`${p.property_key}-${p.check}`));
+                const selectableKeys = new Set(nonIgnoredProps.map(p => `${p.property_key}-${p.check}`));
+                const selectedCount = [...modalSelectedKeys].filter(k => selectableKeys.has(k)).length;
+                const allSelected = selectableKeys.size > 0 && selectedCount === selectableKeys.size;
+                return nonIgnoredProps.length > 0 ? (
+                  <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={() => {
+                          if (allSelected) {
+                            setModalSelectedKeys(new Set());
+                          } else {
+                            setModalSelectedKeys(new Set(selectableKeys));
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Select All ({selectableKeys.size})
+                    </label>
+                    {selectedCount > 0 && (
+                      <>
+                        <span className="text-sm text-gray-400">|</span>
+                        <span className="text-sm text-blue-600 font-medium">{selectedCount} selected</span>
+                        <button
+                          onClick={async () => {
+                            const ok = window.confirm(`Ignore ${selectedCount} selected issue${selectedCount > 1 ? 's' : ''}? They will be removed from displayed counts but can be restored later.`);
+                            if (!ok) return;
+                            const newIgnored = new Set(ignoredIssues);
+                            modalSelectedKeys.forEach(k => newIgnored.add(k));
+                            setIgnoredIssues(newIgnored);
+                            setModalSelectedKeys(new Set());
+                            try {
+                              await supabase
+                                .from('market_land_valuation')
+                                .update({ ignored_issues: Array.from(newIgnored), updated_at: new Date().toISOString() })
+                                .eq('job_id', jobData.id);
+                              applyAndSetResults(rawResults, newIgnored);
+                              if (onUpdateJobCache) await onUpdateJobCache();
+                              const toast = document.createElement('div');
+                              toast.textContent = `✅ ${selectedCount} issue${selectedCount > 1 ? 's' : ''} ignored`;
+                              toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#10B981;color:white;padding:12px 20px;border-radius:6px;z-index:9999;font-size:14px;';
+                              document.body.appendChild(toast);
+                              setTimeout(() => toast.remove(), 2000);
+                            } catch (error) {
+                              console.error('Bulk ignore failed:', error);
+                              alert('Failed to save: ' + error.message);
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
+                        >
+                          Ignore Selected ({selectedCount})
+                        </button>
+                        <button
+                          onClick={() => setModalSelectedKeys(new Set())}
+                          className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                        >
+                          Clear Selection
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : null;
+              })()}
             </div>
             
             <div className="p-6 overflow-y-auto flex-1">
               <table className="w-full">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="border-b-2 border-gray-200">
+                    <th className="py-3 px-2 bg-white w-8">
+                    </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Block
                     </th>
@@ -3024,6 +3097,21 @@ const editCustomCheck = (check) => {
                     
                     return (
                       <tr key={index} className={`border-b border-gray-100 hover:bg-gray-50 ${isIgnored ? 'opacity-50' : ''}`}>
+                        <td className="py-3 px-2 w-8">
+                          {!isIgnored && (
+                            <input
+                              type="checkbox"
+                              checked={modalSelectedKeys.has(issueKey)}
+                              onChange={() => {
+                                const next = new Set(modalSelectedKeys);
+                                if (next.has(issueKey)) next.delete(issueKey);
+                                else next.add(issueKey);
+                                setModalSelectedKeys(next);
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          )}
+                        </td>
                         <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_block || ''}
                         </td>
