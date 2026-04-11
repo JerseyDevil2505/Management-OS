@@ -16,27 +16,36 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     const codeDefs = jobData?.parsed_code_definitions;
     if (!codeDefs) return refusalCodes;
 
-    if (vendor === 'BRT') {
-      // BRT: Look in Residential section for "REFUSED" descriptions
-      const residentialSection = codeDefs.sections?.['Residential'] || {};
-      Object.values(residentialSection).forEach(item => {
+    // Helper to scan a section's entries (and their nested MAP) for REFUSED descriptions
+    const scanForRefusedCodes = (section) => {
+      if (!section || typeof section !== 'object') return;
+      Object.values(section).forEach(item => {
+        // Check top-level entry
         if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
           const code = item.KEY || item.DATA.KEY;
           if (code) refusalCodes.push(code);
         }
-      });
-    } else if (vendor === 'Microsystems') {
-      // Microsystems: Look for "REFUSED" in any section
-      const sections = codeDefs.sections || {};
-      Object.values(sections).forEach(section => {
-        if (typeof section === 'object') {
-          Object.values(section).forEach(item => {
-            if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
-              const code = item.KEY || item.DATA.KEY;
+        // Check nested MAP entries (e.g. INFO. BY subsection contains the actual codes)
+        if (item?.MAP && typeof item.MAP === 'object') {
+          Object.values(item.MAP).forEach(subItem => {
+            if (subItem?.DATA?.VALUE && subItem.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+              const code = subItem.KEY || subItem.DATA.KEY;
               if (code) refusalCodes.push(code);
             }
           });
         }
+      });
+    };
+
+    if (vendor === 'BRT') {
+      // BRT: Look in Residential section for "REFUSED" descriptions
+      const residentialSection = codeDefs.sections?.['Residential'] || {};
+      scanForRefusedCodes(residentialSection);
+    } else if (vendor === 'Microsystems') {
+      // Microsystems: Look for "REFUSED" in any section
+      const sections = codeDefs.sections || {};
+      Object.values(sections).forEach(section => {
+        scanForRefusedCodes(section);
       });
     }
 
