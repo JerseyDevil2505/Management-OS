@@ -1548,9 +1548,11 @@ const App = () => {
           const filteredPpaJobs = filterJobsForUser(appData.archivedJobs || []);
           const ppaJobIds = new Set(filteredPpaJobs.map(j => j.id));
 
-          // Add Jackson and Maplewood from archived jobs only if not already in list
+          // Manually add Jackson and Maplewood (LOJIK clients with their own org_id where the data lives)
+          // These have empty PPA drafts but real data in their LOJIK entries
           const specialJobs = (appData.archivedJobs || []).filter(job => {
             const jobName = (job.job_name || '').toLowerCase().trim();
+            // Get all Jackson and Maplewood entries, prefer the LOJIK version with real data
             return (jobName === 'maplewood' || jobName === 'jackson') && !ppaJobIds.has(job.id);
           });
 
