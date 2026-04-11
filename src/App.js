@@ -156,7 +156,6 @@ const App = () => {
 
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
-  const [showViewAsMenu, setShowViewAsMenu] = useState(false);
 
   // Change Password modal state
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -1288,82 +1287,6 @@ const App = () => {
                   '🔄 Refresh'
                 )}
               </button>
-              {!isAdmin && (
-                <div style={{ position: 'relative' }}>
-                  <button
-                    onClick={() => setShowViewAsMenu(!showViewAsMenu)}
-                    className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-                    title="View as another PPA user to test their permissions"
-                  >
-                    View As {viewingAs ? `(${viewingAs.name})` : ''}
-                  </button>
-                  {showViewAsMenu && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      marginTop: '4px',
-                      backgroundColor: 'white',
-                      border: '1px solid #ddd',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      zIndex: 1000,
-                      minWidth: '250px',
-                      maxHeight: '400px',
-                      overflowY: 'auto'
-                    }}>
-                      <button
-                        onClick={() => {
-                          handleExitViewAs();
-                          setShowViewAsMenu(false);
-                        }}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          padding: '12px 16px',
-                          textAlign: 'left',
-                          border: 'none',
-                          backgroundColor: viewingAs ? 'transparent' : '#f0f0f0',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: '500',
-                          color: '#333'
-                        }}
-                      >
-                        {viewingAs ? 'Exit View As' : '(Normal View)'}
-                      </button>
-                      {appData.employees
-                        .filter(e => {
-                          // Show PPA employees (same org as current user)
-                          return e.organization_id === user.employeeData?.organization_id;
-                        })
-                        .map(emp => (
-                          <button
-                            key={emp.id}
-                            onClick={() => {
-                              handleViewAs(emp);
-                              setShowViewAsMenu(false);
-                            }}
-                            style={{
-                              display: 'block',
-                              width: '100%',
-                              padding: '12px 16px',
-                              textAlign: 'left',
-                              border: 'none',
-                              backgroundColor: viewingAs?.id === emp.id ? '#e3f2fd' : 'transparent',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              color: '#333',
-                              borderBottom: '1px solid #f0f0f0'
-                            }}
-                          >
-                            {emp.name} ({emp.role || 'Employee'})
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              )}
               <button
                 onClick={() => setShowChangePassword(true)}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
