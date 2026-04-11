@@ -1548,11 +1548,16 @@ const App = () => {
           const filteredPpaJobs = filterJobsForUser(appData.archivedJobs || []);
           const ppaJobIds = new Set(filteredPpaJobs.map(j => j.id));
 
-          // Manually add Jackson and Maplewood (LOJIK clients with their own org_id where the data lives)
-          // These have empty PPA drafts but real data in their LOJIK entries
-          const specialJobs = (appData.archivedJobs || []).filter(job => {
+          // Hardcode Jackson and Maplewood (LOJIK clients with their own org_id where the appeal data lives)
+          // The PPA archived drafts are dead weight; the real data is in their LOJIK entries
+          const allJobs = [
+            ...(appData.archivedJobs || []),
+            ...(appData.activeJobs || []),
+            ...(appData.planningJobs || []),
+            ...(appData.jobs || [])
+          ];
+          const specialJobs = allJobs.filter(job => {
             const jobName = (job.job_name || '').toLowerCase().trim();
-            // Get all Jackson and Maplewood entries, prefer the LOJIK version with real data
             return (jobName === 'maplewood' || jobName === 'jackson') && !ppaJobIds.has(job.id);
           });
 
