@@ -143,17 +143,26 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
           byClass[propertyClass].improvedInspected++;
         }
 
-        // Track residential (2/3A) inspection dates for average + most recent interior entry
+        // Track residential (2/3A) dates for average measured + most recent interior entry
         const isResClass = propertyClass === '2' || propertyClass === '3A';
-        if (isResClass && hasListDate) {
-          residentialEntryDates.push(new Date(prop.inspection_list_date));
+        if (isResClass) {
+          // Average inspected date uses measure_date
+          if (prop.inspection_measure_date) {
+            residentialEntryDates.push(new Date(prop.inspection_measure_date));
+          }
 
-          // Check if this is an interior entry via info_by code
-          const infoByCode = vendor === 'Microsystems' ? prop.info_by_code : prop.inspection_info_by;
-          if (infoByCode && entryCodes.includes(infoByCode)) {
-            const entryDate = new Date(prop.inspection_list_date);
-            if (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry) {
-              mostRecentInteriorEntry = entryDate;
+          // Most recent interior entry uses list_date
+          if (hasListDate) {
+            const infoByCode = vendor === 'Microsystems' ? prop.info_by_code : prop.inspection_info_by;
+            // If entry codes are configured, use them; otherwise any entry counts
+            const isInterior = entryCodes.length > 0
+              ? (infoByCode && entryCodes.includes(infoByCode))
+              : hasEntry;
+            if (isInterior) {
+              const entryDate = new Date(prop.inspection_list_date);
+              if (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry) {
+                mostRecentInteriorEntry = entryDate;
+              }
             }
           }
         }
@@ -309,7 +318,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         <div className="bg-white p-5 rounded-lg border-2 border-blue-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Avg Inspected Date (2/3A)</p>
+              <p className="text-sm text-gray-500">Avg Measured Date (2/3A)</p>
               <p className="text-2xl font-bold text-blue-600">
                 {metrics.avgInspectionDate
                   ? metrics.avgInspectionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
