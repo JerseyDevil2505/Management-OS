@@ -138,7 +138,42 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         byClass[propertyClass].improvedTotal++;
       }
 
-      if (hasEntry) {
+      // Refusals have list_by/list_date but should NOT count as entries
+      if (hasRefusal) {
+        notInspected++;
+        if (isImproved) {
+          improvedNotInspected++;
+        }
+
+        // Track refusals in VCS breakdown
+        if (isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].refusals++;
+        }
+
+        // Track inspector who recorded the refusal
+        if (hasListBy) {
+          const inspector = prop.inspection_list_by.trim();
+          if (!inspectorBreakdown[inspector]) {
+            inspectorBreakdown[inspector] = 0;
+          }
+          inspectorBreakdown[inspector]++;
+        }
+
+        // Track in missing list
+        if (missingInspections.length < 500) {
+          missingInspections.push({
+            block: prop.property_block || '',
+            lot: prop.property_lot || '',
+            qualifier: prop.property_qualifier || '',
+            location: prop.property_location || '',
+            class: propertyClass,
+            owner: prop.owner_name || '',
+            isImproved,
+            isRefusal: true
+          });
+        }
+      } else if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
 
@@ -188,12 +223,6 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
           improvedNotInspected++;
         }
 
-        // Track refusals in VCS breakdown
-        if (hasRefusal && isResidential) {
-          const vcsLabel = vcsCode || 'Unknown';
-          byVCS[vcsLabel].refusals++;
-        }
-
         // Track missing - limit to first 500 for display
         if (missingInspections.length < 500) {
           missingInspections.push({
@@ -204,7 +233,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
             class: propertyClass,
             owner: prop.owner_name || '',
             isImproved,
-            isRefusal: hasRefusal
+            isRefusal: false
           });
         }
       }
