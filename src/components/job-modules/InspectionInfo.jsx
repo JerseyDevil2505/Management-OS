@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   // Extract refusal codes from parsed code definitions
@@ -69,6 +69,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedTotal = 0;
     let improvedInspected = 0;
     let improvedNotInspected = 0;
+    const residentialEntryDates = [];
+    let mostRecentInteriorEntry = null;
+    const entryCodes = jobData?.infoby_category_config?.entry || [];
     const byClass = {};
     const byVCS = {};
     const missingInspections = [];
@@ -140,6 +143,21 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
           byClass[propertyClass].improvedInspected++;
         }
 
+        // Track residential (2/3A) inspection dates for average + most recent interior entry
+        const isResClass = propertyClass === '2' || propertyClass === '3A';
+        if (isResClass && hasListDate) {
+          residentialEntryDates.push(new Date(prop.inspection_list_date));
+
+          // Check if this is an interior entry via info_by code
+          const infoByCode = vendor === 'Microsystems' ? prop.info_by_code : prop.inspection_info_by;
+          if (infoByCode && entryCodes.includes(infoByCode)) {
+            const entryDate = new Date(prop.inspection_list_date);
+            if (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry) {
+              mostRecentInteriorEntry = entryDate;
+            }
+          }
+        }
+
         // Track inspector by list_by
         const inspector = prop.inspection_list_by.trim();
         if (!inspectorBreakdown[inspector]) {
@@ -182,6 +200,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       ? ((improvedInspected / improvedTotal) * 100).toFixed(1)
       : 0;
 
+    // Calculate average inspection date for residential (Class 2/3A)
+    let avgInspectionDate = null;
+    if (residentialEntryDates.length > 0) {
+      const totalMs = residentialEntryDates.reduce((sum, d) => sum + d.getTime(), 0);
+      avgInspectionDate = new Date(totalMs / residentialEntryDates.length);
+    }
+
     return {
       totalProperties: properties.length,
       inspected,
@@ -194,7 +219,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       byClass,
       byVCS,
       missingInspections,
-      inspectorBreakdown
+      inspectorBreakdown,
+      avgInspectionDate,
+      mostRecentInteriorEntry
     };
   }, [properties, refusalCodes, vendor]);
 
@@ -232,7 +259,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       </h2>
 
       {/* Summary Cards - Improved Properties (entry rate only matters for improved) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white p-5 rounded-lg border-2 border-indigo-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -276,6 +303,34 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               className="bg-teal-500 h-2 rounded-full transition-all"
               style={{ width: `${Math.min(metrics.improvedEntryRate, 100)}%` }}
             />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-lg border-2 border-blue-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Avg Inspected Date (2/3A)</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {metrics.avgInspectionDate
+                  ? metrics.avgInspectionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '\u2014'}
+              </p>
+            </div>
+            <Calendar className="w-8 h-8 text-blue-400" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-lg border-2 border-purple-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Latest Interior Entry (2/3A)</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {metrics.mostRecentInteriorEntry
+                  ? metrics.mostRecentInteriorEntry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '\u2014'}
+              </p>
+            </div>
+            <Home className="w-8 h-8 text-purple-400" />
           </div>
         </div>
       </div>
