@@ -47,6 +47,7 @@ const DataQualityTab = ({
   const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
   const [modalSelectedKeys, setModalSelectedKeys] = useState(new Set());
+  const [modalClassFilter, setModalClassFilter] = useState('all');
 
   // Helper: filter out ignored issues from results for display
   const filterIgnoredResults = (results, ignoredSet = ignoredIssues) => {
@@ -1901,6 +1902,7 @@ const generateQCFormPDF = () => {
     });
     setShowDetailsModal(true);
     setModalSelectedKeys(new Set());
+    setModalClassFilter('all');
   };
 
   const saveCustomChecksToDb = async (checks) => {
@@ -2990,26 +2992,48 @@ const editCustomCheck = (check) => {
               </div>
               {/* Bulk actions bar */}
               {(() => {
+                const allClasses = [...new Set(modalData.properties.map(p => p.details?.property_m4_class || 'Unknown'))].sort();
                 const nonIgnoredProps = modalData.properties.filter(p => !ignoredIssues.has(`${p.property_key}-${p.check}`));
-                const selectableKeys = new Set(nonIgnoredProps.map(p => `${p.property_key}-${p.check}`));
+                const visibleNonIgnored = modalClassFilter === 'all'
+                  ? nonIgnoredProps
+                  : nonIgnoredProps.filter(p => (p.details?.property_m4_class || 'Unknown') === modalClassFilter);
+                const selectableKeys = new Set(visibleNonIgnored.map(p => `${p.property_key}-${p.check}`));
                 const selectedCount = [...modalSelectedKeys].filter(k => selectableKeys.has(k)).length;
                 const allSelected = selectableKeys.size > 0 && selectedCount === selectableKeys.size;
                 return nonIgnoredProps.length > 0 ? (
-                  <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100 flex-wrap">
+                    <select
+                      value={modalClassFilter}
+                      onChange={(e) => setModalClassFilter(e.target.value)}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="all">All Classes ({nonIgnoredProps.length})</option>
+                      {allClasses.map(cls => {
+                        const count = nonIgnoredProps.filter(p => (p.details?.property_m4_class || 'Unknown') === cls).length;
+                        return <option key={cls} value={cls}>{cls} ({count})</option>;
+                      })}
+                    </select>
+                    <span className="text-sm text-gray-400">|</span>
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={allSelected}
                         onChange={() => {
                           if (allSelected) {
-                            setModalSelectedKeys(new Set());
+                            // Deselect only the visible filtered keys
+                            const next = new Set(modalSelectedKeys);
+                            selectableKeys.forEach(k => next.delete(k));
+                            setModalSelectedKeys(next);
                           } else {
-                            setModalSelectedKeys(new Set(selectableKeys));
+                            // Add all visible filtered keys to selection
+                            const next = new Set(modalSelectedKeys);
+                            selectableKeys.forEach(k => next.add(k));
+                            setModalSelectedKeys(next);
                           }
                         }}
                         className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
-                      Select All ({selectableKeys.size})
+                      Select Visible ({selectableKeys.size})
                     </label>
                     {selectedCount > 0 && (
                       <>
@@ -3090,7 +3114,9 @@ const editCustomCheck = (check) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {modalData.properties.map((prop, index) => {
+                  {modalData.properties
+                    .filter(p => modalClassFilter === 'all' || (p.details?.property_m4_class || 'Unknown') === modalClassFilter)
+                    .map((prop, index) => {
                     const property = prop.details;
                     const issueKey = `${prop.property_key}-${prop.check}`;
                     const isIgnored = ignoredIssues.has(issueKey);
@@ -3203,7 +3229,7 @@ const editCustomCheck = (check) => {
             {modalData.properties.length > 10 && (
               <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center flex-shrink-0">
                 <div className="text-sm text-gray-600">
-                  Showing {modalData.properties.length} properties
+                  Showing {modalClassFilter === 'all' ? modalData.properties.length : modalData.properties.filter(p => (p.details?.property_m4_class || 'Unknown') === modalClassFilter).length}{modalClassFilter !== 'all' ? ` of ${modalData.properties.length}` : ''} properties
                 </div>
                 <button
                   onClick={() => {
