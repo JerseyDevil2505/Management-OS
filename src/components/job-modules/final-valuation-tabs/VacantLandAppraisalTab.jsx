@@ -1,4 +1,4 @@
-import { Download, X, Save, Filter, FileDown, Printer } from 'lucide-react';
+import { Download, X, Save, Filter, FileDown, Printer, Send } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 import jsPDF from 'jspdf';
@@ -563,6 +563,45 @@ const VacantLandAppraisalTab = ({
     setShowExportModal(true);
   }, []);
 
+  // Send evaluation result to appeal log
+  const handleSendToAppealLog = async () => {
+    const subjectProp = loadedProperties.subject;
+    if (!subjectProp || !estimatedLandValue) return;
+
+    try {
+      // Find existing appeal for this property
+      const { data: appeals } = await supabase
+        .from('appeal_log')
+        .select('id, appeal_number, status')
+        .eq('job_id', jobData.id)
+        .eq('property_block', subjectProp.property_block)
+        .eq('property_lot', subjectProp.property_lot);
+
+      if (!appeals || appeals.length === 0) {
+        alert('No appeal log entry found for this property. Create one in the Appeal Log tab first.');
+        return;
+      }
+
+      // Prefer active appeal, fall back to most recent
+      const active = appeals.find(a => a.status !== 'C') || appeals[0];
+
+      const { error } = await supabase
+        .from('appeal_log')
+        .update({
+          vla_projected_value: estimatedLandValue,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', active.id);
+
+      if (error) throw error;
+
+      alert(`Sent land evaluation value ($${estimatedLandValue.toLocaleString()}) to Appeal Log${active.appeal_number ? ` — Appeal #${active.appeal_number}` : ''}`);
+    } catch (err) {
+      console.error('Error sending to appeal log:', err);
+      alert('Failed to send to Appeal Log: ' + err.message);
+    }
+  };
+
   // Generate PDF
   const generatePDF = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
@@ -611,7 +650,7 @@ const VacantLandAppraisalTab = ({
     // Title
     doc.setFontSize(14);
     doc.setTextColor(...lojikBlue);
-    doc.text('Vacant Land Appraisal', margin, margin + 50);
+    doc.text('Vacant Land Evaluation', margin, margin + 50);
 
     doc.setFontSize(9);
     doc.setTextColor(80, 80, 80);
@@ -775,7 +814,7 @@ const VacantLandAppraisalTab = ({
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h3 className="font-semibold text-blue-900 text-sm">Vacant Land Appraisal</h3>
+            <h3 className="font-semibold text-blue-900 text-sm">Vacant Land Evaluation</h3>
             <p className="text-xs text-blue-700">
               {method1Sales.length > 0
                 ? `${method1Sales.length} vacant land sale${method1Sales.length !== 1 ? 's' : ''} from Land Valuation Method 1`
@@ -1274,6 +1313,15 @@ const VacantLandAppraisalTab = ({
           >
             <Download size={14} /> Export
           </button>
+
+          <button
+            onClick={handleSendToAppealLog}
+            disabled={!subjectProp || !estimatedLandValue}
+            className="flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded font-medium text-sm hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            title="Send evaluation result to Appeal Log"
+          >
+            <Send size={14} /> Send to Appeal Log
+          </button>
         </div>
       </div>
 
@@ -1368,7 +1416,7 @@ const VacantLandAppraisalTab = ({
             <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
               <div className="flex items-center gap-3">
                 <Printer className="text-white" size={20} />
-                <h3 className="text-base font-semibold text-white">Export PDF — Vacant Land Appraisal</h3>
+                <h3 className="text-base font-semibold text-white">Export PDF — Vacant Land Evaluation</h3>
               </div>
               <button
                 onClick={() => setShowExportModal(false)}

@@ -2921,7 +2921,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
     { id: 'summary', label: 'Summary', icon: BarChart3 },
-    { id: 'vacant-land', label: 'Vacant Land Appraisal', icon: FileText }
+    { id: 'vacant-land', label: 'Vacant Land Evaluation', icon: FileText }
   ];
 
   return (
