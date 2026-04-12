@@ -6,7 +6,7 @@ import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -5242,6 +5242,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           <VacantLandAppraisalTab
             properties={properties}
             jobData={jobData}
+            vendorType={vendorType}
+            codeDefinitions={codeDefinitions}
+            marketLandData={marketLandData}
+            onUpdateJobCache={onUpdateJobCache}
             vacantLandSubject={vacantLandSubject}
             setVacantLandSubject={setVacantLandSubject}
             vacantLandComps={vacantLandComps}
