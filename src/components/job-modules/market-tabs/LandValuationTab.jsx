@@ -394,7 +394,9 @@ const LandValuationTab = ({
   const [depthTables, setDepthTables] = useState({});
   const [vcsDepthTableOverrides, setVcsDepthTableOverrides] = useState({}); // VCS-specific depth table overrides
   const [showVcsSpecificForm, setShowVcsSpecificForm] = useState(false);
-  const [vcsSpecificFormData, setVcsSpecificFormData] = useState({ selectedVCS: [], method: '', description: '' });
+  const [vcsSpecificFormData, setVcsSpecificFormData] = useState({ selectedVCS: [], method: '' });
+  const [vcsDropdownSearch, setVcsDropdownSearch] = useState('');
+  const [vcsDropdownOpen, setVcsDropdownOpen] = useState(false);
 
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
@@ -9425,87 +9427,85 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 Remove
               </button>
             </div>
-            <div style={{ fontSize: '11px', color: '#059669', marginBottom: '8px' }}>
-              {cascadeConfig.vcsSpecific[vcsKey].description}
-            </div>
-
             {/* VCS-Specific Cascade Configuration */}
-            <div style={{ display: 'grid', gridTemplateColumns:
-              cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? 'repeat(2, 1fr)' :
-              cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? 'repeat(2, 1fr)' :
-              'repeat(4, 1fr)', gap: '10px' }}>
+            {(() => {
+              const vcsConfig = cascadeConfig.vcsSpecific[vcsKey];
+              const method = vcsConfig.method;
+              const hasSecondary = vcsConfig.rates?.secondary?.max > 0;
+              const colCount = (method === 'ff' || method === 'sf') ? (hasSecondary ? 3 : 2) : 4;
+              return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + colCount + ', 1fr)', gap: '10px' }}>
 
-              {cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? (
-                // Front Foot for VCS-Specific
+              {(method === 'ff' || method === 'sf') ? (
                 <>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Standard (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100} ft)
+                      Standard (0-{vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000)} {method === 'ff' ? 'ft' : 'sq ft'})
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || ''}
+                        value={vcsConfig.rates?.standard?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.rate || ''}
+                        step={method === 'sf' ? '0.01' : undefined}
+                        value={vcsConfig.rates?.standard?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                     </div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100}+ ft)
-                    </label>
-                    <input
-                      type="number"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
-                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
-                      placeholder="Rate"
-                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                    />
-                  </div>
-                </>
-              ) : cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? (
-                // Square Foot for VCS-Specific
-                <>
-                  <div>
-                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Primary (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000} sq ft)
-                    </label>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      <input
-                        type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
-                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
-                        placeholder="Max"
-                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
-                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
-                        placeholder="Rate"
-                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                      />
+                  {hasSecondary ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                        <label style={{ fontSize: '11px', color: '#059669' }}>
+                          Secondary ({vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000)}-{vcsConfig.rates?.secondary?.max} {method === 'ff' ? 'ft' : 'sq ft'})
+                        </label>
+                        <button
+                          onClick={() => {
+                            setCascadeConfig(prev => {
+                              const updated = { ...prev.vcsSpecific[vcsKey] };
+                              const newRates = { ...updated.rates };
+                              delete newRates.secondary;
+                              return { ...prev, vcsSpecific: { ...prev.vcsSpecific, [vcsKey]: { ...updated, rates: newRates } } };
+                            });
+                          }}
+                          style={{ fontSize: '9px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                        >Remove</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        <input
+                          type="number"
+                          value={vcsConfig.rates?.secondary?.max || ''}
+                          onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
+                          placeholder="Max"
+                          style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                        />
+                        <input
+                          type="number"
+                          step={method === 'sf' ? '0.01' : undefined}
+                          value={vcsConfig.rates?.secondary?.rate || ''}
+                          onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                          placeholder="Rate"
+                          style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000}+ sq ft)
+                      Excess ({hasSecondary ? vcsConfig.rates?.secondary?.max : (vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000))}+ {method === 'ff' ? 'ft' : 'sq ft'})
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
-                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                      step={method === 'sf' ? '0.01' : undefined}
+                      value={vcsConfig.rates?.excess?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                     />
@@ -9516,20 +9516,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Prime (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1} acres)
+                      Prime (0-{vcsConfig.rates?.prime?.max || 1} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        value={vcsConfig.rates?.prime?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        value={vcsConfig.rates?.prime?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9538,20 +9538,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1}-{cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5} acres)
+                      Secondary ({vcsConfig.rates?.prime?.max || 1}-{vcsConfig.rates?.secondary?.max || 5} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || ''}
+                        value={vcsConfig.rates?.secondary?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                        value={vcsConfig.rates?.secondary?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9560,20 +9560,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5}-{cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10} acres)
+                      Excess ({vcsConfig.rates?.secondary?.max || 5}-{vcsConfig.rates?.excess?.max || 10} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || ''}
+                        value={vcsConfig.rates?.excess?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                        value={vcsConfig.rates?.excess?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9582,11 +9582,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Residual ({cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10}+ acres)
+                      Residual ({vcsConfig.rates?.excess?.max || 10}+ acres)
                     </label>
                     <input
                       type="number"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.residual?.rate || ''}
+                      value={vcsConfig.rates?.residual?.rate || ''}
                       onChange={(e) => updateVCSSpecificCascade(vcsKey, 'residual', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9595,6 +9595,44 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </>
               )}
             </div>
+              );
+            })()}
+            {/* Add Step button for VCS-specific SF/FF */}
+            {(cascadeConfig.vcsSpecific[vcsKey].method === 'sf' || cascadeConfig.vcsSpecific[vcsKey].method === 'ff') && !cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max && (
+              <button
+                onClick={() => {
+                  const m = cascadeConfig.vcsSpecific[vcsKey].method;
+                  const stdMax = cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || (m === 'ff' ? 100 : 5000);
+                  const defaultMax = stdMax * 2;
+                  setCascadeConfig(prev => ({
+                    ...prev,
+                    vcsSpecific: {
+                      ...prev.vcsSpecific,
+                      [vcsKey]: {
+                        ...prev.vcsSpecific[vcsKey],
+                        rates: {
+                          ...prev.vcsSpecific[vcsKey].rates,
+                          secondary: { max: defaultMax, rate: null }
+                        }
+                      }
+                    }
+                  }));
+                }}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 10px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600'
+                }}
+              >
+                + Add Step
+              </button>
+            )}
           </div>
         ))}
 
@@ -9603,7 +9641,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           {!showVcsSpecificForm ? (
             <button
               onClick={() => {
-                setVcsSpecificFormData({ selectedVCS: [], method: valuationMode, description: '' });
+                setVcsSpecificFormData({ selectedVCS: [], method: valuationMode }); setVcsDropdownSearch(''); setVcsDropdownOpen(false);
                 setShowVcsSpecificForm(true);
               }}
               style={{
@@ -9624,42 +9662,66 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ backgroundColor: '#F0FDF4', padding: '14px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#059669', marginBottom: '10px' }}>New VCS-Specific Configuration</h4>
 
-              {/* VCS Selection */}
+              {/* VCS Selection - Searchable Dropdown */}
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Select VCS codes:</label>
+                {vcsSpecificFormData.selectedVCS.length > 0 && (
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                    {vcsSpecificFormData.selectedVCS.map(vcs => (
+                      <span key={vcs} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', backgroundColor: '#D1FAE5', borderRadius: '3px', fontSize: '12px', color: '#059669', fontWeight: '600' }}>
+                        {vcs}
+                        <button onClick={() => setVcsSpecificFormData(prev => ({ ...prev, selectedVCS: prev.selectedVCS.filter(v => v !== vcs) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '14px', lineHeight: 1, padding: 0 }}>x</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {Object.keys(vcsSheetData).length > 0 ? (
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {Object.keys(vcsSheetData).sort().map(vcs => {
-                      const alreadyConfigured = Object.values(cascadeConfig.vcsSpecific || {}).some(c => c.vcsList?.includes(vcs));
-                      const isSelected = vcsSpecificFormData.selectedVCS.includes(vcs);
-                      return (
-                        <button
-                          key={vcs}
-                          disabled={alreadyConfigured}
-                          onClick={() => {
-                            setVcsSpecificFormData(prev => ({
-                              ...prev,
-                              selectedVCS: isSelected
-                                ? prev.selectedVCS.filter(v => v !== vcs)
-                                : [...prev.selectedVCS, vcs]
-                            }));
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '4px',
-                            border: isSelected ? '2px solid #059669' : '1px solid #D1D5DB',
-                            backgroundColor: alreadyConfigured ? '#F3F4F6' : isSelected ? '#D1FAE5' : 'white',
-                            color: alreadyConfigured ? '#9CA3AF' : '#374151',
-                            cursor: alreadyConfigured ? 'not-allowed' : 'pointer',
-                            fontSize: '12px',
-                            fontWeight: isSelected ? '600' : '400'
-                          }}
-                          title={alreadyConfigured ? 'Already has a specific config' : `Click to ${isSelected ? 'deselect' : 'select'}`}
-                        >
-                          {vcs}{alreadyConfigured ? ' (configured)' : ''}
-                        </button>
-                      );
-                    })}
+                  <div style={{ position: 'relative', width: '280px' }}>
+                    <input
+                      type="text"
+                      value={vcsDropdownSearch}
+                      onChange={(e) => { setVcsDropdownSearch(e.target.value); setVcsDropdownOpen(true); }}
+                      onFocus={() => setVcsDropdownOpen(true)}
+                      placeholder="Search VCS..."
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px' }}
+                    />
+                    {vcsDropdownOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: '200px', overflowY: 'auto', backgroundColor: 'white', border: '1px solid #D1D5DB', borderRadius: '0 0 4px 4px', zIndex: 50, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                        {Object.keys(vcsSheetData).sort().filter(vcs => !vcsDropdownSearch || vcs.toLowerCase().includes(vcsDropdownSearch.toLowerCase())).map(vcs => {
+                          const alreadyConfigured = Object.values(cascadeConfig.vcsSpecific || {}).some(c => c.vcsList?.includes(vcs));
+                          const isSelected = vcsSpecificFormData.selectedVCS.includes(vcs);
+                          return (
+                            <div
+                              key={vcs}
+                              onClick={() => {
+                                if (alreadyConfigured) return;
+                                setVcsSpecificFormData(prev => ({
+                                  ...prev,
+                                  selectedVCS: isSelected ? prev.selectedVCS.filter(v => v !== vcs) : [...prev.selectedVCS, vcs]
+                                }));
+                                setVcsDropdownSearch('');
+                              }}
+                              style={{
+                                padding: '6px 10px',
+                                cursor: alreadyConfigured ? 'not-allowed' : 'pointer',
+                                backgroundColor: isSelected ? '#D1FAE5' : alreadyConfigured ? '#F9FAFB' : 'white',
+                                color: alreadyConfigured ? '#9CA3AF' : '#374151',
+                                fontSize: '12px',
+                                borderBottom: '1px solid #F3F4F6',
+                                display: 'flex', justifyContent: 'space-between'
+                              }}
+                            >
+                              <span>{vcs}</span>
+                              {alreadyConfigured ? <span style={{ fontSize: '10px', color: '#9CA3AF' }}>configured</span> : isSelected ? <span style={{ color: '#059669' }}>selected</span> : null}
+                            </div>
+                          );
+                        })}
+                        <div
+                          onClick={() => setVcsDropdownOpen(false)}
+                          style={{ padding: '4px 10px', textAlign: 'center', fontSize: '11px', color: '#6B7280', cursor: 'pointer', borderTop: '1px solid #E5E7EB' }}
+                        >Close</div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>No VCS data available yet. Run the VCS Sheet tab first.</div>
@@ -9667,7 +9729,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
 
               {/* Method Selection */}
-              <div style={{ marginBottom: '10px' }}>
+              <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Valuation Method:</label>
                 <select
                   value={vcsSpecificFormData.method}
@@ -9680,25 +9742,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </select>
               </div>
 
-              {/* Description (optional) */}
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Description (optional):</label>
-                <input
-                  type="text"
-                  value={vcsSpecificFormData.description}
-                  onChange={(e) => setVcsSpecificFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="e.g. Rural areas, Subdivision lots"
-                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px', width: '300px' }}
-                />
-              </div>
-
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   disabled={vcsSpecificFormData.selectedVCS.length === 0}
                   onClick={() => {
                     const vcsKey = `vcs_${Date.now()}`;
-                    const methodLabel = { acre: 'Acreage', sf: 'Square Foot', ff: 'Front Foot' };
                     setCascadeConfig(prev => ({
                       ...prev,
                       vcsSpecific: {
@@ -9706,7 +9755,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         [vcsKey]: {
                           vcsList: vcsSpecificFormData.selectedVCS,
                           method: vcsSpecificFormData.method,
-                          description: vcsSpecificFormData.description || `${methodLabel[vcsSpecificFormData.method] || 'Custom'} - VCS ${vcsSpecificFormData.selectedVCS.join(', ')}`,
+                          description: '',
                           rates: {}
                         }
                       }
