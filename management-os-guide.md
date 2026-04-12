@@ -213,17 +213,12 @@ JobContainer (loads once with pagination)
 └── management-os-guide.md             ← THIS DOCUMENT! Complete system documentation
 ```
 
-**Component Organization Pattern (NEW!):**
+**Component Organization Pattern:**
 
-The `market-tabs/` sub-folder demonstrates a scalable organization pattern:
-- **Parent Orchestrator**: `MarketAnalysis.jsx` (173 lines) - lightweight coordinator
-- **Child Tab Components**: In `market-tabs/` sub-folder - heavy implementations
-- **Benefits**:
-  - Cleaner file organization
-  - Easier navigation
-  - Logical grouping of related components
-  - Potential for code splitting/lazy loading
-  - Can be applied to other complex modules (FinalValuation, AppealCoverage)
+Both `market-tabs/` and `final-valuation-tabs/` use the same scalable pattern:
+- **Parent Orchestrator**: Lightweight coordinator (MarketAnalysis 372 lines, FinalValuation 182 lines)
+- **Child Tab Components**: In sub-folder - heavy implementations
+- **Benefits**: Clean file organization, logical grouping, no double data loading
 
 **Service Architecture Pattern:**
 
@@ -294,30 +289,38 @@ The `sql/` folder contains database optimization scripts:
 - ❌ **WRONG**: `components/FileUploadButton.jsx`
 - ✅ **CORRECT**: `components/job-modules/FileUploadButton.jsx`
 
-**Component Line Count Updates:**
+**Component Complexity Rankings (Updated April 2025):**
 
 | Component | Lines | Module | Notes |
 |-----------|-------|--------|-------|
-| LandValuationTab.jsx | ~10,000 | Market Analysis | THE ABSOLUTE LARGEST! |
-| ProductionTracker.jsx | 4,400+ | Job Container | Analytics engine |
-| PreValuationTab.jsx | 3,726 | Market Analysis | Normalization workflows |
-| SalesComparisonTab.jsx | 2,812 | Final Valuation | CME comparable search |
-| DataQualityTab.jsx | 2,651 | Market Analysis | Data validation |
-| AttributeCardsTab.jsx | ~2,500 | Market Analysis | Condition items + cards |
-| SalesReviewTab.jsx | 1,879 | Final Valuation | Sales history review |
-| MarketDataTab.jsx | 1,551 | Final Valuation | Effective age calc |
-| AdjustmentsTab.jsx | 1,325 | Final Valuation | CME adjustment grid |
-| RatableComparisonTab.jsx | 1,112 | Final Valuation | Tax rate impact |
-| OverallAnalysisTab.jsx | ~1,000 | Market Analysis | Block mapping |
-| CostValuationTab.jsx | ~800 | Market Analysis | New construction + CCF |
-| DetailedAppraisalGrid.jsx | 577 | Final Valuation | Manual appraisal |
-| AnalyticsTab.jsx | 441 | Final Valuation | Final recommendations |
+| LandValuationTab.jsx | 12,678 | Market Analysis | THE ABSOLUTE LARGEST! |
+| PreValuationTab.jsx | 6,408 | Market Analysis | Normalization workflows |
+| SalesComparisonTab.jsx | 5,684 | Final Valuation | CME comparable search |
+| supabaseClient.js | 5,058 | Library | Core services + interpretCodes |
+| BillingManagement.jsx | 4,721 | Top-Level | Financial control tower |
+| ProductionTracker.jsx | 4,632 | Job Container | Analytics engine |
+| AttributeCardsTab.jsx | 4,624 | Market Analysis | Condition items + cards |
+| OverallAnalysisTab.jsx | 4,275 | Market Analysis | Block mapping + condos |
+| FileUploadButton.jsx | 3,766 | Job Container | Comparison engine |
+| AdminJobManagement.jsx | 3,280 | Top-Level | Job lifecycle management |
+| DataQualityTab.jsx | 3,279 | Market Analysis | Data validation |
+| AppealLogTab.jsx | 3,116 | Final Valuation | Appeal log & import |
+| DetailedAppraisalGrid.jsx | 2,532 | Final Valuation | Manual appraisal + PDF |
+| EmployeeManagement.jsx | 2,478 | Top-Level | HR + analytics |
+| AdjustmentsTab.jsx | 2,277 | Final Valuation | CME grid + bracket mapping |
+| SalesReviewTab.jsx | 1,870 | Final Valuation | Sales history review |
+| MarketDataTab.jsx | 1,692 | Final Valuation | Effective age calc |
+| VacantLandAppraisalTab.jsx | 1,549 | Final Valuation | Vacant land evaluation |
+| PayrollManagement.jsx | 1,540 | Top-Level | Payroll processing |
+| RevenueManagement.jsx | 1,538 | Top-Level | Revenue + proposals |
+| JobContainer.jsx | 1,466 | Job Container | Module dispatcher |
+| DataVisualizations.jsx | 1,182 | Job Container | Data viz charts |
+| RatableComparisonTab.jsx | 1,109 | Final Valuation | Tax rate impact |
+| AssessorDashboard.jsx | 1,079 | Top-Level | External client dashboard |
+| CostValuationTab.jsx | 1,072 | Market Analysis | New construction + CCF |
+| AnalyticsTab.jsx | 468 | Final Valuation | Final recommendations |
 
-**Public Assets:**
-
-- **index.html**: Entry point with app title "Mgmt OS"
-- **favicon.ico**: Browser tab icon
-- **hr-documents/**: Employee resources (handbook, forms) served statically
+**Total Source Lines: ~98,000+**
 ### Data Interpretation Layer (interpretCodes) - ENHANCED
 
 **Location**: `src/lib/supabaseClient.js` - interpretCodes export
@@ -2327,7 +2330,7 @@ Each component receives:
 
 ### JobContainer.jsx - Module Orchestrator & Central Data Loader 🎛️
 
-**Scale**: ~500 lines, central hub for all job modules with unified data loading
+**Scale**: ~1,466 lines, central hub for all job modules with unified data loading
 
 **Core Philosophy**: Load data once, distribute everywhere - eliminate duplicate queries
 
@@ -2441,7 +2444,7 @@ Each module receives the complete data package, preventing need for individual q
 
 ### AdminJobManagement.jsx - Enterprise Job Operations Platform 🚀
 
-**Scale**: 3,200+ lines managing entire job lifecycle with real-time monitoring
+**Scale**: 3,280 lines managing entire job lifecycle with real-time monitoring
 
 **Core Features:**
 - **Five-Tab Command Center with Live Counts**: Each tab shows real-time record counts
@@ -2620,7 +2623,7 @@ sales_history: {
 
 ### ProductionTracker.jsx - Analytics & Data Processing Engine 🚀
 
-**Scale**: 4,400+ lines managing the entire data processing pipeline with real-time validation
+**Scale**: 4,632 lines managing the entire data processing pipeline with real-time validation
 
 **Core Philosophy**: Transform raw property data → clean inspection_data → real-time analytics → business intelligence
 
@@ -2849,7 +2852,7 @@ Each tab receives:
 
 ### DataQualityTab.jsx - Data Quality & Error Checking Engine 🔍
 
-**Scale**: 2,651 lines of comprehensive data validation and quality checks
+**Scale**: 3,279 lines of comprehensive data validation and quality checks
 
 **Core Philosophy**: Catch data issues early, provide actionable insights, enable manager decisions
 
@@ -3010,7 +3013,7 @@ score = 100 - (totalDeductions / propertyCount)
 
 ### PreValuationTab.jsx - Pre-Valuation Setup & Normalization Engine 📊
 
-**Scale**: 3,726 lines of sophisticated normalization and worksheet management
+**Scale**: 6,408 lines of sophisticated normalization and worksheet management
 
 **Core Philosophy**: Prepare properties for valuation through systematic normalization and review
 
@@ -3169,7 +3172,7 @@ standardLocations = [
 
 ### OverallAnalysisTab.jsx - Overall Market & Condo Analysis 📈
 
-**Scale**: ~1,000 lines of comprehensive property analysis and condo valuation
+**Scale**: 4,275 lines of comprehensive property analysis and condo valuation
 
 **Core Philosophy**: Provide market insights through systematic analysis and visual mapping
 
@@ -3323,7 +3326,7 @@ VCS: RIVERSIDE COMPLEX
 
 ### LandValuationTab.jsx - Complete 7-Section Land Valuation System 🏞️
 
-**Scale**: ~10,000 lines - **THE ABSOLUTE LARGEST COMPONENT IN THE ENTIRE SYSTEM**
+**Scale**: 12,678 lines - **THE ABSOLUTE LARGEST COMPONENT IN THE ENTIRE SYSTEM**
 
 **Core Philosophy**: Comprehensive land valuation using multiple methodologies, economic obsolescence analysis, and VCS-based rate structures
 
@@ -3865,7 +3868,7 @@ const recommendedRate = Math.min(method1Result, method2Result);
 
 ### CostValuationTab.jsx - Cost Conversion Factor Analysis 💰
 
-**Scale**: ~800 lines of new construction analysis and cost conversion calculations
+**Scale**: 1,072 lines of new construction analysis and cost conversion calculations
 
 **Core Philosophy**: Calculate and apply Cost Conversion Factor (CCF) for accurate property valuations based on replacement cost methodology
 
@@ -4500,7 +4503,7 @@ const getLivingArea = (property) => {
 
 ### AttributeCardsTab.jsx - Attribute & Additional Card Analysis 🏷️
 
-**Scale**: ~2,500 lines of comprehensive attribute and card impact analysis
+**Scale**: 4,624 lines of comprehensive attribute and card impact analysis
 
 **Core Philosophy**: Quantify the market impact of property attributes and additional dwelling units through statistical comparison
 
@@ -5392,7 +5395,7 @@ console.log('Calculation breakdown:', {
 
 ## FinalValuation.jsx - Depreciation Optimization & Value Reconciliation System 🎯
 
-**Scale**: 170 lines parent orchestrator + 9,697 lines across 7 tab components
+**Scale**: 182 lines parent orchestrator + 9 tab components totaling ~21,000+ lines
 
 **Core Philosophy**: Complete final valuation system integrating Market Data Approach, Comparative Market Evaluation (CME), and Tax Rate Impact Analysis
 
@@ -5435,7 +5438,7 @@ JobContainer loads data once → FinalValuation receives props → Distributes t
 
 ### SalesReviewTab.jsx - Sales History Review & Decision Engine 📋
 
-**Scale**: 1,879 lines of sales filtering, validation, and usability tracking
+**Scale**: 1,870 lines of sales filtering, validation, and usability tracking
 
 **Core Philosophy**: Systematically review all sales to determine which are usable for valuation analysis
 
@@ -5515,7 +5518,7 @@ JobContainer loads data once → FinalValuation receives props → Distributes t
 
 ### MarketDataTab.jsx - Depreciation Optimization & Effective Age Calculator 🏗️
 
-**Scale**: 1,551 lines of depreciation analysis, effective age calculation, and value projection
+**Scale**: 1,692 lines of depreciation analysis, effective age calculation, and value projection
 
 **Core Philosophy**: Use market data to determine optimal depreciation factors and project new assessments
 
@@ -5671,7 +5674,7 @@ projectedRate = (budget × (1 + bufferPct)) / projectedRatableBase
 
 ### RatableComparisonTab.jsx - Tax Rate Impact & Ratable Base Analysis 💰
 
-**Scale**: 1,112 lines of tax impact analysis and property class comparison
+**Scale**: 1,109 lines of tax impact analysis and property class comparison
 
 **Core Philosophy**: Understand tax implications of revaluation by comparing current vs projected ratable bases
 
@@ -5835,7 +5838,7 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 
 ### SalesComparisonTab.jsx - Comparative Market Evaluation (CME) Engine 🔍
 
-**Scale**: ~3,900+ lines - THE LARGEST Final Valuation component!
+**Scale**: 5,684 lines - THE LARGEST Final Valuation component!
 
 **Core Philosophy**: Automated comparable search with sophisticated filtering, bracket mapping, and adjustment grid integration. Supports batch-based workflows where users evaluate by VCS/Type-Use segments, set aside good results, and build toward a complete town valuation.
 
@@ -6161,7 +6164,7 @@ AdjustmentsTab contains two sub-sections:
 
 ### AdjustmentsTab.jsx - CME Adjustment Grid & Bracket Mapping ⚙️
 
-**Scale**: ~1,500+ lines of adjustment grid management and bracket mapping
+**Scale**: 2,277 lines of adjustment grid management and bracket mapping
 
 **Core Philosophy**: Configure market-based adjustments across 10 price brackets and map VCS/Type-Use codes to brackets for automated CME routing
 
@@ -6351,7 +6354,7 @@ Export adjustment grid to spreadsheet:
 
 ### AnalyticsTab.jsx - Final Value Recommendations & Quality Metrics 📊
 
-**Scale**: 441 lines of value analysis and quality scoring
+**Scale**: 468 lines of value analysis and quality scoring
 
 **Core Philosophy**: Provide final valuation recommendations with confidence metrics
 
@@ -6643,7 +6646,7 @@ Comprehensive analytics report:
 
 ### BillingManagement.jsx - Financial Control Tower 💰
 
-**Scale**: 3,300 lines of integrated financial management
+**Scale**: 4,721 lines of integrated financial management
 
 **Core Features:**
 - **Six-Tab Command Center with Live Counts**:
@@ -6746,7 +6749,7 @@ Comprehensive analytics report:
 
 ### PayrollManagement.jsx - Office Manager Chaos Killer 💸
 
-**Scale**: 1,100 lines of smart payroll processing and worksheet validation
+**Scale**: 1,540 lines of smart payroll processing and worksheet validation
 
 **Core Features:**
 - **Three-Step Workflow**: Upload worksheet → Calculate bonuses → Export to ADP
@@ -6811,7 +6814,7 @@ Comprehensive analytics report:
 
 ### EmployeeManagement.jsx - Human Capital Analytics Platform 💪
 
-**Scale**: 2,600+ lines combining HR operations with cross-job performance analytics
+**Scale**: 2,478 lines combining HR operations with cross-job performance analytics
 
 **Core Features:**
 - **Global Inspector Performance Analytics**: Loads ALL inspection data across ALL jobs with pagination (45K+ records)
