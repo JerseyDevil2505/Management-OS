@@ -2679,34 +2679,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Get the category for this sale
       const category = saleCategories[s.id];
 
-      // If no category is set, check if it's a vacant land sale (class 1/3B) that should be auto-included as building lot
+      // Uncategorized sales are excluded - user must explicitly assign a category
       if (!category) {
-        // Allow vacant land sales (they should have been auto-categorized as building-lot)
-        const isVacantClass = String(s.property_m4_class).toUpperCase() === '1' ||
-                              String(s.property_m4_class).toUpperCase() === '3B';
-        if (isVacantClass) {
-          console.log(`✅ Including uncategorized vacant land sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
-          return true;
-        }
-
-        // Check for teardown (class 2 with minimal improvement)
-        const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
-        if (isTeardown) {
-          console.log(`�� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
-          return true;
-        }
-
-        // Check for pre-construction (sold before built)
-        const isPreConstruction = String(s.property_m4_class) === '2' &&
-                                  s.asset_year_built &&
-                                  s.sales_date &&
-                                  new Date(s.sales_date).getFullYear() < s.asset_year_built;
-        if (isPreConstruction) {
-          console.log(`�� Including uncategorized pre-construction sale ${s.property_block}/${s.property_lot}`);
-          return true;
-        }
-
-        console.log(`⚠������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot} - assign a category (Building Lot, Tear Down, or Pre-Construction) to include`);
         return false;
       }
 
