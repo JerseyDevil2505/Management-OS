@@ -7358,7 +7358,42 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <table style={{ width: '100%', fontSize: '14px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Include</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={vacantSales.length > 0 && vacantSales.every(s => includedSales.has(s.id))}
+                      ref={el => {
+                        if (el) {
+                          const checkedCount = vacantSales.filter(s => includedSales.has(s.id)).length;
+                          el.indeterminate = checkedCount > 0 && checkedCount < vacantSales.length;
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Select all: add all to included, clear all from excluded
+                          const allIds = vacantSales.map(s => s.id);
+                          setIncludedSales(prev => new Set([...prev, ...allIds]));
+                          setMethod1ExcludedSales(prev => {
+                            const newSet = new Set(prev);
+                            allIds.forEach(id => newSet.delete(id));
+                            return newSet;
+                          });
+                        } else {
+                          // Deselect all: remove all from included, add all to excluded
+                          const allIds = vacantSales.map(s => s.id);
+                          setIncludedSales(prev => {
+                            const newSet = new Set(prev);
+                            allIds.forEach(id => newSet.delete(id));
+                            return newSet;
+                          });
+                          setMethod1ExcludedSales(prev => new Set([...prev, ...allIds]));
+                        }
+                      }}
+                    />
+                    Include
+                  </label>
+                </th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Qual</th>
