@@ -290,6 +290,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // FORMULAS
 
   // Formula: Recommended EFA
+  // BRT: outputs a calendar year (e.g., 2015)
+  // Microsystems: outputs an age in years (e.g., 10)
   const calculateRecommendedEFA = (property) => {
     if (!property.values_norm_time) return null;
 
@@ -300,14 +302,27 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     if (replCost === 0) return null;
 
-    const formula = yearPriorToDueYear - ((1 - ((normTime - camaLand - detItems) / replCost)) * 100);
-    return Math.round(formula);
+    const deprAge = (1 - ((normTime - camaLand - detItems) / replCost)) * 100;
+
+    if (vendorType === 'Microsystems') {
+      // Microsystems stores EFA as actual age, so just return the age
+      return Math.round(deprAge);
+    }
+    // BRT: convert age to effective year
+    return Math.round(yearPriorToDueYear - deprAge);
   };
 
   // Formula: DEPR factor
+  // BRT: actualEFA is a year, so depr = 1 - ((yearPrior - year) / 100)
+  // Microsystems: actualEFA is an age, so depr = 1 - (age / 100)
   const calculateDEPR = (actualEFA) => {
     if (actualEFA === null || actualEFA === undefined) return null;
-    const depr = 1 - ((yearPriorToDueYear - actualEFA) / 100);
+    let depr;
+    if (vendorType === 'Microsystems') {
+      depr = 1 - (actualEFA / 100);
+    } else {
+      depr = 1 - ((yearPriorToDueYear - actualEFA) / 100);
+    }
     return depr > 1 ? 1 : depr;
   };
 
@@ -1022,7 +1037,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
       row['Check'] = { f: `IF(${col('MOD IV')}${r}=${col('CAMA')}${r},"TRUE","FALSE")` };
-      row['Test'] = { f: `IF(AND(${col('Year Built')}${r}<>"",${col('Actual EFA')}${r}<>""),IF(${col('Actual EFA')}${r}>=${col('Year Built')}${r},"TRUE","FALSE"),"")` };
+      // Test: BRT checks if EFA year >= Year Built; Microsystems checks if age <= actual age (yearPrior - yearBuilt)
+      if (vendorType === 'Microsystems') {
+        row['Test'] = { f: `IF(AND(${col('Year Built')}${r}<>"",${col('Actual EFA')}${r}<>""),IF(${col('Actual EFA')}${r}<=(${yearPriorToDueYear}-${col('Year Built')}${r}),"TRUE","FALSE"),"")` };
+      } else {
+        row['Test'] = { f: `IF(AND(${col('Year Built')}${r}<>"",${col('Actual EFA')}${r}<>""),IF(${col('Actual EFA')}${r}>=${col('Year Built')}${r},"TRUE","FALSE"),"")` };
+      }
 
       row['Sales Ratio'] = calc.projectedTotal && property.values_norm_time
         ? { f: `${col('Proj Total')}${r}/${col('Norm Time Value')}${r}` } : '';
@@ -1042,21 +1062,39 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       row['Delta %'] = calc.projectedTotal && property.values_mod_total
         ? { f: `(${col('Proj Total')}${r}-${col('Current Total')}${r})/${col('Current Total')}${r}` } : '';
 
-      // Recommended EFA - conditionally factor in condition adjustment
+      // Recommended EFA - vendor-specific + condition table logic
       if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
-        if (useConditionTable) {
-          row['Recommended EFA'] = { f: `ROUND(${yearPriorToDueYear}-((1-${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100),0)` };
+        // Age portion: (1 - ((NormTime - CamaLand - DetItems) / CostNew)) * 100
+        const ageFormula = `(1-((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100`;
+        const condPrefix = useConditionTable ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-` : '';
+
+        if (vendorType === 'Microsystems') {
+          // Microsystems: output age directly
+          row['Recommended EFA'] = useConditionTable
+            ? { f: `ROUND((1-${condPrefix}((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100,0)` }
+            : { f: `ROUND(${ageFormula},0)` };
         } else {
-          row['Recommended EFA'] = { f: `ROUND(${yearPriorToDueYear}-((1-((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100),0)` };
+          // BRT: output year = yearPrior - age
+          row['Recommended EFA'] = useConditionTable
+            ? { f: `ROUND(${yearPriorToDueYear}-((1-${condPrefix}((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100),0)` }
+            : { f: `ROUND(${yearPriorToDueYear}-(${ageFormula}),0)` };
         }
       }
 
-      // DEPR - conditionally factor in condition adjustment
+      // DEPR - vendor-specific + condition table logic
       if (calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined) {
-        if (useConditionTable) {
-          row['DEPR'] = { f: `MIN(1,1-${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` };
+        const condPrefix = useConditionTable ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-` : '';
+
+        if (vendorType === 'Microsystems') {
+          // Microsystems: actualEFA is age, so DEPR = 1 - age/100
+          row['DEPR'] = useConditionTable
+            ? { f: `MIN(1,1-${condPrefix}(${col('Actual EFA')}${r}/100))` }
+            : { f: `MIN(1,1-(${col('Actual EFA')}${r}/100))` };
         } else {
-          row['DEPR'] = { f: `MIN(1,1-((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` };
+          // BRT: actualEFA is year, so DEPR = 1 - ((yearPrior - year) / 100)
+          row['DEPR'] = useConditionTable
+            ? { f: `MIN(1,1-${condPrefix}((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` }
+            : { f: `MIN(1,1-((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` };
         }
       }
 
