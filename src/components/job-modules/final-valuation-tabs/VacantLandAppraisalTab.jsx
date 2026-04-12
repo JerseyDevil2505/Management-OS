@@ -1,4 +1,4 @@
-import { Download, Search, X, Save } from 'lucide-react';
+import { Download, X, Save, Filter } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 
@@ -19,39 +19,96 @@ const VacantLandAppraisalTab = ({
   setVacantLandResult
 }) => {
   const [loadedProperties, setLoadedProperties] = useState({});
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
   const [savedAppraisals, setSavedAppraisals] = useState([]);
   const [saveNameInput, setSaveNameInput] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Valuation method - default from job's land valuation config
   const jobValuationMethod = marketLandData?.cascade_rates?.mode || marketLandData?.raw_land_config?.cascade_config?.mode || 'acre';
   const [valuationMethod, setValuationMethod] = useState(jobValuationMethod);
 
-  // Search filters
-  const [searchFilters, setSearchFilters] = useState({
-    dateStart: new Date(new Date().getFullYear() - 5, 0, 1).toISOString().split('T')[0],
-    dateEnd: new Date().toISOString().split('T')[0],
+  // Filters for the Method 1 sales table
+  const [filters, setFilters] = useState({
     vcs: [],
     zoning: [],
     utilityGas: 'any',
     utilityWater: 'any',
     utilitySewer: 'any',
+    category: 'all', // all, building_lot, teardown, pre-construction
   });
 
-  // Unique VCS and zoning values from properties
+  // Build the vacant land sales array from Method 1 saved data
+  const method1Sales = useMemo(() => {
+    const savedSales = marketLandData?.vacant_sales_analysis?.sales || [];
+    if (savedSales.length === 0) return [];
+
+    // Build a lookup of property data by ID
+    const propMap = {};
+    properties.forEach(p => { if (p.id) propMap[p.id] = p; });
+
+    // Cross-reference saved sale IDs with full property records
+    return savedSales
+      .filter(s => s.included !== false) // only included sales
+      .map(s => {
+        const prop = propMap[s.id];
+        if (!prop) return null;
+        return {
+          ...prop,
+          _category: s.category || null,
+          _specialRegion: s.special_region || 'Normal',
+          _notes: s.notes || null,
+          _manuallyAdded: s.manually_added || false,
+        };
+      })
+      .filter(Boolean);
+  }, [marketLandData, properties]);
+
+  // Unique VCS and zoning from method1Sales
   const uniqueVCS = useMemo(() => {
     const set = new Set();
-    properties.forEach(p => { if (p.property_vcs) set.add(p.property_vcs); });
+    method1Sales.forEach(p => { if (p.property_vcs) set.add(p.property_vcs); });
     return Array.from(set).sort();
-  }, [properties]);
+  }, [method1Sales]);
 
   const uniqueZoning = useMemo(() => {
     const set = new Set();
-    properties.forEach(p => { if (p.property_zoning) set.add(p.property_zoning); });
+    method1Sales.forEach(p => { if (p.property_zoning) set.add(p.property_zoning); });
     return Array.from(set).sort();
-  }, [properties]);
+  }, [method1Sales]);
+
+  const uniqueCategories = useMemo(() => {
+    const set = new Set();
+    method1Sales.forEach(p => { if (p._category) set.add(p._category); });
+    return Array.from(set).sort();
+  }, [method1Sales]);
+
+  // Filtered sales
+  const filteredSales = useMemo(() => {
+    return method1Sales.filter(prop => {
+      if (filters.vcs.length > 0 && !filters.vcs.includes(prop.property_vcs)) return false;
+      if (filters.zoning.length > 0 && !filters.zoning.includes(prop.property_zoning)) return false;
+      if (filters.category !== 'all' && prop._category !== filters.category) return false;
+
+      if (filters.utilityGas !== 'any') {
+        const hasGas = prop.utility_heat && prop.utility_heat.toLowerCase().includes('gas');
+        if (filters.utilityGas === 'yes' && !hasGas) return false;
+        if (filters.utilityGas === 'no' && hasGas) return false;
+      }
+      if (filters.utilityWater !== 'any') {
+        const hasWater = prop.utility_water && prop.utility_water.toLowerCase().includes('public');
+        if (filters.utilityWater === 'yes' && !hasWater) return false;
+        if (filters.utilityWater === 'no' && hasWater) return false;
+      }
+      if (filters.utilitySewer !== 'any') {
+        const hasSewer = prop.utility_sewer && prop.utility_sewer.toLowerCase().includes('public');
+        if (filters.utilitySewer === 'yes' && !hasSewer) return false;
+        if (filters.utilitySewer === 'no' && hasSewer) return false;
+      }
+
+      return true;
+    });
+  }, [method1Sales, filters]);
 
   // Load saved appraisals on mount
   useEffect(() => {
@@ -60,25 +117,14 @@ const VacantLandAppraisalTab = ({
 
   const loadSavedAppraisals = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('market_land_valuation')
-        .select('id, job_id, created_at, updated_at')
-        .eq('job_id', jobData.id);
+        .select('vacant_land_appraisals')
+        .eq('job_id', jobData.id)
+        .single();
       
-      if (error) throw error;
-      
-      // Load vacant_land_appraisals from the job's market land data
-      const existing = data?.[0];
-      if (existing) {
-        const { data: full } = await supabase
-          .from('market_land_valuation')
-          .select('vacant_land_appraisals')
-          .eq('id', existing.id)
-          .single();
-        
-        if (full?.vacant_land_appraisals) {
-          setSavedAppraisals(full.vacant_land_appraisals);
-        }
+      if (data?.vacant_land_appraisals) {
+        setSavedAppraisals(data.vacant_land_appraisals);
       }
     } catch (err) {
       console.warn('Could not load saved appraisals:', err.message);
@@ -102,7 +148,7 @@ const VacantLandAppraisalTab = ({
     }) || null;
   }, [properties]);
 
-  // Get lot size value based on current valuation method
+  // Lot size helpers
   const getLotSizeForMethod = useCallback((prop) => {
     if (!prop) return 0;
     if (valuationMethod === 'ff') return parseFloat(prop.asset_lot_frontage) || 0;
@@ -117,7 +163,7 @@ const VacantLandAppraisalTab = ({
   }, [valuationMethod]);
 
   const getSizeLabel = useCallback(() => {
-    if (valuationMethod === 'ff') return 'Front Feet';
+    if (valuationMethod === 'ff') return 'Front Ft';
     if (valuationMethod === 'sf') return 'Sq Ft';
     return 'Acres';
   }, [valuationMethod]);
@@ -130,7 +176,25 @@ const VacantLandAppraisalTab = ({
     return Math.round(size).toLocaleString();
   }, [valuationMethod, getLotSizeForMethod]);
 
-  // Calculate estimated land value
+  const getCategoryLabel = (cat) => {
+    switch (cat) {
+      case 'building_lot': return 'Bldg Lot';
+      case 'teardown': return 'Teardown';
+      case 'pre-construction': return 'Pre-Con';
+      default: return cat || 'Vacant';
+    }
+  };
+
+  const getCategoryColor = (cat) => {
+    switch (cat) {
+      case 'teardown': return 'bg-orange-100 text-orange-700';
+      case 'pre-construction': return 'bg-purple-100 text-purple-700';
+      case 'building_lot': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  // Estimated land value
   const estimatedLandValue = useMemo(() => {
     const subjectProp = loadedProperties.subject;
     const subjectSize = getLotSizeForMethod(subjectProp);
@@ -177,80 +241,7 @@ const VacantLandAppraisalTab = ({
     }
   }, [loadedProperties, estimatedLandValue, setVacantLandResult]);
 
-  // Search for vacant land sales
-  const handleSearch = useCallback(() => {
-    const results = properties.filter(prop => {
-      // Must have a valid sale
-      const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
-      if (!hasValidSale) return false;
-
-      // Date range check
-      const saleDate = new Date(prop.sales_date);
-      const startDate = new Date(searchFilters.dateStart);
-      startDate.setHours(0,0,0,0);
-      const endDate = new Date(searchFilters.dateEnd);
-      endDate.setHours(23,59,59,999);
-      if (saleDate < startDate || saleDate > endDate) return false;
-
-      // NU code check (valid sales only)
-      const nu = (prop.sales_nu || '').toString().trim();
-      const validNu = nu === '' || ['00','07','7'].includes(nu) || prop.sales_nu?.toString().startsWith(' ');
-      if (!validNu) return false;
-
-      // Must be vacant class (1 or 3B) or teardown or pre-construction
-      const m4Class = String(prop.property_m4_class || '').toUpperCase();
-      const isVacantClass = m4Class === '1' || m4Class === '3B';
-      const isTeardown = m4Class === '2' && 
-                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
-                         (prop.values_mod_improvement || 0) < 10000;
-      const isPreConstruction = m4Class === '2' &&
-                               prop.asset_year_built && prop.sales_date &&
-                               new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
-      
-      if (!isVacantClass && !isTeardown && !isPreConstruction) return false;
-
-      // Skip additional cards
-      if (prop.property_addl_card) {
-        const card = String(prop.property_addl_card).trim().toUpperCase();
-        if (vendorType === 'BRT') {
-          if (card !== '' && card !== 'NONE' && !card.startsWith('1')) return false;
-        } else {
-          if (card !== '' && card !== 'NONE' && card !== 'M') return false;
-        }
-      }
-
-      // VCS filter
-      if (searchFilters.vcs.length > 0 && !searchFilters.vcs.includes(prop.property_vcs)) return false;
-
-      // Zoning filter
-      if (searchFilters.zoning.length > 0 && !searchFilters.zoning.includes(prop.property_zoning)) return false;
-
-      // Utility filters
-      if (searchFilters.utilityGas !== 'any') {
-        const hasGas = prop.utility_heat && prop.utility_heat.toLowerCase().includes('gas');
-        if (searchFilters.utilityGas === 'yes' && !hasGas) return false;
-        if (searchFilters.utilityGas === 'no' && hasGas) return false;
-      }
-      if (searchFilters.utilityWater !== 'any') {
-        const hasPublicWater = prop.utility_water && prop.utility_water.toLowerCase().includes('public');
-        if (searchFilters.utilityWater === 'yes' && !hasPublicWater) return false;
-        if (searchFilters.utilityWater === 'no' && hasPublicWater) return false;
-      }
-      if (searchFilters.utilitySewer !== 'any') {
-        const hasPublicSewer = prop.utility_sewer && prop.utility_sewer.toLowerCase().includes('public');
-        if (searchFilters.utilitySewer === 'yes' && !hasPublicSewer) return false;
-        if (searchFilters.utilitySewer === 'no' && hasPublicSewer) return false;
-      }
-
-      return true;
-    });
-
-    // Sort by sale date descending
-    results.sort((a, b) => new Date(b.sales_date) - new Date(a.sales_date));
-    setSearchResults(results);
-  }, [properties, searchFilters, vendorType]);
-
-  // Add search result to a comp slot
+  // Add from sales table to comp slot
   const addToComp = (prop) => {
     const emptyIdx = vacantLandComps.findIndex(c => !c.block && !c.lot);
     if (emptyIdx >= 0) {
@@ -289,7 +280,6 @@ const VacantLandAppraisalTab = ({
     const updated = [...savedAppraisals, appraisal];
 
     try {
-      // Upsert into market_land_valuation
       const { data: existing } = await supabase
         .from('market_land_valuation')
         .select('id')
@@ -333,7 +323,6 @@ const VacantLandAppraisalTab = ({
     
     if (appraisal.valuation_method) setValuationMethod(appraisal.valuation_method);
     
-    // Auto-evaluate
     setTimeout(() => {
       const subjectData = getPropertyData(appraisal.subject.block, appraisal.subject.lot, appraisal.subject.qualifier);
       const loaded = { subject: subjectData };
@@ -372,17 +361,17 @@ const VacantLandAppraisalTab = ({
 
   const subjectProp = loadedProperties.subject;
 
-  // Helper to render a simple data row
+  // Helper to render a data row in the appraisal grid
   const renderDataRow = (label, getValue, options = {}) => (
     <tr className={`border-t border-gray-200 ${options.className || ''}`}>
-      <td className={`px-3 py-2 font-medium text-gray-700 ${options.bold ? 'font-semibold' : ''}`}>{label}</td>
-      <td className={`px-3 py-2 text-center ${options.subjectBg || 'bg-yellow-50'} text-xs ${options.bold ? 'font-semibold' : ''}`}>
+      <td className={`px-2 py-1.5 font-medium text-gray-700 text-xs whitespace-nowrap ${options.bold ? 'font-semibold' : ''}`}>{label}</td>
+      <td className={`px-2 py-1.5 text-center ${options.subjectBg || 'bg-yellow-50'} text-xs ${options.bold ? 'font-semibold' : ''}`}>
         {getValue(subjectProp)}
       </td>
       {vacantLandComps.map((comp, idx) => {
         const prop = loadedProperties[`comp_${idx}`];
         return (
-          <td key={idx} className={`px-3 py-2 text-center ${options.compBg || 'bg-blue-50'} border-l border-gray-300 text-xs ${options.bold ? 'font-semibold' : ''}`}>
+          <td key={idx} className={`px-2 py-1.5 text-center ${options.compBg || 'bg-blue-50'} border-l border-gray-300 text-xs ${options.bold ? 'font-semibold' : ''}`}>
             {getValue(prop)}
           </td>
         );
@@ -390,18 +379,29 @@ const VacantLandAppraisalTab = ({
     </tr>
   );
 
+  const activeFilterCount = [
+    filters.vcs.length > 0,
+    filters.zoning.length > 0,
+    filters.category !== 'all',
+    filters.utilityGas !== 'any',
+    filters.utilityWater !== 'any',
+    filters.utilitySewer !== 'any',
+  ].filter(Boolean).length;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header with method toggle */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h3 className="font-semibold text-blue-900 mb-1">Vacant Land Appraisal</h3>
+            <h3 className="font-semibold text-blue-900 text-sm">Vacant Land Appraisal</h3>
             <p className="text-xs text-blue-700">
-              Search for vacant land sales, enter subject/comps, and evaluate estimated land value.
+              {method1Sales.length > 0
+                ? `${method1Sales.length} vacant land sale${method1Sales.length !== 1 ? 's' : ''} from Land Valuation Method 1`
+                : 'No vacant land sales found — run Land Valuation Method 1 first'}
             </p>
           </div>
-          <div className="flex items-center gap-1 bg-white rounded-lg border border-blue-200 p-1">
+          <div className="flex items-center gap-1 bg-white rounded-lg border border-blue-200 p-0.5">
             {[
               { key: 'acre', label: 'Acre' },
               { key: 'sf', label: 'Sq Ft' },
@@ -410,7 +410,7 @@ const VacantLandAppraisalTab = ({
               <button
                 key={m.key}
                 onClick={() => setValuationMethod(m.key)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                   valuationMethod === m.key
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-600 hover:bg-gray-100'
@@ -425,20 +425,20 @@ const VacantLandAppraisalTab = ({
 
       {/* Saved Appraisals */}
       {savedAppraisals.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-medium text-gray-600">Saved:</span>
           {savedAppraisals.map(a => (
-            <div key={a.id} className="flex items-center gap-1 bg-gray-100 border border-gray-300 rounded px-2.5 py-1">
+            <div key={a.id} className="flex items-center gap-1 bg-gray-100 border border-gray-300 rounded px-2 py-0.5">
               <button
                 onClick={() => handleLoadAppraisal(a)}
                 className="text-xs text-blue-700 hover:text-blue-900 hover:underline font-medium"
               >
                 {a.name}
               </button>
-              <span className="text-xs text-gray-400 ml-1">({new Date(a.created_at).toLocaleDateString()})</span>
+              <span className="text-xs text-gray-400">({new Date(a.created_at).toLocaleDateString()})</span>
               <button
                 onClick={() => handleDeleteAppraisal(a.id)}
-                className="ml-1 text-red-400 hover:text-red-600 text-xs font-bold"
+                className="ml-0.5 text-red-400 hover:text-red-600"
                 title="Delete"
               >
                 <X className="w-3 h-3" />
@@ -448,118 +448,111 @@ const VacantLandAppraisalTab = ({
         </div>
       )}
 
-      {/* Search Engine */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <button
-          onClick={() => setShowSearch(!showSearch)}
-          className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">Search Vacant Land Sales</span>
-            {searchResults.length > 0 && (
-              <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{searchResults.length} found</span>
-            )}
+      {/* Vacant Land Sales from Method 1 */}
+      {method1Sales.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">
+              Vacant Land Sales
+              {filteredSales.length !== method1Sales.length && (
+                <span className="text-xs text-gray-500 ml-1">
+                  ({filteredSales.length} of {method1Sales.length})
+                </span>
+              )}
+            </span>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                showFilters || activeFilterCount > 0
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                  : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Filter className="w-3 h-3" />
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </button>
           </div>
-          <span className="text-gray-400 text-sm">{showSearch ? '▲' : '▼'}</span>
-        </button>
 
-        {showSearch && (
-          <div className="p-4 space-y-3 border-t border-gray-200">
-            {/* Filter Row 1: Dates */}
-            <div className="flex flex-wrap items-end gap-3">
+          {/* Inline Filters */}
+          {showFilters && (
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
+              {/* Category */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                <input
-                  type="date"
-                  value={searchFilters.dateStart}
-                  onChange={(e) => setSearchFilters(prev => ({ ...prev, dateStart: e.target.value }))}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded"
-                />
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Type</label>
+                <select
+                  value={filters.category}
+                  onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded"
+                >
+                  <option value="all">All</option>
+                  {uniqueCategories.map(c => (
+                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                <input
-                  type="date"
-                  value={searchFilters.dateEnd}
-                  onChange={(e) => setSearchFilters(prev => ({ ...prev, dateEnd: e.target.value }))}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded"
-                />
-              </div>
-            </div>
 
-            {/* Filter Row 2: VCS + Zoning */}
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">VCS</label>
+              {/* VCS */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">VCS</label>
                 <div className="flex flex-wrap items-center gap-1">
-                  {searchFilters.vcs.map(v => (
-                    <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 border border-blue-300 text-blue-800">
+                  {filters.vcs.map(v => (
+                    <span key={v} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 border border-blue-300 text-blue-800">
                       {v}
-                      <button onClick={() => setSearchFilters(prev => ({ ...prev, vcs: prev.vcs.filter(x => x !== v) }))}>
-                        <X className="w-3 h-3" />
-                      </button>
+                      <button onClick={() => setFilters(prev => ({ ...prev, vcs: prev.vcs.filter(x => x !== v) }))}><X className="w-2.5 h-2.5" /></button>
                     </span>
                   ))}
                   <select
                     value=""
                     onChange={(e) => {
-                      if (e.target.value && !searchFilters.vcs.includes(e.target.value)) {
-                        setSearchFilters(prev => ({ ...prev, vcs: [...prev.vcs, e.target.value] }));
+                      if (e.target.value && !filters.vcs.includes(e.target.value)) {
+                        setFilters(prev => ({ ...prev, vcs: [...prev.vcs, e.target.value] }));
                       }
                     }}
-                    className="px-2 py-1 text-xs border border-gray-300 rounded"
+                    className="px-1.5 py-1 text-xs border border-gray-300 rounded"
                   >
                     <option value="">+ VCS</option>
-                    {uniqueVCS.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
+                    {uniqueVCS.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
               </div>
 
-              <div className="min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Zoning</label>
+              {/* Zoning */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Zoning</label>
                 <div className="flex flex-wrap items-center gap-1">
-                  {searchFilters.zoning.map(z => (
-                    <span key={z} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 border border-green-300 text-green-800">
+                  {filters.zoning.map(z => (
+                    <span key={z} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full bg-green-100 border border-green-300 text-green-800">
                       {z}
-                      <button onClick={() => setSearchFilters(prev => ({ ...prev, zoning: prev.zoning.filter(x => x !== z) }))}>
-                        <X className="w-3 h-3" />
-                      </button>
+                      <button onClick={() => setFilters(prev => ({ ...prev, zoning: prev.zoning.filter(x => x !== z) }))}><X className="w-2.5 h-2.5" /></button>
                     </span>
                   ))}
                   <select
                     value=""
                     onChange={(e) => {
-                      if (e.target.value && !searchFilters.zoning.includes(e.target.value)) {
-                        setSearchFilters(prev => ({ ...prev, zoning: [...prev.zoning, e.target.value] }));
+                      if (e.target.value && !filters.zoning.includes(e.target.value)) {
+                        setFilters(prev => ({ ...prev, zoning: [...prev.zoning, e.target.value] }));
                       }
                     }}
-                    className="px-2 py-1 text-xs border border-gray-300 rounded"
+                    className="px-1.5 py-1 text-xs border border-gray-300 rounded"
                   >
                     <option value="">+ Zone</option>
-                    {uniqueZoning.map(z => (
-                      <option key={z} value={z}>{z}</option>
-                    ))}
+                    {uniqueZoning.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
               </div>
-            </div>
 
-            {/* Filter Row 3: Utilities */}
-            <div className="flex flex-wrap items-end gap-4">
+              {/* Utilities */}
               {[
                 { key: 'utilityGas', label: 'Gas' },
-                { key: 'utilityWater', label: 'Public Water' },
-                { key: 'utilitySewer', label: 'Public Sewer' },
+                { key: 'utilityWater', label: 'Water' },
+                { key: 'utilitySewer', label: 'Sewer' },
               ].map(u => (
                 <div key={u.key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{u.label}</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-0.5">{u.label}</label>
                   <select
-                    value={searchFilters[u.key]}
-                    onChange={(e) => setSearchFilters(prev => ({ ...prev, [u.key]: e.target.value }))}
-                    className="px-2 py-1 text-xs border border-gray-300 rounded"
+                    value={filters[u.key]}
+                    onChange={(e) => setFilters(prev => ({ ...prev, [u.key]: e.target.value }))}
+                    className="px-1.5 py-1 text-xs border border-gray-300 rounded"
                   >
                     <option value="any">Any</option>
                     <option value="yes">Yes</option>
@@ -567,94 +560,110 @@ const VacantLandAppraisalTab = ({
                   </select>
                 </div>
               ))}
-            </div>
 
-            {/* Search Button */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSearch}
-                className="px-4 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
-              >
-                <span className="flex items-center gap-1"><Search className="w-3.5 h-3.5" /> Search</span>
-              </button>
-              {searchResults.length > 0 && (
-                <span className="text-xs text-gray-500">{searchResults.length} vacant land sale{searchResults.length !== 1 ? 's' : ''} found</span>
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={() => setFilters({ vcs: [], zoning: [], utilityGas: 'any', utilityWater: 'any', utilitySewer: 'any', category: 'all' })}
+                  className="px-2 py-1 text-xs text-red-600 hover:text-red-800 font-medium"
+                >
+                  Clear All
+                </button>
               )}
             </div>
+          )}
 
-            {/* Search Results Table */}
-            {searchResults.length > 0 && (
-              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-100 sticky top-0">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Block</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Lot</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Qual</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">VCS</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Zone</th>
-                      <th className="px-2 py-1.5 text-right font-medium text-gray-600">{getSizeLabel()}</th>
-                      <th className="px-2 py-1.5 text-right font-medium text-gray-600">Sale Price</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Sale Date</th>
-                      <th className="px-2 py-1.5 text-right font-medium text-gray-600">{getUnitLabel()}</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Heat</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Water</th>
-                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Sewer</th>
-                      <th className="px-2 py-1.5 text-center font-medium text-gray-600"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {searchResults.map((prop, i) => {
-                      const size = getLotSizeForMethod(prop);
-                      const pricePerUnit = size > 0 ? parseFloat(prop.sales_price) / size : 0;
-                      return (
-                        <tr key={i} className="border-t border-gray-100 hover:bg-blue-50">
-                          <td className="px-2 py-1.5">{prop.property_block}</td>
-                          <td className="px-2 py-1.5">{prop.property_lot}</td>
-                          <td className="px-2 py-1.5">{prop.property_qualifier || ''}</td>
-                          <td className="px-2 py-1.5">{prop.property_vcs || ''}</td>
-                          <td className="px-2 py-1.5">{prop.property_zoning || ''}</td>
-                          <td className="px-2 py-1.5 text-right">{formatSize(prop)}</td>
-                          <td className="px-2 py-1.5 text-right">${Math.round(parseFloat(prop.sales_price)).toLocaleString()}</td>
-                          <td className="px-2 py-1.5">{prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : ''}</td>
-                          <td className="px-2 py-1.5 text-right font-medium">${Math.round(pricePerUnit).toLocaleString()}</td>
-                          <td className="px-2 py-1.5 text-gray-500">{prop.utility_heat || ''}</td>
-                          <td className="px-2 py-1.5 text-gray-500">{prop.utility_water || ''}</td>
-                          <td className="px-2 py-1.5 text-gray-500">{prop.utility_sewer || ''}</td>
-                          <td className="px-2 py-1.5 text-center">
-                            <button
-                              onClick={() => addToComp(prop)}
-                              className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
-                              title="Add as comparable"
-                            >
-                              + Comp
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          {/* Sales Table */}
+          <div className="max-h-72 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-100 sticky top-0 z-10">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-16">Block</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-14">Lot</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-10">Q</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-12">VCS</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-14">Zone</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-16">Type</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-16">{getSizeLabel()}</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-20">Sale Price</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-20">Sale Date</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-16">{getUnitLabel()}</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-12">Region</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-gray-600 w-14"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSales.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-3 py-4 text-center text-gray-500 text-xs">
+                      {method1Sales.length > 0
+                        ? 'No sales match the current filters'
+                        : 'No vacant land sales data available'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSales.map((prop, i) => {
+                    const size = getLotSizeForMethod(prop);
+                    const pricePerUnit = size > 0 ? parseFloat(prop.sales_price) / size : 0;
+                    return (
+                      <tr key={prop.id || i} className="border-t border-gray-100 hover:bg-blue-50">
+                        <td className="px-2 py-1">{prop.property_block}</td>
+                        <td className="px-2 py-1">{prop.property_lot}</td>
+                        <td className="px-2 py-1">{prop.property_qualifier || ''}</td>
+                        <td className="px-2 py-1">{prop.property_vcs || ''}</td>
+                        <td className="px-2 py-1">{prop.property_zoning || ''}</td>
+                        <td className="px-2 py-1">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs ${getCategoryColor(prop._category)}`}>
+                            {getCategoryLabel(prop._category)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 text-right">{formatSize(prop)}</td>
+                        <td className="px-2 py-1 text-right">${Math.round(parseFloat(prop.sales_price)).toLocaleString()}</td>
+                        <td className="px-2 py-1">{prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : ''}</td>
+                        <td className="px-2 py-1 text-right font-medium">${Math.round(pricePerUnit).toLocaleString()}</td>
+                        <td className="px-2 py-1 text-gray-500">{prop._specialRegion !== 'Normal' ? prop._specialRegion : ''}</td>
+                        <td className="px-2 py-1 text-center">
+                          <button
+                            onClick={() => addToComp(prop)}
+                            className="px-1.5 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                            title="Add as comparable"
+                          >
+                            + Comp
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* No Method 1 data message */}
+      {method1Sales.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-center">
+          <p className="text-sm text-amber-800 font-medium">No Vacant Land Sales Available</p>
+          <p className="text-xs text-amber-600 mt-1">
+            Run Land Valuation Method 1 and save to populate this table with identified vacant land sales.
+          </p>
+        </div>
+      )}
 
       {/* Entry Section */}
       <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
-        <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
-          <h4 className="font-semibold text-gray-900">Property Entry</h4>
+        <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+          <h4 className="font-semibold text-gray-900 text-sm">Property Entry</h4>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
             <thead>
               <tr className="bg-gray-100 border-b-2 border-gray-300">
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 w-32"></th>
-                <th className="px-3 py-2 text-center font-semibold bg-yellow-50 w-20">Subject</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-gray-700 w-24"></th>
+                <th className="px-2 py-1.5 text-center font-semibold bg-yellow-50 w-20">Subject</th>
                 {[1, 2, 3, 4, 5].map((compNum) => (
-                  <th key={compNum} className="px-3 py-2 text-center font-semibold bg-blue-50 border-l border-gray-300 w-20">
+                  <th key={compNum} className="px-2 py-1.5 text-center font-semibold bg-blue-50 border-l border-gray-300 w-20">
                     Comp {compNum}
                   </th>
                 ))}
@@ -663,18 +672,18 @@ const VacantLandAppraisalTab = ({
             <tbody className="bg-white">
               {/* Block */}
               <tr className="border-t border-gray-200">
-                <td className="px-3 py-2 font-medium text-gray-700">Block</td>
-                <td className="px-3 py-2 text-center bg-yellow-50">
+                <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Block</td>
+                <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
                     type="text"
                     value={vacantLandSubject.block}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, block: e.target.value }))}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Block"
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
-                  <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                  <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
                       type="text"
                       value={comp.block}
@@ -683,7 +692,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], block: e.target.value };
                         setVacantLandComps(newComps);
                       }}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                      className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Block"
                     />
                   </td>
@@ -692,18 +701,18 @@ const VacantLandAppraisalTab = ({
 
               {/* Lot */}
               <tr className="border-t border-gray-200">
-                <td className="px-3 py-2 font-medium text-gray-700">Lot</td>
-                <td className="px-3 py-2 text-center bg-yellow-50">
+                <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Lot</td>
+                <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
                     type="text"
                     value={vacantLandSubject.lot}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, lot: e.target.value }))}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Lot"
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
-                  <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                  <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
                       type="text"
                       value={comp.lot}
@@ -712,7 +721,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], lot: e.target.value };
                         setVacantLandComps(newComps);
                       }}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                      className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Lot"
                     />
                   </td>
@@ -721,18 +730,18 @@ const VacantLandAppraisalTab = ({
 
               {/* Qualifier */}
               <tr className="border-t border-gray-200">
-                <td className="px-3 py-2 font-medium text-gray-700">Qual</td>
-                <td className="px-3 py-2 text-center bg-yellow-50">
+                <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Qual</td>
+                <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
                     type="text"
                     value={vacantLandSubject.qualifier}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, qualifier: e.target.value }))}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Qual"
                   />
                 </td>
                 {vacantLandComps.map((comp, idx) => (
-                  <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                  <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
                       type="text"
                       value={comp.qualifier}
@@ -741,7 +750,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], qualifier: e.target.value };
                         setVacantLandComps(newComps);
                       }}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                      className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Qual"
                     />
                   </td>
@@ -750,8 +759,8 @@ const VacantLandAppraisalTab = ({
 
               {/* Lot Size preview */}
               <tr className="border-t border-gray-200 bg-gray-50">
-                <td className="px-3 py-2 font-medium text-gray-700 text-xs">Lot Size ({getSizeLabel()})</td>
-                <td className="px-3 py-2 text-center bg-yellow-50 text-xs font-medium">
+                <td className="px-2 py-1.5 font-medium text-gray-700 text-xs whitespace-nowrap">Size ({getSizeLabel()})</td>
+                <td className="px-2 py-1.5 text-center bg-yellow-50 text-xs font-medium">
                   {(() => {
                     const prop = getPropertyData(vacantLandSubject.block, vacantLandSubject.lot, vacantLandSubject.qualifier);
                     return formatSize(prop);
@@ -760,7 +769,7 @@ const VacantLandAppraisalTab = ({
                 {vacantLandComps.map((comp, idx) => {
                   const prop = getPropertyData(comp.block, comp.lot, comp.qualifier);
                   return (
-                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs font-medium">
+                    <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300 text-xs font-medium">
                       {formatSize(prop)}
                     </td>
                   );
@@ -771,30 +780,30 @@ const VacantLandAppraisalTab = ({
         </div>
 
         {/* Evaluate Button Section */}
-        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center gap-3">
+        <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 flex items-center gap-2">
           <button
             onClick={handleEvaluate}
             disabled={!vacantLandSubject.block || !vacantLandSubject.lot || vacantLandEvaluating}
-            className="flex-1 px-4 py-2 bg-blue-500 text-white rounded font-medium text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="flex-1 px-3 py-2 bg-blue-500 text-white rounded font-medium text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             {vacantLandEvaluating ? 'Loading...' : 'Evaluate & Load Properties'}
           </button>
 
           {/* Save */}
           {showSaveInput ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <input
                 type="text"
                 value={saveNameInput}
                 onChange={(e) => setSaveNameInput(e.target.value)}
                 placeholder="Appraisal name..."
-                className="px-2 py-1.5 text-xs border border-gray-300 rounded w-40"
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded w-32"
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handleSave(saveNameInput)}
               />
               <button
                 onClick={() => handleSave(saveNameInput)}
-                className="px-3 py-1.5 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600"
+                className="px-2.5 py-1.5 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600"
               >
                 Save
               </button>
@@ -809,7 +818,7 @@ const VacantLandAppraisalTab = ({
             <button
               onClick={() => setShowSaveInput(true)}
               disabled={!subjectProp}
-              className="flex items-center gap-1 px-4 py-2 bg-green-500 text-white rounded font-medium text-sm hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-3 py-2 bg-green-500 text-white rounded font-medium text-sm hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Save size={14} /> Save
             </button>
@@ -818,10 +827,9 @@ const VacantLandAppraisalTab = ({
           <button
             onClick={handleExport}
             disabled={!vacantLandResult}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded font-medium text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="flex items-center gap-1 px-3 py-2 bg-purple-500 text-white rounded font-medium text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            <Download size={14} />
-            Export
+            <Download size={14} /> Export
           </button>
         </div>
       </div>
@@ -829,18 +837,18 @@ const VacantLandAppraisalTab = ({
       {/* Appraisal Grid */}
       {subjectProp && (
         <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
-          <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
-            <h4 className="font-semibold text-gray-900">Appraisal Grid</h4>
+          <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+            <h4 className="font-semibold text-gray-900 text-sm">Appraisal Grid</h4>
           </div>
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="bg-gray-100 border-b-2 border-gray-300">
-                  <th className="px-3 py-2 text-left font-semibold text-gray-700 w-32">Attribute</th>
-                  <th className="px-3 py-2 text-center font-semibold bg-yellow-50 w-24">Subject</th>
+                  <th className="px-2 py-1.5 text-left font-semibold text-gray-700 w-28">Attribute</th>
+                  <th className="px-2 py-1.5 text-center font-semibold bg-yellow-50 w-20">Subject</th>
                   {[1, 2, 3, 4, 5].map((compNum) => (
-                    <th key={compNum} className="px-3 py-2 text-center font-semibold bg-blue-50 border-l border-gray-300 w-24">
+                    <th key={compNum} className="px-2 py-1.5 text-center font-semibold bg-blue-50 border-l border-gray-300 w-20">
                       Comp {compNum}
                     </th>
                   ))}
@@ -848,9 +856,9 @@ const VacantLandAppraisalTab = ({
               </thead>
               <tbody className="bg-white">
                 {renderDataRow('Location', p => p?.property_location || '-')}
-                {renderDataRow('Lot Size FF', p => p?.asset_lot_frontage ? parseFloat(p.asset_lot_frontage).toFixed(0) : '-')}
-                {renderDataRow('Lot Size SF', p => p?.asset_lot_sf ? Math.round(parseFloat(p.asset_lot_sf)).toLocaleString() : '-')}
-                {renderDataRow('Lot Size Acre', p => p?.asset_lot_acre ? parseFloat(p.asset_lot_acre).toFixed(3) : '-')}
+                {renderDataRow('Lot FF', p => p?.asset_lot_frontage ? parseFloat(p.asset_lot_frontage).toFixed(0) : '-')}
+                {renderDataRow('Lot SF', p => p?.asset_lot_sf ? Math.round(parseFloat(p.asset_lot_sf)).toLocaleString() : '-')}
+                {renderDataRow('Lot Acre', p => p?.asset_lot_acre ? parseFloat(p.asset_lot_acre).toFixed(3) : '-')}
                 {renderDataRow('VCS', p => p?.property_vcs || '-')}
                 {renderDataRow('Zoning', p => p?.property_zoning || '-')}
                 {renderDataRow('Topography', p => p?.topography || '-')}
@@ -878,16 +886,16 @@ const VacantLandAppraisalTab = ({
 
       {/* Results */}
       {vacantLandResult && (
-        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-6">
+        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4">
           <p className="text-sm font-semibold text-green-900">Estimated Vacant Land Value</p>
-          <p className="text-4xl font-bold text-green-700 mt-3">
+          <p className="text-3xl font-bold text-green-700 mt-2">
             ${vacantLandResult.toLocaleString('en-US', {maximumFractionDigits: 0})}
           </p>
-          <p className="text-sm text-green-700 mt-3">
+          <p className="text-xs text-green-700 mt-2">
             {(() => {
               const validComps = Object.keys(loadedProperties).filter(k => k.startsWith('comp_')).filter(k => loadedProperties[k]).length;
               const subjectSize = getLotSizeForMethod(subjectProp);
-              return `${validComps} comparable(s) × avg ${getUnitLabel().replace('$/', '')} rate × ${
+              return `${validComps} comparable(s) — avg ${getUnitLabel().replace('$/', '')} rate × ${
                 valuationMethod === 'acre' ? (subjectSize || 0).toFixed(3) + ' acres' :
                 valuationMethod === 'sf' ? Math.round(subjectSize || 0).toLocaleString() + ' SF' :
                 Math.round(subjectSize || 0).toLocaleString() + ' FF'
