@@ -393,6 +393,8 @@ const LandValuationTab = ({
   // ========== DEPTH TABLES STATE ==========
   const [depthTables, setDepthTables] = useState({});
   const [vcsDepthTableOverrides, setVcsDepthTableOverrides] = useState({}); // VCS-specific depth table overrides
+  const [showVcsSpecificForm, setShowVcsSpecificForm] = useState(false);
+  const [vcsSpecificFormData, setVcsSpecificFormData] = useState({ selectedVCS: [], method: '', description: '' });
 
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
@@ -9596,50 +9598,151 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </div>
         ))}
 
-        {/* Add VCS-Specific Configuration Button */}
+        {/* Add VCS-Specific Configuration */}
         <div style={{ marginBottom: '15px' }}>
-          <button
-            onClick={() => {
-              // This will open a modal to select VCS and method
-              const vcsInput = prompt('Enter VCS codes (comma-separated for multiple):');
-              if (!vcsInput) return;
+          {!showVcsSpecificForm ? (
+            <button
+              onClick={() => {
+                setVcsSpecificFormData({ selectedVCS: [], method: valuationMode, description: '' });
+                setShowVcsSpecificForm(true);
+              }}
+              style={{
+                backgroundColor: '#10B981',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Plus size={16} /> Add VCS-Specific Configuration
+            </button>
+          ) : (
+            <div style={{ backgroundColor: '#F0FDF4', padding: '14px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#059669', marginBottom: '10px' }}>New VCS-Specific Configuration</h4>
 
-              const vcsList = vcsInput.split(',').map(v => v.trim()).filter(v => v);
-              const method = prompt('Select method for these VCS:\\n1. acre\\n2. sf\\n3. ff');
+              {/* VCS Selection */}
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Select VCS codes:</label>
+                {Object.keys(vcsSheetData).length > 0 ? (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {Object.keys(vcsSheetData).sort().map(vcs => {
+                      const alreadyConfigured = Object.values(cascadeConfig.vcsSpecific || {}).some(c => c.vcsList?.includes(vcs));
+                      const isSelected = vcsSpecificFormData.selectedVCS.includes(vcs);
+                      return (
+                        <button
+                          key={vcs}
+                          disabled={alreadyConfigured}
+                          onClick={() => {
+                            setVcsSpecificFormData(prev => ({
+                              ...prev,
+                              selectedVCS: isSelected
+                                ? prev.selectedVCS.filter(v => v !== vcs)
+                                : [...prev.selectedVCS, vcs]
+                            }));
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            border: isSelected ? '2px solid #059669' : '1px solid #D1D5DB',
+                            backgroundColor: alreadyConfigured ? '#F3F4F6' : isSelected ? '#D1FAE5' : 'white',
+                            color: alreadyConfigured ? '#9CA3AF' : '#374151',
+                            cursor: alreadyConfigured ? 'not-allowed' : 'pointer',
+                            fontSize: '12px',
+                            fontWeight: isSelected ? '600' : '400'
+                          }}
+                          title={alreadyConfigured ? 'Already has a specific config' : `Click to ${isSelected ? 'deselect' : 'select'}`}
+                        >
+                          {vcs}{alreadyConfigured ? ' (configured)' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>No VCS data available yet. Run the VCS Sheet tab first.</div>
+                )}
+              </div>
 
-              const methodMap = { '1': 'acre', '2': 'sf', '3': 'ff' };
-              const selectedMethod = methodMap[method] || 'acre';
+              {/* Method Selection */}
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Valuation Method:</label>
+                <select
+                  value={vcsSpecificFormData.method}
+                  onChange={(e) => setVcsSpecificFormData(prev => ({ ...prev, method: e.target.value }))}
+                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px', minWidth: '160px' }}
+                >
+                  <option value="acre">Acreage (per acre)</option>
+                  <option value="sf">Square Foot (per sq ft)</option>
+                  <option value="ff">Front Foot (per front ft)</option>
+                </select>
+              </div>
 
-              const description = prompt('Enter description (e.g., "Rural areas", "Subdivision lots"):') || 'Custom configuration';
+              {/* Description (optional) */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Description (optional):</label>
+                <input
+                  type="text"
+                  value={vcsSpecificFormData.description}
+                  onChange={(e) => setVcsSpecificFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="e.g. Rural areas, Subdivision lots"
+                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px', width: '300px' }}
+                />
+              </div>
 
-              const vcsKey = `vcs_${Date.now()}`;
-              setCascadeConfig(prev => ({
-                ...prev,
-                vcsSpecific: {
-                  ...prev.vcsSpecific,
-                  [vcsKey]: {
-                    vcsList,
-                    method: selectedMethod,
-                    description,
-                    rates: {}
-                  }
-                }
-              }));
-            }}
-            style={{
-              backgroundColor: '#10B981',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <Plus size={16} /> Add VCS-Specific Configuration
-          </button>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={vcsSpecificFormData.selectedVCS.length === 0}
+                  onClick={() => {
+                    const vcsKey = `vcs_${Date.now()}`;
+                    const methodLabel = { acre: 'Acreage', sf: 'Square Foot', ff: 'Front Foot' };
+                    setCascadeConfig(prev => ({
+                      ...prev,
+                      vcsSpecific: {
+                        ...prev.vcsSpecific,
+                        [vcsKey]: {
+                          vcsList: vcsSpecificFormData.selectedVCS,
+                          method: vcsSpecificFormData.method,
+                          description: vcsSpecificFormData.description || `${methodLabel[vcsSpecificFormData.method] || 'Custom'} - VCS ${vcsSpecificFormData.selectedVCS.join(', ')}`,
+                          rates: {}
+                        }
+                      }
+                    }));
+                    setShowVcsSpecificForm(false);
+                  }}
+                  style={{
+                    backgroundColor: vcsSpecificFormData.selectedVCS.length === 0 ? '#9CA3AF' : '#059669',
+                    color: 'white',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: vcsSpecificFormData.selectedVCS.length === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '600'
+                  }}
+                >
+                  Add Configuration
+                </button>
+                <button
+                  onClick={() => setShowVcsSpecificForm(false)}
+                  style={{
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    border: '1px solid #D1D5DB',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Special Categories */}
