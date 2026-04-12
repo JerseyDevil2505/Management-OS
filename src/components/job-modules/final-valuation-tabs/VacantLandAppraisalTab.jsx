@@ -1,6 +1,51 @@
-import { Download, X, Save, Filter } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../../lib/supabaseClient';
+import { Download, X, Save, Filter, FileDown, Printer } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { interpretCodes, supabase } from '../../../lib/supabaseClient';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+// Canonical category values matching Method 1 dropdown
+const CATEGORY_OPTIONS = [
+  { value: 'uncategorized', label: 'Uncategorized' },
+  { value: 'raw_land', label: 'Raw Land' },
+  { value: 'building_lot', label: 'Building Lot' },
+  { value: 'commercial_land', label: 'Commercial Land' },
+  { value: 'wetlands', label: 'Wetlands' },
+  { value: 'landlocked', label: 'Landlocked' },
+  { value: 'conservation', label: 'Conservation' },
+  { value: 'teardown', label: 'Teardown' },
+  { value: 'pre-construction', label: 'Pre-Construction' },
+];
+
+// Normalize category values (Method 1 auto-categorize uses hyphens sometimes)
+const normalizeCategory = (cat) => {
+  if (!cat) return 'uncategorized';
+  const c = cat.toLowerCase().replace(/-/g, '_');
+  if (c === 'building_lot' || c === 'building lot') return 'building_lot';
+  if (c === 'pre_construction' || c === 'pre construction') return 'pre-construction';
+  return cat;
+};
+
+const getCategoryLabel = (cat) => {
+  const normalized = normalizeCategory(cat);
+  const found = CATEGORY_OPTIONS.find(o => o.value === normalized);
+  return found ? found.label : cat || 'Uncategorized';
+};
+
+const getCategoryColor = (cat) => {
+  const normalized = normalizeCategory(cat);
+  switch (normalized) {
+    case 'teardown': return 'bg-orange-100 text-orange-700';
+    case 'pre-construction': return 'bg-purple-100 text-purple-700';
+    case 'building_lot': return 'bg-blue-100 text-blue-700';
+    case 'raw_land': return 'bg-green-100 text-green-700';
+    case 'wetlands': return 'bg-teal-100 text-teal-700';
+    case 'landlocked': return 'bg-red-100 text-red-700';
+    case 'conservation': return 'bg-emerald-100 text-emerald-700';
+    case 'commercial_land': return 'bg-amber-100 text-amber-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
 
 const VacantLandAppraisalTab = ({ 
   properties = [], 
@@ -23,6 +68,13 @@ const VacantLandAppraisalTab = ({
   const [saveNameInput, setSaveNameInput] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [editableProperties, setEditableProperties] = useState({});
+  const [appealNumber, setAppealNumber] = useState('');
+  const [appealAutoDetected, setAppealAutoDetected] = useState(false);
+
+  // Refs for tab order
+  const inputRefs = useRef({});
 
   // Valuation method - default from job's land valuation config
   const jobValuationMethod = marketLandData?.cascade_rates?.mode || marketLandData?.raw_land_config?.cascade_config?.mode || 'acre';
@@ -35,34 +87,42 @@ const VacantLandAppraisalTab = ({
     utilityGas: 'any',
     utilityWater: 'any',
     utilitySewer: 'any',
-    category: 'all', // all, building_lot, teardown, pre-construction
+    category: 'all',
+    sizeMin: '',
+    sizeMax: '',
   });
+
+  // Calculate acreage using the same helper as Method 1
+  const calculateAcreage = useCallback((property) => {
+    if (!property) return 0;
+    return parseFloat(interpretCodes.getCalculatedAcreage(property, vendorType)) || 0;
+  }, [vendorType]);
 
   // Build the vacant land sales array from Method 1 saved data
   const method1Sales = useMemo(() => {
     const savedSales = marketLandData?.vacant_sales_analysis?.sales || [];
     if (savedSales.length === 0) return [];
 
-    // Build a lookup of property data by ID
     const propMap = {};
     properties.forEach(p => { if (p.id) propMap[p.id] = p; });
 
-    // Cross-reference saved sale IDs with full property records
     return savedSales
-      .filter(s => s.included !== false) // only included sales
+      .filter(s => s.included !== false)
       .map(s => {
         const prop = propMap[s.id];
         if (!prop) return null;
+        const acres = calculateAcreage(prop);
         return {
           ...prop,
-          _category: s.category || null,
+          _calculatedAcres: acres,
+          _category: normalizeCategory(s.category),
           _specialRegion: s.special_region || 'Normal',
           _notes: s.notes || null,
           _manuallyAdded: s.manually_added || false,
         };
       })
       .filter(Boolean);
-  }, [marketLandData, properties]);
+  }, [marketLandData, properties, calculateAcreage]);
 
   // Unique VCS and zoning from method1Sales
   const uniqueVCS = useMemo(() => {
@@ -83,12 +143,46 @@ const VacantLandAppraisalTab = ({
     return Array.from(set).sort();
   }, [method1Sales]);
 
+  // Lot size helpers using calculateAcreage
+  const getLotSizeForMethod = useCallback((prop) => {
+    if (!prop) return 0;
+    if (valuationMethod === 'ff') return parseFloat(prop.asset_lot_frontage) || 0;
+    const acres = prop._calculatedAcres !== undefined ? prop._calculatedAcres : calculateAcreage(prop);
+    if (valuationMethod === 'sf') return acres * 43560;
+    return acres;
+  }, [valuationMethod, calculateAcreage]);
+
+  const getUnitLabel = useCallback(() => {
+    if (valuationMethod === 'ff') return '$/FF';
+    if (valuationMethod === 'sf') return '$/SF';
+    return '$/Acre';
+  }, [valuationMethod]);
+
+  const getSizeLabel = useCallback(() => {
+    if (valuationMethod === 'ff') return 'Front Ft';
+    if (valuationMethod === 'sf') return 'Sq Ft';
+    return 'Acres';
+  }, [valuationMethod]);
+
+  const formatSize = useCallback((prop) => {
+    const size = getLotSizeForMethod(prop);
+    if (size === 0) return '-';
+    if (valuationMethod === 'acre') return size.toFixed(3);
+    if (valuationMethod === 'sf') return Math.round(size).toLocaleString();
+    return Math.round(size).toLocaleString();
+  }, [valuationMethod, getLotSizeForMethod]);
+
   // Filtered sales
   const filteredSales = useMemo(() => {
     return method1Sales.filter(prop => {
       if (filters.vcs.length > 0 && !filters.vcs.includes(prop.property_vcs)) return false;
       if (filters.zoning.length > 0 && !filters.zoning.includes(prop.property_zoning)) return false;
       if (filters.category !== 'all' && prop._category !== filters.category) return false;
+
+      // Size range filter
+      const size = getLotSizeForMethod(prop);
+      if (filters.sizeMin !== '' && size < parseFloat(filters.sizeMin)) return false;
+      if (filters.sizeMax !== '' && size > parseFloat(filters.sizeMax)) return false;
 
       if (filters.utilityGas !== 'any') {
         const hasGas = prop.utility_heat && prop.utility_heat.toLowerCase().includes('gas');
@@ -108,12 +202,12 @@ const VacantLandAppraisalTab = ({
 
       return true;
     });
-  }, [method1Sales, filters]);
+  }, [method1Sales, filters, getLotSizeForMethod]);
 
   // Load saved appraisals on mount
   useEffect(() => {
     if (jobData?.id) loadSavedAppraisals();
-  }, [jobData?.id]);
+  }, [jobData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSavedAppraisals = async () => {
     try {
@@ -147,52 +241,6 @@ const VacantLandAppraisalTab = ({
              (!qualStr || pQual === qualStr || !pQual);
     }) || null;
   }, [properties]);
-
-  // Lot size helpers
-  const getLotSizeForMethod = useCallback((prop) => {
-    if (!prop) return 0;
-    if (valuationMethod === 'ff') return parseFloat(prop.asset_lot_frontage) || 0;
-    if (valuationMethod === 'sf') return (parseFloat(prop.asset_lot_acre) || 0) * 43560;
-    return parseFloat(prop.asset_lot_acre) || 0;
-  }, [valuationMethod]);
-
-  const getUnitLabel = useCallback(() => {
-    if (valuationMethod === 'ff') return '$/FF';
-    if (valuationMethod === 'sf') return '$/SF';
-    return '$/Acre';
-  }, [valuationMethod]);
-
-  const getSizeLabel = useCallback(() => {
-    if (valuationMethod === 'ff') return 'Front Ft';
-    if (valuationMethod === 'sf') return 'Sq Ft';
-    return 'Acres';
-  }, [valuationMethod]);
-
-  const formatSize = useCallback((prop) => {
-    const size = getLotSizeForMethod(prop);
-    if (size === 0) return '-';
-    if (valuationMethod === 'acre') return size.toFixed(3);
-    if (valuationMethod === 'sf') return Math.round(size).toLocaleString();
-    return Math.round(size).toLocaleString();
-  }, [valuationMethod, getLotSizeForMethod]);
-
-  const getCategoryLabel = (cat) => {
-    switch (cat) {
-      case 'building_lot': return 'Bldg Lot';
-      case 'teardown': return 'Teardown';
-      case 'pre-construction': return 'Pre-Con';
-      default: return cat || 'Vacant';
-    }
-  };
-
-  const getCategoryColor = (cat) => {
-    switch (cat) {
-      case 'teardown': return 'bg-orange-100 text-orange-700';
-      case 'pre-construction': return 'bg-purple-100 text-purple-700';
-      case 'building_lot': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-600';
-    }
-  };
 
   // Estimated land value
   const estimatedLandValue = useMemo(() => {
@@ -232,6 +280,39 @@ const VacantLandAppraisalTab = ({
     
     setLoadedProperties(loaded);
     setVacantLandEvaluating(false);
+
+    // Auto-detect appeal number for subject
+    if (subjectData && jobData?.id) {
+      lookupAppealNumber(subjectData);
+    }
+  };
+
+  // Look up active appeal for subject property
+  const lookupAppealNumber = async (subjectProp) => {
+    try {
+      const { data } = await supabase
+        .from('appeal_log')
+        .select('appeal_number, status')
+        .eq('job_id', jobData.id)
+        .eq('property_block', subjectProp.property_block)
+        .eq('property_lot', subjectProp.property_lot);
+
+      if (data && data.length > 0) {
+        // Find active appeal (not Closed)
+        const active = data.find(a => a.status !== 'C');
+        if (active && active.appeal_number) {
+          setAppealNumber(active.appeal_number);
+          setAppealAutoDetected(true);
+          return;
+        }
+      }
+      // No active appeal found - keep manual entry
+      if (!appealNumber) {
+        setAppealAutoDetected(false);
+      }
+    } catch (err) {
+      console.warn('Could not look up appeal:', err.message);
+    }
   };
 
   // Recalculate result when loadedProperties changes
@@ -264,6 +345,7 @@ const VacantLandAppraisalTab = ({
       name: name || `Appraisal ${savedAppraisals.length + 1}`,
       created_at: new Date().toISOString(),
       valuation_method: valuationMethod,
+      appeal_number: appealNumber || null,
       subject: {
         block: vacantLandSubject.block,
         lot: vacantLandSubject.lot,
@@ -322,6 +404,10 @@ const VacantLandAppraisalTab = ({
     setVacantLandComps(newComps);
     
     if (appraisal.valuation_method) setValuationMethod(appraisal.valuation_method);
+    if (appraisal.appeal_number) {
+      setAppealNumber(appraisal.appeal_number);
+      setAppealAutoDetected(true);
+    }
     
     setTimeout(() => {
       const subjectData = getPropertyData(appraisal.subject.block, appraisal.subject.lot, appraisal.subject.qualifier);
@@ -355,9 +441,246 @@ const VacantLandAppraisalTab = ({
     }
   };
 
-  const handleExport = () => {
-    alert('Export to PDF coming soon - will generate appraisal report');
-  };
+  // ==================== EXPORT MODAL LOGIC ====================
+  
+  const updateEditedValue = useCallback((propKey, field, value) => {
+    setEditableProperties(prev => ({
+      ...prev,
+      [propKey]: {
+        ...(prev[propKey] || {}),
+        [field]: value
+      }
+    }));
+  }, []);
+
+  const getEditedValue = useCallback((propKey, field) => {
+    return editableProperties[propKey]?.[field];
+  }, [editableProperties]);
+
+  // Get display value for export modal (edited or original)
+  const getExportValue = useCallback((propKey, field, prop) => {
+    const edited = getEditedValue(propKey, field);
+    if (edited !== undefined) return edited;
+    if (!prop) return '';
+    
+    switch (field) {
+      case 'location': return prop.property_location || '';
+      case 'lot_ff': return prop.asset_lot_frontage ? parseFloat(prop.asset_lot_frontage).toFixed(0) : '';
+      case 'lot_sf': {
+        const acres = calculateAcreage(prop);
+        return acres > 0 ? Math.round(acres * 43560).toLocaleString() : '';
+      }
+      case 'lot_acre': return calculateAcreage(prop) > 0 ? calculateAcreage(prop).toFixed(3) : '';
+      case 'vcs': return prop.property_vcs || '';
+      case 'zoning': return prop.property_zoning || '';
+      case 'topography': return prop.topography || '';
+      case 'clearing': return prop.clearing || '';
+      case 'utility_heat': return prop.utility_heat || '';
+      case 'utility_water': return prop.utility_water || '';
+      case 'utility_sewer': return prop.utility_sewer || '';
+      case 'current_assess': {
+        const total = prop.values_mod_total || prop.values_cama_total || 0;
+        return total > 0 ? '$' + Math.round(total).toLocaleString() : '';
+      }
+      case 'sales_price': return prop.sales_price ? '$' + Math.round(parseFloat(prop.sales_price)).toLocaleString() : '';
+      case 'sales_date': return prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '';
+      case 'price_per_unit': {
+        if (!prop.sales_price) return '';
+        const size = getLotSizeForMethod(prop);
+        if (size <= 0) return '';
+        return '$' + Math.round(parseFloat(prop.sales_price) / size).toLocaleString();
+      }
+      default: return '';
+    }
+  }, [getEditedValue, calculateAcreage, getLotSizeForMethod]);
+
+  // Calculate recalculated value from export modal edits
+  const recalculatedValue = useMemo(() => {
+    const subjectProp = loadedProperties.subject;
+    if (!subjectProp) return null;
+
+    // Get subject lot size (edited or original)
+    let subjectSize;
+    if (valuationMethod === 'ff') {
+      const editedFF = getEditedValue('subject', 'lot_ff');
+      subjectSize = editedFF !== undefined ? parseFloat(editedFF) || 0 : (parseFloat(subjectProp.asset_lot_frontage) || 0);
+    } else if (valuationMethod === 'sf') {
+      const editedSF = getEditedValue('subject', 'lot_sf');
+      if (editedSF !== undefined) {
+        subjectSize = parseFloat(String(editedSF).replace(/,/g, '')) || 0;
+      } else {
+        subjectSize = calculateAcreage(subjectProp) * 43560;
+      }
+    } else {
+      const editedAcre = getEditedValue('subject', 'lot_acre');
+      subjectSize = editedAcre !== undefined ? parseFloat(editedAcre) || 0 : calculateAcreage(subjectProp);
+    }
+
+    if (!subjectSize || subjectSize === 0) return null;
+
+    const compRates = [];
+    for (let i = 0; i < 5; i++) {
+      const compProp = loadedProperties[`comp_${i}`];
+      if (!compProp || !compProp.sales_price) continue;
+
+      // Get edited sales price
+      const editedPrice = getEditedValue(`comp_${i}`, 'sales_price');
+      const price = editedPrice !== undefined
+        ? parseFloat(String(editedPrice).replace(/[$,]/g, '')) || 0
+        : parseFloat(compProp.sales_price) || 0;
+      if (price <= 0) continue;
+
+      // Get comp lot size
+      let compSize;
+      if (valuationMethod === 'ff') {
+        const editedFF = getEditedValue(`comp_${i}`, 'lot_ff');
+        compSize = editedFF !== undefined ? parseFloat(editedFF) || 0 : (parseFloat(compProp.asset_lot_frontage) || 0);
+      } else if (valuationMethod === 'sf') {
+        const editedSF = getEditedValue(`comp_${i}`, 'lot_sf');
+        if (editedSF !== undefined) {
+          compSize = parseFloat(String(editedSF).replace(/,/g, '')) || 0;
+        } else {
+          compSize = calculateAcreage(compProp) * 43560;
+        }
+      } else {
+        const editedAcre = getEditedValue(`comp_${i}`, 'lot_acre');
+        compSize = editedAcre !== undefined ? parseFloat(editedAcre) || 0 : calculateAcreage(compProp);
+      }
+
+      if (compSize > 0) {
+        compRates.push(price / compSize);
+      }
+    }
+
+    if (compRates.length === 0) return null;
+    const avgRate = compRates.reduce((s, r) => s + r, 0) / compRates.length;
+    return Math.round(subjectSize * avgRate);
+  }, [loadedProperties, editableProperties, valuationMethod, calculateAcreage, getEditedValue]);
+
+  // Open export modal
+  const openExportModal = useCallback(() => {
+    setEditableProperties({});
+    setShowExportModal(true);
+  }, []);
+
+  // Generate PDF
+  const generatePDF = useCallback(async () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 30;
+    const lojikBlue = [0, 102, 204];
+
+    // Load logo
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    const subjectProp = loadedProperties.subject;
+    const subjectBLQ = `${vacantLandSubject.block}/${vacantLandSubject.lot}${vacantLandSubject.qualifier ? '/' + vacantLandSubject.qualifier : ''}`;
+
+    // Header
+    if (logoDataUrl) {
+      try { doc.addImage(logoDataUrl, 'PNG', margin, margin - 5, 80, 35); } catch (e) { /* fallback */ }
+    }
+
+    // Appeal number above BLQ
+    let headerY = margin + 10;
+    const currentAppealNumber = appealNumber || '';
+    if (currentAppealNumber) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Appeal #: ${currentAppealNumber}`, pageWidth - margin, headerY, { align: 'right' });
+      headerY += 14;
+    }
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(subjectBLQ, pageWidth - margin, headerY + 10, { align: 'right' });
+
+    // Title
+    doc.setFontSize(14);
+    doc.setTextColor(...lojikBlue);
+    doc.text('Vacant Land Appraisal', margin, margin + 50);
+
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.setFont('helvetica', 'normal');
+    const methodLabel = valuationMethod === 'ff' ? 'Front Foot' : valuationMethod === 'sf' ? 'Square Foot' : 'Acre';
+    doc.text(`Valuation Method: ${methodLabel}  |  ${jobData?.ccdd || ''}  |  ${new Date().toLocaleDateString()}`, margin, margin + 62);
+
+    // Build table data
+    const compSlots = [0, 1, 2, 3, 4];
+    const activeComps = compSlots.filter(i => loadedProperties[`comp_${i}`]);
+    
+    const headers = [['Attribute', 'Subject', ...activeComps.map(i => `Comp ${i + 1}`)]];
+
+    const rows = [
+      { label: 'Location', field: 'location' },
+      { label: 'Lot Size FF', field: 'lot_ff' },
+      { label: 'Lot Size SF', field: 'lot_sf' },
+      { label: 'Lot Size Acre', field: 'lot_acre' },
+      { label: 'VCS', field: 'vcs' },
+      { label: 'Zoning', field: 'zoning' },
+      { label: 'Topography', field: 'topography' },
+      { label: 'Clearing', field: 'clearing' },
+      { label: 'Utility — Heat', field: 'utility_heat' },
+      { label: 'Utility — Water', field: 'utility_water' },
+      { label: 'Utility — Sewer', field: 'utility_sewer' },
+      { label: 'Current Assess', field: 'current_assess' },
+      { label: 'Sales Price', field: 'sales_price' },
+      { label: 'Sales Date', field: 'sales_date' },
+      { label: getUnitLabel(), field: 'price_per_unit' },
+    ];
+
+    const bodyRows = rows.map(row => {
+      const subjectVal = getExportValue('subject', row.field, subjectProp);
+      const compVals = activeComps.map(i => getExportValue(`comp_${i}`, row.field, loadedProperties[`comp_${i}`]));
+      return [row.label, subjectVal || '-', ...compVals.map(v => v || '-')];
+    });
+
+    // Add estimated value row
+    const finalValue = recalculatedValue || vacantLandResult || 0;
+    bodyRows.push(['Est. Land Value', finalValue > 0 ? '$' + finalValue.toLocaleString() : '-', ...activeComps.map(() => '')]);
+
+    autoTable(doc, {
+      head: headers,
+      body: bodyRows,
+      startY: margin + 72,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 7.5, cellPadding: 3, lineColor: [200, 200, 200], lineWidth: 0.5, valign: 'middle' },
+      headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 80 },
+        1: { fillColor: [255, 255, 230], halign: 'center' },
+        ...Object.fromEntries(activeComps.map((_, i) => [i + 2, { fillColor: [230, 242, 255], halign: 'center' }]))
+      },
+      didParseCell: function(data) {
+        if (data.row.raw && data.row.raw[0] === 'Est. Land Value') {
+          data.cell.styles.fillColor = [200, 230, 255];
+          data.cell.styles.fontStyle = 'bold';
+        }
+        if (data.row.raw && data.row.raw[0] === getUnitLabel()) {
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    const ccdd = jobData?.ccdd || 'UNKNOWN';
+    const fileName = `VLA_${ccdd}_${vacantLandSubject.block}_${vacantLandSubject.lot}${vacantLandSubject.qualifier ? '_' + vacantLandSubject.qualifier : ''}.pdf`;
+    doc.save(fileName);
+    setShowExportModal(false);
+  }, [loadedProperties, vacantLandSubject, vacantLandResult, recalculatedValue, valuationMethod, jobData, appealNumber, getExportValue, getUnitLabel]);
 
   const subjectProp = loadedProperties.subject;
 
@@ -386,7 +709,65 @@ const VacantLandAppraisalTab = ({
     filters.utilityGas !== 'any',
     filters.utilityWater !== 'any',
     filters.utilitySewer !== 'any',
+    filters.sizeMin !== '',
+    filters.sizeMax !== '',
   ].filter(Boolean).length;
+
+  // Tab order: column-first (subject block → subject lot → subject qual → comp1 block → comp1 lot → comp1 qual → ...)
+  const handleTabKeyDown = (e, colIndex, rowField) => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+
+    const fieldOrder = ['block', 'lot', 'qualifier'];
+    const currentFieldIdx = fieldOrder.indexOf(rowField);
+    
+    if (e.shiftKey) {
+      // Reverse tab
+      if (currentFieldIdx > 0) {
+        // Go up in same column
+        const prevField = fieldOrder[currentFieldIdx - 1];
+        inputRefs.current[`${colIndex}_${prevField}`]?.focus();
+      } else if (colIndex > 0) {
+        // Go to bottom of previous column
+        const prevCol = colIndex - 1;
+        inputRefs.current[`${prevCol}_qualifier`]?.focus();
+      }
+    } else {
+      // Forward tab
+      if (currentFieldIdx < fieldOrder.length - 1) {
+        // Go down in same column
+        const nextField = fieldOrder[currentFieldIdx + 1];
+        inputRefs.current[`${colIndex}_${nextField}`]?.focus();
+      } else if (colIndex < 5) {
+        // Go to top of next column
+        const nextCol = colIndex + 1;
+        inputRefs.current[`${nextCol}_block`]?.focus();
+      }
+    }
+  };
+
+  const setInputRef = (colIndex, field, el) => {
+    inputRefs.current[`${colIndex}_${field}`] = el;
+  };
+
+  // Export modal rows definition
+  const EXPORT_ROWS = [
+    { label: 'Location', field: 'location', editable: false },
+    { label: 'Lot Size FF', field: 'lot_ff', editable: true, type: 'number' },
+    { label: 'Lot Size SF', field: 'lot_sf', editable: true, type: 'number' },
+    { label: 'Lot Size Acre', field: 'lot_acre', editable: true, type: 'number', step: '0.001' },
+    { label: 'VCS', field: 'vcs', editable: false },
+    { label: 'Zoning', field: 'zoning', editable: false },
+    { label: 'Topography', field: 'topography', editable: true, type: 'text' },
+    { label: 'Clearing', field: 'clearing', editable: true, type: 'text' },
+    { label: 'Utility — Heat', field: 'utility_heat', editable: true, type: 'text' },
+    { label: 'Utility — Water', field: 'utility_water', editable: true, type: 'text' },
+    { label: 'Utility — Sewer', field: 'utility_sewer', editable: true, type: 'text' },
+    { label: 'Current Assess', field: 'current_assess', editable: false },
+    { label: 'Sales Price', field: 'sales_price', editable: true, type: 'text' },
+    { label: 'Sales Date', field: 'sales_date', editable: false },
+    { label: getUnitLabel(), field: 'price_per_unit', editable: false },
+  ];
 
   return (
     <div className="space-y-3">
@@ -478,7 +859,7 @@ const VacantLandAppraisalTab = ({
             <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-3">
               {/* Category */}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-0.5">Type</label>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Category</label>
                 <select
                   value={filters.category}
                   onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
@@ -541,6 +922,30 @@ const VacantLandAppraisalTab = ({
                 </div>
               </div>
 
+              {/* Size Range */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">{getSizeLabel()} Range</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={filters.sizeMin}
+                    onChange={(e) => setFilters(prev => ({ ...prev, sizeMin: e.target.value }))}
+                    placeholder="Min"
+                    className="px-1.5 py-1 text-xs border border-gray-300 rounded w-16"
+                    step={valuationMethod === 'acre' ? '0.01' : '1'}
+                  />
+                  <span className="text-xs text-gray-400">—</span>
+                  <input
+                    type="number"
+                    value={filters.sizeMax}
+                    onChange={(e) => setFilters(prev => ({ ...prev, sizeMax: e.target.value }))}
+                    placeholder="Max"
+                    className="px-1.5 py-1 text-xs border border-gray-300 rounded w-16"
+                    step={valuationMethod === 'acre' ? '0.01' : '1'}
+                  />
+                </div>
+              </div>
+
               {/* Utilities */}
               {[
                 { key: 'utilityGas', label: 'Gas' },
@@ -563,7 +968,7 @@ const VacantLandAppraisalTab = ({
 
               {activeFilterCount > 0 && (
                 <button
-                  onClick={() => setFilters({ vcs: [], zoning: [], utilityGas: 'any', utilityWater: 'any', utilitySewer: 'any', category: 'all' })}
+                  onClick={() => setFilters({ vcs: [], zoning: [], utilityGas: 'any', utilityWater: 'any', utilitySewer: 'any', category: 'all', sizeMin: '', sizeMax: '' })}
                   className="px-2 py-1 text-xs text-red-600 hover:text-red-800 font-medium"
                 >
                   Clear All
@@ -582,11 +987,14 @@ const VacantLandAppraisalTab = ({
                   <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-10">Q</th>
                   <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-12">VCS</th>
                   <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-14">Zone</th>
-                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-16">Type</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-20">Category</th>
                   <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-16">{getSizeLabel()}</th>
                   <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-20">Sale Price</th>
                   <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-20">Sale Date</th>
                   <th className="px-2 py-1.5 text-right font-medium text-gray-600 w-16">{getUnitLabel()}</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-10">Heat</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-10">Water</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-10">Sewer</th>
                   <th className="px-2 py-1.5 text-left font-medium text-gray-600 w-12">Region</th>
                   <th className="px-2 py-1.5 text-center font-medium text-gray-600 w-14"></th>
                 </tr>
@@ -594,7 +1002,7 @@ const VacantLandAppraisalTab = ({
               <tbody>
                 {filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-3 py-4 text-center text-gray-500 text-xs">
+                    <td colSpan={15} className="px-3 py-4 text-center text-gray-500 text-xs">
                       {method1Sales.length > 0
                         ? 'No sales match the current filters'
                         : 'No vacant land sales data available'}
@@ -620,6 +1028,9 @@ const VacantLandAppraisalTab = ({
                         <td className="px-2 py-1 text-right">${Math.round(parseFloat(prop.sales_price)).toLocaleString()}</td>
                         <td className="px-2 py-1">{prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : ''}</td>
                         <td className="px-2 py-1 text-right font-medium">${Math.round(pricePerUnit).toLocaleString()}</td>
+                        <td className="px-2 py-1 text-gray-500 truncate" title={prop.utility_heat || ''}>{prop.utility_heat || '-'}</td>
+                        <td className="px-2 py-1 text-gray-500 truncate" title={prop.utility_water || ''}>{prop.utility_water || '-'}</td>
+                        <td className="px-2 py-1 text-gray-500 truncate" title={prop.utility_sewer || ''}>{prop.utility_sewer || '-'}</td>
                         <td className="px-2 py-1 text-gray-500">{prop._specialRegion !== 'Normal' ? prop._specialRegion : ''}</td>
                         <td className="px-2 py-1 text-center">
                           <button
@@ -652,8 +1063,22 @@ const VacantLandAppraisalTab = ({
 
       {/* Entry Section */}
       <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
-        <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+        <div className="bg-gray-100 px-3 py-2 border-b border-gray-300 flex items-center justify-between">
           <h4 className="font-semibold text-gray-900 text-sm">Property Entry</h4>
+          {/* Appeal Number */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600">Appeal #:</label>
+            <input
+              type="text"
+              value={appealNumber}
+              onChange={(e) => { setAppealNumber(e.target.value); setAppealAutoDetected(false); }}
+              placeholder="Enter or auto-detected"
+              className={`px-2 py-1 text-xs border rounded w-36 ${
+                appealAutoDetected ? 'border-green-400 bg-green-50' : 'border-gray-300'
+              }`}
+            />
+            {appealAutoDetected && <span className="text-xs text-green-600">Auto</span>}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -675,9 +1100,11 @@ const VacantLandAppraisalTab = ({
                 <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Block</td>
                 <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
+                    ref={(el) => setInputRef(0, 'block', el)}
                     type="text"
                     value={vacantLandSubject.block}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, block: e.target.value }))}
+                    onKeyDown={(e) => handleTabKeyDown(e, 0, 'block')}
                     className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Block"
                   />
@@ -685,6 +1112,7 @@ const VacantLandAppraisalTab = ({
                 {vacantLandComps.map((comp, idx) => (
                   <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
+                      ref={(el) => setInputRef(idx + 1, 'block', el)}
                       type="text"
                       value={comp.block}
                       onChange={(e) => {
@@ -692,6 +1120,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], block: e.target.value };
                         setVacantLandComps(newComps);
                       }}
+                      onKeyDown={(e) => handleTabKeyDown(e, idx + 1, 'block')}
                       className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Block"
                     />
@@ -704,9 +1133,11 @@ const VacantLandAppraisalTab = ({
                 <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Lot</td>
                 <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
+                    ref={(el) => setInputRef(0, 'lot', el)}
                     type="text"
                     value={vacantLandSubject.lot}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, lot: e.target.value }))}
+                    onKeyDown={(e) => handleTabKeyDown(e, 0, 'lot')}
                     className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Lot"
                   />
@@ -714,6 +1145,7 @@ const VacantLandAppraisalTab = ({
                 {vacantLandComps.map((comp, idx) => (
                   <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
+                      ref={(el) => setInputRef(idx + 1, 'lot', el)}
                       type="text"
                       value={comp.lot}
                       onChange={(e) => {
@@ -721,6 +1153,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], lot: e.target.value };
                         setVacantLandComps(newComps);
                       }}
+                      onKeyDown={(e) => handleTabKeyDown(e, idx + 1, 'lot')}
                       className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Lot"
                     />
@@ -733,9 +1166,11 @@ const VacantLandAppraisalTab = ({
                 <td className="px-2 py-1.5 font-medium text-gray-700 text-xs">Qual</td>
                 <td className="px-2 py-1.5 text-center bg-yellow-50">
                   <input
+                    ref={(el) => setInputRef(0, 'qualifier', el)}
                     type="text"
                     value={vacantLandSubject.qualifier}
                     onChange={(e) => setVacantLandSubject(prev => ({ ...prev, qualifier: e.target.value }))}
+                    onKeyDown={(e) => handleTabKeyDown(e, 0, 'qualifier')}
                     className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                     placeholder="Qual"
                   />
@@ -743,6 +1178,7 @@ const VacantLandAppraisalTab = ({
                 {vacantLandComps.map((comp, idx) => (
                   <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
                     <input
+                      ref={(el) => setInputRef(idx + 1, 'qualifier', el)}
                       type="text"
                       value={comp.qualifier}
                       onChange={(e) => {
@@ -750,6 +1186,7 @@ const VacantLandAppraisalTab = ({
                         newComps[idx] = { ...newComps[idx], qualifier: e.target.value };
                         setVacantLandComps(newComps);
                       }}
+                      onKeyDown={(e) => handleTabKeyDown(e, idx + 1, 'qualifier')}
                       className="w-full px-1.5 py-1 border border-gray-300 rounded text-center text-xs"
                       placeholder="Qual"
                     />
@@ -763,14 +1200,20 @@ const VacantLandAppraisalTab = ({
                 <td className="px-2 py-1.5 text-center bg-yellow-50 text-xs font-medium">
                   {(() => {
                     const prop = getPropertyData(vacantLandSubject.block, vacantLandSubject.lot, vacantLandSubject.qualifier);
-                    return formatSize(prop);
+                    if (!prop) return '-';
+                    const size = getLotSizeForMethod({ ...prop, _calculatedAcres: calculateAcreage(prop) });
+                    if (size === 0) return '-';
+                    if (valuationMethod === 'acre') return size.toFixed(3);
+                    return Math.round(size).toLocaleString();
                   })()}
                 </td>
                 {vacantLandComps.map((comp, idx) => {
                   const prop = getPropertyData(comp.block, comp.lot, comp.qualifier);
+                  const enriched = prop ? { ...prop, _calculatedAcres: calculateAcreage(prop) } : null;
+                  const size = enriched ? getLotSizeForMethod(enriched) : 0;
                   return (
                     <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300 text-xs font-medium">
-                      {formatSize(prop)}
+                      {size === 0 ? '-' : (valuationMethod === 'acre' ? size.toFixed(3) : Math.round(size).toLocaleString())}
                     </td>
                   );
                 })}
@@ -825,8 +1268,8 @@ const VacantLandAppraisalTab = ({
           )}
 
           <button
-            onClick={handleExport}
-            disabled={!vacantLandResult}
+            onClick={openExportModal}
+            disabled={!subjectProp}
             className="flex items-center gap-1 px-3 py-2 bg-purple-500 text-white rounded font-medium text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             <Download size={14} /> Export
@@ -857,8 +1300,16 @@ const VacantLandAppraisalTab = ({
               <tbody className="bg-white">
                 {renderDataRow('Location', p => p?.property_location || '-')}
                 {renderDataRow('Lot FF', p => p?.asset_lot_frontage ? parseFloat(p.asset_lot_frontage).toFixed(0) : '-')}
-                {renderDataRow('Lot SF', p => p?.asset_lot_sf ? Math.round(parseFloat(p.asset_lot_sf)).toLocaleString() : '-')}
-                {renderDataRow('Lot Acre', p => p?.asset_lot_acre ? parseFloat(p.asset_lot_acre).toFixed(3) : '-')}
+                {renderDataRow('Lot SF', p => {
+                  if (!p) return '-';
+                  const acres = calculateAcreage(p);
+                  return acres > 0 ? Math.round(acres * 43560).toLocaleString() : '-';
+                })}
+                {renderDataRow('Lot Acre', p => {
+                  if (!p) return '-';
+                  const acres = calculateAcreage(p);
+                  return acres > 0 ? acres.toFixed(3) : '-';
+                })}
                 {renderDataRow('VCS', p => p?.property_vcs || '-')}
                 {renderDataRow('Zoning', p => p?.property_zoning || '-')}
                 {renderDataRow('Topography', p => p?.topography || '-')}
@@ -874,7 +1325,8 @@ const VacantLandAppraisalTab = ({
                 {renderDataRow('Sales Date', p => p?.sales_date ? new Date(p.sales_date).toLocaleDateString() : '-')}
                 {renderDataRow(getUnitLabel(), p => {
                   if (!p?.sales_price) return '-';
-                  const size = getLotSizeForMethod(p);
+                  const enriched = { ...p, _calculatedAcres: calculateAcreage(p) };
+                  const size = getLotSizeForMethod(enriched);
                   if (size <= 0) return '-';
                   return '$' + Math.round(parseFloat(p.sales_price) / size).toLocaleString();
                 }, { bold: true, subjectBg: 'bg-yellow-100', compBg: 'bg-blue-100' })}
@@ -894,7 +1346,7 @@ const VacantLandAppraisalTab = ({
           <p className="text-xs text-green-700 mt-2">
             {(() => {
               const validComps = Object.keys(loadedProperties).filter(k => k.startsWith('comp_')).filter(k => loadedProperties[k]).length;
-              const subjectSize = getLotSizeForMethod(subjectProp);
+              const subjectSize = subjectProp ? getLotSizeForMethod({ ...subjectProp, _calculatedAcres: calculateAcreage(subjectProp) }) : 0;
               return `${validComps} comparable(s) — avg ${getUnitLabel().replace('$/', '')} rate × ${
                 valuationMethod === 'acre' ? (subjectSize || 0).toFixed(3) + ' acres' :
                 valuationMethod === 'sf' ? Math.round(subjectSize || 0).toLocaleString() + ' SF' :
@@ -902,6 +1354,144 @@ const VacantLandAppraisalTab = ({
               }`;
             })()}
           </p>
+        </div>
+      )}
+
+      {/* ==================== EXPORT MODAL ==================== */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2">
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-7xl flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 40px)' }}
+          >
+            {/* Modal Header */}
+            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <Printer className="text-white" size={20} />
+                <h3 className="text-base font-semibold text-white">Export PDF — Vacant Land Appraisal</h3>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-white hover:text-blue-200 transition-colors p-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Appeal Number Row */}
+            <div className="px-4 py-2 bg-blue-50 border-b flex items-center gap-4 flex-shrink-0">
+              <label className="text-sm font-medium text-gray-700">Appeal/Petition #:</label>
+              <input
+                type="text"
+                value={appealNumber}
+                onChange={(e) => { setAppealNumber(e.target.value); setAppealAutoDetected(false); }}
+                placeholder="Enter appeal number (appears on PDF header)"
+                className={`px-3 py-1.5 text-sm border rounded w-64 ${
+                  appealAutoDetected ? 'border-green-400 bg-green-50' : 'border-gray-300'
+                }`}
+              />
+              {appealAutoDetected && <span className="text-xs text-green-600 font-medium">Auto-detected from Appeal Log</span>}
+              {!appealAutoDetected && !appealNumber && <span className="text-xs text-gray-400">Optional — will appear above Block/Lot on PDF</span>}
+            </div>
+
+            {/* Modal Content - Editable Grid */}
+            <div className="flex-1 overflow-auto p-3">
+              <table className="min-w-full text-xs border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-blue-600 text-white">
+                    <th className="px-2 py-2 text-left font-semibold border border-blue-500 w-28">Attribute</th>
+                    <th className="px-2 py-2 text-center font-semibold border border-blue-500 w-24 bg-yellow-600">Subject</th>
+                    {[0, 1, 2, 3, 4].map(i => {
+                      const prop = loadedProperties[`comp_${i}`];
+                      if (!prop) return null;
+                      return (
+                        <th key={i} className="px-2 py-2 text-center font-semibold border border-blue-500 w-24">
+                          Comp {i + 1}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {EXPORT_ROWS.map((row) => {
+                    const activeCompIndices = [0, 1, 2, 3, 4].filter(i => loadedProperties[`comp_${i}`]);
+                    return (
+                      <tr key={row.field} className="border-t border-gray-200 hover:bg-gray-50">
+                        <td className="px-2 py-1.5 font-medium text-gray-700 border border-gray-300">{row.label}</td>
+                        {/* Subject cell */}
+                        <td className="px-2 py-1.5 text-center border border-gray-300 bg-yellow-50">
+                          {row.editable ? (
+                            <input
+                              type={row.type === 'number' ? 'text' : 'text'}
+                              inputMode={row.type === 'number' ? 'decimal' : 'text'}
+                              value={getEditedValue('subject', row.field) ?? getExportValue('subject', row.field, subjectProp)}
+                              onChange={(e) => updateEditedValue('subject', row.field, e.target.value)}
+                              className="w-full px-1 py-0.5 border border-gray-300 rounded text-center text-xs"
+                              step={row.step}
+                            />
+                          ) : (
+                            <span className="text-xs">{getExportValue('subject', row.field, subjectProp) || '-'}</span>
+                          )}
+                        </td>
+                        {/* Comp cells */}
+                        {activeCompIndices.map(i => {
+                          const prop = loadedProperties[`comp_${i}`];
+                          return (
+                            <td key={i} className="px-2 py-1.5 text-center border border-gray-300 bg-blue-50">
+                              {row.editable ? (
+                                <input
+                                  type={row.type === 'number' ? 'text' : 'text'}
+                                  inputMode={row.type === 'number' ? 'decimal' : 'text'}
+                                  value={getEditedValue(`comp_${i}`, row.field) ?? getExportValue(`comp_${i}`, row.field, prop)}
+                                  onChange={(e) => updateEditedValue(`comp_${i}`, row.field, e.target.value)}
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-center text-xs"
+                                  step={row.step}
+                                />
+                              ) : (
+                                <span className="text-xs">{getExportValue(`comp_${i}`, row.field, prop) || '-'}</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                  {/* Estimated Value Row */}
+                  <tr className="border-t-2 border-gray-400 bg-green-50">
+                    <td className="px-2 py-2 font-bold text-gray-900 border border-gray-300">Est. Land Value</td>
+                    <td className="px-2 py-2 text-center font-bold text-green-700 border border-gray-300 bg-yellow-100">
+                      {(recalculatedValue || vacantLandResult) ? '$' + (recalculatedValue || vacantLandResult).toLocaleString() : '-'}
+                    </td>
+                    {[0, 1, 2, 3, 4].filter(i => loadedProperties[`comp_${i}`]).map(i => (
+                      <td key={i} className="px-2 py-2 border border-gray-300"></td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
+              <p className="text-xs text-gray-500">
+                Edit values above — changes auto-recalculate. Then download PDF.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={generatePDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+                >
+                  <FileDown size={16} />
+                  Download PDF
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
