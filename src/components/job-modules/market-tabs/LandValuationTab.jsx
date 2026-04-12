@@ -2334,9 +2334,10 @@ const getPricePerUnit = useCallback((price, size) => {
     const included = vacantSales.filter(s => {
       if (!includedSales.has(s.id)) return false;
       // Exclude special categories from rate calculation
-      if (saleCategories[s.id] === 'wetlands' || 
+      if (saleCategories[s.id] === 'wetlands' ||
           saleCategories[s.id] === 'landlocked' ||
-          saleCategories[s.id] === 'conservation') return false;
+          saleCategories[s.id] === 'conservation' ||
+          saleCategories[s.id] === 'commercial_land') return false;
       // Filter by special region if specified
       if (regionFilter && specialRegions[s.id] !== regionFilter) return false;
       return true;
@@ -2699,6 +2700,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
       if (cat.includes('wetland')) {
         console.log(`⚠️ Excluding Wetlands sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+      if (cat.includes('commercial')) {
+        console.log(`🏢 Excluding Commercial Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
 
@@ -6875,6 +6880,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
+    const commercialLand = getCategoryAverage(s => saleCategories[s.id] === 'commercial_land', 'constrained');
 
     debug('�������� Building Lot Analysis Result:', {
       avg: buildingLot.avg,
@@ -7010,7 +7016,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    return { rawLand, buildingLot, wetlands, landlocked, conservation, specialRegions: specialRegionsAnalysis };
+    return { rawLand, buildingLot, wetlands, landlocked, conservation, commercialLand, specialRegions: specialRegionsAnalysis };
   }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
 
   const saveRates = async () => {
@@ -7534,6 +7540,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <option value="uncategorized">Uncategorized</option>
                         <option value="raw_land">Raw Land</option>
                         <option value="building_lot">Building Lot</option>
+                        <option value="commercial_land">Commercial Land</option>
                         <option value="wetlands">Wetlands</option>
                         <option value="landlocked">Landlocked</option>
                         <option value="conservation">Conservation</option>
@@ -7645,7 +7652,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Method 1 Summary - MOVED TO BOTTOM */}
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
                   Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
@@ -7732,6 +7739,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {categoryAnalysis.conservation.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.conservation.avgLotSize}
+                  </div>
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>Commercial Land</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#DC2626' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.commercialLand.avg}` : `$${categoryAnalysis.commercialLand.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.commercialLand.count} sales</div>
+                {categoryAnalysis.commercialLand.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.commercialLand.avgLotSize}
                   </div>
                 )}
               </div>
