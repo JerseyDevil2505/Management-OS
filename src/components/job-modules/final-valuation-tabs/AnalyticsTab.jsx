@@ -107,7 +107,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newTotalValue += newTotal;
       
       // Sales ratios by period - include sales even if newTotal is 0 (will be filtered in display)
-      if (prop.sales_date && prop.sales_price && prop.sales_price > 0) {
+      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0 && prop.sales_price > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
 
         // Track counts
