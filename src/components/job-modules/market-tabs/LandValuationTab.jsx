@@ -3065,11 +3065,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // Helper function to calculate raw land value using cascade rates
-  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
-    // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
-    console.log('\u27a1\ufe0f calculateRawLandValue called:', { valuationMode, hasPropertyForFF: !!propertyForFF });
+  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null, methodOverride = null) => {
+    const effectiveMethod = methodOverride || valuationMode;
+    // If method is Front Foot and we have a property with FF data, use FF calculation
+    console.log('\u27a1\ufe0f calculateRawLandValue called:', { effectiveMethod, valuationMode, hasPropertyForFF: !!propertyForFF });
 
-    if (valuationMode === 'ff' && propertyForFF) {
+    if (effectiveMethod === 'ff' && propertyForFF) {
       const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
       const depth = parseFloat(propertyForFF.land_depth) || 0;
 
@@ -3128,7 +3129,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     // SQUARE FOOT MODE - supports 2 or 3 tier cascade
-    if (valuationMode === 'sf') {
+    if (effectiveMethod === 'sf') {
       const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
                      (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
 
@@ -4478,18 +4479,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Build headers array (start first row with headers only)
     const headers = ['VCS', 'Total', 'Type', 'Description', 'Method'];
 
-    // Typical lot size headers - different for FF mode vs Acre mode
-    if (valuationMode === 'ff') {
+    // Typical lot size headers - include FF columns if any VCS uses FF
+    if (hasFFMethod) {
       headers.push('Typical FF', 'Typical Depth', 'Depth Table');
-    } else {
+    }
+    // Always include lot size column (used by acre and sf methods)
+    if (hasSFMethod || hasAcreMethod || !hasFFMethod) {
       headers.push('Typical Lot Size');
     }
 
-    // Add stepdown header for FF and SF modes
-    if (valuationMode === 'ff') {
-      headers.push('Stepdown (FF)');
-    } else if (valuationMode === 'sf') {
-      headers.push('Stepdown (SF)');
+    // Add stepdown header if any VCS uses FF or SF
+    if (hasFFMethod || hasSFMethod) {
+      headers.push('Stepdown');
     }
 
     // Raw Land column comes after stepdown
@@ -4502,16 +4503,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Stepdown 2');
     }
 
-    // Dynamic cascade headers - respect the selected method
-    if (valuationMode === 'ff') {
-      headers.push('Standard Rate ($/FF)');
-      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate ($/FF)');
-      headers.push('Excess Rate ($/FF)');
-    } else if (valuationMode === 'sf') {
-      headers.push('Standard Rate ($/SF)');
-      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate ($/SF)');
-      headers.push('Excess Rate ($/SF)');
-    } else {
+    // Dynamic cascade headers - include all column types present in the job
+    if (hasFFMethod || hasSFMethod) {
+      headers.push('Standard Rate');
+      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate');
+      headers.push('Excess Rate');
+    }
+    if (hasAcreMethod) {
       headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
       if (shouldShowResidualColumn) {
         headers.push('Residual Rate ($/Acre)');
@@ -4547,7 +4545,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       let depthTableName = '';
       let typicalLot = '';
 
-      if (valuationMode === 'ff') {
+      // Get effective method for this VCS
+      const vcsMethod = getVCSMethod(vcs, type);
+
+      if (vcsMethod === 'ff') {
         // FF mode: calculate typical front feet and depth from vendor data
         const vcsProps = properties?.filter(p =>
           p.new_vcs === vcs && p.asset_lot_frontage && p.asset_lot_depth
@@ -4570,7 +4571,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Use VCS-specific override if available, otherwise use zoning default
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
-      } else if (valuationMode === 'sf') {
+      } else if (vcsMethod === 'sf') {
         // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
         const vcsProps = properties?.filter(p =>
           p.new_vcs === vcs &&
@@ -4617,9 +4618,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
       const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
 
-      // Get the actual method for this VCS
-      const vcsMethod = getVCSMethod(vcs, type);
-
       const row = [
         vcs,
         vcsData.counts?.total || 0,
@@ -4628,10 +4626,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         getMethodDisplay(vcsMethod)
       ];
 
-      // Add typical lot size columns (different for FF vs Acre mode)
-      if (valuationMode === 'ff') {
-        row.push(typicalFF || '', typicalDepth || '', depthTableName || '');
-      } else {
+      // Add typical lot size columns - match header structure
+      if (hasFFMethod) {
+        row.push(vcsMethod === 'ff' ? (typicalFF || '') : '', vcsMethod === 'ff' ? (typicalDepth || '') : '', vcsMethod === 'ff' ? (depthTableName || '') : '');
+      }
+      if (hasSFMethod || hasAcreMethod || !hasFFMethod) {
         row.push(typicalLot || '');
       }
 
@@ -4651,13 +4650,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Add stepdown column for FF and SF modes (numeric only for formula compatibility)
-      if (valuationMode === 'ff' && isResidential) {
-        row.push(cascadeRates.standard?.max || '');
-      } else if (valuationMode === 'sf' && isResidential) {
-        row.push(cascadeRates.standard?.max || '');
-      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
-        row.push(''); // Empty for non-residential
+      // Add stepdown column if any VCS uses FF or SF
+      if (hasFFMethod || hasSFMethod) {
+        if ((vcsMethod === 'ff' || vcsMethod === 'sf') && isResidential) {
+          row.push(cascadeRates.standard?.max || '');
+        } else {
+          row.push('');
+        }
       }
 
       // Add secondary stepdown column if applicable
@@ -4672,7 +4671,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
       if (isResidential && typicalLot) {
-        if (valuationMode === 'ff' && typicalFF && typicalDepth) {
+        if (vcsMethod === 'ff' && typicalFF && typicalDepth) {
           // Front Foot mode - use 3-tier FF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 50;
@@ -4710,7 +4709,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               rawLandValue *= depthFactor;
             }
           }
-        } else if (valuationMode === 'sf') {
+        } else if (vcsMethod === 'sf') {
           // Square Foot mode - use 3-tier SF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 5000;
@@ -4781,19 +4780,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Add Allocation Target to row
       row.push(allocationTargetValue);
 
-      // Add cascade rates - match the selected method
-      if (isResidential) {
-        if (valuationMode === 'ff') {
-          row.push(
-            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
-            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
-          );
-        } else if (valuationMode === 'sf') {
-          row.push(
-            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
-            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
-          );
+      // Add cascade rates - match headers which include all method columns present
+      // FF/SF columns (Standard, [Secondary], Excess)
+      if (hasFFMethod || hasSFMethod) {
+        if (isResidential && (vcsMethod === 'ff' || vcsMethod === 'sf')) {
+          row.push(cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '');
+          if (shouldShowSecondaryStepColumn) {
+            row.push(cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '');
+          }
+          row.push(cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : '');
         } else {
+          row.push('');
+          if (shouldShowSecondaryStepColumn) row.push('');
+          row.push('');
+        }
+      }
+      // Acre columns (Prime, Secondary, Excess, [Residual])
+      if (hasAcreMethod) {
+        if (isResidential && vcsMethod === 'acre') {
           row.push(
             cascadeRates.prime?.rate != null ? `$${Math.round(cascadeRates.prime.rate).toLocaleString()}` : '',
             cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '',
@@ -4802,18 +4806,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (shouldShowResidualColumn) {
             row.push(cascadeRates.residual?.rate != null ? `$${Math.round(cascadeRates.residual.rate).toLocaleString()}` : '');
           }
-        }
-      } else {
-        // Empty cells for non-residential
-        if (valuationMode === 'ff') {
-          row.push('', '');
-        } else if (valuationMode === 'sf') {
-          row.push('', '');
         } else {
           row.push('', '', '');
-          if (shouldShowResidualColumn) {
-            row.push('');
-          }
+          if (shouldShowResidualColumn) row.push('');
         }
       }
 
@@ -4830,16 +4825,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Lot size columns (numeric only for formulas - no units)
       const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
-        valuationMode === 'ff' ? Math.round(vcsData.avgNormTimeLotSize) :
-        valuationMode === 'sf' ? Math.round(vcsData.avgNormTimeLotSize) :
+        vcsMethod === 'ff' ? Math.round(vcsData.avgNormTimeLotSize) :
+        vcsMethod === 'sf' ? Math.round(vcsData.avgNormTimeLotSize) :
         Number(vcsData.avgNormTimeLotSize.toFixed(2))
       ) : '';
 
       // Use fallback logic to match UI: if avgPrice exists, use avgPriceLotSize, else use avgNormTimeLotSize
       const effectiveLotSize = vcsData.avgPrice ? vcsData.avgPriceLotSize : vcsData.avgNormTimeLotSize;
       const avgPriceLotFmt = effectiveLotSize != null ? (
-        valuationMode === 'ff' ? Math.round(effectiveLotSize) :
-        valuationMode === 'sf' ? Math.round(effectiveLotSize) :
+        vcsMethod === 'ff' ? Math.round(effectiveLotSize) :
+        vcsMethod === 'sf' ? Math.round(effectiveLotSize) :
         Number(effectiveLotSize.toFixed(2))
       ) : '';
 
@@ -10947,12 +10942,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const methods = new Set();
     Object.keys(vcsSheetData).forEach(vcs => {
       const type = vcsTypes[vcs] || 'Residential-Typical';
-      const method = vcsMethodOverrides[vcs] ||
-                     (type.toLowerCase().includes('condo') ? 'site' : valuationMode);
+      // Check manual override first, then VCS-specific config, then condo, then global
+      let method = vcsMethodOverrides[vcs];
+      if (!method) {
+        if (type.toLowerCase().includes('condo')) {
+          method = 'site';
+        } else {
+          const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+            config.vcsList?.includes(vcs)
+          );
+          method = vcsSpecificConfig?.method || valuationMode;
+        }
+      }
       methods.add(method);
     });
     return methods;
-  }, [vcsSheetData, vcsTypes, vcsMethodOverrides, valuationMode]);
+  }, [vcsSheetData, vcsTypes, vcsMethodOverrides, valuationMode, cascadeConfig.vcsSpecific]);
 
   const hasFFMethod = methodsInUse.has('ff');
   const hasSFMethod = methodsInUse.has('sf');
@@ -10990,9 +10995,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return 'site';
     }
 
+    // Check if there's a VCS-specific configuration with a different method
+    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+      config.vcsList?.includes(vcs)
+    );
+    if (vcsSpecificConfig && vcsSpecificConfig.method) {
+      return vcsSpecificConfig.method;
+    }
+
     // Otherwise use the global valuation mode
     return valuationMode;
-  }, [vcsMethodOverrides, valuationMode]);
+  }, [vcsMethodOverrides, valuationMode, cascadeConfig.vcsSpecific]);
 
   const getMethodDisplay = useCallback((method) => {
     switch (method) {
