@@ -23,6 +23,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [editedLandMap, setEditedLandMap] = useState({});
   const [editedDetItemMap, setEditedDetItemMap] = useState({});
   const [editedBaseCostMap, setEditedBaseCostMap] = useState({});
+  const [editedBuildingClassMap, setEditedBuildingClassMap] = useState({});
 
   // Helpers to get effective values (edited override or original)
   const getEffectiveDetItems = (p) => {
@@ -34,6 +35,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
     if (editedBaseCostMap[key] !== undefined && editedBaseCostMap[key] !== '') return Number(editedBaseCostMap[key]);
     return (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+  };
+  const getEffectiveBuildingClass = (p) => {
+    const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+    if (editedBuildingClassMap[key] !== undefined) return editedBuildingClassMap[key];
+    return p.asset_building_class || '';
   };
   // Debounce timer ref for auto-saving the year range
   const saveTimerRef = useRef(null);
@@ -199,6 +205,15 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       return true;
     });
   }, [properties, fromYear, toYear, typeGroup]);
+
+  // Unique building class codes from all properties in this town
+  const uniqueBuildingClasses = useMemo(() => {
+    const classes = new Set();
+    properties.forEach(p => {
+      if (p.asset_building_class) classes.add(String(p.asset_building_class).trim());
+    });
+    return Array.from(classes).sort();
+  }, [properties]);
 
   // Initialize include map and edited land map when filtered results change
   useEffect(() => {
@@ -398,7 +413,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       }
 
       // Building Class, Living Area
-      row[COL.BLDG_CLASS] = p.asset_building_class || '';
+      row[COL.BLDG_CLASS] = getEffectiveBuildingClass(p);
       row[COL.LIVING_AREA] = livingArea !== null ? livingArea : '';
 
       // Current Land, Det Item, Base Cost
@@ -882,7 +897,24 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
+                    {(() => {
+                      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                      const val = editedBuildingClassMap[key] !== undefined ? editedBuildingClassMap[key] : (p.asset_building_class || '');
+                      return (
+                        <select
+                          value={val}
+                          onChange={(e) => setEditedBuildingClassMap(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="px-1 py-1 border rounded text-sm w-20"
+                        >
+                          <option value="">—</option>
+                          {uniqueBuildingClasses.map(cls => (
+                            <option key={cls} value={cls}>{cls}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{(() => {
                     const la = getLivingAreaValue(p);
                     return la !== null ? formatNumberNoDecimals(la) : '—';
