@@ -451,6 +451,16 @@ export class MicrosystemsProcessor {
       asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
       asset_bedrooms: this.parseInteger(rawRecord['Total Bedrms']),
 
+      // Utility fields (Microsystems: direct Y/N flags)
+      // Gas Yn: Y = Gas, N/blank = No Gas (likely Oil)
+      utility_heat: this.parseMicroUtilityFlag(rawRecord['Gas Yn'], 'heat'),
+      // Water Yn: Y = Public Water, N/blank = Well
+      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Yn'], 'water'),
+      // Sewer Yn: Y = Public Sewer, N/blank = Septic
+      utility_sewer: this.parseMicroUtilityFlag(rawRecord['Sewer Yn'], 'sewer'),
+      // Topography: stored under 'Source' field, raw code translated via category 115
+      topography: this.preserveStringValue(rawRecord['Source']) || null,
+
       // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
       special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
       special_tax_code_2: rawRecord['Sp Tax Cd2'] || null,
@@ -1291,6 +1301,26 @@ export class MicrosystemsProcessor {
     } catch (error) {
       console.error('Error calculating time-adjusted value:', error);
       return this.parseNumeric(rawRecord['Sale Price']); // Fallback to original price
+    }
+  }
+
+  /**
+   * Parse Microsystems Y/N utility flags into descriptive values
+   * Y = has the utility, N or blank = does not (default to common alternative)
+   */
+  parseMicroUtilityFlag(value, type) {
+    const trimmed = (value || '').trim().toUpperCase();
+    const hasUtility = trimmed === 'Y';
+
+    switch (type) {
+      case 'heat':
+        return hasUtility ? 'Gas' : (trimmed === 'N' ? 'No Gas' : null);
+      case 'water':
+        return hasUtility ? 'Public Water' : (trimmed === 'N' ? 'Well' : null);
+      case 'sewer':
+        return hasUtility ? 'Public Sewer' : (trimmed === 'N' ? 'Septic' : null);
+      default:
+        return hasUtility ? 'Yes' : null;
     }
   }
 

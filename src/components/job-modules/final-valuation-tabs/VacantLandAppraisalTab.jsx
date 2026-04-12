@@ -359,6 +359,76 @@ const VacantLandAppraisalTab = ({
                   })}
                 </tr>
 
+                {/* Topography */}
+                <tr className="border-t border-gray-200">
+                  <td className="px-3 py-2 font-medium text-gray-700">Topography</td>
+                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subjectProp?.topography || '-'}</td>
+                  {vacantLandComps.map((comp, idx) => {
+                    const prop = loadedProperties[`comp_${idx}`];
+                    return (
+                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                        {prop?.topography || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Clearing */}
+                <tr className="border-t border-gray-200">
+                  <td className="px-3 py-2 font-medium text-gray-700">Clearing</td>
+                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subjectProp?.clearing || '-'}</td>
+                  {vacantLandComps.map((comp, idx) => {
+                    const prop = loadedProperties[`comp_${idx}`];
+                    return (
+                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                        {prop?.clearing || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Utility - Heat */}
+                <tr className="border-t border-gray-200">
+                  <td className="px-3 py-2 font-medium text-gray-700">Utility — Heat</td>
+                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subjectProp?.utility_heat || '-'}</td>
+                  {vacantLandComps.map((comp, idx) => {
+                    const prop = loadedProperties[`comp_${idx}`];
+                    return (
+                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                        {prop?.utility_heat || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Utility - Water */}
+                <tr className="border-t border-gray-200">
+                  <td className="px-3 py-2 font-medium text-gray-700">Utility — Water</td>
+                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subjectProp?.utility_water || '-'}</td>
+                  {vacantLandComps.map((comp, idx) => {
+                    const prop = loadedProperties[`comp_${idx}`];
+                    return (
+                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                        {prop?.utility_water || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Utility - Sewer */}
+                <tr className="border-t border-gray-200">
+                  <td className="px-3 py-2 font-medium text-gray-700">Utility — Sewer</td>
+                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subjectProp?.utility_sewer || '-'}</td>
+                  {vacantLandComps.map((comp, idx) => {
+                    const prop = loadedProperties[`comp_${idx}`];
+                    return (
+                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                        {prop?.utility_sewer || '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+
                 {/* Current Assessment */}
                 <tr className="border-t border-gray-200">
                   <td className="px-3 py-2 font-medium text-gray-700">Current Assess</td>

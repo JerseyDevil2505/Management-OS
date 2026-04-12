@@ -598,6 +598,12 @@ export class BRTProcessor {
       asset_effective_age: this.parseInteger(rawRecord.EFFAGE),  // BRT: EFFAGE is already a year (e.g., 1950)
       asset_bedrooms: this.parseInteger(rawRecord.BEDTOT),
 
+      // Utility raw codes (BRT: UTILS_1-4, translated via category 52)
+      utility_code_1: this.preserveStringValue(rawRecord.UTILS_1),
+      utility_code_2: this.preserveStringValue(rawRecord.UTILS_2),
+      utility_code_3: this.preserveStringValue(rawRecord.UTILS_3),
+      utility_code_4: this.preserveStringValue(rawRecord.UTILS_4),
+
       // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
       special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
       special_tax_code_2: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE2),
