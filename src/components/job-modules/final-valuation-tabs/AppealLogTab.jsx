@@ -2493,11 +2493,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               const ownerMismatch = hasOwnerMismatch(appeal);
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
+              const isResolved = ['S', 'W', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
+              const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? 'bg-emerald-50' : 'hover:bg-gray-50';
+              const stickyBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? 'bg-emerald-50' : 'bg-white';
+              const textMuted = isResolved ? 'text-gray-500' : 'text-gray-600';
+              const textStrong = isResolved ? 'text-gray-600' : 'text-gray-900';
 
               return (
-                <tr key={idx} className={`border-b border-gray-100 ${selectedAppeals.has(appeal.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                <tr key={idx} className={`border-b border-gray-100 ${rowBg}`}>
                   {/* CHECKBOX COLUMN */}
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px' }}>
+                  <td className={`sticky left-0 z-10 ${stickyBg} px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center`} style={{ minWidth: '50px', maxWidth: '50px' }}>
                     <input
                       type="checkbox"
                       checked={selectedAppeals.has(appeal.id)}
@@ -2506,7 +2511,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                     />
                   </td>
                   {/* FROZEN LEFT COLUMNS */}
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '85px', maxWidth: '85px' }}>
+                  <td className={`sticky z-10 ${stickyBg} px-3 py-2 whitespace-nowrap border-r border-gray-200`} style={{ left: '50px', minWidth: '85px', maxWidth: '85px' }}>
                     <select
                       value={appeal.status === 'Pending' ? 'D' : (appeal.status || 'NA')}
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
@@ -2523,31 +2528,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <option value="NA">NA</option>
                     </select>
                   </td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900 font-medium" style={{ left: '135px', minWidth: '120px', maxWidth: '120px' }}>
+                  <td className={`sticky z-10 ${stickyBg} px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong} font-medium`} style={{ left: '135px', minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '255px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
-                  <td className="sticky z-10 bg-white px-3 py-2 whitespace-nowrap border-r border-gray-200 text-gray-900" style={{ left: '315px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '110px', maxWidth: '110px' }}>
+                  <td className={`sticky z-10 ${stickyBg} px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '255px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_block || '-'}</td>
+                  <td className={`sticky z-10 ${stickyBg} px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '315px', minWidth: '60px', maxWidth: '60px' }}>{appeal.property_lot || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '110px', maxWidth: '110px' }}>
                     {renderBracketCell(appeal)}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '90px', maxWidth: '90px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '90px', maxWidth: '90px' }}>
                     {renderInspectedCell(appeal)}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'petitioner_name', appeal.petitioner_name, 'text')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '120px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600" style={{ minWidth: '100px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '100px' }}>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -2559,11 +2564,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   </td>
 
                   {/* VALUATION GROUP */}
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '120px', maxWidth: '120px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-blue-600 font-semibold" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium" style={{ minWidth: '100px', maxWidth: '100px' }}>
+                  <td className={`px-3 py-2 whitespace-nowrap ${isResolved ? 'text-blue-400' : 'text-blue-600'} font-semibold`} style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
                   </td>
                   <td className={`px-3 py-2 whitespace-nowrap font-medium ${appeal.judgment_value !== null && appeal.loss > 0 ? 'text-red-600' : 'text-gray-600'}`} style={{ minWidth: '100px', maxWidth: '100px' }}>
