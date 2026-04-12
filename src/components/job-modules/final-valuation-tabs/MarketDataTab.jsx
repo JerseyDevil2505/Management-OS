@@ -405,6 +405,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         if (actualEFA === '' || isNaN(actualEFA)) {
           actualEFA = null;
         }
+        // Microsystems: asset_effective_age is stored as a year (yearPrior - age),
+        // convert back to age for Actual EFA since DEPR formula expects age
+        if (actualEFA !== null && vendorType === 'Microsystems' && yearPriorToDueYear) {
+          actualEFA = yearPriorToDueYear - actualEFA;
+        }
       }
     }
 
