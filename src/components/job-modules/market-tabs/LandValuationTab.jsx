@@ -3091,29 +3091,39 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const primeMax = cascadeRates.prime?.max || cascadeRates.standard?.max || 100;
           const excessRate = cascadeRates.excess?.rate || 0;
 
-          // Calculate prime frontage (first X feet)
-          const primeFF = Math.min(frontFeet, primeMax);
-          const excessFF = Math.max(0, frontFeet - primeMax);
+          // Calculate tiered frontage value (BEFORE depth multiplier)
+          let remaining = frontFeet;
+          let rawValue = 0;
 
-          // Calculate raw frontage value (BEFORE depth multiplier)
-          const primeValue = primeFF * primeRate;
-          const excessValue = excessFF * excessRate;
-          const rawValue = primeValue + excessValue;
+          // Tier 1: Standard/Prime
+          const primeFF = Math.min(remaining, primeMax);
+          rawValue += primeFF * primeRate;
+          remaining -= primeFF;
+
+          // Tier 2: Secondary (if configured)
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - primeMax;
+            const secondaryFF = Math.min(remaining, secondaryMax);
+            rawValue += secondaryFF * cascadeRates.secondary.rate;
+            remaining -= secondaryFF;
+          }
+
+          // Tier 3 (or 2): Excess
+          if (remaining > 0) {
+            rawValue += remaining * excessRate;
+          }
 
           // Apply depth multiplier to total
           const totalValue = rawValue * depthFactor;
 
-          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Prime: ${primeFF}' x $${primeRate} = $${primeValue.toFixed(0)}` +
-            (excessFF > 0 ? `, Excess: ${excessFF}' x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
-            `, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`
-          );
+          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`);
 
           return totalValue;
         }
       }
     }
 
-    // SQUARE FOOT MODE - Added support
+    // SQUARE FOOT MODE - supports 2 or 3 tier cascade
     if (valuationMode === 'sf') {
       const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
                      (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
@@ -3121,19 +3131,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (sqFeet > 0 && cascadeRates.standard) {
         const standardRate = cascadeRates.standard.rate || 0;
         const standardMax = cascadeRates.standard.max || 5000;
+        let rawLandValue = 0;
+        let remaining = sqFeet;
+
+        // Tier 1: Standard
+        const standardSF = Math.min(remaining, standardMax);
+        rawLandValue += standardSF * standardRate;
+        remaining -= standardSF;
+
+        // Tier 2: Secondary (if configured)
+        if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+          const secondaryMax = cascadeRates.secondary.max - standardMax;
+          const secondarySF = Math.min(remaining, secondaryMax);
+          rawLandValue += secondarySF * cascadeRates.secondary.rate;
+          remaining -= secondarySF;
+        }
+
+        // Tier 3 (or 2 if no secondary): Excess
         const excessRate = cascadeRates.excess?.rate || 0;
+        if (remaining > 0) {
+          rawLandValue += remaining * excessRate;
+        }
 
-        const standardSF = Math.min(sqFeet, standardMax);
-        const excessSF = Math.max(0, sqFeet - standardMax);
-
-        const standardValue = standardSF * standardRate;
-        const excessValue = excessSF * excessRate;
-        const rawLandValue = standardValue + excessValue;
-
-        debug(`SF calc for ${sqFeet} sq ft: Standard: ${standardSF} SF x $${standardRate} = $${standardValue.toFixed(0)}` +
-          (excessSF > 0 ? `, Excess: ${excessSF} SF x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
-          ` = $${rawLandValue.toFixed(0)}`);
-
+        debug(`SF calc for ${sqFeet} sq ft = $${rawLandValue.toFixed(0)}`);
         return rawLandValue;
       }
     }
@@ -4473,11 +4493,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     headers.push('Rec Site Value', 'Act Site Value', 'Allocation Target');
 
+    // Secondary stepdown header for SF/FF with 3-tier
+    if (shouldShowSecondaryStepColumn) {
+      headers.push('Stepdown 2');
+    }
+
     // Dynamic cascade headers - respect the selected method
     if (valuationMode === 'ff') {
-      headers.push('Standard Rate ($/FF)', 'Excess Rate ($/FF)');
+      headers.push('Standard Rate ($/FF)');
+      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate ($/FF)');
+      headers.push('Excess Rate ($/FF)');
     } else if (valuationMode === 'sf') {
-      headers.push('Standard Rate ($/SF)', 'Excess Rate ($/SF)');
+      headers.push('Standard Rate ($/SF)');
+      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate ($/SF)');
+      headers.push('Excess Rate ($/SF)');
     } else {
       headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
       if (shouldShowResidualColumn) {
@@ -4485,8 +4514,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
 
-    // Special category headers
-    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate');
+    // Special category headers - only include columns with values
+    if (shouldShowWetlandsColumn) headers.push('Wetlands Rate');
+    if (shouldShowLandlockedColumn) headers.push('Landlocked Rate');
+    if (shouldShowConservationColumn) headers.push('Conservation Rate');
 
     // Lot size and price headers
     headers.push('Avg Price (t) Lot Size', 'Avg Price (Time Norm)', 'Avg Price Lot Size', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
@@ -4625,19 +4656,41 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         row.push(''); // Empty for non-residential
       }
 
+      // Add secondary stepdown column if applicable
+      if (shouldShowSecondaryStepColumn) {
+        if (isResidential && (vcsMethod === 'ff' || vcsMethod === 'sf')) {
+          row.push(cascadeRates.secondary?.max || cascadeConfig.normal.secondary?.max || '');
+        } else {
+          row.push('');
+        }
+      }
+
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
       if (isResidential && typicalLot) {
         if (valuationMode === 'ff' && typicalFF && typicalDepth) {
-          // Front Foot mode - use FF calculation
+          // Front Foot mode - use 3-tier FF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 50;
           const excessRate = cascadeRates.excess?.rate || 0;
+          let remaining = typicalFF;
 
-          const standardFF = Math.min(typicalFF, standardMax);
-          const excessFF = Math.max(0, typicalFF - standardMax);
+          const standardFF = Math.min(remaining, standardMax);
+          rawLandValue = standardFF * standardRate;
+          remaining -= standardFF;
 
-          rawLandValue = (standardFF * standardRate) + (excessFF * excessRate);
+          // Secondary tier
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - standardMax;
+            const secondaryFF = Math.min(remaining, secondaryMax);
+            rawLandValue += secondaryFF * cascadeRates.secondary.rate;
+            remaining -= secondaryFF;
+          }
+
+          // Excess
+          if (remaining > 0) {
+            rawLandValue += remaining * excessRate;
+          }
 
           // Apply depth factor if available
           if (depthTableName && depthTables[depthTableName]) {
@@ -4654,15 +4707,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
           }
         } else if (valuationMode === 'sf') {
-          // Square Foot mode
+          // Square Foot mode - use 3-tier SF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 5000;
           const excessRate = cascadeRates.excess?.rate || 0;
+          let remaining = typicalLot;
 
-          const standardSF = Math.min(typicalLot, standardMax);
-          const excessSF = Math.max(0, typicalLot - standardMax);
+          const standardSF = Math.min(remaining, standardMax);
+          rawLandValue = standardSF * standardRate;
+          remaining -= standardSF;
 
-          rawLandValue = (standardSF * standardRate) + (excessSF * excessRate);
+          // Secondary tier
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - standardMax;
+            const secondarySF = Math.min(remaining, secondaryMax);
+            rawLandValue += secondarySF * cascadeRates.secondary.rate;
+            remaining -= secondarySF;
+          }
+
+          // Excess
+          if (remaining > 0) {
+            rawLandValue += remaining * excessRate;
+          }
         } else {
           // Acre mode - cascade calculation
           let remainingAcres = typicalLot;
@@ -4747,12 +4813,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Special category rates (formatted)
-      row.push(
-        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '',
-        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '',
-        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
-      );
+      // Special category rates - only include columns with values
+      if (shouldShowWetlandsColumn) {
+        row.push(vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '');
+      }
+      if (shouldShowLandlockedColumn) {
+        row.push(vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '');
+      }
+      if (shouldShowConservationColumn) {
+        row.push(vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : '');
+      }
 
       // Lot size columns (numeric only for formulas - no units)
       const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
@@ -8644,11 +8714,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Normal Properties</h4>
           <div style={{ display: 'grid', gridTemplateColumns:
-            valuationMode === 'ff' ? 'repeat(2, 1fr)' :
-            valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+            valuationMode === 'ff' ? (cascadeConfig.normal.secondary?.rate ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
+            valuationMode === 'sf' ? (cascadeConfig.normal.secondary?.rate ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
             'repeat(4, 1fr)', gap: '15px' }}>
             {valuationMode === 'ff' ? (
-              // FRONT FOOT MODE: Standard + Excess
+              // FRONT FOOT MODE: Standard + optional Secondary + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
@@ -8681,9 +8751,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
+                {cascadeConfig.normal.secondary?.rate ? (
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.normal.standard?.max || 100}-{cascadeConfig.normal.secondary?.max || 200} ft)
+                      <button
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { ...prev.normal.secondary, max: null, rate: null } } }))}
+                        style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      >Remove Step</button>
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.max || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'max', e.target.value)}
+                        placeholder="Max ft"
+                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.rate || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                        placeholder="Rate per front foot"
+                        style={{ flex: 1, padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({cascadeConfig.normal.standard?.max || 100}+ ft)
+                    Excess ({(cascadeConfig.normal.secondary?.rate ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 100}+ ft)
                   </label>
                   <input
                     type="number"
@@ -8700,7 +8797,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
               </>
             ) : valuationMode === 'sf' ? (
-              // SQUARE FOOT MODE: Standard + Excess
+              // SQUARE FOOT MODE: Standard + optional Secondary + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
@@ -8734,9 +8831,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
+                {cascadeConfig.normal.secondary?.rate ? (
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.normal.standard?.max || 5000}-{cascadeConfig.normal.secondary?.max || 12000} sq ft)
+                      <button
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { ...prev.normal.secondary, max: null, rate: null } } }))}
+                        style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      >Remove Step</button>
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.max || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'max', e.target.value)}
+                        placeholder="Max sq ft"
+                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.normal.secondary?.rate || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                        placeholder="Rate per sq ft"
+                        style={{ flex: 1, padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({cascadeConfig.normal.standard?.max || 5000}+ sq ft)
+                    Excess ({(cascadeConfig.normal.secondary?.rate ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 5000}+ sq ft)
                   </label>
                   <input
                     type="number"
@@ -8872,6 +8997,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </>
             )}
           </div>
+          {/* Add Step button for SF/FF modes */}
+          {(valuationMode === 'sf' || valuationMode === 'ff') && !cascadeConfig.normal.secondary?.rate && (
+            <button
+              onClick={() => {
+                const defaultMax = valuationMode === 'sf'
+                  ? (cascadeConfig.normal.standard?.max || 5000) * 2
+                  : (cascadeConfig.normal.standard?.max || 100) * 2;
+                setCascadeConfig(prev => ({
+                  ...prev,
+                  normal: {
+                    ...prev.normal,
+                    secondary: { max: defaultMax, rate: null }
+                  }
+                }));
+              }}
+              style={{
+                marginTop: '10px',
+                padding: '6px 14px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600'
+              }}
+            >
+              + Add Step
+            </button>
+          )}
         </div>
 
         {/* Special Region Cascades */}
@@ -10651,6 +10806,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const hasSFMethod = methodsInUse.has('sf');
   const hasAcreMethod = methodsInUse.has('acre');
 
+  // Show secondary column in VCS sheet when SF/FF secondary tier is configured
+  const shouldShowSecondaryStepColumn = useMemo(() => {
+    return (valuationMode === 'sf' || valuationMode === 'ff') &&
+      cascadeConfig.normal.secondary?.rate && cascadeConfig.normal.secondary?.max;
+  }, [cascadeConfig, valuationMode]);
+
+  // Only show special category columns if they have configured rates
+  const shouldShowWetlandsColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.wetlands != null && cascadeConfig.specialCategories.wetlands > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowLandlockedColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.landlocked != null && cascadeConfig.specialCategories.landlocked > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowConservationColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.conservation != null && cascadeConfig.specialCategories.conservation > 0;
+  }, [cascadeConfig]);
+
   // ========== METHOD FORMATTING HELPER ==========
   // Get the effective method for a VCS (considering overrides)
   const getVCSMethod = useCallback((vcs, type) => {
@@ -10931,9 +11105,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {(hasFFMethod || hasSFMethod) && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown</th>
                   )}
+                  {shouldShowSecondaryStepColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown 2</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Prime' : 'Standard'}</th>
+                  {shouldShowSecondaryStepColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Secondary</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Secondary' : 'Excess'}</th>
                   {hasAcreMethod && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
@@ -10941,9 +11121,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {shouldShowResidualColumn && hasAcreMethod && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                   )}
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  {shouldShowWetlandsColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
+                  )}
+                  {shouldShowLandlockedColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
+                  )}
+                  {shouldShowConservationColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t) Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price Lot Size</th>
@@ -11276,6 +11462,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''}
                         </td>
                       )}
+                      {shouldShowSecondaryStepColumn && (
+                        <td style={{
+                          padding: '8px',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
+                        }}>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                            <span style={{ fontSize: '11px' }}>
+                              {cascadeRates.secondary?.max || cascadeConfig.normal.secondary?.max || ''}
+                            </span>
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
@@ -11331,6 +11530,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''
                         ) : ''}
                       </td>
+                      {shouldShowSecondaryStepColumn && (
+                        <td style={{
+                          padding: '8px',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
+                        }}>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.secondary ?? cascadeRates.secondary?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'secondary', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.secondary?.rate || ''}
+                            />
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{
                         padding: '8px',
                         border: '1px solid #E5E7EB',
@@ -11418,34 +11641,40 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''}
                         </td>
                       )}
-                      {/* Special Category Rates */}
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
-                          `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
-                      </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
-                          `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
-                      </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
-                          `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
-                      </td>
+                      {/* Special Category Rates - only show columns with values */}
+                      {shouldShowWetlandsColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
+                            `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
+                        </td>
+                      )}
+                      {shouldShowLandlockedColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
+                            `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
+                        </td>
+                      )}
+                      {shouldShowConservationColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
+                            `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTimeLotSize ? (
                           valuationMode === 'ff' ? `${Math.round(data.avgNormTimeLotSize)} ft` :
