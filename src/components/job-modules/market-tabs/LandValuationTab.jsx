@@ -1035,11 +1035,11 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 ��� Single Family' },
+      { code: '1', description: '1 — Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
-      { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
+      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* ����� Conversions (51,52,53)' },
+      { code: '5', description: '5* — Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -2612,11 +2612,11 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-����� Property ownership/seller details
+- Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
-�� Municipality-specific land use characteristics
-���� Any circumstances of the sale (estate, distressed, etc.)
+- Municipality-specific land use characteristics
+- Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -7086,7 +7086,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          �� Prompt copied! Paste into Claude AI
+          Prompt copied! Paste into Claude AI
         </div>
       )}
 
@@ -8062,7 +8062,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${data.avgAcres.toFixed(2)} ac • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -8136,12 +8136,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${data.avgAcres.toFixed(2)} ac • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ����
+                      ▼
                     </span>
                   </div>
 
@@ -9832,7 +9832,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   color: '#6B7280'
                 }}
               >
-                ����
+                +
               </button>
             </div>
 
@@ -9841,7 +9841,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  �������️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9863,7 +9863,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '���' : '���') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
@@ -9877,7 +9877,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('address')}
@@ -9891,7 +9891,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '��������') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
@@ -9905,7 +9905,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '������������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -9919,7 +9919,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
@@ -9933,7 +9933,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
@@ -9947,7 +9947,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
@@ -9961,7 +9961,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -9975,7 +9975,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '������' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
@@ -9989,7 +9989,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -10959,7 +10959,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�������' : '��'}
+                    Zoning {collapsedFields.zoning ? '►' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -10972,7 +10972,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       onClick={() => toggleFieldCollapse('key')}
                       title="Click to expand/collapse"
                     >
-                      Key {collapsedFields.key ? '���' : '▼'}
+                      Key {collapsedFields.key ? '►' : '▼'}
                     </th>
                   )}
                   {shouldShowMapColumn && (
@@ -11845,7 +11845,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* ���� Row / Townhouse</option>
+                <option value="3">3* — Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
@@ -12255,7 +12255,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
           >
-            {isVcsSheetComplete ? '�� Mark Complete' : 'Mark Complete'}
+            {isVcsSheetComplete ? '✅ Mark Complete' : 'Mark Complete'}
           </button>
         )}
 
@@ -12273,7 +12273,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
           >
-            {isEcoObsComplete ? '�� Mark Complete' : 'Mark Complete'}
+            {isEcoObsComplete ? '✅ Mark Complete' : 'Mark Complete'}
           </button>
         )}
       </div>

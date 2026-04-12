@@ -1991,7 +1991,7 @@ const AdminJobManagement = ({
                   <Plus className="w-8 h-8 mr-3 text-blue-600" />
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {editingJob ? '���️ Edit Job' : '🚀 Create New Appraisal Job'}
+                      {editingJob ? 'Edit Job' : 'Create New Appraisal Job'}
                     </h2>
                     <p className="text-gray-600 mt-1">Set up a job with source data and manager assignments</p>
                   </div>

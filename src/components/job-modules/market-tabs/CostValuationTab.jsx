@@ -924,7 +924,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
                     if (!replWithDeprRow) return <span className="text-xs text-yellow-800">Missing repl</span>;
                     const val = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
-                    return val ? Number(val).toFixed(2) : '���';
+                    return val ? Number(val).toFixed(2) : '-';
                   })()}</td>
 
 
