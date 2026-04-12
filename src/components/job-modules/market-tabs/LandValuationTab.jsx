@@ -8714,8 +8714,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Normal Properties</h4>
           <div style={{ display: 'grid', gridTemplateColumns:
-            valuationMode === 'ff' ? (cascadeConfig.normal.secondary?.rate ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
-            valuationMode === 'sf' ? (cascadeConfig.normal.secondary?.rate ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
+            valuationMode === 'ff' ? (cascadeConfig.normal.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
+            valuationMode === 'sf' ? (cascadeConfig.normal.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
             'repeat(4, 1fr)', gap: '15px' }}>
             {valuationMode === 'ff' ? (
               // FRONT FOOT MODE: Standard + optional Secondary + Excess
@@ -8751,12 +8751,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
-                {cascadeConfig.normal.secondary?.rate ? (
+                {cascadeConfig.normal.secondary?.max ? (
                   <div>
                     <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
                       Secondary ({cascadeConfig.normal.standard?.max || 100}-{cascadeConfig.normal.secondary?.max || 200} ft)
                       <button
-                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { ...prev.normal.secondary, max: null, rate: null } } }))}
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { max: null, rate: null } } }))}
                         style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                       >Remove Step</button>
                     </label>
@@ -8780,7 +8780,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({(cascadeConfig.normal.secondary?.rate ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 100}+ ft)
+                    Excess ({(cascadeConfig.normal.secondary?.max ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 100}+ ft)
                   </label>
                   <input
                     type="number"
@@ -8831,12 +8831,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
-                {cascadeConfig.normal.secondary?.rate ? (
+                {cascadeConfig.normal.secondary?.max ? (
                   <div>
                     <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
                       Secondary ({cascadeConfig.normal.standard?.max || 5000}-{cascadeConfig.normal.secondary?.max || 12000} sq ft)
                       <button
-                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { ...prev.normal.secondary, max: null, rate: null } } }))}
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { max: null, rate: null } } }))}
                         style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                       >Remove Step</button>
                     </label>
@@ -8861,7 +8861,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({(cascadeConfig.normal.secondary?.rate ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 5000}+ sq ft)
+                    Excess ({(cascadeConfig.normal.secondary?.max ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 5000}+ sq ft)
                   </label>
                   <input
                     type="number"
@@ -8998,7 +8998,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             )}
           </div>
           {/* Add Step button for SF/FF modes */}
-          {(valuationMode === 'sf' || valuationMode === 'ff') && !cascadeConfig.normal.secondary?.rate && (
+          {(valuationMode === 'sf' || valuationMode === 'ff') && !cascadeConfig.normal.secondary?.max && (
             <button
               onClick={() => {
                 const defaultMax = valuationMode === 'sf'
@@ -10809,7 +10809,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // Show secondary column in VCS sheet when SF/FF secondary tier is configured
   const shouldShowSecondaryStepColumn = useMemo(() => {
     return (valuationMode === 'sf' || valuationMode === 'ff') &&
-      cascadeConfig.normal.secondary?.rate && cascadeConfig.normal.secondary?.max;
+      cascadeConfig.normal.secondary?.max > 0;
   }, [cascadeConfig, valuationMode]);
 
   // Only show special category columns if they have configured rates
