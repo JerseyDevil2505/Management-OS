@@ -107,7 +107,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newTotalValue += newTotal;
       
       // Sales ratios by period - include sales even if newTotal is 0 (will be filtered in display)
-      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
+      if (prop.sales_date && prop.sales_price && prop.sales_price > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
 
         // Track counts
@@ -117,11 +117,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
 
         // Push all sales data, even if assessed is 0
         if (salesPeriod === 'HSP') {
-          group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          group.hspSales.push({ assessed: newTotal, sale: prop.sales_price });
         } else if (salesPeriod === 'PSP') {
-          group.pspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          group.pspSales.push({ assessed: newTotal, sale: prop.sales_price });
         } else if (salesPeriod === 'CSP') {
-          group.cspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          group.cspSales.push({ assessed: newTotal, sale: prop.sales_price });
         }
       }
     });
@@ -257,7 +257,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
   const exportToExcel = (data = vcsAnalytics) => {
     const workbook = XLSX.utils.book_new();
 
-    const headers = ['VCS', 'Count', 'Old%All', 'New%AL', 'Delta', 'HSP', 'PSP', 'CSP'];
+    const headers = ['VCS', 'Count', 'Old Land%', 'New Land%', 'Delta', 'HSP', 'PSP', 'CSP'];
     const rows = [headers];
 
     data.data.forEach(row => {
@@ -426,8 +426,8 @@ const AnalyticsTab = ({ jobData, properties }) => {
             <tr>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">VCS</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Count</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Old%All</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">New%AL</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Old Land%</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">New Land%</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Delta</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#FED7AA' }}>HSP</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#D1ECF1' }}>PSP</th>
