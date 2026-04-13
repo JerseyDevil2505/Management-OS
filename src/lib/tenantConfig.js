@@ -71,7 +71,7 @@ const TENANT_CONFIGS = {
     },
 
     jobModules: {
-      checklist: true,                 // Available for in-house reassessment/revaluation
+      checklist: false,                // Internal PPA workflow - not visible to assessor clients
       production: false,               // Replaced by inspectionInfo
       inspectionInfo: true,            // Simplified inspection view with staff hints
       dataVisualizations: true,

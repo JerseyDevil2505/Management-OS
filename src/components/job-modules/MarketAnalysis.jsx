@@ -41,6 +41,29 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
 
+  // ==================== ANALYSIS CACHE ====================
+  // Caches computed analysis results so tab switches don't recompute.
+  // dataVersion is bumped by any child save action; cached results store
+  // the version they were computed against so staleness is detectable.
+  const [dataVersion, setDataVersion] = useState(0);
+  const [overallAnalysisCache, setOverallAnalysisCache] = useState(null);
+  const [preValBlockAnalysisCache, setPreValBlockAnalysisCache] = useState(null);
+
+  const bumpDataVersion = useCallback(() => {
+    setDataVersion(v => v + 1);
+  }, []);
+
+  // Clear caches when the underlying properties array changes (file upload / code upload)
+  const prevPropsLenRef = useRef(properties?.length);
+  useEffect(() => {
+    if (properties?.length !== prevPropsLenRef.current) {
+      prevPropsLenRef.current = properties?.length;
+      setOverallAnalysisCache(null);
+      setPreValBlockAnalysisCache(null);
+      setDataVersion(v => v + 1);
+    }
+  }, [properties?.length]);
+
   // Land Valuation Session State - persists user changes while navigating tabs
   const [landValuationSession, setLandValuationSession] = useState({
     method1ExcludedSales: new Set(),
@@ -247,6 +270,10 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                   }
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
+                blockAnalysisCache={preValBlockAnalysisCache}
+                dataVersion={dataVersion}
+                onCacheBlockAnalysis={(data, version) => setPreValBlockAnalysisCache({ data, dataVersion: version })}
+                bumpDataVersion={bumpDataVersion}
               />
             )}
             
@@ -259,6 +286,9 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 marketLandData={marketLandData}
                 hpiData={hpiData}
                 onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                analysisCache={overallAnalysisCache}
+                dataVersion={dataVersion}
+                onCacheAnalysis={(results, version) => setOverallAnalysisCache({ results, dataVersion: version })}
               />
             )}      
             

@@ -53,6 +53,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // Track which job ID we've loaded baseline settings for (to prevent redundant loads)
   const loadedJobIdRef = useRef(null);
+  // Track inputs that produced the current additionalResults to avoid re-running
+  const additionalAnalysisKeyRef = useRef(null);
 
   // Main tab state
   const [active, setActive] = useState('condition');
@@ -574,7 +576,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Add this useEffect to run the analysis on mount and when data changes
   useEffect(() => {
     if (active === 'additional' && properties && properties.length > 0) {
-      runAdditionalCardsAnalysis();
+      // Only re-run if inputs actually changed
+      const cacheKey = `${properties.length}-${vendorType}`;
+      if (additionalAnalysisKeyRef.current !== cacheKey) {
+        runAdditionalCardsAnalysis();
+        additionalAnalysisKeyRef.current = cacheKey;
+      }
     }
   }, [active, properties, vendorType]);
   // ============ BUILD CONDITION CASCADE TABLE ============
@@ -2899,59 +2906,55 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
 
     try {
+      // Pre-build a lookup map: baseKey -> list of additional card properties
+      // This replaces O(n²) nested loops with O(n) map construction + O(1) lookups
+      const isAdditionalCard = (p) => {
+        const card = (p.property_addl_card || p.additional_card || '').toString().trim();
+        if (vendorType === 'Microsystems') {
+          const cardUpper = card.toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        } else {
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        }
+      };
+
+      const additionalCardsByBaseKey = new Map();
+      const allAdditionalCards = [];
+      properties.forEach(p => {
+        if (isAdditionalCard(p)) {
+          const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+          if (!additionalCardsByBaseKey.has(baseKey)) additionalCardsByBaseKey.set(baseKey, []);
+          additionalCardsByBaseKey.get(baseKey).push(p);
+          allAdditionalCards.push(p);
+        }
+      });
+
       // Filter to MAIN CARDS ONLY with sales data
-      // Use property_addl_card directly (more reliable than parsing composite key)
       const mainCardSales = properties.filter(p => {
         const card = (p.property_addl_card || p.additional_card || '').toString().trim();
-
-        // Card filter based on vendor (MAIN CARDS ONLY)
         if (vendorType === 'Microsystems') {
           const cardUpper = card.toUpperCase();
           if (cardUpper !== 'M' && cardUpper !== 'MAIN' && cardUpper !== '') return false;
-        } else { // BRT
+        } else {
           const cardNum = parseInt(card);
-          // Main card is card 1, or blank/empty (which defaults to card 1)
           if (!(cardNum === 1 || card === '' || isNaN(cardNum))) return false;
         }
-
-        // Must have sales data (already normalized with combined SFLA by PreValuation)
         if (!p.values_norm_time || p.values_norm_time <= 0) return false;
-
-        // Must have VCS
         if (!p.new_vcs && !p.property_vcs) return false;
-
         return true;
       });
 
-      console.log(`✅ Found ${mainCardSales.length} main card sales to analyze`);
+      console.log(`Found ${mainCardSales.length} main card sales to analyze`);
 
-      // For each main card, detect if it has additional cards
+      // For each main card, detect if it has additional cards via O(1) map lookup
       const enhancedSales = mainCardSales.map(prop => {
-        // Find additional cards for this property (same block-lot-qualifier)
         const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-
-        const additionalCards = properties.filter(p => {
-          const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
-          if (pBaseKey !== baseKey) return false;
-
-          // Check if this is an additional card (not main card)
-          const pCard = (p.property_addl_card || p.additional_card || '').toString().trim();
-
-          if (vendorType === 'Microsystems') {
-            const cardUpper = pCard.toUpperCase();
-            return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-          } else { // BRT
-            const cardNum = parseInt(pCard);
-            return !isNaN(cardNum) && cardNum > 1;
-          }
-        });
-
+        const addlCards = additionalCardsByBaseKey.get(baseKey) || [];
         return {
           ...prop,
-          has_additional_cards: additionalCards.length > 0,
-          additional_card_count: additionalCards.length
-          // values_norm_time already includes combined SFLA from PreValuation normalization
-          // asset_sfla already includes combined SFLA from PreValuation normalization
+          has_additional_cards: addlCards.length > 0,
+          additional_card_count: addlCards.length
         };
       });
 
@@ -2963,20 +2966,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         without_additional_cards: withoutCards.length
       });
 
-      // Create list of ALL properties with additional cards (for detail table at bottom)
-      const additionalCardsList = properties.filter(prop => {
-        const card = (prop.property_addl_card || prop.additional_card || '').toString().trim();
+      // Use the pre-built list instead of filtering all properties again
+      const additionalCardsList = allAdditionalCards;
 
-        if (vendorType === 'Microsystems') {
-          const cardUpper = card.toUpperCase();
-          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-        } else { // BRT
-          const cardNum = parseInt(card);
-          return !isNaN(cardNum) && cardNum > 1;
-        }
-      });
-
-      console.log(`📋 Total additional card records: ${additionalCardsList.length}`);
+      console.log(`Total additional card records: ${additionalCardsList.length}`);
 
       // Analyze by VCS
       const byVCS = {};
@@ -3022,14 +3015,37 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Identify package pairs using package sale identification logic
       const packagePairs = [];
 
-      // Group ALL properties by location (not requiring sales data)
+      // Build location groups using a single pass (reuse baseKey logic)
       const locationGroups = new Map();
       properties.forEach(prop => {
         const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-        if (!locationGroups.has(baseKey)) {
-          locationGroups.set(baseKey, []);
-        }
+        if (!locationGroups.has(baseKey)) locationGroups.set(baseKey, []);
         locationGroups.get(baseKey).push(prop);
+      });
+
+      // Pre-build a VCS -> main-card-only-sales lookup for baseline comparisons
+      const baselineSalesByVCS = new Map();
+      properties.forEach(p => {
+        const card = (p.property_addl_card || p.additional_card || '').toString().trim();
+        let isMainOnly = false;
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          const cardNum = parseInt(card);
+          isMainOnly = isNaN(cardNum) || cardNum <= 1;
+        } else {
+          const cardUpper = card.toString().trim().toUpperCase();
+          isMainOnly = !cardUpper || cardUpper === 'M' || cardUpper === 'MAIN';
+        }
+        if (isMainOnly && p.values_norm_time && p.values_norm_time > 0) {
+          const vcs = p.new_vcs || p.property_vcs;
+          if (vcs) {
+            if (!baselineSalesByVCS.has(vcs)) baselineSalesByVCS.set(vcs, []);
+            baselineSalesByVCS.get(vcs).push({
+              sfla: parseInt(p.asset_sfla) || 0,
+              year_built: parseInt(p.asset_year_built) || null,
+              norm_time: p.values_norm_time
+            });
+          }
+        }
       });
 
       // Identify properties with additional cards and create pairs
@@ -3039,29 +3055,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const vcs = locationProps[0].new_vcs || locationProps[0].property_vcs;
         if (!vcs) return;
 
-        // Check if this location has additional cards
-        const cardIds = new Set();
-        locationProps.forEach(p => {
-          let card = p.property_addl_card || p.additional_card || p.property_card || null;
-          if (!card && p.property_composite_key) {
-            const parts = p.property_composite_key.split('-').map(s => s.trim());
-            card = parts[4] || parts[3] || null;
-          }
-          if (card) cardIds.add(String(card).trim().toUpperCase());
-        });
-
-        // Check if it has additional cards using vendor logic
-        let hasAdditionalCards = false;
-        if (vendorType === 'BRT' || vendorType === 'brt') {
-          const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
-          hasAdditionalCards = numericCards.some(n => n > 1);
-        } else {
-          const nonMain = Array.from(cardIds).filter(c => c !== 'M' && c !== 'MAIN');
-          hasAdditionalCards = nonMain.length > 0;
-        }
+        // Use the pre-built map to check if this location has additional cards (O(1))
+        const hasAdditionalCards = additionalCardsByBaseKey.has(locationKey);
 
         if (hasAdditionalCards) {
-          console.log(`Found additional cards at ${locationKey}:`, Array.from(cardIds));
 
           // Calculate package metrics
           const totalSFLA = locationProps.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
@@ -3077,29 +3074,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const packagePrice = propsWithSales.length > 0 ?
             Math.max(...propsWithSales.map(p => p.values_norm_time)) : null;
 
-          // Find baseline comparisons (ALL properties without additional cards in same VCS)
-          const baselineComparisons = properties.filter(p => {
-            if ((p.new_vcs || p.property_vcs) !== vcs) return false;
-
-            // Check if this property does NOT have additional cards
-            const card = p.property_addl_card || p.additional_card || p.property_card || '';
-            let isMainCardOnly = false;
-
-            if (vendorType === 'BRT' || vendorType === 'brt') {
-              const cardNum = parseInt(card);
-              isMainCardOnly = isNaN(cardNum) || cardNum <= 1; // Main card or no card
-            } else {
-              const cardUpper = card.toString().trim().toUpperCase();
-              isMainCardOnly = !cardUpper || cardUpper === 'M' || cardUpper === 'MAIN'; // Main card only
-            }
-
-            return isMainCardOnly;
-          }).filter(p => p.values_norm_time && p.values_norm_time > 0) // Only include baseline props with sales for comparison
-          .map(p => ({
-            sfla: parseInt(p.asset_sfla) || 0,
-            year_built: parseInt(p.asset_year_built) || null,
-            norm_time: p.values_norm_time
-          }));
+          // Use pre-built VCS baseline lookup instead of filtering all properties
+          const baselineComparisons = baselineSalesByVCS.get(vcs) || [];
 
           packagePairs.push({
             locationKey,

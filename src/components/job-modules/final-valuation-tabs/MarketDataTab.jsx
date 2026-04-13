@@ -15,6 +15,56 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   });
   const PREVIEW_LIMIT = 500; // Only show first 500 properties
 
+  // Condition handling config
+  const conditionHandlingMethod = jobData?.attribute_condition_config?.conditionHandlingMethod || 'effective_age';
+  const useConditionTable = conditionHandlingMethod === 'condition_table';
+
+  // Build condition code -> unit rate lookup from parsed_code_definitions section 60
+  const conditionRateLookup = useMemo(() => {
+    if (!useConditionTable) return {};
+    const codeDefs = jobData?.parsed_code_definitions;
+    if (!codeDefs?.sections?.Residential) return {};
+
+    // Find section with KEY=60 (condition)
+    const residentialSections = codeDefs.sections.Residential;
+    let section60 = null;
+    for (const [, sectionData] of Object.entries(residentialSections)) {
+      if (sectionData?.KEY === '60') {
+        section60 = sectionData;
+        break;
+      }
+    }
+    if (!section60?.MAP) return {};
+
+    const lookup = {};
+    for (const [, entry] of Object.entries(section60.MAP)) {
+      const code = entry?.DATA?.KEY || entry?.KEY;
+      if (!code) continue;
+      let unitRate = 0;
+      if (entry.MAP) {
+        for (const [, mapItem] of Object.entries(entry.MAP)) {
+          if (mapItem?.KEY === 'UNIT.RATE' || mapItem?.DATA?.KEY === 'UNIT.RATE') {
+            unitRate = parseFloat(mapItem?.DATA?.VALUE || '0') || 0;
+            break;
+          }
+        }
+      }
+      lookup[code] = unitRate;
+    }
+    return lookup;
+  }, [useConditionTable, jobData?.parsed_code_definitions]);
+
+  // Helper: get Excel column letter from 0-based index
+  const colLetter = (idx) => {
+    let letter = '';
+    let n = idx;
+    while (n >= 0) {
+      letter = String.fromCharCode((n % 26) + 65) + letter;
+      n = Math.floor(n / 26) - 1;
+    }
+    return letter;
+  };
+
   // Refs for scroll synchronization
   const topScrollRef = React.useRef(null);
   const mainScrollRef = React.useRef(null);
@@ -240,6 +290,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // FORMULAS
 
   // Formula: Recommended EFA
+  // BRT: outputs a calendar year (e.g., 2015)
+  // Microsystems: outputs an age in years (e.g., 10)
   const calculateRecommendedEFA = (property) => {
     if (!property.values_norm_time) return null;
 
@@ -250,14 +302,27 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     if (replCost === 0) return null;
 
-    const formula = yearPriorToDueYear - ((1 - ((normTime - camaLand - detItems) / replCost)) * 100);
-    return Math.round(formula);
+    const deprAge = (1 - ((normTime - camaLand - detItems) / replCost)) * 100;
+
+    if (vendorType === 'Microsystems') {
+      // Microsystems stores EFA as actual age, so just return the age
+      return Math.round(deprAge);
+    }
+    // BRT: convert age to effective year
+    return Math.round(yearPriorToDueYear - deprAge);
   };
 
   // Formula: DEPR factor
+  // BRT: actualEFA is a year, so depr = 1 - ((yearPrior - year) / 100)
+  // Microsystems: actualEFA is an age, so depr = 1 - (age / 100)
   const calculateDEPR = (actualEFA) => {
     if (actualEFA === null || actualEFA === undefined) return null;
-    const depr = 1 - ((yearPriorToDueYear - actualEFA) / 100);
+    let depr;
+    if (vendorType === 'Microsystems') {
+      depr = 1 - (actualEFA / 100);
+    } else {
+      depr = 1 - ((yearPriorToDueYear - actualEFA) / 100);
+    }
     return depr > 1 ? 1 : depr;
   };
 
@@ -339,6 +404,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         }
         if (actualEFA === '' || isNaN(actualEFA)) {
           actualEFA = null;
+        }
+        // Microsystems: asset_effective_age is stored as a year (yearPrior - age),
+        // convert back to age for Actual EFA since DEPR formula expects age
+        if (actualEFA !== null && vendorType === 'Microsystems' && yearPriorToDueYear) {
+          actualEFA = yearPriorToDueYear - actualEFA;
         }
       }
     }
@@ -799,28 +869,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const rows = consolidatedProperties.map((property, idx) => {
       const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
-      const rowNum = idx + 2; // +2 because Excel is 1-indexed and row 1 is header
       const mainSFLA = property.asset_sfla || 0;
 
       // Use consolidated card data
       const maxCard = property._maxCard || 1;
       const totalCardSF = property._totalCardSF || 0;
-
-      // Column mapping for formulas:
-      // A=Block (text), B=Lot (text), C=Block, D=Lot, E=Qualifier, F=Card, G=Card SF, H=Address
-      // I=Owner Name, J=Owner Address, K=Owner City State, L=Owner Zip
-      // M=Sp Tax Cd 1, N=Sp Tax Cd 2, O=Sp Tax Cd 3, P=Sp Tax Cd 4
-      // Q=MOD IV, R=CAMA, S=Check, T=Info By, U=VCS, V=Exempt Facility, W=Special
-      // X=Lot Frontage, Y=Lot Depth, Z=Lot Size (Acre), AA=Lot Size (SF), AB=View, AC=Location Analysis
-      // AD=Type Use, AE=Building Class, AF=Year Built, AG=Current EFA, AH=Test
-      // AI=Design, AJ=Bedroom Total, AK=Story Height, AL=SFLA, AM=Total SFLA
-      // AN=Exterior, AO=Interior, AP=Code (Sales Period), AQ=Sale Date, AR=Sale Book, AS=Sale Page
-      // AT=Sale Price, AU=HPI Multiplier, AV=Norm Time Value (formula: =AT*AU)
-      // AW=Sales NU Code, AX=Sales Ratio, AY=Sale Comment
-      // AZ=Det Items, BA=Cost New, BB=CLA, BC=Current Land, BD=Current Impr, BE=Current Total
-      // BF=PLA, BG=CAMA Land, BH=Cama/Proj Imp, BI=Proj Total, BJ=Delta %
-      // BK=Recommended EFA, BL=Actual EFA, BM=DEPR, BN=New Value
-      // BO=Current Taxes, BP=Projected Taxes, BQ=Tax Delta $
 
       // Helper to convert "00" or blank to empty string (for styled tables)
       const cleanValue = (val) => {
@@ -855,6 +908,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         return str;
       };
 
+      // Condition rate lookups (only populated when condition_table mode)
+      const extCondCode = padBRTCode(property.asset_ext_cond);
+      const intCondCode = padBRTCode(property.asset_int_cond);
+      const extCondRate = useConditionTable && extCondCode ? (conditionRateLookup[extCondCode] || 0) : 0;
+      const intCondRate = useConditionTable && intCondCode ? (conditionRateLookup[intCondCode] || 0) : 0;
+
       return {
         'Block (text)': property.property_block || '',
         'Lot (text)': property.property_lot || '',
@@ -874,7 +933,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
         'MOD IV': property.property_m4_class || '',
         'CAMA': property.property_cama_class || '',
-        'Check': { f: `IF(Q${rowNum}=R${rowNum},"TRUE","FALSE")` },
+        'Check': '', // Will be replaced with formula after column order is known
         'Info By': property.inspection_info_by ? { v: String(property.inspection_info_by), t: 's' } : '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
@@ -891,14 +950,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Building Class': cleanValue(property.asset_building_class),
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property) || '',
-        'Test': { f: `IF(AND(AF${rowNum}<>"",BL${rowNum}<>""),IF(BL${rowNum}>=AF${rowNum},"TRUE","FALSE"),"")` },
+        'Test': '', // Will be replaced with formula after column order is known
         'Design': padBRTCode(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height ? { v: String(property.asset_story_height), t: 's' } : '',
         'SFLA': mainSFLA || 0,
-        'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
+        'Total SFLA': 0, // Will be replaced with formula after column order is known
         'Exterior': padBRTCode(property.asset_ext_cond),
         'Interior': padBRTCode(property.asset_int_cond),
+        ...(useConditionTable ? {
+          'Ext Cond Rate': extCondRate,
+          'Int Cond Rate': intCondRate,
+        } : {}),
         'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
           // Convert to Excel date serial number (strip time component)
@@ -939,35 +1002,111 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         })(),
         'Norm Time Value': property.values_norm_time || '',
         'Sales NU Code': cleanValue(property.sales_nu),
-        'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
-          { f: `BI${rowNum}/AV${rowNum}` } : '',
+        'Sales Ratio': '',
         'Sale Comment': calc.saleComment || '',
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
-        'CLA': property.values_mod_total && property.values_mod_land ?
-          { f: `BC${rowNum}/BE${rowNum}` } : '',
+        'CLA': '',
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
-        'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BG${rowNum}/BI${rowNum}` } : '',
+        'PLA': '',
         'CAMA Land': property.values_cama_land || 0,
-        'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BN${rowNum}-BG${rowNum}` } : (property.values_cama_improvement || 0),
-        'Proj Total': { f: `BG${rowNum}+BH${rowNum}` },
-        'Delta %': calc.projectedTotal && property.values_mod_total ?
-          { f: `(BI${rowNum}-BE${rowNum})/BE${rowNum}` } : '',
-        'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AV${rowNum}-BG${rowNum}-AZ${rowNum})/BA${rowNum}))*100),0)` } : '',
+        'Cama/Proj Imp': 0,
+        'Proj Total': 0,
+        'Delta %': '',
+        'Recommended EFA': '',
         'Actual EFA': calc.actualEFA || '',
-        'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BL${rowNum})/100))` } : '',
-        'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((BA${rowNum}*BM${rowNum})+AZ${rowNum}+BG${rowNum},-2)` } : 0,
+        'DEPR': '',
+        'New Value': 0,
         'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
       };
+    });
+
+    // Build dynamic column name -> letter map from final header order
+    if (rows.length === 0) {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([]), 'Market Data Approach');
+      XLSX.writeFile(workbook, `Final_Roster_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      return;
+    }
+    const headerNames = Object.keys(rows[0]);
+    const col = (name) => colLetter(headerNames.indexOf(name));
+
+    // Inject Excel formulas using dynamic column references
+    rows.forEach((row, idx) => {
+      const r = idx + 2;
+      const property = consolidatedProperties[idx];
+      const calc = getCalculatedValues(property);
+
+      row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
+      row['Check'] = { f: `IF(${col('MOD IV')}${r}=${col('CAMA')}${r},"TRUE","FALSE")` };
+      // Test: BRT checks if EFA year >= Year Built; Microsystems checks if age <= actual age (yearPrior - yearBuilt)
+      if (vendorType === 'Microsystems') {
+        row['Test'] = { f: `IF(AND(${col('Year Built')}${r}<>"",${col('Actual EFA')}${r}<>""),IF(${col('Actual EFA')}${r}<=(${yearPriorToDueYear}-${col('Year Built')}${r}),"TRUE","FALSE"),"")` };
+      } else {
+        row['Test'] = { f: `IF(AND(${col('Year Built')}${r}<>"",${col('Actual EFA')}${r}<>""),IF(${col('Actual EFA')}${r}>=${col('Year Built')}${r},"TRUE","FALSE"),"")` };
+      }
+
+      row['Sales Ratio'] = calc.projectedTotal && property.values_norm_time
+        ? { f: `${col('Proj Total')}${r}/${col('Norm Time Value')}${r}` } : '';
+
+      row['CLA'] = property.values_mod_total && property.values_mod_land
+        ? { f: `${col('Current Land')}${r}/${col('Current Total')}${r}` } : '';
+
+      row['PLA'] = calc.newLandAllocation && calc.projectedTotal
+        ? { f: `${col('CAMA Land')}${r}/${col('Proj Total')}${r}` } : '';
+
+      row['Cama/Proj Imp'] = calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0
+        ? { f: `${col('New Value')}${r}-${col('CAMA Land')}${r}` }
+        : (property.values_cama_improvement || 0);
+
+      row['Proj Total'] = { f: `${col('CAMA Land')}${r}+${col('Cama/Proj Imp')}${r}` };
+
+      row['Delta %'] = calc.projectedTotal && property.values_mod_total
+        ? { f: `(${col('Proj Total')}${r}-${col('Current Total')}${r})/${col('Current Total')}${r}` } : '';
+
+      // Recommended EFA - vendor-specific + condition table logic
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        // Age portion: (1 - ((NormTime - CamaLand - DetItems) / CostNew)) * 100
+        const ageFormula = `(1-((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100`;
+        const condPrefix = useConditionTable ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-` : '';
+
+        if (vendorType === 'Microsystems') {
+          // Microsystems: output age directly
+          row['Recommended EFA'] = useConditionTable
+            ? { f: `ROUND((1-${condPrefix}((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100,0)` }
+            : { f: `ROUND(${ageFormula},0)` };
+        } else {
+          // BRT: output year = yearPrior - age
+          row['Recommended EFA'] = useConditionTable
+            ? { f: `ROUND(${yearPriorToDueYear}-((1-${condPrefix}((${col('Norm Time Value')}${r}-${col('CAMA Land')}${r}-${col('Det Items')}${r})/${col('Cost New')}${r}))*100),0)` }
+            : { f: `ROUND(${yearPriorToDueYear}-(${ageFormula}),0)` };
+        }
+      }
+
+      // DEPR - vendor-specific + condition table logic
+      if (calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined) {
+        const condPrefix = useConditionTable ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-` : '';
+
+        if (vendorType === 'Microsystems') {
+          // Microsystems: actualEFA is age, so DEPR = 1 - age/100
+          row['DEPR'] = useConditionTable
+            ? { f: `MIN(1,1-${condPrefix}(${col('Actual EFA')}${r}/100))` }
+            : { f: `MIN(1,1-(${col('Actual EFA')}${r}/100))` };
+        } else {
+          // BRT: actualEFA is year, so DEPR = 1 - ((yearPrior - year) / 100)
+          row['DEPR'] = useConditionTable
+            ? { f: `MIN(1,1-${condPrefix}((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` }
+            : { f: `MIN(1,1-((${yearPriorToDueYear}-${col('Actual EFA')}${r})/100))` };
+        }
+      }
+
+      // New Value
+      row['New Value'] = calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined
+        ? { f: `ROUND((${col('Cost New')}${r}*${col('DEPR')}${r})+${col('Det Items')}${r}+${col('CAMA Land')}${r},-2)` }
+        : 0;
     });
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -1044,6 +1183,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = '$#,##0.00'; // Currency with two decimals
         } else if (['CLA', 'PLA', 'Sales Ratio', 'Delta %'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
+        } else if (['Ext Cond Rate', 'Int Cond Rate', 'DEPR'].includes(colName)) {
+          numFmt = '0.00'; // Decimal with 2 places
         } else if (colName === 'Sale Date') {
           numFmt = 'mm/dd/yyyy'; // Date format
         }
