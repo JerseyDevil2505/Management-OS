@@ -1331,6 +1331,11 @@ export class MicrosystemsProcessor {
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
+  preserveStringValue(value) {
+    if (value === null || value === undefined || value === '') return null;
+    return String(value).trim();
+  }
+
   parseNumeric(value, decimals = null) {
     if (!value || value === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));

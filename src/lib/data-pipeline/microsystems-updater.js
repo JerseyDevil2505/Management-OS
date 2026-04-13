@@ -1555,6 +1555,11 @@ export class MicrosystemsUpdater {
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
+  preserveStringValue(value) {
+    if (value === null || value === undefined || value === '') return null;
+    return String(value).trim();
+  }
+
   parseNumeric(value, decimals = null) {
     // Handle null, undefined, empty string, or whitespace-only strings
     if (!value || String(value).trim() === '') return null;
