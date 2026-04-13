@@ -21,6 +21,22 @@
 ## 2. Repository Structure
 
 ```
+public/
+├── index.html                      App shell
+├── lojik-logo.PNG                  Brand logo
+├── lojik-pamphlet.pdf              Generated marketing pamphlet
+├── Property Assessment Copilot.pdf Product overview PDF
+├── hr-documents/                   Employee forms (handbook, I-9, time-off request)
+└── templates/                      Document template folders (brochures, forms, letters, maps)
+
+scripts/
+└── generate-pamphlet.js            PDF-lib script to generate the Lojik pamphlet
+
+supabase/
+└── functions/
+    └── recalculate-amenities/
+        └── index.ts                Edge Function — recalculates property amenity areas
+
 src/
 ├── App.js                          (1,772)  Router + auth guard + tenant context
 ├── index.js                        (11)     Entry point
