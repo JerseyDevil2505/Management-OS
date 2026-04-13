@@ -3046,6 +3046,11 @@ const AdminJobManagement = ({
                           <span className="flex items-center space-x-1">
                             <span>🏠 {(job.totalProperties || 0).toLocaleString()} Properties</span>
                           </span>
+                          {job.source_file_uploaded_at && (
+                            <span className="flex items-center space-x-1">
+                              <span>📄 Last Upload: {new Date(job.source_file_uploaded_at).toLocaleDateString()}</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
