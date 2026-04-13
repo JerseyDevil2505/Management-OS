@@ -2646,19 +2646,6 @@ const handleCodeFileUpdate = async () => {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => handleNormBatchDecision('keep')}
-                className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded hover:bg-green-200 font-medium"
-              >
-                Keep All Undecided
-              </button>
-              <button
-                onClick={() => handleNormBatchDecision('reject')}
-                className="px-3 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200 font-medium"
-              >
-                Reject All Undecided
-              </button>
-              <span className="border-l border-gray-300 mx-1"></span>
-              <button
                 onClick={handleNormSmartBatch}
                 className="px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200 font-medium"
               >

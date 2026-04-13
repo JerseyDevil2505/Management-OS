@@ -25,6 +25,44 @@ export class BRTUpdater {
   }
 
   /**
+   * Translate raw BRT utility codes (UTILS_1-4) into semantic utility fields.
+   * Standard BRT category 52 codes:
+   *   01=ALL, 02=ELECTRIC, 03=GAS, 04=WATER, 05=SEWER,
+   *   06=WELL, 07=SEPTIC, 08=SUMP/SEW, 09=SUMP/NOSEW, 90=NONE
+   */
+  translateUtilityCodes(codes) {
+    const result = { utility_heat: null, utility_water: null, utility_sewer: null };
+    if (!codes || codes.length === 0) return result;
+
+    const normalized = codes
+      .map(c => c ? String(c).replace(/^0+/, '') || '0' : null)
+      .filter(Boolean);
+
+    if (normalized.includes('1')) {
+      result.utility_heat = 'Gas';
+      result.utility_water = 'Public Water';
+      result.utility_sewer = 'Public Sewer';
+      return result;
+    }
+    if (normalized.includes('90')) {
+      return result;
+    }
+
+    if (normalized.includes('3')) result.utility_heat = 'Gas';
+    else if (normalized.includes('2')) result.utility_heat = 'Electric';
+
+    if (normalized.includes('4')) result.utility_water = 'Public Water';
+    else if (normalized.includes('6')) result.utility_water = 'Well';
+
+    if (normalized.includes('5')) result.utility_sewer = 'Public Sewer';
+    else if (normalized.includes('7')) result.utility_sewer = 'Septic';
+    else if (normalized.includes('8')) result.utility_sewer = 'Sump Pump/Sewer';
+    else if (normalized.includes('9')) result.utility_sewer = 'Sump Pump/No Sewer';
+
+    return result;
+  }
+
+  /**
    * Ensure string values are preserved exactly as-is
    */
   preserveStringValue(value) {
@@ -703,6 +741,11 @@ export class BRTUpdater {
       utility_code_2: this.preserveStringValue(rawRecord.UTILS_2),
       utility_code_3: this.preserveStringValue(rawRecord.UTILS_3),
       utility_code_4: this.preserveStringValue(rawRecord.UTILS_4),
+
+      // Translated utility fields from raw codes
+      ...this.translateUtilityCodes([
+        rawRecord.UTILS_1, rawRecord.UTILS_2, rawRecord.UTILS_3, rawRecord.UTILS_4
+      ]),
 
       // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
       special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
