@@ -1815,18 +1815,39 @@ const handleCodeFileUpdate = async () => {
               };
             }
 
-            const { error } = await supabase
-              .from('property_records')
-              .update(updateData)
-              .eq('property_composite_key', compositeKey)
-              .eq('job_id', job.id);
-            
-            if (error) {
-              console.error('Error updating sales decision:', error);
-              addBatchLog(`❌ Error saving sales decision for ${compositeKey}`, 'error', { error: error.message });
-            } else {
-              salesProcessed++;
+            // Split update: sales fields → property_records, sales_history → property_market_analysis
+            const { sales_history: salesHistoryData, ...propertyFieldUpdates } = updateData;
+
+            // Update sales fields on property_records (if any, e.g. Keep Old reverts)
+            if (Object.keys(propertyFieldUpdates).length > 0) {
+              const { error: prError } = await supabase
+                .from('property_records')
+                .update(propertyFieldUpdates)
+                .eq('property_composite_key', compositeKey)
+                .eq('job_id', job.id);
+
+              if (prError) {
+                console.error('Error updating property sales fields:', prError);
+                addBatchLog(`Error saving sales fields for ${compositeKey}`, 'error', { error: prError.message });
+                continue;
+              }
             }
+
+            // Store sales_history on property_market_analysis
+            if (salesHistoryData) {
+              const { error: pmaError } = await supabase
+                .from('property_market_analysis')
+                .update({ sales_history: salesHistoryData })
+                .eq('property_composite_key', compositeKey)
+                .eq('job_id', job.id);
+
+              if (pmaError) {
+                console.error('Error updating sales history:', pmaError);
+                addBatchLog(`Warning: sales decision saved but history not recorded for ${compositeKey}`, 'warning', { error: pmaError.message });
+              }
+            }
+
+            salesProcessed++;
           } catch (updateError) {
             console.error('Failed to update sales decision for property:', compositeKey, updateError);
             addBatchLog(`❌ Failed to update sales decision for ${compositeKey}`, 'error', { error: updateError.message });
@@ -2547,6 +2568,19 @@ const handleCodeFileUpdate = async () => {
     });
   };
 
+  // Phase 2: Smart batch — keep unflagged, reject flagged (all undecided)
+  const handleNormSmartBatch = () => {
+    setNormDecisions(prev => {
+      const updated = new Map(prev);
+      normResults.forEach(r => {
+        if (!updated.has(r.property_composite_key)) {
+          updated.set(r.property_composite_key, r.auto_flag_reason ? 'reject' : 'keep');
+        }
+      });
+      return updated;
+    });
+  };
+
   // Phase 2: Save normalization decisions and close
   const handleSaveNormDecisions = async () => {
     setNormSaving(true);
@@ -2622,6 +2656,13 @@ const handleCodeFileUpdate = async () => {
                 className="px-3 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200 font-medium"
               >
                 Reject All Undecided
+              </button>
+              <span className="border-l border-gray-300 mx-1"></span>
+              <button
+                onClick={handleNormSmartBatch}
+                className="px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200 font-medium"
+              >
+                Auto: Keep Clean / Reject Flagged
               </button>
             </div>
           </div>
@@ -3004,12 +3045,48 @@ const handleCodeFileUpdate = async () => {
               <div>
                 {hasSalesChanges ? (
                   <>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Sales Changes Requiring Decisions:
-                      <span className="ml-2 text-blue-600">
-                        ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
-                      </span>
-                    </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Sales Changes Requiring Decisions:
+                        <span className="ml-2 text-blue-600">
+                          ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
+                        </span>
+                      </h3>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setSalesDecisions(prev => {
+                              const updated = new Map(prev);
+                              details.salesChanges.forEach(change => {
+                                if (!updated.has(change.property_composite_key)) {
+                                  updated.set(change.property_composite_key, 'Keep New');
+                                }
+                              });
+                              return updated;
+                            });
+                          }}
+                          className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded hover:bg-green-200 font-medium"
+                        >
+                          Keep All New (Undecided)
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSalesDecisions(prev => {
+                              const updated = new Map(prev);
+                              details.salesChanges.forEach(change => {
+                                if (!updated.has(change.property_composite_key)) {
+                                  updated.set(change.property_composite_key, 'Keep Old');
+                                }
+                              });
+                              return updated;
+                            });
+                          }}
+                          className="px-3 py-1 bg-red-100 text-red-800 text-xs rounded hover:bg-red-200 font-medium"
+                        >
+                          Keep All Old (Undecided)
+                        </button>
+                      </div>
+                    </div>
                     <div ref={salesContainerRef} id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
                       {details.salesChanges.map((change, idx) => {
                         const currentDecision = salesDecisions.get(change.property_composite_key);
