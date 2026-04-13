@@ -70,6 +70,71 @@ const App = () => {
   });
 
 
+  // Listen for browser back/forward buttons (moved after selectedJob declaration below)
+
+  // ==========================================
+  // PERFORMANCE MONITORING
+  // ==========================================
+  const performanceRef = useRef({
+    appStartTime: Date.now(),
+    dbQueries: 0,
+    avgLoadTime: 0
+  });
+
+  // ==========================================
+  // LIVE DATA STATE - NO CACHING
+  // ==========================================
+  const [appData, setAppData] = useState({
+    // Core Data
+    jobs: [],
+    employees: [],
+    managers: [],
+    planningJobs: [],
+    archivedJobs: [],
+
+    // Billing Data
+    activeJobs: [],
+    legacyJobs: [],
+    expenses: [],
+    receivables: [],
+    distributions: [],
+    billingMetrics: null,
+
+    // Computed Data
+    jobFreshness: {},
+    assignedPropertyCounts: {},
+    workflowStats: {},
+    globalInspectionAnalytics: null,
+
+    // Payroll Data
+    archivedPayrollPeriods: [],
+    dataRecency: [],
+
+    // Additional Data for Components
+    countyHpiData: [],
+    jobResponsibilities: [],
+
+    // Live State
+    isLoading: false,
+    isInitialized: false
+  });
+
+  // UI State - loading status tracking
+  const [loadingStatus, setLoadingStatus] = useState({
+    isStale: false,
+    isRefreshing: false,
+    lastError: null,
+    message: ''
+  });
+
+  // Job selection state
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
+
+  // Job exit confirmation
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const pendingExitAction = useRef(null);
+
   // Listen for browser back/forward buttons
   useEffect(() => {
     const handlePopState = (e) => {
@@ -137,69 +202,6 @@ const App = () => {
     setShowExitConfirm(false);
     pendingExitAction.current = null;
   }, []);
-
-  // ==========================================
-  // PERFORMANCE MONITORING
-  // ==========================================
-  const performanceRef = useRef({
-    appStartTime: Date.now(),
-    dbQueries: 0,
-    avgLoadTime: 0
-  });
-
-  // ==========================================
-  // LIVE DATA STATE - NO CACHING
-  // ==========================================
-  const [appData, setAppData] = useState({
-    // Core Data
-    jobs: [],
-    employees: [],
-    managers: [],
-    planningJobs: [],
-    archivedJobs: [],
-
-    // Billing Data
-    activeJobs: [],
-    legacyJobs: [],
-    expenses: [],
-    receivables: [],
-    distributions: [],
-    billingMetrics: null,
-
-    // Computed Data
-    jobFreshness: {},
-    assignedPropertyCounts: {},
-    workflowStats: {},
-    globalInspectionAnalytics: null,
-
-    // Payroll Data
-    archivedPayrollPeriods: [],
-    dataRecency: [],
-
-    // Additional Data for Components
-    countyHpiData: [],
-    jobResponsibilities: [],
-
-    // Live State
-    isLoading: false,
-    isInitialized: false
-  });
-
-  // UI State - loading status tracking
-  const [loadingStatus, setLoadingStatus] = useState({
-    isStale: false,
-    isRefreshing: false,
-    lastError: null,
-    message: ''
-  });
-
-  // Job selection state
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
-
-  // Job exit confirmation
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const pendingExitAction = useRef(null);
 
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
