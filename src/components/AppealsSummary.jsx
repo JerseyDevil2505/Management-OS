@@ -69,112 +69,133 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   const loadAppealsByJob = async () => {
     try {
       setLoading(true);
+
+      // Separate jobs with snapshots from those needing DB fetch
+      const jobsWithSnapshots = [];
+      const jobsNeedingFetch = [];
+      jobs.forEach(job => {
+        if (job.appeal_summary_snapshot) {
+          jobsWithSnapshots.push(job);
+        } else {
+          jobsNeedingFetch.push(job);
+        }
+      });
+
+      // Single batch query for all jobs without snapshots
+      let fetchedAppealsByJob = {};
+      if (jobsNeedingFetch.length > 0) {
+        const jobIds = jobsNeedingFetch.map(j => j.id);
+        const { data: allFetchedAppeals, error } = await supabase
+          .from('appeal_log')
+          .select('*')
+          .in('job_id', jobIds);
+
+        if (error) {
+          console.error('Error batch-loading appeals:', error);
+        } else {
+          // Group fetched appeals by job_id
+          (allFetchedAppeals || []).forEach(appeal => {
+            if (!fetchedAppealsByJob[appeal.job_id]) {
+              fetchedAppealsByJob[appeal.job_id] = [];
+            }
+            fetchedAppealsByJob[appeal.job_id].push(appeal);
+          });
+        }
+      }
+
+      // Build summary and collect all years in a single pass
       const summaryData = [];
+      const allYearsSet = new Set();
 
-      // For each active job, use appeal_summary_snapshot if available, otherwise load from DB
       for (const job of jobs) {
-        try {
-          let appeals = job.appeal_summary_snapshot;
+        const appeals = job.appeal_summary_snapshot || fetchedAppealsByJob[job.id] || [];
 
-          // Fall back to database query if snapshot is not available
-          if (!appeals) {
-            const { data: fetchedAppeals, error } = await supabase
-              .from('appeal_log')
-              .select('*')
-              .eq('job_id', job.id);
+        // Collect all years from this job's appeals
+        appeals.forEach(a => {
+          if (a.appeal_year) allYearsSet.add(a.appeal_year);
+        });
 
-            if (error) {
-              console.error(`Error loading appeals for job ${job.id}:`, error);
-              continue;
-            }
-            appeals = fetchedAppeals || [];
+        if (appeals.length > 0) {
+          // Filter appeals by selected year
+          const yearFilteredAppeals = appeals.filter(a => a.appeal_year === selectedYear);
+
+          if (yearFilteredAppeals.length === 0) {
+            continue;
           }
 
-          if (appeals && appeals.length > 0) {
-            // Filter appeals by selected year (exclude appeals without a year)
-            const yearFilteredAppeals = appeals.filter(a => a.appeal_year === selectedYear);
+          // Calculate status breakdowns
+          const statusBreakdown = {
+            defend: 0,         // D
+            stipulated: 0,     // S
+            heard: 0,          // H
+            withdrawn: 0,      // W
+            assessor: 0,       // A or appeal_type = 'assessor'
+            affirmed: 0,       // AP, AWP
+            hasCME: 0          // cme_projected_value or cme_new_assessment
+          };
 
-            if (yearFilteredAppeals.length === 0) {
-              // No appeals for this year, skip this job
-              continue;
+          let proSeCount = 0;
+          let attorneyCount = 0;
+
+          yearFilteredAppeals.forEach(appeal => {
+            // Count by status
+            const status = appeal.status?.toUpperCase();
+            if (status === 'D') statusBreakdown.defend++;
+            else if (status === 'S') statusBreakdown.stipulated++;
+            else if (status === 'H') statusBreakdown.heard++;
+            else if (status === 'W') statusBreakdown.withdrawn++;
+            else if (status === 'A') statusBreakdown.assessor++;
+            else if (status === 'AP' || status === 'AWP') statusBreakdown.affirmed++;
+
+            // Count CME valuations
+            if (appeal.cme_projected_value || appeal.cme_new_assessment) {
+              statusBreakdown.hasCME++;
             }
 
-            // Calculate status breakdowns
-            const statusBreakdown = {
-              defend: 0,         // D
-              stipulated: 0,     // S
-              heard: 0,          // H
-              withdrawn: 0,      // W
-              assessor: 0,       // A or appeal_type = 'assessor'
-              affirmed: 0,       // AP, AWP
-              hasCME: 0          // cme_projected_value or cme_new_assessment
-            };
+            // Count pro se vs attorney
+            if (appeal.attorney && appeal.attorney.trim() && appeal.attorney.toLowerCase() !== 'pro se') {
+              attorneyCount++;
+            } else {
+              proSeCount++;
+            }
+          });
 
-            let proSeCount = 0;
-            let attorneyCount = 0;
+          // Compute class breakdown and hearing dates from year-filtered appeals
+          const classBreakdown = computeClassBreakdown(yearFilteredAppeals);
+          const hearingInfo = getHearingDates(yearFilteredAppeals);
 
-            yearFilteredAppeals.forEach(appeal => {
-              // Count by status
-              const status = appeal.status?.toUpperCase();
-              if (status === 'D') statusBreakdown.defend++;
-              else if (status === 'S') statusBreakdown.stipulated++;
-              else if (status === 'H') statusBreakdown.heard++;
-              else if (status === 'W') statusBreakdown.withdrawn++;
-              else if (status === 'A') statusBreakdown.assessor++;
-              else if (status === 'AP' || status === 'AWP') statusBreakdown.affirmed++;
-
-              // Count CME valuations
-              if (appeal.cme_projected_value || appeal.cme_new_assessment) {
-                statusBreakdown.hasCME++;
-              }
-
-              // Count pro se vs attorney
-              if (appeal.attorney && appeal.attorney.trim() && appeal.attorney.toLowerCase() !== 'pro se') {
-                attorneyCount++;
-              } else {
-                proSeCount++;
-              }
-            });
-
-            // Compute class breakdown and hearing dates from year-filtered appeals
-            const classBreakdown = computeClassBreakdown(yearFilteredAppeals);
-            const hearingInfo = getHearingDates(yearFilteredAppeals);
-
-            summaryData.push({
-              jobId: job.id,
-              jobName: job.job_name || 'Unnamed Job',
-              totalAppeals: yearFilteredAppeals.length,
-              statusBreakdown,
-              proSeCount,
-              attorneyCount,
-              residential: classBreakdown.residential,
-              commercial: classBreakdown.commercial,
-              vacant: classBreakdown.vacant,
-              hearingDate: hearingInfo.earliest,
-              hasMultipleHearings: hearingInfo.hasMultiple,
-              snapshotAvailable: !!job.appeal_summary_snapshot
-            });
-          } else {
-            // Job exists but has no appeals - add row with all zeros/blanks
-            summaryData.push({
-              jobId: job.id,
-              jobName: job.job_name || 'Unnamed Job',
-              totalAppeals: 0,
-              statusBreakdown: {
-                defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0
-              },
-              proSeCount: 0,
-              attorneyCount: 0,
-              residential: job.appeal_summary_snapshot ? 0 : null,
-              commercial: job.appeal_summary_snapshot ? 0 : null,
-              vacant: job.appeal_summary_snapshot ? 0 : null,
-              hearingDate: job.appeal_summary_snapshot ? null : null,
-              hasMultipleHearings: false,
-              snapshotAvailable: !!job.appeal_summary_snapshot
-            });
-          }
-        } catch (err) {
-          console.error(`Error processing job ${job.id}:`, err);
+          summaryData.push({
+            jobId: job.id,
+            jobName: job.job_name || 'Unnamed Job',
+            totalAppeals: yearFilteredAppeals.length,
+            statusBreakdown,
+            proSeCount,
+            attorneyCount,
+            residential: classBreakdown.residential,
+            commercial: classBreakdown.commercial,
+            vacant: classBreakdown.vacant,
+            hearingDate: hearingInfo.earliest,
+            hasMultipleHearings: hearingInfo.hasMultiple,
+            snapshotAvailable: !!job.appeal_summary_snapshot
+          });
+        } else {
+          // Job exists but has no appeals - add row with all zeros/blanks
+          summaryData.push({
+            jobId: job.id,
+            jobName: job.job_name || 'Unnamed Job',
+            totalAppeals: 0,
+            statusBreakdown: {
+              defend: 0, stipulated: 0, heard: 0, withdrawn: 0, assessor: 0, affirmed: 0, hasCME: 0
+            },
+            proSeCount: 0,
+            attorneyCount: 0,
+            residential: job.appeal_summary_snapshot ? 0 : null,
+            commercial: job.appeal_summary_snapshot ? 0 : null,
+            vacant: job.appeal_summary_snapshot ? 0 : null,
+            hearingDate: job.appeal_summary_snapshot ? null : null,
+            hasMultipleHearings: false,
+            snapshotAvailable: !!job.appeal_summary_snapshot
+          });
         }
       }
 
@@ -189,23 +210,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         });
       setJobAppealsSummary(jobsWithAppeals);
 
-      // Build available years from all appeal data
-      const allYearsSet = new Set();
-      for (const job of jobs) {
-        let appeals = job.appeal_summary_snapshot;
-        if (!appeals) {
-          const { data: fetchedAppeals } = await supabase
-            .from('appeal_log')
-            .select('*')
-            .eq('job_id', job.id);
-          appeals = fetchedAppeals || [];
-        }
-        if (appeals && appeals.length > 0) {
-          appeals
-            .filter(a => a.appeal_year)
-            .forEach(a => allYearsSet.add(a.appeal_year));
-        }
-      }
+      // Years already collected in single pass above
       const yearsArray = [...allYearsSet].sort((a, b) => b - a);
       setAvailableYears(yearsArray.length > 0 ? yearsArray : [new Date().getFullYear()]);
     } catch (error) {

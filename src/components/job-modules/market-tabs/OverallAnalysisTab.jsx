@@ -8,10 +8,13 @@ import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
-  properties = [], 
-  jobData = {}, 
+  properties = [],
+  jobData = {},
   marketLandData = {},
-  onDataChange = () => {}
+  onDataChange = () => {},
+  analysisCache = null,
+  dataVersion = 0,
+  onCacheAnalysis = () => {}
 }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('market');
@@ -1762,6 +1765,11 @@ const OverallAnalysisTab = ({
       setAnalysis(results);
       setLastProcessed(new Date());
 
+      // Cache results in parent so tab switches don't recompute
+      if (selectedVCS === 'ALL') {
+        onCacheAnalysis(results, dataVersion);
+      }
+
       // Notify parent of changes
       onDataChange();
 
@@ -1826,10 +1834,16 @@ const OverallAnalysisTab = ({
     }
   }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange, filteredProperties, vendorType, codeDefinitions]);
 
-  // Run analysis on mount and when properties change
+  // Run analysis on mount — use cached results if data hasn't changed
   useEffect(() => {
     if (filteredProperties.length > 0) {
-      runAnalysis();
+      if (analysisCache && analysisCache.dataVersion === dataVersion && selectedVCS === 'ALL') {
+        // Cache is fresh and VCS filter hasn't changed — restore without recomputing
+        setAnalysis(analysisCache.results);
+        setLastProcessed(new Date(analysisCache.results.timestamp));
+      } else {
+        runAnalysis();
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredProperties.length]); // Only re-run when count changes
@@ -3377,10 +3391,10 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">{group.salesCount}</td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgYearSales > 0 ? group.avgYearSales : '���'}
+                              {group.avgYearSales > 0 ? group.avgYearSales : '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '����'}
+                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
@@ -3537,8 +3551,8 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.salesCount}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : ''}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : ''}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�������'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '-'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '-'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : ''}
                                       </div>
@@ -3547,7 +3561,7 @@ const OverallAnalysisTab = ({
                                       </div>
                                       <div className="col-span-1 text-center text-xs">
                                         {designGroup.salesCount === 0 ? (
-                                          <span className="text-gray-400">���</span>
+                                          <span className="text-gray-400">-</span>
                                         ) : designGroup.deltaPercent !== 0 ? (
                                           <span className={designGroup.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                             {designGroup.deltaPercent > 0 ? '+' : ''}{designGroup.deltaPercent.toFixed(0)}%
@@ -3608,7 +3622,7 @@ const OverallAnalysisTab = ({
                 >
                   <div>
                     <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
-                    <div className="text-xs text-gray-500 mt-1">Average-based comparison ��� Overall Avg: {formatCurrency(analysis.condo.overallAvgPrice)} @ {formatNumber(analysis.condo.overallAvgSize)} SF</div>
+                    <div className="text-xs text-gray-500 mt-1">Average-based comparison • Overall Avg: {formatCurrency(analysis.condo.overallAvgPrice)} @ {formatNumber(analysis.condo.overallAvgSize)} SF</div>
                   </div>
                   {expandedSections.condoDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
@@ -3788,7 +3802,7 @@ const OverallAnalysisTab = ({
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
                                   <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '����'}
+                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '-'}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgPrice > 0 ? formatCurrency(bedroom.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}

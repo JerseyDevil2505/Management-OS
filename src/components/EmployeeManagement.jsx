@@ -310,7 +310,7 @@ const loadEmployees = () => {
       
       const matchesRegion = filter.region === 'all' || record.employee.region === filter.region;
       
-      // Quarter filtering
+      // Quarter/Year filtering
       let matchesQuarter = true;
       if (filter.quarter !== 'all') {
         const measureDate = record.measure_date;
@@ -318,16 +318,18 @@ const loadEmployees = () => {
           matchesQuarter = false;
         } else {
           const recordDate = new Date(measureDate);
-          const [quarter, year] = filter.quarter.split('-');
+          const [prefix, year] = filter.quarter.split('-');
           const recordYear = recordDate.getFullYear();
-          const recordMonth = recordDate.getMonth() + 1; // JavaScript months are 0-indexed
-          
+
           if (recordYear.toString() !== year) {
             matchesQuarter = false;
-          } else {
+          } else if (prefix !== 'YEAR') {
+            // Quarter-specific filter (Q1, Q2, etc.)
+            const recordMonth = recordDate.getMonth() + 1;
             const recordQuarter = Math.ceil(recordMonth / 3);
-            matchesQuarter = `Q${recordQuarter}` === quarter;
+            matchesQuarter = `Q${recordQuarter}` === prefix;
           }
+          // If prefix === 'YEAR', year already matched so matchesQuarter stays true
         }
       }
       
@@ -1472,14 +1474,22 @@ const loadEmployees = () => {
                           className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="all">All Time</option>
+                          <option value="YEAR-2024">2024 (Full Year)</option>
+                          <option value="YEAR-2025">2025 (Full Year)</option>
+                          <option value="YEAR-2026">2026 (Full Year)</option>
+                          <option disabled>──────────</option>
                           <option value="Q1-2024">Q1 2024 (Jan-Mar)</option>
                           <option value="Q2-2024">Q2 2024 (Apr-Jun)</option>
                           <option value="Q3-2024">Q3 2024 (Jul-Sep)</option>
                           <option value="Q4-2024">Q4 2024 (Oct-Dec)</option>
+                          <option disabled>──────────</option>
                           <option value="Q1-2025">Q1 2025 (Jan-Mar)</option>
                           <option value="Q2-2025">Q2 2025 (Apr-Jun)</option>
                           <option value="Q3-2025">Q3 2025 (Jul-Sep)</option>
                           <option value="Q4-2025">Q4 2025 (Oct-Dec)</option>
+                          <option disabled>──────────</option>
+                          <option value="Q1-2026">Q1 2026 (Jan-Mar)</option>
+                          <option value="Q2-2026">Q2 2026 (Apr-Jun)</option>
                         </select>
 
                         <select

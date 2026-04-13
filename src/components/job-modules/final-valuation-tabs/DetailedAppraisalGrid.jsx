@@ -108,6 +108,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [hasEdits, setHasEdits] = useState(false);
   const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
 
+  // Appeal number for PDF export
+  const [appealNumber, setAppealNumber] = useState('');
+  const [appealAutoDetected, setAppealAutoDetected] = useState(false);
+
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
     // Numeric inputs
@@ -1285,13 +1289,39 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setHasEdits(false);
   }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
 
-  const openExportModal = useCallback(() => {
+  const openExportModal = useCallback(async () => {
     setEditableProperties({});
     setEditedAdjustments({});
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
     setShowExportModal(true);
-  }, []);
+
+    // Auto-detect appeal number for subject
+    if (subject && jobData?.id) {
+      try {
+        const { data } = await supabase
+          .from('appeal_log')
+          .select('appeal_number, status')
+          .eq('job_id', jobData.id)
+          .eq('property_block', subject.property_block)
+          .eq('property_lot', subject.property_lot);
+
+        if (data && data.length > 0) {
+          const active = data.find(a => a.status !== 'C');
+          if (active && active.appeal_number) {
+            setAppealNumber(active.appeal_number);
+            setAppealAutoDetected(true);
+            return;
+          }
+        }
+        // No active appeal - clear
+        setAppealNumber('');
+        setAppealAutoDetected(false);
+      } catch (err) {
+        console.warn('Could not look up appeal:', err.message);
+      }
+    }
+  }, [subject, jobData?.id]);
 
   // Generate PDF document
   const generatePDF = useCallback(async () => {
@@ -1349,11 +1379,21 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       // Add the LOJIK logo image
       addLogoToPage(margin, margin - 5);
 
+      // Appeal number above block/lot if present
+      let headerY = margin + 10;
+      if (appealNumber) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        doc.text(`Appeal #: ${appealNumber}`, pageWidth - margin, headerY, { align: 'right' });
+        headerY += 14;
+      }
+
       // Block/Lot in top right
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(blockLot, pageWidth - margin, margin + 20, { align: 'right' });
+      doc.text(blockLot, pageWidth - margin, headerY + 10, { align: 'right' });
 
       // If this is page 2+, add Block/Lot/Qualifier row under header
       if (includeBlockLotRow) {
@@ -2216,6 +2256,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   <X size={20} />
                 </button>
               </div>
+            </div>
+
+            {/* Appeal Number Row */}
+            <div className="px-4 py-2 bg-blue-50 border-b flex items-center gap-4 flex-shrink-0">
+              <label className="text-sm font-medium text-gray-700">Appeal/Petition #:</label>
+              <input
+                type="text"
+                value={appealNumber}
+                onChange={(e) => { setAppealNumber(e.target.value); setAppealAutoDetected(false); }}
+                placeholder="Enter appeal number (appears on PDF header)"
+                className={`px-3 py-1.5 text-sm border rounded w-64 ${
+                  appealAutoDetected ? 'border-green-400 bg-green-50' : 'border-gray-300'
+                }`}
+              />
+              {appealAutoDetected && <span className="text-xs text-green-600 font-medium">Auto-detected from Appeal Log</span>}
+              {!appealAutoDetected && !appealNumber && <span className="text-xs text-gray-400">Optional — will appear above Block/Lot on PDF</span>}
             </div>
 
             {/* Modal Content - Editable Grid */}

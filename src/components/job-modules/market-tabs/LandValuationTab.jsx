@@ -393,6 +393,10 @@ const LandValuationTab = ({
   // ========== DEPTH TABLES STATE ==========
   const [depthTables, setDepthTables] = useState({});
   const [vcsDepthTableOverrides, setVcsDepthTableOverrides] = useState({}); // VCS-specific depth table overrides
+  const [showVcsSpecificForm, setShowVcsSpecificForm] = useState(false);
+  const [vcsSpecificFormData, setVcsSpecificFormData] = useState({ selectedVCS: [], method: '' });
+  const [vcsDropdownSearch, setVcsDropdownSearch] = useState('');
+  const [vcsDropdownOpen, setVcsDropdownOpen] = useState(false);
 
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
@@ -1035,11 +1039,11 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 ��� Single Family' },
+      { code: '1', description: '1 — Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
-      { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
+      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* ����� Conversions (51,52,53)' },
+      { code: '5', description: '5* — Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -2334,9 +2338,10 @@ const getPricePerUnit = useCallback((price, size) => {
     const included = vacantSales.filter(s => {
       if (!includedSales.has(s.id)) return false;
       // Exclude special categories from rate calculation
-      if (saleCategories[s.id] === 'wetlands' || 
+      if (saleCategories[s.id] === 'wetlands' ||
           saleCategories[s.id] === 'landlocked' ||
-          saleCategories[s.id] === 'conservation') return false;
+          saleCategories[s.id] === 'conservation' ||
+          saleCategories[s.id] === 'commercial_land') return false;
       // Filter by special region if specified
       if (regionFilter && specialRegions[s.id] !== regionFilter) return false;
       return true;
@@ -2611,11 +2616,11 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-����� Property ownership/seller details
+- Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
-�� Municipality-specific land use characteristics
-���� Any circumstances of the sale (estate, distressed, etc.)
+- Municipality-specific land use characteristics
+- Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -2679,34 +2684,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Get the category for this sale
       const category = saleCategories[s.id];
 
-      // If no category is set, check if it's a vacant land sale (class 1/3B) that should be auto-included as building lot
+      // Uncategorized sales are excluded - user must explicitly assign a category
       if (!category) {
-        // Allow vacant land sales (they should have been auto-categorized as building-lot)
-        const isVacantClass = String(s.property_m4_class).toUpperCase() === '1' ||
-                              String(s.property_m4_class).toUpperCase() === '3B';
-        if (isVacantClass) {
-          console.log(`✅ Including uncategorized vacant land sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
-          return true;
-        }
-
-        // Check for teardown (class 2 with minimal improvement)
-        const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
-        if (isTeardown) {
-          console.log(`�� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
-          return true;
-        }
-
-        // Check for pre-construction (sold before built)
-        const isPreConstruction = String(s.property_m4_class) === '2' &&
-                                  s.asset_year_built &&
-                                  s.sales_date &&
-                                  new Date(s.sales_date).getFullYear() < s.asset_year_built;
-        if (isPreConstruction) {
-          console.log(`�� Including uncategorized pre-construction sale ${s.property_block}/${s.property_lot}`);
-          return true;
-        }
-
-        console.log(`⚠������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot} - assign a category (Building Lot, Tear Down, or Pre-Construction) to include`);
         return false;
       }
 
@@ -2724,6 +2704,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
       if (cat.includes('wetland')) {
         console.log(`⚠️ Excluding Wetlands sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+      if (cat.includes('commercial')) {
+        console.log(`🏢 Excluding Commercial Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
 
@@ -3081,11 +3065,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // Helper function to calculate raw land value using cascade rates
-  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
-    // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
-    console.log('\u27a1\ufe0f calculateRawLandValue called:', { valuationMode, hasPropertyForFF: !!propertyForFF });
+  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null, methodOverride = null) => {
+    const effectiveMethod = methodOverride || valuationMode;
+    // If method is Front Foot and we have a property with FF data, use FF calculation
+    console.log('\u27a1\ufe0f calculateRawLandValue called:', { effectiveMethod, valuationMode, hasPropertyForFF: !!propertyForFF });
 
-    if (valuationMode === 'ff' && propertyForFF) {
+    if (effectiveMethod === 'ff' && propertyForFF) {
       const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
       const depth = parseFloat(propertyForFF.land_depth) || 0;
 
@@ -3111,49 +3096,69 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const primeMax = cascadeRates.prime?.max || cascadeRates.standard?.max || 100;
           const excessRate = cascadeRates.excess?.rate || 0;
 
-          // Calculate prime frontage (first X feet)
-          const primeFF = Math.min(frontFeet, primeMax);
-          const excessFF = Math.max(0, frontFeet - primeMax);
+          // Calculate tiered frontage value (BEFORE depth multiplier)
+          let remaining = frontFeet;
+          let rawValue = 0;
 
-          // Calculate raw frontage value (BEFORE depth multiplier)
-          const primeValue = primeFF * primeRate;
-          const excessValue = excessFF * excessRate;
-          const rawValue = primeValue + excessValue;
+          // Tier 1: Standard/Prime
+          const primeFF = Math.min(remaining, primeMax);
+          rawValue += primeFF * primeRate;
+          remaining -= primeFF;
+
+          // Tier 2: Secondary (if configured)
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - primeMax;
+            const secondaryFF = Math.min(remaining, secondaryMax);
+            rawValue += secondaryFF * cascadeRates.secondary.rate;
+            remaining -= secondaryFF;
+          }
+
+          // Tier 3 (or 2): Excess
+          if (remaining > 0) {
+            rawValue += remaining * excessRate;
+          }
 
           // Apply depth multiplier to total
           const totalValue = rawValue * depthFactor;
 
-          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Prime: ${primeFF}' x $${primeRate} = $${primeValue.toFixed(0)}` +
-            (excessFF > 0 ? `, Excess: ${excessFF}' x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
-            `, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`
-          );
+          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`);
 
           return totalValue;
         }
       }
     }
 
-    // SQUARE FOOT MODE - Added support
-    if (valuationMode === 'sf') {
+    // SQUARE FOOT MODE - supports 2 or 3 tier cascade
+    if (effectiveMethod === 'sf') {
       const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
                      (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
 
       if (sqFeet > 0 && cascadeRates.standard) {
         const standardRate = cascadeRates.standard.rate || 0;
         const standardMax = cascadeRates.standard.max || 5000;
+        let rawLandValue = 0;
+        let remaining = sqFeet;
+
+        // Tier 1: Standard
+        const standardSF = Math.min(remaining, standardMax);
+        rawLandValue += standardSF * standardRate;
+        remaining -= standardSF;
+
+        // Tier 2: Secondary (if configured)
+        if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+          const secondaryMax = cascadeRates.secondary.max - standardMax;
+          const secondarySF = Math.min(remaining, secondaryMax);
+          rawLandValue += secondarySF * cascadeRates.secondary.rate;
+          remaining -= secondarySF;
+        }
+
+        // Tier 3 (or 2 if no secondary): Excess
         const excessRate = cascadeRates.excess?.rate || 0;
+        if (remaining > 0) {
+          rawLandValue += remaining * excessRate;
+        }
 
-        const standardSF = Math.min(sqFeet, standardMax);
-        const excessSF = Math.max(0, sqFeet - standardMax);
-
-        const standardValue = standardSF * standardRate;
-        const excessValue = excessSF * excessRate;
-        const rawLandValue = standardValue + excessValue;
-
-        debug(`SF calc for ${sqFeet} sq ft: Standard: ${standardSF} SF x $${standardRate} = $${standardValue.toFixed(0)}` +
-          (excessSF > 0 ? `, Excess: ${excessSF} SF x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
-          ` = $${rawLandValue.toFixed(0)}`);
-
+        debug(`SF calc for ${sqFeet} sq ft = $${rawLandValue.toFixed(0)}`);
         return rawLandValue;
       }
     }
@@ -4474,18 +4479,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Build headers array (start first row with headers only)
     const headers = ['VCS', 'Total', 'Type', 'Description', 'Method'];
 
-    // Typical lot size headers - different for FF mode vs Acre mode
-    if (valuationMode === 'ff') {
+    // Typical lot size headers - include FF columns if any VCS uses FF
+    if (hasFFMethod) {
       headers.push('Typical FF', 'Typical Depth', 'Depth Table');
-    } else {
+    }
+    // Always include lot size column (used by acre and sf methods)
+    if (hasSFMethod || hasAcreMethod || !hasFFMethod) {
       headers.push('Typical Lot Size');
     }
 
-    // Add stepdown header for FF and SF modes
-    if (valuationMode === 'ff') {
-      headers.push('Stepdown (FF)');
-    } else if (valuationMode === 'sf') {
-      headers.push('Stepdown (SF)');
+    // Add stepdown header if any VCS uses FF or SF
+    if (hasFFMethod || hasSFMethod) {
+      headers.push('Stepdown');
     }
 
     // Raw Land column comes after stepdown
@@ -4493,20 +4498,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     headers.push('Rec Site Value', 'Act Site Value', 'Allocation Target');
 
-    // Dynamic cascade headers - respect the selected method
-    if (valuationMode === 'ff') {
-      headers.push('Standard Rate ($/FF)', 'Excess Rate ($/FF)');
-    } else if (valuationMode === 'sf') {
-      headers.push('Standard Rate ($/SF)', 'Excess Rate ($/SF)');
-    } else {
+    // Secondary stepdown header for SF/FF with 3-tier
+    if (shouldShowSecondaryStepColumn) {
+      headers.push('Stepdown 2');
+    }
+
+    // Dynamic cascade headers - include all column types present in the job
+    if (hasFFMethod || hasSFMethod) {
+      headers.push('Standard Rate');
+      if (shouldShowSecondaryStepColumn) headers.push('Secondary Rate');
+      headers.push('Excess Rate');
+    }
+    if (hasAcreMethod) {
       headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
       if (shouldShowResidualColumn) {
         headers.push('Residual Rate ($/Acre)');
       }
     }
 
-    // Special category headers
-    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate');
+    // Special category headers - only include columns with values
+    if (shouldShowWetlandsColumn) headers.push('Wetlands Rate');
+    if (shouldShowLandlockedColumn) headers.push('Landlocked Rate');
+    if (shouldShowConservationColumn) headers.push('Conservation Rate');
 
     // Lot size and price headers
     headers.push('Avg Price (t) Lot Size', 'Avg Price (Time Norm)', 'Avg Price Lot Size', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
@@ -4532,7 +4545,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       let depthTableName = '';
       let typicalLot = '';
 
-      if (valuationMode === 'ff') {
+      // Get effective method for this VCS
+      const vcsMethod = getVCSMethod(vcs, type);
+
+      if (vcsMethod === 'ff') {
         // FF mode: calculate typical front feet and depth from vendor data
         const vcsProps = properties?.filter(p =>
           p.new_vcs === vcs && p.asset_lot_frontage && p.asset_lot_depth
@@ -4555,7 +4571,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Use VCS-specific override if available, otherwise use zoning default
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
-      } else if (valuationMode === 'sf') {
+      } else if (vcsMethod === 'sf') {
         // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
         const vcsProps = properties?.filter(p =>
           p.new_vcs === vcs &&
@@ -4602,9 +4618,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
       const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
 
-      // Get the actual method for this VCS
-      const vcsMethod = getVCSMethod(vcs, type);
-
       const row = [
         vcs,
         vcsData.counts?.total || 0,
@@ -4613,10 +4626,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         getMethodDisplay(vcsMethod)
       ];
 
-      // Add typical lot size columns (different for FF vs Acre mode)
-      if (valuationMode === 'ff') {
-        row.push(typicalFF || '', typicalDepth || '', depthTableName || '');
-      } else {
+      // Add typical lot size columns - match header structure
+      if (hasFFMethod) {
+        row.push(vcsMethod === 'ff' ? (typicalFF || '') : '', vcsMethod === 'ff' ? (typicalDepth || '') : '', vcsMethod === 'ff' ? (depthTableName || '') : '');
+      }
+      if (hasSFMethod || hasAcreMethod || !hasFFMethod) {
         row.push(typicalLot || '');
       }
 
@@ -4636,28 +4650,50 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Add stepdown column for FF and SF modes (numeric only for formula compatibility)
-      if (valuationMode === 'ff' && isResidential) {
-        row.push(cascadeRates.standard?.max || '');
-      } else if (valuationMode === 'sf' && isResidential) {
-        row.push(cascadeRates.standard?.max || '');
-      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
-        row.push(''); // Empty for non-residential
+      // Add stepdown column if any VCS uses FF or SF
+      if (hasFFMethod || hasSFMethod) {
+        if ((vcsMethod === 'ff' || vcsMethod === 'sf') && isResidential) {
+          row.push(cascadeRates.standard?.max || '');
+        } else {
+          row.push('');
+        }
+      }
+
+      // Add secondary stepdown column if applicable
+      if (shouldShowSecondaryStepColumn) {
+        if (isResidential && (vcsMethod === 'ff' || vcsMethod === 'sf')) {
+          row.push(cascadeRates.secondary?.max || cascadeConfig.normal.secondary?.max || '');
+        } else {
+          row.push('');
+        }
       }
 
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
       if (isResidential && typicalLot) {
-        if (valuationMode === 'ff' && typicalFF && typicalDepth) {
-          // Front Foot mode - use FF calculation
+        if (vcsMethod === 'ff' && typicalFF && typicalDepth) {
+          // Front Foot mode - use 3-tier FF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 50;
           const excessRate = cascadeRates.excess?.rate || 0;
+          let remaining = typicalFF;
 
-          const standardFF = Math.min(typicalFF, standardMax);
-          const excessFF = Math.max(0, typicalFF - standardMax);
+          const standardFF = Math.min(remaining, standardMax);
+          rawLandValue = standardFF * standardRate;
+          remaining -= standardFF;
 
-          rawLandValue = (standardFF * standardRate) + (excessFF * excessRate);
+          // Secondary tier
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - standardMax;
+            const secondaryFF = Math.min(remaining, secondaryMax);
+            rawLandValue += secondaryFF * cascadeRates.secondary.rate;
+            remaining -= secondaryFF;
+          }
+
+          // Excess
+          if (remaining > 0) {
+            rawLandValue += remaining * excessRate;
+          }
 
           // Apply depth factor if available
           if (depthTableName && depthTables[depthTableName]) {
@@ -4673,16 +4709,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               rawLandValue *= depthFactor;
             }
           }
-        } else if (valuationMode === 'sf') {
-          // Square Foot mode
+        } else if (vcsMethod === 'sf') {
+          // Square Foot mode - use 3-tier SF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 5000;
           const excessRate = cascadeRates.excess?.rate || 0;
+          let remaining = typicalLot;
 
-          const standardSF = Math.min(typicalLot, standardMax);
-          const excessSF = Math.max(0, typicalLot - standardMax);
+          const standardSF = Math.min(remaining, standardMax);
+          rawLandValue = standardSF * standardRate;
+          remaining -= standardSF;
 
-          rawLandValue = (standardSF * standardRate) + (excessSF * excessRate);
+          // Secondary tier
+          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
+            const secondaryMax = cascadeRates.secondary.max - standardMax;
+            const secondarySF = Math.min(remaining, secondaryMax);
+            rawLandValue += secondarySF * cascadeRates.secondary.rate;
+            remaining -= secondarySF;
+          }
+
+          // Excess
+          if (remaining > 0) {
+            rawLandValue += remaining * excessRate;
+          }
         } else {
           // Acre mode - cascade calculation
           let remainingAcres = typicalLot;
@@ -4731,19 +4780,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Add Allocation Target to row
       row.push(allocationTargetValue);
 
-      // Add cascade rates - match the selected method
-      if (isResidential) {
-        if (valuationMode === 'ff') {
-          row.push(
-            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
-            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
-          );
-        } else if (valuationMode === 'sf') {
-          row.push(
-            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
-            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
-          );
+      // Add cascade rates - match headers which include all method columns present
+      // FF/SF columns (Standard, [Secondary], Excess)
+      if (hasFFMethod || hasSFMethod) {
+        if (isResidential && (vcsMethod === 'ff' || vcsMethod === 'sf')) {
+          row.push(cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '');
+          if (shouldShowSecondaryStepColumn) {
+            row.push(cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '');
+          }
+          row.push(cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : '');
         } else {
+          row.push('');
+          if (shouldShowSecondaryStepColumn) row.push('');
+          row.push('');
+        }
+      }
+      // Acre columns (Prime, Secondary, Excess, [Residual])
+      if (hasAcreMethod) {
+        if (isResidential && vcsMethod === 'acre') {
           row.push(
             cascadeRates.prime?.rate != null ? `$${Math.round(cascadeRates.prime.rate).toLocaleString()}` : '',
             cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '',
@@ -4752,40 +4806,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (shouldShowResidualColumn) {
             row.push(cascadeRates.residual?.rate != null ? `$${Math.round(cascadeRates.residual.rate).toLocaleString()}` : '');
           }
-        }
-      } else {
-        // Empty cells for non-residential
-        if (valuationMode === 'ff') {
-          row.push('', '');
-        } else if (valuationMode === 'sf') {
-          row.push('', '');
         } else {
           row.push('', '', '');
-          if (shouldShowResidualColumn) {
-            row.push('');
-          }
+          if (shouldShowResidualColumn) row.push('');
         }
       }
 
-      // Special category rates (formatted)
-      row.push(
-        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '',
-        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '',
-        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
-      );
+      // Special category rates - only include columns with values
+      if (shouldShowWetlandsColumn) {
+        row.push(vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '');
+      }
+      if (shouldShowLandlockedColumn) {
+        row.push(vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '');
+      }
+      if (shouldShowConservationColumn) {
+        row.push(vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : '');
+      }
 
       // Lot size columns (numeric only for formulas - no units)
       const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
-        valuationMode === 'ff' ? Math.round(vcsData.avgNormTimeLotSize) :
-        valuationMode === 'sf' ? Math.round(vcsData.avgNormTimeLotSize) :
+        vcsMethod === 'ff' ? Math.round(vcsData.avgNormTimeLotSize) :
+        vcsMethod === 'sf' ? Math.round(vcsData.avgNormTimeLotSize) :
         Number(vcsData.avgNormTimeLotSize.toFixed(2))
       ) : '';
 
       // Use fallback logic to match UI: if avgPrice exists, use avgPriceLotSize, else use avgNormTimeLotSize
       const effectiveLotSize = vcsData.avgPrice ? vcsData.avgPriceLotSize : vcsData.avgNormTimeLotSize;
       const avgPriceLotFmt = effectiveLotSize != null ? (
-        valuationMode === 'ff' ? Math.round(effectiveLotSize) :
-        valuationMode === 'sf' ? Math.round(effectiveLotSize) :
+        vcsMethod === 'ff' ? Math.round(effectiveLotSize) :
+        vcsMethod === 'sf' ? Math.round(effectiveLotSize) :
         Number(effectiveLotSize.toFixed(2))
       ) : '';
 
@@ -6900,6 +6949,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
+    const commercialLand = getCategoryAverage(s => saleCategories[s.id] === 'commercial_land', 'constrained');
 
     debug('�������� Building Lot Analysis Result:', {
       avg: buildingLot.avg,
@@ -7035,7 +7085,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    return { rawLand, buildingLot, wetlands, landlocked, conservation, specialRegions: specialRegionsAnalysis };
+    return { rawLand, buildingLot, wetlands, landlocked, conservation, commercialLand, specialRegions: specialRegionsAnalysis };
   }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
 
   const saveRates = async () => {
@@ -7105,7 +7155,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          �� Prompt copied! Paste into Claude AI
+          Prompt copied! Paste into Claude AI
         </div>
       )}
 
@@ -7358,7 +7408,42 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <table style={{ width: '100%', fontSize: '14px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Include</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={vacantSales.length > 0 && vacantSales.every(s => includedSales.has(s.id))}
+                      ref={el => {
+                        if (el) {
+                          const checkedCount = vacantSales.filter(s => includedSales.has(s.id)).length;
+                          el.indeterminate = checkedCount > 0 && checkedCount < vacantSales.length;
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Select all: add all to included, clear all from excluded
+                          const allIds = vacantSales.map(s => s.id);
+                          setIncludedSales(prev => new Set([...prev, ...allIds]));
+                          setMethod1ExcludedSales(prev => {
+                            const newSet = new Set(prev);
+                            allIds.forEach(id => newSet.delete(id));
+                            return newSet;
+                          });
+                        } else {
+                          // Deselect all: remove all from included, add all to excluded
+                          const allIds = vacantSales.map(s => s.id);
+                          setIncludedSales(prev => {
+                            const newSet = new Set(prev);
+                            allIds.forEach(id => newSet.delete(id));
+                            return newSet;
+                          });
+                          setMethod1ExcludedSales(prev => new Set([...prev, ...allIds]));
+                        }
+                      }}
+                    />
+                    Include
+                  </label>
+                </th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Qual</th>
@@ -7524,6 +7609,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <option value="uncategorized">Uncategorized</option>
                         <option value="raw_land">Raw Land</option>
                         <option value="building_lot">Building Lot</option>
+                        <option value="commercial_land">Commercial Land</option>
                         <option value="wetlands">Wetlands</option>
                         <option value="landlocked">Landlocked</option>
                         <option value="conservation">Conservation</option>
@@ -7635,7 +7721,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Method 1 Summary - MOVED TO BOTTOM */}
         <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB' }}>
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px' }}>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
                   Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
@@ -7722,6 +7808,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {categoryAnalysis.conservation.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.conservation.avgLotSize}
+                  </div>
+                )}
+              </div>
+              <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>Commercial Land</div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#DC2626' }}>
+                  {valuationMode === 'sf' ? `$${categoryAnalysis.commercialLand.avg}` : `$${categoryAnalysis.commercialLand.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.commercialLand.count} sales</div>
+                {categoryAnalysis.commercialLand.count > 0 && (
+                  <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                    Avg: {categoryAnalysis.commercialLand.avgLotSize}
                   </div>
                 )}
               </div>
@@ -8030,7 +8131,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${data.avgAcres.toFixed(2)} ac • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -8104,12 +8205,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${data.avgAcres.toFixed(2)} ac • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ����
+                      ▼
                     </span>
                   </div>
 
@@ -8612,11 +8713,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ marginBottom: '15px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px' }}>Normal Properties</h4>
           <div style={{ display: 'grid', gridTemplateColumns:
-            valuationMode === 'ff' ? 'repeat(2, 1fr)' :
-            valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+            valuationMode === 'ff' ? (cascadeConfig.normal.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
+            valuationMode === 'sf' ? (cascadeConfig.normal.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
             'repeat(4, 1fr)', gap: '15px' }}>
             {valuationMode === 'ff' ? (
-              // FRONT FOOT MODE: Standard + Excess
+              // FRONT FOOT MODE: Standard + optional Secondary + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
@@ -8649,9 +8750,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
+                {cascadeConfig.normal.secondary?.max ? (
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.normal.standard?.max || 100}-{cascadeConfig.normal.secondary?.max || 200} ft)
+                      <button
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { max: null, rate: null } } }))}
+                        style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      >Remove Step</button>
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.max || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'max', e.target.value)}
+                        placeholder="Max ft"
+                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.rate || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                        placeholder="Rate per front foot"
+                        style={{ flex: 1, padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({cascadeConfig.normal.standard?.max || 100}+ ft)
+                    Excess ({(cascadeConfig.normal.secondary?.max ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 100}+ ft)
                   </label>
                   <input
                     type="number"
@@ -8668,7 +8796,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
               </>
             ) : valuationMode === 'sf' ? (
-              // SQUARE FOOT MODE: Standard + Excess
+              // SQUARE FOOT MODE: Standard + optional Secondary + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
@@ -8702,9 +8830,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                   </div>
                 </div>
+                {cascadeConfig.normal.secondary?.max ? (
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                      Secondary ({cascadeConfig.normal.standard?.max || 5000}-{cascadeConfig.normal.secondary?.max || 12000} sq ft)
+                      <button
+                        onClick={() => setCascadeConfig(prev => ({ ...prev, normal: { ...prev.normal, secondary: { max: null, rate: null } } }))}
+                        style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      >Remove Step</button>
+                    </label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <input
+                        type="number"
+                        value={cascadeConfig.normal.secondary?.max || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'max', e.target.value)}
+                        placeholder="Max sq ft"
+                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cascadeConfig.normal.secondary?.rate || ''}
+                        onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                        placeholder="Rate per sq ft"
+                        style={{ flex: 1, padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Excess ({cascadeConfig.normal.standard?.max || 5000}+ sq ft)
+                    Excess ({(cascadeConfig.normal.secondary?.max ? cascadeConfig.normal.secondary?.max : cascadeConfig.normal.standard?.max) || 5000}+ sq ft)
                   </label>
                   <input
                     type="number"
@@ -8840,6 +8996,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </>
             )}
           </div>
+          {/* Add Step button for SF/FF modes */}
+          {(valuationMode === 'sf' || valuationMode === 'ff') && !cascadeConfig.normal.secondary?.max && (
+            <button
+              onClick={() => {
+                const defaultMax = valuationMode === 'sf'
+                  ? (cascadeConfig.normal.standard?.max || 5000) * 2
+                  : (cascadeConfig.normal.standard?.max || 100) * 2;
+                setCascadeConfig(prev => ({
+                  ...prev,
+                  normal: {
+                    ...prev.normal,
+                    secondary: { max: defaultMax, rate: null }
+                  }
+                }));
+              }}
+              style={{
+                marginTop: '10px',
+                padding: '6px 14px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600'
+              }}
+            >
+              + Add Step
+            </button>
+          )}
         </div>
 
         {/* Special Region Cascades */}
@@ -9236,87 +9422,85 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 Remove
               </button>
             </div>
-            <div style={{ fontSize: '11px', color: '#059669', marginBottom: '8px' }}>
-              {cascadeConfig.vcsSpecific[vcsKey].description}
-            </div>
-
             {/* VCS-Specific Cascade Configuration */}
-            <div style={{ display: 'grid', gridTemplateColumns:
-              cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? 'repeat(2, 1fr)' :
-              cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? 'repeat(2, 1fr)' :
-              'repeat(4, 1fr)', gap: '10px' }}>
+            {(() => {
+              const vcsConfig = cascadeConfig.vcsSpecific[vcsKey];
+              const method = vcsConfig.method;
+              const hasSecondary = vcsConfig.rates?.secondary?.max > 0;
+              const colCount = (method === 'ff' || method === 'sf') ? (hasSecondary ? 3 : 2) : 4;
+              return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + colCount + ', 1fr)', gap: '10px' }}>
 
-              {cascadeConfig.vcsSpecific[vcsKey].method === 'ff' ? (
-                // Front Foot for VCS-Specific
+              {(method === 'ff' || method === 'sf') ? (
                 <>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Standard (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100} ft)
+                      Standard (0-{vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000)} {method === 'ff' ? 'ft' : 'sq ft'})
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || ''}
+                        value={vcsConfig.rates?.standard?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.rate || ''}
+                        step={method === 'sf' ? '0.01' : undefined}
+                        value={vcsConfig.rates?.standard?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'standard', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                     </div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || 100}+ ft)
-                    </label>
-                    <input
-                      type="number"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
-                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
-                      placeholder="Rate"
-                      style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                    />
-                  </div>
-                </>
-              ) : cascadeConfig.vcsSpecific[vcsKey].method === 'sf' ? (
-                // Square Foot for VCS-Specific
-                <>
-                  <div>
-                    <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Primary (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000} sq ft)
-                    </label>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      <input
-                        type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
-                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
-                        placeholder="Max"
-                        style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
-                        onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
-                        placeholder="Rate"
-                        style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
-                      />
+                  {hasSecondary ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                        <label style={{ fontSize: '11px', color: '#059669' }}>
+                          Secondary ({vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000)}-{vcsConfig.rates?.secondary?.max} {method === 'ff' ? 'ft' : 'sq ft'})
+                        </label>
+                        <button
+                          onClick={() => {
+                            setCascadeConfig(prev => {
+                              const updated = { ...prev.vcsSpecific[vcsKey] };
+                              const newRates = { ...updated.rates };
+                              delete newRates.secondary;
+                              return { ...prev, vcsSpecific: { ...prev.vcsSpecific, [vcsKey]: { ...updated, rates: newRates } } };
+                            });
+                          }}
+                          style={{ fontSize: '9px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                        >Remove</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        <input
+                          type="number"
+                          value={vcsConfig.rates?.secondary?.max || ''}
+                          onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
+                          placeholder="Max"
+                          style={{ width: '60px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                        />
+                        <input
+                          type="number"
+                          step={method === 'sf' ? '0.01' : undefined}
+                          value={vcsConfig.rates?.secondary?.rate || ''}
+                          onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                          placeholder="Rate"
+                          style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 5000}+ sq ft)
+                      Excess ({hasSecondary ? vcsConfig.rates?.secondary?.max : (vcsConfig.rates?.standard?.max || (method === 'ff' ? 100 : 5000))}+ {method === 'ff' ? 'ft' : 'sq ft'})
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
-                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
+                      step={method === 'sf' ? '0.01' : undefined}
+                      value={vcsConfig.rates?.excess?.rate || ''}
+                      onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                     />
@@ -9327,20 +9511,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Prime (0-{cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1} acres)
+                      Prime (0-{vcsConfig.rates?.prime?.max || 1} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || ''}
+                        value={vcsConfig.rates?.prime?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.rate || ''}
+                        value={vcsConfig.rates?.prime?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'prime', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9349,20 +9533,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Secondary ({cascadeConfig.vcsSpecific[vcsKey].rates?.prime?.max || 1}-{cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5} acres)
+                      Secondary ({vcsConfig.rates?.prime?.max || 1}-{vcsConfig.rates?.secondary?.max || 5} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || ''}
+                        value={vcsConfig.rates?.secondary?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.rate || ''}
+                        value={vcsConfig.rates?.secondary?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'secondary', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9371,20 +9555,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Excess ({cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max || 5}-{cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10} acres)
+                      Excess ({vcsConfig.rates?.secondary?.max || 5}-{vcsConfig.rates?.excess?.max || 10} acres)
                     </label>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || ''}
+                        value={vcsConfig.rates?.excess?.max || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '50px', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
                       />
                       <input
                         type="number"
-                        value={cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.rate || ''}
+                        value={vcsConfig.rates?.excess?.rate || ''}
                         onChange={(e) => updateVCSSpecificCascade(vcsKey, 'excess', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9393,11 +9577,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#059669', display: 'block', marginBottom: '2px' }}>
-                      Residual ({cascadeConfig.vcsSpecific[vcsKey].rates?.excess?.max || 10}+ acres)
+                      Residual ({vcsConfig.rates?.excess?.max || 10}+ acres)
                     </label>
                     <input
                       type="number"
-                      value={cascadeConfig.vcsSpecific[vcsKey].rates?.residual?.rate || ''}
+                      value={vcsConfig.rates?.residual?.rate || ''}
                       onChange={(e) => updateVCSSpecificCascade(vcsKey, 'residual', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '4px', border: '1px solid #BBF7D0', borderRadius: '3px', fontSize: '10px' }}
@@ -9406,53 +9590,203 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </>
               )}
             </div>
+              );
+            })()}
+            {/* Add Step button for VCS-specific SF/FF */}
+            {(cascadeConfig.vcsSpecific[vcsKey].method === 'sf' || cascadeConfig.vcsSpecific[vcsKey].method === 'ff') && !cascadeConfig.vcsSpecific[vcsKey].rates?.secondary?.max && (
+              <button
+                onClick={() => {
+                  const m = cascadeConfig.vcsSpecific[vcsKey].method;
+                  const stdMax = cascadeConfig.vcsSpecific[vcsKey].rates?.standard?.max || (m === 'ff' ? 100 : 5000);
+                  const defaultMax = stdMax * 2;
+                  setCascadeConfig(prev => ({
+                    ...prev,
+                    vcsSpecific: {
+                      ...prev.vcsSpecific,
+                      [vcsKey]: {
+                        ...prev.vcsSpecific[vcsKey],
+                        rates: {
+                          ...prev.vcsSpecific[vcsKey].rates,
+                          secondary: { max: defaultMax, rate: null }
+                        }
+                      }
+                    }
+                  }));
+                }}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 10px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600'
+                }}
+              >
+                + Add Step
+              </button>
+            )}
           </div>
         ))}
 
-        {/* Add VCS-Specific Configuration Button */}
+        {/* Add VCS-Specific Configuration */}
         <div style={{ marginBottom: '15px' }}>
-          <button
-            onClick={() => {
-              // This will open a modal to select VCS and method
-              const vcsInput = prompt('Enter VCS codes (comma-separated for multiple):');
-              if (!vcsInput) return;
+          {!showVcsSpecificForm ? (
+            <button
+              onClick={() => {
+                setVcsSpecificFormData({ selectedVCS: [], method: valuationMode }); setVcsDropdownSearch(''); setVcsDropdownOpen(false);
+                setShowVcsSpecificForm(true);
+              }}
+              style={{
+                backgroundColor: '#10B981',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Plus size={16} /> Add VCS-Specific Configuration
+            </button>
+          ) : (
+            <div style={{ backgroundColor: '#F0FDF4', padding: '14px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#059669', marginBottom: '10px' }}>New VCS-Specific Configuration</h4>
 
-              const vcsList = vcsInput.split(',').map(v => v.trim()).filter(v => v);
-              const method = prompt('Select method for these VCS:\\n1. acre\\n2. sf\\n3. ff');
+              {/* VCS Selection - Searchable Dropdown */}
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Select VCS codes:</label>
+                {vcsSpecificFormData.selectedVCS.length > 0 && (
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                    {vcsSpecificFormData.selectedVCS.map(vcs => (
+                      <span key={vcs} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', backgroundColor: '#D1FAE5', borderRadius: '3px', fontSize: '12px', color: '#059669', fontWeight: '600' }}>
+                        {vcs}
+                        <button onClick={() => setVcsSpecificFormData(prev => ({ ...prev, selectedVCS: prev.selectedVCS.filter(v => v !== vcs) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '14px', lineHeight: 1, padding: 0 }}>x</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {Object.keys(vcsSheetData).length > 0 ? (
+                  <div style={{ position: 'relative', width: '280px' }}>
+                    <input
+                      type="text"
+                      value={vcsDropdownSearch}
+                      onChange={(e) => { setVcsDropdownSearch(e.target.value); setVcsDropdownOpen(true); }}
+                      onFocus={() => setVcsDropdownOpen(true)}
+                      placeholder="Search VCS..."
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px' }}
+                    />
+                    {vcsDropdownOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: '200px', overflowY: 'auto', backgroundColor: 'white', border: '1px solid #D1D5DB', borderRadius: '0 0 4px 4px', zIndex: 50, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                        {Object.keys(vcsSheetData).sort().filter(vcs => !vcsDropdownSearch || vcs.toLowerCase().includes(vcsDropdownSearch.toLowerCase())).map(vcs => {
+                          const alreadyConfigured = Object.values(cascadeConfig.vcsSpecific || {}).some(c => c.vcsList?.includes(vcs));
+                          const isSelected = vcsSpecificFormData.selectedVCS.includes(vcs);
+                          return (
+                            <div
+                              key={vcs}
+                              onClick={() => {
+                                if (alreadyConfigured) return;
+                                setVcsSpecificFormData(prev => ({
+                                  ...prev,
+                                  selectedVCS: isSelected ? prev.selectedVCS.filter(v => v !== vcs) : [...prev.selectedVCS, vcs]
+                                }));
+                                setVcsDropdownSearch('');
+                              }}
+                              style={{
+                                padding: '6px 10px',
+                                cursor: alreadyConfigured ? 'not-allowed' : 'pointer',
+                                backgroundColor: isSelected ? '#D1FAE5' : alreadyConfigured ? '#F9FAFB' : 'white',
+                                color: alreadyConfigured ? '#9CA3AF' : '#374151',
+                                fontSize: '12px',
+                                borderBottom: '1px solid #F3F4F6',
+                                display: 'flex', justifyContent: 'space-between'
+                              }}
+                            >
+                              <span>{vcs}</span>
+                              {alreadyConfigured ? <span style={{ fontSize: '10px', color: '#9CA3AF' }}>configured</span> : isSelected ? <span style={{ color: '#059669' }}>selected</span> : null}
+                            </div>
+                          );
+                        })}
+                        <div
+                          onClick={() => setVcsDropdownOpen(false)}
+                          style={{ padding: '4px 10px', textAlign: 'center', fontSize: '11px', color: '#6B7280', cursor: 'pointer', borderTop: '1px solid #E5E7EB' }}
+                        >Close</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>No VCS data available yet. Run the VCS Sheet tab first.</div>
+                )}
+              </div>
 
-              const methodMap = { '1': 'acre', '2': 'sf', '3': 'ff' };
-              const selectedMethod = methodMap[method] || 'acre';
+              {/* Method Selection */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Valuation Method:</label>
+                <select
+                  value={vcsSpecificFormData.method}
+                  onChange={(e) => setVcsSpecificFormData(prev => ({ ...prev, method: e.target.value }))}
+                  style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #D1D5DB', fontSize: '13px', minWidth: '160px' }}
+                >
+                  <option value="acre">Acreage (per acre)</option>
+                  <option value="sf">Square Foot (per sq ft)</option>
+                  <option value="ff">Front Foot (per front ft)</option>
+                </select>
+              </div>
 
-              const description = prompt('Enter description (e.g., "Rural areas", "Subdivision lots"):') || 'Custom configuration';
-
-              const vcsKey = `vcs_${Date.now()}`;
-              setCascadeConfig(prev => ({
-                ...prev,
-                vcsSpecific: {
-                  ...prev.vcsSpecific,
-                  [vcsKey]: {
-                    vcsList,
-                    method: selectedMethod,
-                    description,
-                    rates: {}
-                  }
-                }
-              }));
-            }}
-            style={{
-              backgroundColor: '#10B981',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <Plus size={16} /> Add VCS-Specific Configuration
-          </button>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={vcsSpecificFormData.selectedVCS.length === 0}
+                  onClick={() => {
+                    const vcsKey = `vcs_${Date.now()}`;
+                    setCascadeConfig(prev => ({
+                      ...prev,
+                      vcsSpecific: {
+                        ...prev.vcsSpecific,
+                        [vcsKey]: {
+                          vcsList: vcsSpecificFormData.selectedVCS,
+                          method: vcsSpecificFormData.method,
+                          description: '',
+                          rates: {}
+                        }
+                      }
+                    }));
+                    setShowVcsSpecificForm(false);
+                  }}
+                  style={{
+                    backgroundColor: vcsSpecificFormData.selectedVCS.length === 0 ? '#9CA3AF' : '#059669',
+                    color: 'white',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: vcsSpecificFormData.selectedVCS.length === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '600'
+                  }}
+                >
+                  Add Configuration
+                </button>
+                <button
+                  onClick={() => setShowVcsSpecificForm(false)}
+                  style={{
+                    backgroundColor: 'white',
+                    color: '#374151',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    border: '1px solid #D1D5DB',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Special Categories */}
@@ -9800,7 +10134,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   color: '#6B7280'
                 }}
               >
-                ����
+                +
               </button>
             </div>
 
@@ -9809,7 +10143,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  �������️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9831,7 +10165,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '���' : '���') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
@@ -9845,7 +10179,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('address')}
@@ -9859,7 +10193,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '��������') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
@@ -9873,7 +10207,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '������������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -9887,7 +10221,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
@@ -9901,7 +10235,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
@@ -9915,7 +10249,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
@@ -9929,7 +10263,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -9943,7 +10277,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '������' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
@@ -9957,7 +10291,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -10608,16 +10942,45 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const methods = new Set();
     Object.keys(vcsSheetData).forEach(vcs => {
       const type = vcsTypes[vcs] || 'Residential-Typical';
-      const method = vcsMethodOverrides[vcs] ||
-                     (type.toLowerCase().includes('condo') ? 'site' : valuationMode);
+      // Check manual override first, then VCS-specific config, then condo, then global
+      let method = vcsMethodOverrides[vcs];
+      if (!method) {
+        if (type.toLowerCase().includes('condo')) {
+          method = 'site';
+        } else {
+          const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+            config.vcsList?.includes(vcs)
+          );
+          method = vcsSpecificConfig?.method || valuationMode;
+        }
+      }
       methods.add(method);
     });
     return methods;
-  }, [vcsSheetData, vcsTypes, vcsMethodOverrides, valuationMode]);
+  }, [vcsSheetData, vcsTypes, vcsMethodOverrides, valuationMode, cascadeConfig.vcsSpecific]);
 
   const hasFFMethod = methodsInUse.has('ff');
   const hasSFMethod = methodsInUse.has('sf');
   const hasAcreMethod = methodsInUse.has('acre');
+
+  // Show secondary column in VCS sheet when SF/FF secondary tier is configured
+  const shouldShowSecondaryStepColumn = useMemo(() => {
+    return (valuationMode === 'sf' || valuationMode === 'ff') &&
+      cascadeConfig.normal.secondary?.max > 0;
+  }, [cascadeConfig, valuationMode]);
+
+  // Only show special category columns if they have configured rates
+  const shouldShowWetlandsColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.wetlands != null && cascadeConfig.specialCategories.wetlands > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowLandlockedColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.landlocked != null && cascadeConfig.specialCategories.landlocked > 0;
+  }, [cascadeConfig]);
+
+  const shouldShowConservationColumn = useMemo(() => {
+    return cascadeConfig.specialCategories?.conservation != null && cascadeConfig.specialCategories.conservation > 0;
+  }, [cascadeConfig]);
 
   // ========== METHOD FORMATTING HELPER ==========
   // Get the effective method for a VCS (considering overrides)
@@ -10632,9 +10995,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return 'site';
     }
 
+    // Check if there's a VCS-specific configuration with a different method
+    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+      config.vcsList?.includes(vcs)
+    );
+    if (vcsSpecificConfig && vcsSpecificConfig.method) {
+      return vcsSpecificConfig.method;
+    }
+
     // Otherwise use the global valuation mode
     return valuationMode;
-  }, [vcsMethodOverrides, valuationMode]);
+  }, [vcsMethodOverrides, valuationMode, cascadeConfig.vcsSpecific]);
 
   const getMethodDisplay = useCallback((method) => {
     switch (method) {
@@ -10899,9 +11270,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {(hasFFMethod || hasSFMethod) && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown</th>
                   )}
+                  {shouldShowSecondaryStepColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown 2</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Prime' : 'Standard'}</th>
+                  {shouldShowSecondaryStepColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Secondary</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Secondary' : 'Excess'}</th>
                   {hasAcreMethod && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
@@ -10909,9 +11286,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {shouldShowResidualColumn && hasAcreMethod && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                   )}
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  {shouldShowWetlandsColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
+                  )}
+                  {shouldShowLandlockedColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
+                  )}
+                  {shouldShowConservationColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t) Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price Lot Size</th>
@@ -10927,7 +11310,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�������' : '��'}
+                    Zoning {collapsedFields.zoning ? '►' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -10940,7 +11323,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       onClick={() => toggleFieldCollapse('key')}
                       title="Click to expand/collapse"
                     >
-                      Key {collapsedFields.key ? '���' : '▼'}
+                      Key {collapsedFields.key ? '►' : '▼'}
                     </th>
                   )}
                   {shouldShowMapColumn && (
@@ -11244,6 +11627,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''}
                         </td>
                       )}
+                      {shouldShowSecondaryStepColumn && (
+                        <td style={{
+                          padding: '8px',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
+                        }}>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                            <span style={{ fontSize: '11px' }}>
+                              {cascadeRates.secondary?.max || cascadeConfig.normal.secondary?.max || ''}
+                            </span>
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
@@ -11299,6 +11695,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''
                         ) : ''}
                       </td>
+                      {shouldShowSecondaryStepColumn && (
+                        <td style={{
+                          padding: '8px',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
+                        }}>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.secondary ?? cascadeRates.secondary?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'secondary', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.secondary?.rate || ''}
+                            />
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{
                         padding: '8px',
                         border: '1px solid #E5E7EB',
@@ -11386,34 +11806,40 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''}
                         </td>
                       )}
-                      {/* Special Category Rates */}
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
-                          `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
-                      </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
-                          `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
-                      </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
-                          `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
-                      </td>
+                      {/* Special Category Rates - only show columns with values */}
+                      {shouldShowWetlandsColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.wetlands ? '#1E40AF' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ?
+                            `$${cascadeConfig.specialCategories.wetlands.toLocaleString()}` : ''}
+                        </td>
+                      )}
+                      {shouldShowLandlockedColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.landlocked ? '#92400E' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ?
+                            `$${cascadeConfig.specialCategories.landlocked.toLocaleString()}` : ''}
+                        </td>
+                      )}
+                      {shouldShowConservationColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          color: vcsSpecialCategories.conservation ? '#059669' : '#9CA3AF',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ?
+                            `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTimeLotSize ? (
                           valuationMode === 'ff' ? `${Math.round(data.avgNormTimeLotSize)} ft` :
@@ -11813,7 +12239,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* ���� Row / Townhouse</option>
+                <option value="3">3* — Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
@@ -12223,7 +12649,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
           >
-            {isVcsSheetComplete ? '�� Mark Complete' : 'Mark Complete'}
+            {isVcsSheetComplete ? '✅ Mark Complete' : 'Mark Complete'}
           </button>
         )}
 
@@ -12241,7 +12667,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
           >
-            {isEcoObsComplete ? '�� Mark Complete' : 'Mark Complete'}
+            {isEcoObsComplete ? '✅ Mark Complete' : 'Mark Complete'}
           </button>
         )}
       </div>

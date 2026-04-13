@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   // Extract refusal codes from parsed code definitions
@@ -16,27 +16,36 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     const codeDefs = jobData?.parsed_code_definitions;
     if (!codeDefs) return refusalCodes;
 
-    if (vendor === 'BRT') {
-      // BRT: Look in Residential section for "REFUSED" descriptions
-      const residentialSection = codeDefs.sections?.['Residential'] || {};
-      Object.values(residentialSection).forEach(item => {
+    // Helper to scan a section's entries (and their nested MAP) for REFUSED descriptions
+    const scanForRefusedCodes = (section) => {
+      if (!section || typeof section !== 'object') return;
+      Object.values(section).forEach(item => {
+        // Check top-level entry
         if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
           const code = item.KEY || item.DATA.KEY;
           if (code) refusalCodes.push(code);
         }
-      });
-    } else if (vendor === 'Microsystems') {
-      // Microsystems: Look for "REFUSED" in any section
-      const sections = codeDefs.sections || {};
-      Object.values(sections).forEach(section => {
-        if (typeof section === 'object') {
-          Object.values(section).forEach(item => {
-            if (item?.DATA?.VALUE && item.DATA.VALUE.toUpperCase().includes('REFUSED')) {
-              const code = item.KEY || item.DATA.KEY;
+        // Check nested MAP entries (e.g. INFO. BY subsection contains the actual codes)
+        if (item?.MAP && typeof item.MAP === 'object') {
+          Object.values(item.MAP).forEach(subItem => {
+            if (subItem?.DATA?.VALUE && subItem.DATA.VALUE.toUpperCase().includes('REFUSED')) {
+              const code = subItem.KEY || subItem.DATA.KEY;
               if (code) refusalCodes.push(code);
             }
           });
         }
+      });
+    };
+
+    if (vendor === 'BRT') {
+      // BRT: Look in Residential section for "REFUSED" descriptions
+      const residentialSection = codeDefs.sections?.['Residential'] || {};
+      scanForRefusedCodes(residentialSection);
+    } else if (vendor === 'Microsystems') {
+      // Microsystems: Look for "REFUSED" in any section
+      const sections = codeDefs.sections || {};
+      Object.values(sections).forEach(section => {
+        scanForRefusedCodes(section);
       });
     }
 
@@ -69,6 +78,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedTotal = 0;
     let improvedInspected = 0;
     let improvedNotInspected = 0;
+    const residentialEntryDates = [];
+    let mostRecentInteriorEntry = null;
+    const entryCodes = jobData?.infoby_category_config?.entry || [];
     const byClass = {};
     const byVCS = {};
     const missingInspections = [];
@@ -126,7 +138,42 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         byClass[propertyClass].improvedTotal++;
       }
 
-      if (hasEntry) {
+      // Refusals have list_by/list_date but should NOT count as entries
+      if (hasRefusal) {
+        notInspected++;
+        if (isImproved) {
+          improvedNotInspected++;
+        }
+
+        // Track refusals in VCS breakdown
+        if (isResidential) {
+          const vcsLabel = vcsCode || 'Unknown';
+          byVCS[vcsLabel].refusals++;
+        }
+
+        // Track inspector who recorded the refusal
+        if (hasListBy) {
+          const inspector = prop.inspection_list_by.trim();
+          if (!inspectorBreakdown[inspector]) {
+            inspectorBreakdown[inspector] = 0;
+          }
+          inspectorBreakdown[inspector]++;
+        }
+
+        // Track in missing list
+        if (missingInspections.length < 500) {
+          missingInspections.push({
+            block: prop.property_block || '',
+            lot: prop.property_lot || '',
+            qualifier: prop.property_qualifier || '',
+            location: prop.property_location || '',
+            class: propertyClass,
+            owner: prop.owner_name || '',
+            isImproved,
+            isRefusal: true
+          });
+        }
+      } else if (hasEntry) {
         inspected++;
         byClass[propertyClass].inspected++;
 
@@ -138,6 +185,30 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         if (isImproved) {
           improvedInspected++;
           byClass[propertyClass].improvedInspected++;
+        }
+
+        // Track residential (2/3A) dates for average measured + most recent interior entry
+        const isResClass = propertyClass === '2' || propertyClass === '3A';
+        if (isResClass) {
+          // Average inspected date uses measure_date
+          if (prop.inspection_measure_date) {
+            residentialEntryDates.push(new Date(prop.inspection_measure_date));
+          }
+
+          // Most recent interior entry uses list_date
+          if (hasListDate) {
+            const infoByCode = vendor === 'Microsystems' ? prop.info_by_code : prop.inspection_info_by;
+            // If entry codes are configured, use them; otherwise any entry counts
+            const isInterior = entryCodes.length > 0
+              ? (infoByCode && entryCodes.includes(infoByCode))
+              : hasEntry;
+            if (isInterior) {
+              const entryDate = new Date(prop.inspection_list_date);
+              if (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry) {
+                mostRecentInteriorEntry = entryDate;
+              }
+            }
+          }
         }
 
         // Track inspector by list_by
@@ -152,12 +223,6 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
           improvedNotInspected++;
         }
 
-        // Track refusals in VCS breakdown
-        if (hasRefusal && isResidential) {
-          const vcsLabel = vcsCode || 'Unknown';
-          byVCS[vcsLabel].refusals++;
-        }
-
         // Track missing - limit to first 500 for display
         if (missingInspections.length < 500) {
           missingInspections.push({
@@ -168,7 +233,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
             class: propertyClass,
             owner: prop.owner_name || '',
             isImproved,
-            isRefusal: hasRefusal
+            isRefusal: false
           });
         }
       }
@@ -182,6 +247,13 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       ? ((improvedInspected / improvedTotal) * 100).toFixed(1)
       : 0;
 
+    // Calculate average inspection date for residential (Class 2/3A)
+    let avgInspectionDate = null;
+    if (residentialEntryDates.length > 0) {
+      const totalMs = residentialEntryDates.reduce((sum, d) => sum + d.getTime(), 0);
+      avgInspectionDate = new Date(totalMs / residentialEntryDates.length);
+    }
+
     return {
       totalProperties: properties.length,
       inspected,
@@ -194,7 +266,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       byClass,
       byVCS,
       missingInspections,
-      inspectorBreakdown
+      inspectorBreakdown,
+      avgInspectionDate,
+      mostRecentInteriorEntry
     };
   }, [properties, refusalCodes, vendor]);
 
@@ -232,7 +306,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       </h2>
 
       {/* Summary Cards - Improved Properties (entry rate only matters for improved) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white p-5 rounded-lg border-2 border-indigo-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -276,6 +350,34 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               className="bg-teal-500 h-2 rounded-full transition-all"
               style={{ width: `${Math.min(metrics.improvedEntryRate, 100)}%` }}
             />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-lg border-2 border-blue-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Avg Measured Date (2/3A)</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {metrics.avgInspectionDate
+                  ? metrics.avgInspectionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '\u2014'}
+              </p>
+            </div>
+            <Calendar className="w-8 h-8 text-blue-400" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-lg border-2 border-purple-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Latest Interior Entry (2/3A)</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {metrics.mostRecentInteriorEntry
+                  ? metrics.mostRecentInteriorEntry.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '\u2014'}
+              </p>
+            </div>
+            <Home className="w-8 h-8 text-purple-400" />
           </div>
         </div>
       </div>

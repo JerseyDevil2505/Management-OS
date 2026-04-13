@@ -139,6 +139,7 @@ const FinalValuation = ({
             jobData={jobData}
             properties={properties}
             hpiData={hpiData}
+            marketLandData={marketLandData}
             onUpdateJobCache={handleCacheUpdate}
             tenantConfig={tenantConfig}
             initialManualSubject={

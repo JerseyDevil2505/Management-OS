@@ -1258,6 +1258,105 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return storyCode;
   },
 
+  /**
+   * Translate BRT utility codes (UTILS_1-4) via category 52 into utility_heat/water/sewer
+   * Returns { utility_heat, utility_water, utility_sewer } with translated descriptions
+   */
+  translateBRTUtilities: function(property, codeDefinitions) {
+    const result = { utility_heat: null, utility_water: null, utility_sewer: null };
+    if (!property || !codeDefinitions) return result;
+
+    // Collect all utility codes from the property
+    const utilityCodes = [
+      property.utility_code_1,
+      property.utility_code_2,
+      property.utility_code_3,
+      property.utility_code_4,
+    ].filter(c => c && c.trim());
+
+    if (utilityCodes.length === 0) return result;
+
+    // Translate each code via BRT section 52
+    const descriptions = utilityCodes.map(code => {
+      const desc = this.getBRTValueBySection(code, codeDefinitions, '52');
+      return desc || code;
+    });
+
+    // Classify each translated description into heat/water/sewer
+    const heatKeywords = ['gas', 'oil', 'coal', 'wood', 'electric heat', 'solar'];
+    const waterKeywords = ['public water', 'well', 'water', 'spring', 'cistern'];
+    const sewerKeywords = ['public sewer', 'sewer', 'septic', 'cesspool'];
+
+    for (const desc of descriptions) {
+      const lower = desc.toLowerCase();
+      if (!result.utility_heat && heatKeywords.some(k => lower.includes(k))) {
+        result.utility_heat = desc;
+      } else if (!result.utility_water && waterKeywords.some(k => lower.includes(k))) {
+        result.utility_water = desc;
+      } else if (!result.utility_sewer && sewerKeywords.some(k => lower.includes(k))) {
+        result.utility_sewer = desc;
+      }
+    }
+
+    // If we still have unclassified codes, store them in the first empty slot
+    for (const desc of descriptions) {
+      const lower = desc.toLowerCase();
+      const isClassified =
+        (result.utility_heat && result.utility_heat === desc) ||
+        (result.utility_water && result.utility_water === desc) ||
+        (result.utility_sewer && result.utility_sewer === desc);
+      if (!isClassified) {
+        if (!result.utility_heat) result.utility_heat = desc;
+        else if (!result.utility_water) result.utility_water = desc;
+        else if (!result.utility_sewer) result.utility_sewer = desc;
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Look up a BRT code by section number directly
+   */
+  getBRTValueBySection: function(code, codeDefinitions, sectionNumber) {
+    if (!code || !codeDefinitions) return null;
+    const cleanCode = code.trim().toUpperCase();
+
+    if (!codeDefinitions.sections?.Residential) return cleanCode;
+
+    const residentialSections = codeDefinitions.sections.Residential;
+    let targetSection = null;
+
+    for (const [sectionKey, sectionData] of Object.entries(residentialSections)) {
+      if (sectionData.KEY === sectionNumber) {
+        targetSection = sectionData;
+        break;
+      }
+    }
+
+    if (!targetSection || !targetSection.MAP) return cleanCode;
+
+    for (const [mapKey, mapValue] of Object.entries(targetSection.MAP)) {
+      if (mapValue.KEY === cleanCode || mapValue.DATA?.KEY === cleanCode) {
+        return mapValue.DATA?.VALUE || mapValue.VALUE || cleanCode;
+      }
+    }
+
+    return cleanCode;
+  },
+
+  /**
+   * Translate Microsystems topography code via category 115
+   */
+  translateMicroTopography: function(property, codeDefinitions) {
+    if (!property || !codeDefinitions || !property.topography) return null;
+    return this.getMicrosystemsValue(
+      { ...property, topo: property.topography },
+      codeDefinitions,
+      'topo'
+    );
+  },
+
   // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
   isFieldEmpty: function(value) {
     if (!value) return true;

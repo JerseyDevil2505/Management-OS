@@ -762,7 +762,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['1'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                         <div>{formatAvgAsmt(projectedRatableBase['1'].total)}</div>
-                        {formatDelta(projectedRatableBase['1'].total, previousProjected.class_1_total)}
                       </div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                         {formatPercentChange(projectedRatableBase['1'].total, localCurrentYear.class_1_total)}
@@ -783,7 +782,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['2'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                         <div>{formatAvgAsmt(projectedRatableBase['2'].total)}</div>
-                        {formatDelta(projectedRatableBase['2'].total, previousProjected.class_2_total)}
                       </div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                         {formatPercentChange(projectedRatableBase['2'].total, localCurrentYear.class_2_total)}
@@ -803,7 +801,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                     <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['3A'].count)}</div>
                     <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                       <div>{formatAvgAsmt(projectedRatableBase['3A'].total)}</div>
-                      {formatDelta(projectedRatableBase['3A'].total, previousProjected.class_3a_total)}
                     </div>
                     <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                       {formatPercentChange(projectedRatableBase['3A'].total, localCurrentYear.class_3a_total)}
@@ -816,7 +813,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                     <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['3B'].count)}</div>
                     <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                       <div>{formatAvgAsmt(projectedRatableBase['3B'].total)}</div>
-                      {formatDelta(projectedRatableBase['3B'].total, previousProjected.class_3b_total)}
                     </div>
                     <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                       {formatPercentChange(projectedRatableBase['3B'].total, localCurrentYear.class_3b_total)}
@@ -830,7 +826,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['4ABC'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                         <div>{formatAvgAsmt(projectedRatableBase['4ABC'].total)}</div>
-                        {formatDelta(projectedRatableBase['4ABC'].total, previousProjected.class_4_total)}
                       </div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                         {formatPercentChange(projectedRatableBase['4ABC'].total, localCurrentYear.class_4_total)}
@@ -851,7 +846,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
                         <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
-                        {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
                       </div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
                         {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
@@ -871,7 +865,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
                     <div className="text-base text-right px-2 py-1">
                       <div className="flex flex-col items-end">
                         <div>{formatAvgAsmt(projectedRatableBase.totalTotal)}</div>
-                        {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
                       </div>
                     </div>
                     <div className="text-base text-right px-2 py-1 flex items-center justify-end">

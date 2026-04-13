@@ -578,6 +578,13 @@ export class MicrosystemsUpdater {
       asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
       asset_bedrooms: this.parseInteger(rawRecord['Total Bedrms']),
 
+      // Utility fields (Microsystems: direct Y/N flags)
+      utility_heat: this.parseMicroUtilityFlag(rawRecord['Gas Yn'], 'heat'),
+      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Y N'] || rawRecord['Water Yn'], 'water'),
+      utility_sewer: this.parseMicroUtilityFlag(rawRecord['Sewer Yn'], 'sewer'),
+      // Topography: stored under 'Source' field, raw code translated via category 115
+      topography: this.preserveStringValue(rawRecord['Source']) || null,
+
       // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
       special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
       special_tax_code_2: rawRecord['Sp Tax Cd2'] || null,
@@ -1521,12 +1528,36 @@ export class MicrosystemsUpdater {
     }
   }
 
+  /**
+   * Parse Microsystems Y/N utility flags into descriptive values
+   */
+  parseMicroUtilityFlag(value, type) {
+    const trimmed = (value || '').trim().toUpperCase();
+    const hasUtility = trimmed === 'Y';
+
+    switch (type) {
+      case 'heat':
+        return hasUtility ? 'Gas' : (trimmed === 'N' ? 'No Gas' : null);
+      case 'water':
+        return hasUtility ? 'Public Water' : (trimmed === 'N' ? 'Well' : null);
+      case 'sewer':
+        return hasUtility ? 'Public Sewer' : (trimmed === 'N' ? 'Septic' : null);
+      default:
+        return hasUtility ? 'Yes' : null;
+    }
+  }
+
   // Utility functions
   parseDate(dateString) {
     // Handle null, undefined, empty string, or whitespace-only strings
     if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+  }
+
+  preserveStringValue(value) {
+    if (value === null || value === undefined || value === '') return null;
+    return String(value).trim();
   }
 
   parseNumeric(value, decimals = null) {

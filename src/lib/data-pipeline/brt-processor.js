@@ -23,6 +23,49 @@ export class BRTProcessor {
   }
 
   /**
+   * Translate raw BRT utility codes (UTILS_1-4) into semantic utility fields.
+   * Standard BRT category 52 codes:
+   *   01=ALL, 02=ELECTRIC, 03=GAS, 04=WATER, 05=SEWER,
+   *   06=WELL, 07=SEPTIC, 08=SUMP/SEW, 09=SUMP/NOSEW, 90=NONE
+   */
+  translateUtilityCodes(codes) {
+    const result = { utility_heat: null, utility_water: null, utility_sewer: null };
+    if (!codes || codes.length === 0) return result;
+
+    const normalized = codes
+      .map(c => c ? String(c).replace(/^0+/, '') || '0' : null)
+      .filter(Boolean);
+
+    if (normalized.includes('1')) {
+      // Code 01 = ALL utilities
+      result.utility_heat = 'Gas';
+      result.utility_water = 'Public Water';
+      result.utility_sewer = 'Public Sewer';
+      return result;
+    }
+    if (normalized.includes('90')) {
+      // Code 90 = NONE
+      return result;
+    }
+
+    // Heat: Electric (02) or Gas (03)
+    if (normalized.includes('3')) result.utility_heat = 'Gas';
+    else if (normalized.includes('2')) result.utility_heat = 'Electric';
+
+    // Water: Water (04) or Well (06)
+    if (normalized.includes('4')) result.utility_water = 'Public Water';
+    else if (normalized.includes('6')) result.utility_water = 'Well';
+
+    // Sewer: Sewer (05), Septic (07), Sump/Sew (08), Sump/NoSew (09)
+    if (normalized.includes('5')) result.utility_sewer = 'Public Sewer';
+    else if (normalized.includes('7')) result.utility_sewer = 'Septic';
+    else if (normalized.includes('8')) result.utility_sewer = 'Sump Pump/Sewer';
+    else if (normalized.includes('9')) result.utility_sewer = 'Sump Pump/No Sewer';
+
+    return result;
+  }
+
+  /**
    * Ensure string values are preserved exactly as-is
    */
   preserveStringValue(value) {
@@ -597,6 +640,17 @@ export class BRTProcessor {
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
       asset_effective_age: this.parseInteger(rawRecord.EFFAGE),  // BRT: EFFAGE is already a year (e.g., 1950)
       asset_bedrooms: this.parseInteger(rawRecord.BEDTOT),
+
+      // Utility raw codes (BRT: UTILS_1-4, translated via category 52)
+      utility_code_1: this.preserveStringValue(rawRecord.UTILS_1),
+      utility_code_2: this.preserveStringValue(rawRecord.UTILS_2),
+      utility_code_3: this.preserveStringValue(rawRecord.UTILS_3),
+      utility_code_4: this.preserveStringValue(rawRecord.UTILS_4),
+
+      // Translated utility fields from raw codes
+      ...this.translateUtilityCodes([
+        rawRecord.UTILS_1, rawRecord.UTILS_2, rawRecord.UTILS_3, rawRecord.UTILS_4
+      ]),
 
       // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
       special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
