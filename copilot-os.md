@@ -490,3 +490,63 @@ Key exports beyond the Supabase client itself:
 | Excel | ProductionTracker | Inspection analytics |
 
 Both PDF generators support appeal-number auto-detection from `appeal_log` and manual override.
+
+---
+
+## 9. Ground Rules for New Branches
+
+**READ BEFORE TOUCHING ANYTHING.**
+
+This codebase has been built iteratively over the course of a year. Every pattern that looks "weird" was likely solved through multiple rounds of debugging with the user. Before refactoring, restructuring, or "improving" existing code:
+
+### Do NOT:
+- Refactor working code that wasn't part of the request
+- "Clean up" vendor-specific branching logic — it exists because BRT and Microsystems genuinely work differently
+- Simplify the EFA/depreciation math — the conversions between age-as-year and age-as-age are correct and intentional
+- Remove or consolidate what looks like duplicate logic between BRT and Microsystems paths — they are intentionally separate
+- Add abstractions, wrapper functions, or "helper utilities" around code that works fine inline
+- Change how `interpretCodes` works — it handles vendor-specific code translation and the structure is deliberate
+- Normalize database field names or suggest schema migrations unless explicitly asked
+- Add TypeScript, PropTypes, or type annotations unless asked
+- Add error boundaries, loading skeletons, or UX polish that wasn't requested
+- Move files, rename components, or restructure folders
+
+### Do:
+- Read the relevant component fully before making changes
+- Ask "is this intentional?" before changing any pattern that seems odd
+- Check this document for context on vendor differences before touching anything in the data pipeline or EFA logic
+- Make surgical, minimal changes scoped to exactly what was requested
+- Trust that large components (LandValuationTab at 12,678 lines) are large for a reason — they contain complex, interrelated workflows that break when split apart
+
+### Patterns That Look Wrong But Are Correct
+
+| Pattern | Why It's Intentional |
+|---------|---------------------|
+| `asset_effective_age` stores a year, not an age (Microsystems) | Processor converts age→year for uniform storage; UI converts back for display |
+| Separate processor + updater files per vendor | First upload vs re-upload have fundamentally different logic (diff tracking, comparison reports) |
+| `MarketAnalysis.jsx` is only 372 lines | It's an orchestrator — all real work is in `market-tabs/` children |
+| `FinalValuation.jsx` is only 182 lines | Same pattern — orchestrator for `final-valuation-tabs/` |
+| `supabaseClient.js` at 5,058 lines | Centralized service layer — it's large because it's the single source of truth for data operations |
+| Components with 2,000-12,000 lines | These are full workflow modules with inline state, calculations, and UI — splitting them creates worse problems than keeping them together |
+| Inline calculations in JSX components | The depreciation/normalization/CME math needs to live close to the UI that displays it — extracting to separate files creates synchronization bugs |
+| `property_composite_key` used as FK (not uuid) | Block+lot+qualifier+card is the natural key in NJ tax assessment — it's the identifier that survives across file uploads |
+| Multiple jsonb columns on `market_land_valuation` | One row per job with rich jsonb fields is the correct model — it avoids join complexity for data that's always loaded together |
+| `is_assigned_property` filter vs dedicated join table | Assignment-aware loading was solved at the flag level intentionally — the join table `job_responsibilities` stores the upload, but the flag on `property_records` is what the app queries |
+
+### Lessons Learned the Hard Way
+
+1. **The EFA conversion chain** — Microsystems stores effective age as years-of-age in their source file. The processor converts it to a year (`yearPrior - age`) for storage. `MarketDataTab` converts it back to age for display. The DEPR formula uses age directly for Microsystems and `yearPrior - year` for BRT. Touching any part of this chain without understanding the full flow will produce incorrect valuations across the entire job.
+
+2. **Don't "fix" the data pipeline processors** — `brt-processor.js` and `microsystems-processor.js` map vendor-specific field names to our normalized schema. The field mappings look arbitrary but match exact vendor export formats that municipalities provide. Renaming or reordering breaks real uploads.
+
+3. **Large components are load-bearing** — `LandValuationTab.jsx` (12,678 lines) handles bracket analysis, vacant sales, allocation studies, cascade rates, eco-obs adjustments, and per-block worksheets. These features share internal state. Previous attempts to split it created race conditions and stale-state bugs.
+
+4. **CME adjustment grid is bracket-aware** — The `job_adjustment_grid` has `bracket_0` through `bracket_9` columns. These map to price brackets defined in `job_cme_bracket_mappings`. The mapping between VCS codes, type-use codes, and brackets is municipality-specific. Don't assume uniform bracket definitions.
+
+5. **Multi-tenant scoping is not optional** — Every query that touches jobs, employees, or properties must respect `organization_id`. The `internal` org can see everything, `assessor` orgs can only see their own data. The `job_access_grants` table allows controlled cross-job access for specific employees — this is not a bug.
+
+6. **Appeal log import formats vary** — Each county board has its own export format. The import logic in `AppealLogTab` handles XLS, CSV, PDF, and manual entry. The field mapping is deliberately flexible because no two counties produce the same export.
+
+7. **Don't add loading states or spinners** to working flows — If a component doesn't show a loading spinner, it's probably because the data loads fast enough that a spinner causes more visual disruption than a brief blank frame.
+
+8. **`comparison_reports` are generated, not user-created** — They're produced automatically when a new source file is uploaded over an existing one. Don't expose CRUD for them.
