@@ -580,7 +580,7 @@ export class MicrosystemsUpdater {
 
       // Utility fields (Microsystems: direct Y/N flags)
       utility_heat: this.parseMicroUtilityFlag(rawRecord['Gas Yn'], 'heat'),
-      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Yn'], 'water'),
+      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Y N'] || rawRecord['Water Yn'], 'water'),
       utility_sewer: this.parseMicroUtilityFlag(rawRecord['Sewer Yn'], 'sewer'),
       // Topography: stored under 'Source' field, raw code translated via category 115
       topography: this.preserveStringValue(rawRecord['Source']) || null,

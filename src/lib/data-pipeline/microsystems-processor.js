@@ -454,8 +454,8 @@ export class MicrosystemsProcessor {
       // Utility fields (Microsystems: direct Y/N flags)
       // Gas Yn: Y = Gas, N/blank = No Gas (likely Oil)
       utility_heat: this.parseMicroUtilityFlag(rawRecord['Gas Yn'], 'heat'),
-      // Water Yn: Y = Public Water, N/blank = Well
-      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Yn'], 'water'),
+      // Water Y N: Y = Public Water, N/blank = Well (note: Microsystems uses "Water Y N" with spaces, not "Water Yn")
+      utility_water: this.parseMicroUtilityFlag(rawRecord['Water Y N'] || rawRecord['Water Yn'], 'water'),
       // Sewer Yn: Y = Public Sewer, N/blank = Septic
       utility_sewer: this.parseMicroUtilityFlag(rawRecord['Sewer Yn'], 'sewer'),
       // Topography: stored under 'Source' field, raw code translated via category 115
