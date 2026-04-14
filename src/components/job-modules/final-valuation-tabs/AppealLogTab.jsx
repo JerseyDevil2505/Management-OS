@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -286,6 +286,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
             new_vcs: property?.new_vcs || null,
             owner_name: property?.owner_name || null,
+            owner_street: property?.owner_street || null,
+            owner_csz: property?.owner_csz || null,
             property_block: appeal.property_block || property?.property_block || null,
             property_lot: appeal.property_lot || property?.property_lot || null,
             property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1044,6 +1046,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1470,6 +1474,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1615,6 +1621,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1683,6 +1691,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         Inspected: inspectionDate ? 'Yes' : 'No',
         'Last Inspection': inspectionDate || '-',
         Petitioner: appeal.petitioner_name || '-',
+        'Petitioner Address': appeal.owner_street || '-',
+        'Petitioner City/State': appeal.owner_csz || '-',
         Taxpayer: appeal.taxpayer_name || '-',
         Attorney: appeal.attorney || '-',
         'Atty Address': appeal.attorney_address || '-',
