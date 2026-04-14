@@ -24,14 +24,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // Filter state - separates pending (UI) from active (applied)
   const [pendingFilters, setPendingFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
   });
 
   const [filters, setFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
@@ -721,7 +721,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Extract suffix (trailing letter(s): D, L, A, X - case insensitive)
     // Using the exact regex format with proper anchoring
-    const suffix = appealNumber.trim().match(/([DLAXdlax]+)$/)
+    const suffix = appealNumber.trim().match(/([DLAXZdlaxz]+)$/)
       ?.[1]?.toUpperCase();
 
     // Map suffix to appeal_type
@@ -729,7 +729,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'D': 'petitioner',
       'L': 'represented',
       'A': 'assessor',
-      'X': 'cross'
+      'X': 'cross',
+      'Z': 'dismissed'
     };
 
     return {
@@ -1894,7 +1895,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         ref: `${XLSX.utils.encode_col(statusCodeColIndex)}2:${XLSX.utils.encode_col(statusCodeColIndex)}${range.e.r + 1}`,
         type: 'list',
         operator: 'equal',
-        formula1: '"D,S,H,W,A,AP,AWP,NA"',
+        formula1: '"D,S,H,W,Z,A,AP,AWP,NA"',
         showDropDown: true
       });
     }
@@ -1949,7 +1950,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const updateData = {};
         const newStatus = String(row['Status Code'] || '').trim();
         const newStip = String(row['Stip Status'] || '').trim();
-        const validStatuses = ['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'];
+        const validStatuses = ['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA'];
         const validStips = ['not_started', 'drafted', 'sent', 'signed', 'filed'];
 
         if (newStatus && newStatus !== '-') {
@@ -2204,6 +2205,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               <span className="text-lg font-bold text-gray-900">{stats.statusCounts['W'] || 0}</span>
             </div>
             <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">Z:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['Z'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-xs text-gray-600">NA:</span>
               <span className="text-lg font-bold text-gray-900">{stats.statusCounts['NA'] || 0}</span>
             </div>
@@ -2290,6 +2295,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 { code: 'S', label: 'Stipulated' },
                 { code: 'H', label: 'Heard' },
                 { code: 'W', label: 'Withdrawn' },
+                { code: 'Z', label: 'Dismissed' },
                 { code: 'A', label: 'Assessor' },
                 { code: 'AP', label: 'Affirmed w/Prejudice' },
                 { code: 'AWP', label: 'Affirmed w/o Prejudice' },
@@ -2685,7 +2691,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               const ownerMismatch = hasOwnerMismatch(appeal);
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
-              const isResolved = ['S', 'W', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
+              const isResolved = ['S', 'W', 'Z', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
               const resolvedBg = '#ecfdf5'; // pastel mint green
               const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? '' : 'hover:bg-gray-50';
               const textMuted = isResolved ? 'text-gray-500' : 'text-gray-600';
@@ -2714,6 +2720,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <option value="S">S</option>
                       <option value="H">H</option>
                       <option value="W">W</option>
+                      <option value="Z">Z</option>
                       <option value="A">A</option>
                       <option value="AP">AP</option>
                       <option value="AWP">AWP</option>
@@ -3336,6 +3343,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       ['A', 'Assessor'],
                       ['AP', 'Affirmed Pending'],
                       ['AWP', 'Affirmed w/ Prejudice'],
+                      ['Z', 'Dismissed'],
                       ['NA', 'Nonappearance']
                     ].map(([code, label]) => (
                       <div key={code} className="flex items-center gap-1.5">
