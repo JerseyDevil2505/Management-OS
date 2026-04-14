@@ -1958,6 +1958,38 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           updateData.stip_status = newStip;
         }
 
+        // Hearing Date — parse from Excel and auto-calculate Evidence Due (7 days prior)
+        const rawHearing = row['Hearing Date'];
+        if (rawHearing && String(rawHearing).trim() !== '-' && String(rawHearing).trim() !== '') {
+          let hearingDate = null;
+          const rawStr = String(rawHearing).trim();
+          // Handle Excel serial number dates
+          if (typeof rawHearing === 'number') {
+            const excelEpoch = new Date(1899, 11, 30);
+            hearingDate = new Date(excelEpoch.getTime() + rawHearing * 86400000);
+          } else {
+            hearingDate = new Date(rawStr);
+          }
+          if (hearingDate && !isNaN(hearingDate.getTime())) {
+            const hYear = hearingDate.getFullYear();
+            const hMonth = String(hearingDate.getMonth() + 1).padStart(2, '0');
+            const hDay = String(hearingDate.getDate()).padStart(2, '0');
+            const hearingDateStr = `${hYear}-${hMonth}-${hDay}`;
+            // Only update if different from current
+            const currentHearing = match.hearing_date ? match.hearing_date.split('T')[0] : '';
+            if (hearingDateStr !== currentHearing) {
+              updateData.hearing_date = hearingDateStr;
+              // Auto-calculate evidence due date (7 days prior)
+              const evidenceDue = new Date(hearingDate);
+              evidenceDue.setDate(evidenceDue.getDate() - 7);
+              const eYear = evidenceDue.getFullYear();
+              const eMonth = String(evidenceDue.getMonth() + 1).padStart(2, '0');
+              const eDay = String(evidenceDue.getDate()).padStart(2, '0');
+              updateData.evidence_due_date = `${eYear}-${eMonth}-${eDay}`;
+            }
+          }
+        }
+
         if (Object.keys(updateData).length === 0) {
           skipped++;
           continue;
@@ -3273,10 +3305,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-2">
-              Upload a previously exported Appeal Log Excel file to update <strong>Status Code</strong> and <strong>Stip Status</strong> values.
+              Upload a previously exported Appeal Log Excel file to update <strong>Status Code</strong>, <strong>Stip Status</strong>, and <strong>Hearing Date</strong> values.
             </p>
             <p className="text-xs text-gray-500 mb-4">
-              Appeals are matched by Appeal # and Appeal Year. Only Status Code and Stip Status columns are imported — all other columns are ignored.
+              Appeals are matched by Appeal # and Appeal Year. Only Status Code, Stip Status, and Hearing Date are imported — all other columns are ignored. Evidence Due is auto-calculated (7 days before hearing).
             </p>
             <input
               type="file"
