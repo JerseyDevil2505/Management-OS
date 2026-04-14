@@ -100,6 +100,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
   const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
+  // Import from export state
+  const [showImportExportModal, setShowImportExportModal] = useState(false);
+  const [importExportFile, setImportExportFile] = useState(null);
+  const [importExportResult, setImportExportResult] = useState(null);
+  const [importExportProcessing, setImportExportProcessing] = useState(false);
+
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
   const [bulkHearingDate, setBulkHearingDate] = useState('');
@@ -1879,8 +1885,134 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const timestamp = new Date().toISOString().split('T')[0];
     const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
 
+    // Add data validation dropdowns for Status Code and Stip Status
+    const statusCodeColIndex = headers.indexOf('Status Code');
+    const stipStatusColIndex = headers.indexOf('Stip Status');
+    if (!ws['!dataValidation']) ws['!dataValidation'] = [];
+    if (statusCodeColIndex >= 0) {
+      ws['!dataValidation'].push({
+        ref: `${XLSX.utils.encode_col(statusCodeColIndex)}2:${XLSX.utils.encode_col(statusCodeColIndex)}${range.e.r + 1}`,
+        type: 'list',
+        operator: 'equal',
+        formula1: '"D,S,H,W,A,AP,AWP,NA"',
+        showDropDown: true
+      });
+    }
+    if (stipStatusColIndex >= 0) {
+      ws['!dataValidation'].push({
+        ref: `${XLSX.utils.encode_col(stipStatusColIndex)}2:${XLSX.utils.encode_col(stipStatusColIndex)}${range.e.r + 1}`,
+        type: 'list',
+        operator: 'equal',
+        formula1: '"not_started,drafted,sent,signed,filed"',
+        showDropDown: true
+      });
+    }
+
     // Save file
     XLSX.writeFile(wb, filename);
+  };
+
+  // ==================== IMPORT HANDLER (Status Code + Stip Status from exported Excel) ====================
+  const handleImportFromExport = async () => {
+    if (!importExportFile) return;
+    try {
+      setImportExportProcessing(true);
+      const arrayBuffer = await importExportFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      let updated = 0;
+      let skipped = 0;
+      let notFound = 0;
+
+      for (const row of rows) {
+        const appealNumber = String(row['Appeal #'] || '').trim();
+        const appealYear = row['Appeal Year'];
+        if (!appealNumber || appealNumber === '-' || !appealYear) {
+          skipped++;
+          continue;
+        }
+
+        // Find matching appeal
+        const match = appeals.find(a =>
+          String(a.appeal_number || '').trim() === appealNumber &&
+          String(a.appeal_year) === String(appealYear)
+        );
+        if (!match) {
+          notFound++;
+          continue;
+        }
+
+        // Build update with only allowed fields
+        const updateData = {};
+        const newStatus = String(row['Status Code'] || '').trim();
+        const newStip = String(row['Stip Status'] || '').trim();
+        const validStatuses = ['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'];
+        const validStips = ['not_started', 'drafted', 'sent', 'signed', 'filed'];
+
+        if (newStatus && validStatuses.includes(newStatus) && newStatus !== (match.status_code || '')) {
+          updateData.status_code = newStatus;
+        }
+        if (newStip && validStips.includes(newStip) && newStip !== (match.stip_status || '')) {
+          updateData.stip_status = newStip;
+        }
+
+        if (Object.keys(updateData).length === 0) {
+          skipped++;
+          continue;
+        }
+
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(updateData)
+          .eq('id', match.id);
+
+        if (!error) updated++;
+        else skipped++;
+      }
+
+      // Refresh appeals
+      const { data: fetchData } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('appeal_year', selectedYear);
+
+      if (fetchData) {
+        const enrichedAppeals = (fetchData || []).map(appeal => {
+          const property = properties.find(p =>
+            p.property_block === appeal.property_block &&
+            p.property_lot === appeal.property_lot &&
+            (p.property_qualifier || '') === (appeal.property_qualifier || '')
+          );
+          const { appealType } = parseAppealNumber(appeal.appeal_number);
+          return {
+            ...appeal,
+            appeal_type: appealType,
+            property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+            new_vcs: property?.new_vcs || null,
+            owner_name: property?.owner_name || null,
+            owner_street: property?.owner_street || null,
+            owner_csz: property?.owner_csz || null,
+            property_block: appeal.property_block || property?.property_block || null,
+            property_lot: appeal.property_lot || property?.property_lot || null,
+            property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+            property_location: appeal.property_location || property?.property_location || null
+          };
+        });
+        setAppeals(enrichedAppeals);
+        computeAndEmitStats(enrichedAppeals);
+        saveSnapshot(enrichedAppeals);
+      }
+
+      setImportExportResult({ updated, skipped, notFound, total: rows.length });
+    } catch (error) {
+      console.error('Import from export error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setImportExportProcessing(false);
+    }
   };
 
   // ==================== RENDER ====================
@@ -1927,6 +2059,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
+          </button>
+          <button
+            onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import from Export
           </button>
         </div>
       </div>
@@ -2578,7 +2717,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap ${isResolved ? 'text-blue-400' : 'text-blue-600'} font-semibold`} style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${isResolved ? 'text-blue-400' : 'text-blue-600'} font-semibold`} style={{ minWidth: '100px', maxWidth: '100px' }}>
+                    {renderEditableCell(appeal.id, 'cme_projected_value', appeal.cme_projected_value, 'number')}
+                  </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
                   </td>
@@ -2635,7 +2776,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {/* Current Assessment */}
               <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '120px', maxWidth: '120px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
               {/* CME Value */}
-              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (Number(a.cme_projected_value) || 0), 0))}</td>
               {/* Judgment */}
               <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
               {/* Loss */}
@@ -3116,6 +3257,58 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT FROM EXPORT MODAL */}
+      {showImportExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Import from Exported Excel</h3>
+              <button onClick={() => setShowImportExportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Upload a previously exported Appeal Log Excel file to update <strong>Status Code</strong> and <strong>Stip Status</strong> values.
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              Appeals are matched by Appeal # and Appeal Year. Only Status Code and Stip Status columns are imported — all other columns are ignored.
+            </p>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setImportExportFile(e.target.files[0])}
+              className="w-full mb-4 text-sm"
+            />
+            {importExportResult && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+                <p className="font-medium mb-1">Import Complete</p>
+                <p>Updated: <strong>{importExportResult.updated}</strong></p>
+                <p>Skipped (no changes): <strong>{importExportResult.skipped}</strong></p>
+                <p>Not found: <strong>{importExportResult.notFound}</strong></p>
+                <p className="text-gray-500 mt-1">Total rows: {importExportResult.total}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowImportExportModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
+              >
+                {importExportResult ? 'Close' : 'Cancel'}
+              </button>
+              {!importExportResult && (
+                <button
+                  onClick={handleImportFromExport}
+                  disabled={!importExportFile || importExportProcessing}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {importExportProcessing ? 'Importing...' : 'Import'}
+                </button>
+              )}
             </div>
           </div>
         </div>
