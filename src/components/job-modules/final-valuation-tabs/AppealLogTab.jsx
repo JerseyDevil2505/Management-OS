@@ -1699,8 +1699,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'Atty City/State': appeal.attorney_city_state || '-',
         'Atty Phone': appeal.attorney_phone || '-',
         'Atty Email': appeal.attorney_email || '-',
-        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
         'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
         'Evidence Status': appeal.evidence_status || '-',
         'Submission Type': appeal.submission_type || '-',
         'Stip Status': appeal.stip_status || '-',
@@ -1747,7 +1747,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Set column widths - expand for readability
     ws['!cols'] = headers.map(key => {
       if (key.includes('Address') || key.includes('Comments')) return { wch: 30 };
-      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney')) return { wch: 28 };
+      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney') || key === 'Taxpayer') return { wch: 28 };
       if (key.includes('Phone') || key.includes('Email') || key.includes('Inspection')) return { wch: 22 };
       if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value') || key.includes('CME')) return { wch: 20 };
       if (key.includes('Bracket')) return { wch: 18 };
