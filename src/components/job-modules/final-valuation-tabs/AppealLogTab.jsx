@@ -3317,9 +3317,53 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             <p className="text-sm text-gray-600 mb-2">
               Upload a previously exported Appeal Log Excel file to update <strong>Status Code</strong>, <strong>Stip Status</strong>, and <strong>Hearing Date</strong> values.
             </p>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-gray-500 mb-3">
               Appeals are matched by Appeal # and Appeal Year. Only Status Code, Stip Status, and Hearing Date are imported — all other columns are ignored. Evidence Due is auto-calculated (7 days before hearing).
             </p>
+            <div className="mb-4 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <p className="text-xs font-semibold text-gray-700">Accepted Values Reference</p>
+              </div>
+              <div className="p-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-1">Status Code</p>
+                  <div className="space-y-0.5">
+                    {[
+                      ['D', 'Docketed'],
+                      ['S', 'Settled'],
+                      ['H', 'Heard'],
+                      ['W', 'Withdrawn'],
+                      ['A', 'Assessor'],
+                      ['AP', 'Affirmed Pending'],
+                      ['AWP', 'Affirmed w/ Prejudice'],
+                      ['NA', 'Not Applicable']
+                    ].map(([code, label]) => (
+                      <div key={code} className="flex items-center gap-1.5">
+                        <code className="text-xs bg-white border border-gray-300 px-1.5 py-0.5 rounded font-mono select-all cursor-pointer" title="Click to select">{code}</code>
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-1">Stip Status</p>
+                  <div className="space-y-0.5">
+                    {[
+                      ['not_started', 'Not Started'],
+                      ['drafted', 'Drafted'],
+                      ['sent', 'Sent to Taxpayer'],
+                      ['signed', 'Signed'],
+                      ['filed', 'Filed']
+                    ].map(([code, label]) => (
+                      <div key={code} className="flex items-center gap-1.5">
+                        <code className="text-xs bg-white border border-gray-300 px-1.5 py-0.5 rounded font-mono select-all cursor-pointer" title="Click to select">{code}</code>
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
             <input
               type="file"
               accept=".xlsx,.xls"
