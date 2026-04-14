@@ -3329,14 +3329,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <p className="text-xs font-medium text-gray-700 mb-1">Status Code</p>
                   <div className="space-y-0.5">
                     {[
-                      ['D', 'Docketed'],
+                      ['D', 'Defend'],
                       ['S', 'Settled'],
                       ['H', 'Heard'],
                       ['W', 'Withdrawn'],
                       ['A', 'Assessor'],
                       ['AP', 'Affirmed Pending'],
                       ['AWP', 'Affirmed w/ Prejudice'],
-                      ['NA', 'Not Applicable']
+                      ['NA', 'Nonappearance']
                     ].map(([code, label]) => (
                       <div key={code} className="flex items-center gap-1.5">
                         <code className="text-xs bg-white border border-gray-300 px-1.5 py-0.5 rounded font-mono select-all cursor-pointer" title="Click to select">{code}</code>
