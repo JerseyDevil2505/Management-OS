@@ -31,7 +31,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
-      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 assessment year
+      end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0] // 10/31 assessment year
     };
   }, [jobData?.end_date, isLojikTenant]);
 
@@ -1940,7 +1940,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
         const assessmentYear = new Date(jobData.end_date).getFullYear();
         const cspStart = new Date(assessmentYear - 1, 9, 1);
-        const cspEnd = new Date(assessmentYear, 11, 31);
+        const cspEnd = new Date(assessmentYear, 9, 31);
 
         const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
         const subjectSaleCode = String(subject.sales_nu ?? '').trim();
