@@ -271,9 +271,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (error) throw error;
 
-        // DEBUG: Log raw data from DB
-        console.log('DEBUG: Raw appeals from DB:', data?.length);
-
         // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -302,7 +299,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         });
 
         setAppeals(enrichedAppeals);
-        console.log('DEBUG: Appeals state set with:', enrichedAppeals.length, 'records');
 
         // Emit stats on initial load
         computeAndEmitStats(enrichedAppeals);
@@ -474,7 +470,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Filter and sort appeals
   const filteredAppeals = useMemo(() => {
     let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
-    console.log('DEBUG: After year filter:', result.length);
 
     // Apply active filters
     result = result.filter(a => {
@@ -497,7 +492,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       return true;
     });
 
-    console.log('DEBUG: After all filters:', result.length);
 
     // Apply sorting
     if (sortState.column) {
@@ -1000,31 +994,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
       };
 
-      // DEBUG: Check job_id
-      console.log('DEBUG: job_id present?', !!appealData.job_id, 'value:', appealData.job_id);
-
-      // DEBUG: Log payload keys before insert
-      console.log('DEBUG: Payload keys:', Object.keys(appealData).sort());
-
-      // DEBUG: Log full payload
-      console.log('DEBUG: Attempting insert with payload:', JSON.stringify(appealData, null, 2));
-
       const { data, error } = await supabase
         .from('appeal_log')
         .insert([appealData])
         .select()
         .single();
 
-      // DEBUG: Log insert results
-      console.log('DEBUG: Insert result - data:', data);
-      console.log('DEBUG: Insert result - error:', error);
-
-      if (error) {
-        console.error('SUPABASE INSERT ERROR:', error);
-        throw error;
-      }
-
-      console.log('DEBUG: Insert succeeded, reloading appeals...');
+      if (error) throw error;
 
       // Reload appeals
       const { data: fetchData, error: fetchError } = await supabase
@@ -1034,8 +1010,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         .order('appeal_number', { ascending: true });
 
       if (fetchError) throw fetchError;
-
-      console.log('DEBUG: Fetched appeals count:', fetchData?.length || 0);
 
       const enrichedAppeals = (fetchData || []).map(appeal => {
         const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -1063,7 +1037,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
-      console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
       handleCloseModal();
@@ -1275,10 +1248,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
       // Column index helpers
       const col = (name) => headers.findIndex(h => h === name);
-
-      console.log('CSV Headers:', headers);
-      console.log('Entry col index:', col('Entry'));
-      console.log('Hearing Type col index:', col('Hearing Type'));
 
       const idxBLQ       = col('BLQ');
       const idxAppealNum = col('Appeal #');
