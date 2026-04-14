@@ -1788,10 +1788,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Define a function to create proper cell style
     const getCellStyle = (columnName, bgFill, isFormula = false) => {
+      const thinBorder = { style: 'thin', color: { rgb: 'D0D0D0' } };
       const baseStyle = {
         font: { name: 'Leelawadee', sz: 10, color: { rgb: '000000' } },
         alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
-        fill: bgFill
+        fill: bgFill,
+        border: { left: thinBorder, right: thinBorder, top: thinBorder, bottom: thinBorder }
       };
 
       if (currencyColumns.includes(columnName)) {
@@ -1828,18 +1830,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     // Format data rows
+    const defaultBgFill = { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' };
     for (let R = 1; R <= range.e.r; R++) {
-      // Use Judgment value for default row color
-      const judgmentValue = exportData[R - 1]?.Judgment || 0;
-      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) }, patternType: 'solid' };
-
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
         const columnName = headers[C];
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
-        // For Bracket column, use bracket-specific color
+        // For Bracket column, use bracket-specific color; all other columns use white
         let cellBgFill = defaultBgFill;
         if (C === headers.indexOf('Bracket')) {
           const bracketLabel = exportData[R - 1]?.Bracket || '-';
