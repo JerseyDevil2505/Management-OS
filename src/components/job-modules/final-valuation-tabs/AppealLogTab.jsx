@@ -1708,7 +1708,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'Current Assessment': appeal.current_assessment || 0,
         'Requested Value': appeal.requested_value || 0,
         'CME Value': appeal.cme_projected_value || 0,
-        'CME Assessment': appeal.cme_new_assessment || 0,
+        'CME Assessment': appeal.cme_projected_value && jobData?.director_ratio
+          ? Math.round(appeal.cme_projected_value * jobData.director_ratio)
+          : 0,
         Judgment: appeal.judgment_value || 0,
         Loss: '',  // Will be populated with formula
         'Loss %': '',  // Will be populated with formula
