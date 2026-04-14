@@ -3687,7 +3687,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
+          Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
         </span>
 
         <input
@@ -3744,7 +3744,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙�� Code: {getFileStatusWithRealVersion(localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || job.created_at, 'code')}
+          Code: {getFileStatusWithRealVersion(localCodeUploadedAt || latestCodeUploadedAt || job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
@@ -3798,7 +3798,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Database className="w-4 h-4 text-purple-400" />
         <span className="text-sm min-w-0 flex-1">
-          �� Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
+          Reports: {reportCount} saved comparison{reportCount !== 1 ? 's' : ''}
         </span>
         <button
           onClick={() => {
