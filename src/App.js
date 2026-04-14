@@ -70,30 +70,7 @@ const App = () => {
   });
 
 
-  // Listen for browser back/forward buttons
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      const parts = path.split('/');
-      
-      // Handle job-specific URLs
-      if (parts[1] === 'job' && parts[2]) {
-        // Don't do anything here - the other useEffect handles job selection
-        return;
-      }
-      
-      // Handle main navigation
-      const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
-      if (validViews.includes(viewPath)) {
-        setActiveView(viewPath);
-        setSelectedJob(null); // Clear job selection when navigating to main views
-      }
-    };
-    
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  // Listen for browser back/forward buttons (moved after selectedJob declaration below)
 
   // ==========================================
   // PERFORMANCE MONITORING
@@ -153,6 +130,78 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
   const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
+
+  // Job exit confirmation
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const pendingExitAction = useRef(null);
+
+  // Listen for browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const path = window.location.pathname;
+      const parts = path.split('/');
+
+      // Handle job-specific URLs
+      if (parts[1] === 'job' && parts[2]) {
+        // Don't do anything here - the other useEffect handles job selection
+        return;
+      }
+
+      // If currently in a job, intercept and confirm
+      if (selectedJob && activeView === 'job-modules') {
+        // Push the job URL back so the user stays on the page
+        window.history.pushState({}, '', `/job/${selectedJob.id}`);
+        const viewPath = path.slice(1) || 'admin-jobs';
+        pendingExitAction.current = () => {
+          const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+          if (validViews.includes(viewPath)) {
+            setActiveView(viewPath);
+            setSelectedJob(null);
+            window.history.pushState({}, '', `/${viewPath}`);
+          }
+        };
+        setShowExitConfirm(true);
+        return;
+      }
+
+      // Handle main navigation
+      const viewPath = path.slice(1) || 'admin-jobs';
+      const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+      if (validViews.includes(viewPath)) {
+        setActiveView(viewPath);
+        setSelectedJob(null); // Clear job selection when navigating to main views
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selectedJob, activeView]);
+
+  // Warn on browser refresh/close when in a job
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (selectedJob && activeView === 'job-modules') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [selectedJob, activeView]);
+
+  // Exit confirmation handlers
+  const confirmExitJob = useCallback(() => {
+    setShowExitConfirm(false);
+    if (pendingExitAction.current) {
+      pendingExitAction.current();
+      pendingExitAction.current = null;
+    }
+  }, []);
+
+  const cancelExitJob = useCallback(() => {
+    setShowExitConfirm(false);
+    pendingExitAction.current = null;
+  }, []);
 
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
@@ -272,7 +321,7 @@ const App = () => {
   };
 
   // Update URL when view changes
-  const handleViewChange = useCallback((view) => {
+  const executeViewChange = useCallback((view) => {
     // Prevent non-admins from navigating to billing/payroll
     const role = user?.role?.toString?.().toLowerCase?.() || '';
     const isAdminLocal = role === 'admin' || role === 'owner';
@@ -295,10 +344,21 @@ const App = () => {
       return;
     }
 
+    setSelectedJob(null);
     setActiveView(view);
     // Update URL without page reload
     window.history.pushState({}, '', `/${view}`);
   }, [user, tenantConfig]);
+
+  const handleViewChange = useCallback((view) => {
+    // If currently in a job, confirm before leaving
+    if (selectedJob && activeView === 'job-modules') {
+      pendingExitAction.current = () => executeViewChange(view);
+      setShowExitConfirm(true);
+      return;
+    }
+    executeViewChange(view);
+  }, [selectedJob, activeView, executeViewChange]);
 
   // ==========================================
   // JOB FRESHNESS CALCULATOR
@@ -815,7 +875,7 @@ const App = () => {
     console.log(`🔄 Selected job ${job.id} - will load fresh data`);
   }, []);
 
-  const handleBackToJobs = useCallback(() => {
+  const executeBackToJobs = useCallback(() => {
     setSelectedJob(null);
     const backView = isAssessorUser ? 'assessor-dashboard' : 'admin-jobs';
     setActiveView(backView);
@@ -825,6 +885,15 @@ const App = () => {
     console.log('🔄 Refreshing jobs data after returning from modules');
     loadLiveData(['jobs']);
   }, [loadLiveData, isAssessorUser]);
+
+  const handleBackToJobs = useCallback(() => {
+    if (selectedJob && activeView === 'job-modules') {
+      pendingExitAction.current = () => executeBackToJobs();
+      setShowExitConfirm(true);
+      return;
+    }
+    executeBackToJobs();
+  }, [selectedJob, activeView, executeBackToJobs]);
 
   const handleFileProcessed = useCallback(() => {
     console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
@@ -1762,6 +1831,43 @@ const App = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Exit Job Confirmation Modal */}
+      {showExitConfirm && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '2rem',
+            width: '90%', maxWidth: '400px', boxShadow: '0 20px 25px rgba(0,0,0,0.15)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>⚠️</div>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem', color: '#1a202c' }}>
+              Exit Job?
+            </h3>
+            <p style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+              Are you sure you want to leave <strong>{selectedJob?.job_name || selectedJob?.name}</strong>? Large jobs may take several minutes to reload.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+              <button
+                onClick={cancelExitJob}
+                style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}
+              >
+                Stay in Job
+              </button>
+              <button
+                onClick={confirmExitJob}
+                style={{ padding: '0.6rem 1.5rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #2a5298, #1e3c72)', color: 'white', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}
+              >
+                Yes, Exit
+              </button>
+            </div>
           </div>
         </div>
       )}

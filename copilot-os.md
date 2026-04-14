@@ -566,3 +566,5 @@ This codebase has been built iteratively over the course of a year. Every patter
 7. **Don't add loading states or spinners** to working flows — If a component doesn't show a loading spinner, it's probably because the data loads fast enough that a spinner causes more visual disruption than a brief blank frame.
 
 8. **`comparison_reports` are generated, not user-created** — They're produced automatically when a new source file is uploaded over an existing one. Don't expose CRUD for them.
+
+😊
