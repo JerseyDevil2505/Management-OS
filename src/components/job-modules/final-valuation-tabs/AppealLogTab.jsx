@@ -1925,6 +1925,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       let updated = 0;
       let skipped = 0;
       let notFound = 0;
+      let invalid = 0;
 
       for (const row of rows) {
         const appealNumber = String(row['Appeal #'] || '').trim();
@@ -1951,11 +1952,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         const validStatuses = ['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA'];
         const validStips = ['not_started', 'drafted', 'sent', 'signed', 'filed'];
 
-        if (newStatus && validStatuses.includes(newStatus) && newStatus !== (match.status_code || '')) {
-          updateData.status_code = newStatus;
+        if (newStatus && newStatus !== '-') {
+          if (validStatuses.includes(newStatus)) {
+            if (newStatus !== (match.status_code || '')) updateData.status_code = newStatus;
+          } else {
+            invalid++;
+          }
         }
-        if (newStip && validStips.includes(newStip) && newStip !== (match.stip_status || '')) {
-          updateData.stip_status = newStip;
+        if (newStip && newStip !== '-') {
+          if (validStips.includes(newStip)) {
+            if (newStip !== (match.stip_status || '')) updateData.stip_status = newStip;
+          } else {
+            invalid++;
+          }
         }
 
         // Hearing Date — parse from Excel and auto-calculate Evidence Due (7 days prior)
@@ -2038,7 +2047,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         saveSnapshot(enrichedAppeals);
       }
 
-      setImportExportResult({ updated, skipped, notFound, total: rows.length });
+      setImportExportResult({ updated, skipped, notFound, invalid, total: rows.length });
     } catch (error) {
       console.error('Import from export error:', error);
       alert(`Import failed: ${error.message}`);
@@ -2094,7 +2103,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           </button>
           <button
             onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+            style={{ backgroundColor: '#ea580c', color: 'white' }}
+            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
             Import from Export
@@ -3322,6 +3332,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 <p>Updated: <strong>{importExportResult.updated}</strong></p>
                 <p>Skipped (no changes): <strong>{importExportResult.skipped}</strong></p>
                 <p>Not found: <strong>{importExportResult.notFound}</strong></p>
+                {importExportResult.invalid > 0 && (
+                  <p className="text-red-600">Invalid values rejected: <strong>{importExportResult.invalid}</strong></p>
+                )}
                 <p className="text-gray-500 mt-1">Total rows: {importExportResult.total}</p>
               </div>
             )}
