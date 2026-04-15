@@ -88,6 +88,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
+  const [setAsideSubjectIds, setSetAsideSubjectIds] = useState(new Set()); // IDs of set-aside subjects
+  const [showAllResults, setShowAllResults] = useState(true); // Toggle: show all vs remaining only
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [bracketMappings, setBracketMappings] = useState([]);
@@ -382,8 +384,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       if (error) throw error;
 
+      setSavedEvaluations(data || []);
+      // Sync set-aside subject IDs for filter toggle
+      const ids = new Set((data || []).map(e => e.subject_property_id));
+      setSetAsideSubjectIds(ids);
       if (data && data.length > 0) {
-        setSavedEvaluations(data);
         console.log(`📌 Loaded ${data.length} set-aside evaluations`);
       }
     } catch (error) {
@@ -1088,10 +1093,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const handleSetAsideSuccessful = async () => {
     if (!evaluationResults) return;
 
-    const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
+    // Only set aside results that aren't already set aside
+    const successful = evaluationResults.filter(r =>
+      r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)
+    );
 
     if (successful.length === 0) {
-      alert(`No properties with ${minCompsForSuccess}+ comparables to set aside`);
+      alert(`No new properties with ${minCompsForSuccess}+ comparables to set aside`);
       return;
     }
 
@@ -1125,13 +1133,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // Reload saved evaluations to include newly set-aside ones
       await loadSavedEvaluations();
 
-      // Remove set-aside properties from current results display
-      const remainingResults = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
+      const remainingCount = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess).length;
 
-      alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
+      alert(`${successful.length} properties set aside successfully. ${remainingCount} properties remain for re-evaluation.\n\nUse "Show All Results" to view set-aside properties, or "Show Remaining" to focus on what's left.`);
 
-      // Update results to show only remaining
-      setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
+      // Switch to showing remaining only so user sees what still needs work
+      setShowAllResults(false);
 
       // Auto-switch to 'keep' mode since user now has saved results
       setEvaluationMode('keep');
@@ -1530,6 +1537,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           console.log('🗑️ Cleared all previous evaluations (fresh mode)');
         }
         setSavedEvaluations([]);
+        setSetAsideSubjectIds(new Set());
+        setShowAllResults(true);
       } else {
         // Keep mode: exclude properties that already have set_aside results
         const setAsidePropertyIds = new Set(
@@ -4336,8 +4345,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">
                     Evaluation Results
+                    {!showAllResults && setAsideSubjectIds.size > 0 && (
+                      <span className="ml-2 text-sm font-normal text-gray-500">(showing remaining only)</span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-3">
+                    {/* Show All / Show Remaining Toggle */}
+                    {setAsideSubjectIds.size > 0 && (
+                      <button
+                        onClick={() => setShowAllResults(!showAllResults)}
+                        className={`px-4 py-2 rounded text-sm font-medium border ${
+                          showAllResults
+                            ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
+                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {showAllResults ? 'Show Remaining' : `Show All Results (${evaluationResults.length})`}
+                      </button>
+                    )}
                     {/* Minimum Comps Selector */}
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-medium text-gray-700">Min Comps:</label>
@@ -4355,7 +4380,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
                     <button
                       onClick={handleSetAsideSuccessful}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length === 0}
+                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).length === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
                       Set Aside
@@ -4412,7 +4437,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {evaluationResults.map((result, idx) => {
+                      {evaluationResults
+                        .filter(r => showAllResults || !setAsideSubjectIds.has(r.subject.id))
+                        .map((result, idx) => {
+                        const isSetAside = setAsideSubjectIds.has(result.subject.id);
                         // Decode Type Use and Style codes
                         const typeUseDecoded = codeDefinitions
                           ? interpretCodes.getTypeName(result.subject, codeDefinitions, vendorType)
@@ -4430,9 +4458,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           : result.subject.asset_design_style || '';
 
                         return (
-                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <tr key={idx} className={`${isSetAside ? 'bg-blue-50 opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')}`}>
                             {/* Subject Property Info */}
-                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                              {isSetAside && <span title="Set Aside" className="text-blue-500 mr-1">&#x2713;</span>}
+                              {result.subject.property_vcs}
+                            </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_lot}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_qualifier || ''}</td>
@@ -4652,8 +4683,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               </div>
             )}
 
-            {/* SET-ASIDE RESULTS - Always visible when there are saved evaluations */}
-            {savedEvaluations.length > 0 && (
+            {/* SET-ASIDE RESULTS - Show only when no active results but saved evaluations exist (e.g. after page refresh) */}
+            {!evaluationResults && savedEvaluations.length > 0 && (
               <div className="mt-6 bg-white border border-blue-300 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-blue-900">
