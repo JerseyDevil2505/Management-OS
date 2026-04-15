@@ -4,7 +4,7 @@ import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [] }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {} }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
 
@@ -1845,8 +1845,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const assessmentRatio = projectedValue > 0 ? (currentAssessment / projectedValue) : 0;
 
     // Chapter 123 thresholds: Common Level Range is Director's Ratio +/- 15%
-    // Use job-level director_ratio if saved, otherwise default to 100%
-    const directorsRatio = jobData?.director_ratio ? parseFloat(jobData.director_ratio) : 1.0;
+    // Use job-level director_ratio if saved, fallback to equalization ratio from normalization, cap at 100%
+    let directorsRatio = 1.0;
+    if (jobData?.director_ratio) {
+      directorsRatio = parseFloat(jobData.director_ratio);
+      // If stored as percentage (e.g. 98.5), convert to decimal
+      if (directorsRatio > 1) directorsRatio = directorsRatio / 100;
+    } else if (marketLandData?.normalization_config?.equalizationRatio) {
+      directorsRatio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+      // If stored as percentage (e.g. 107.29), convert to decimal
+      if (directorsRatio > 1) directorsRatio = directorsRatio / 100;
+    }
+    // Cap at 100% — cannot exceed
+    directorsRatio = Math.min(directorsRatio, 1.0);
     const upperLimit = directorsRatio * 1.15;
     const lowerLimit = directorsRatio * 0.85;
 

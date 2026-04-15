@@ -88,6 +88,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
+  const [setAsideSubjectIds, setSetAsideSubjectIds] = useState(new Set()); // IDs of set-aside subjects
+  const [showAllResults, setShowAllResults] = useState(true); // Toggle: show all vs remaining only
+  const [selectedForSetAside, setSelectedForSetAside] = useState(new Set()); // Per-row checkbox for set-aside
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [bracketMappings, setBracketMappings] = useState([]);
@@ -180,6 +183,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
+  // Staged filter inputs (not applied until user clicks Filter)
+  const [stagedDateStart, setStagedDateStart] = useState(compFilters.salesDateStart);
+  const [stagedDateEnd, setStagedDateEnd] = useState(compFilters.salesDateEnd);
+  const [stagedSearch, setStagedSearch] = useState('');
   const [poolAnalyticsExpanded, setPoolAnalyticsExpanded] = useState({ vcs: false, style: false, typeUse: false, view: false });
   // Pool display filters (filter the table view, not inclusion logic)
   const [poolFilterVCS, setPoolFilterVCS] = useState([]);
@@ -382,8 +389,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       if (error) throw error;
 
+      setSavedEvaluations(data || []);
+      // Sync set-aside subject IDs for filter toggle
+      const ids = new Set((data || []).map(e => e.subject_property_id));
+      setSetAsideSubjectIds(ids);
       if (data && data.length > 0) {
-        setSavedEvaluations(data);
         console.log(`📌 Loaded ${data.length} set-aside evaluations`);
       }
     } catch (error) {
@@ -504,6 +514,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       // Restore results
       setEvaluationResults(data.results);
+      // Pre-select all non-set-aside rows for set-aside checkbox
+      const allIds = new Set(
+        (data.results || [])
+          .filter(r => !setAsideSubjectIds.has(r.subject.id))
+          .map(r => r.subject.id)
+      );
+      setSelectedForSetAside(allIds);
 
       // Restore adjustment bracket
       if (data.adjustment_bracket) {
@@ -1088,10 +1105,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const handleSetAsideSuccessful = async () => {
     if (!evaluationResults) return;
 
-    const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
+    // Only set aside results that are checked AND not already set aside
+    const successful = evaluationResults.filter(r =>
+      selectedForSetAside.has(r.subject.id) &&
+      r.comparables.length >= minCompsForSuccess &&
+      !setAsideSubjectIds.has(r.subject.id)
+    );
 
     if (successful.length === 0) {
-      alert(`No properties with ${minCompsForSuccess}+ comparables to set aside`);
+      const checkedCount = evaluationResults.filter(r => selectedForSetAside.has(r.subject.id) && !setAsideSubjectIds.has(r.subject.id)).length;
+      const belowThreshold = evaluationResults.filter(r => selectedForSetAside.has(r.subject.id) && !setAsideSubjectIds.has(r.subject.id) && r.comparables.length < minCompsForSuccess).length;
+      if (belowThreshold > 0) {
+        alert(`${belowThreshold} checked propert${belowThreshold === 1 ? 'y doesn\'t' : 'ies don\'t'} meet the minimum ${minCompsForSuccess} comparables threshold.\n\nAdjust your Min Comps setting or re-run with different criteria to find more comparables.`);
+      } else {
+        alert(`No properties selected to set aside. Use the checkboxes to select rows.`);
+      }
       return;
     }
 
@@ -1125,13 +1153,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // Reload saved evaluations to include newly set-aside ones
       await loadSavedEvaluations();
 
-      // Remove set-aside properties from current results display
-      const remainingResults = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
+      // Remove newly set-aside IDs from checkbox selection
+      const updatedSelection = new Set(selectedForSetAside);
+      successful.forEach(r => updatedSelection.delete(r.subject.id));
+      setSelectedForSetAside(updatedSelection);
 
-      alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
+      const newSetAsideIds = new Set(successful.map(s => s.subject.id));
+      const remainingCount = evaluationResults.filter(r =>
+        !setAsideSubjectIds.has(r.subject.id) && !newSetAsideIds.has(r.subject.id)
+      ).length;
 
-      // Update results to show only remaining
-      setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
+      alert(`${successful.length} properties set aside successfully. ${remainingCount} properties remain for re-evaluation.\n\nUse "Show All Results" to view set-aside properties, or "Show Remaining" to focus on what's left.`);
+
+      // Switch to showing remaining only so user sees what still needs work
+      setShowAllResults(false);
 
       // Auto-switch to 'keep' mode since user now has saved results
       setEvaluationMode('keep');
@@ -1172,6 +1207,63 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     } catch (error) {
       console.error('Error saving to appeal log:', error);
       alert('Failed to save to Appeal Log: ' + error.message);
+    }
+  };
+
+  // ==================== SAVE SET-ASIDE TO APPEAL LOG ====================
+  const handleSaveSetAsideToAppealLog = async () => {
+    if (!savedEvaluations || savedEvaluations.length === 0) return;
+
+    try {
+      let updatedCount = 0;
+
+      for (const evaluation of savedEvaluations) {
+        if (!evaluation.projected_assessment) continue;
+
+        const pams = evaluation.subject_pams || '';
+        const parts = pams.split('-');
+        const block = parts[0] || '';
+        const lot = parts[1] || '';
+        const qualifier = parts.slice(2).join('-') || '';
+
+        const { error } = await supabase
+          .from('appeal_log')
+          .update({
+            cme_projected_value: evaluation.projected_assessment,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('property_block', block)
+          .eq('property_lot', lot)
+          .eq('property_qualifier', qualifier);
+
+        if (!error) updatedCount++;
+      }
+
+      alert(`Saved ${updatedCount} set-aside CME values to Appeal Log`);
+
+    } catch (error) {
+      console.error('Error saving set-aside to appeal log:', error);
+      alert('Failed to save to Appeal Log: ' + error.message);
+    }
+  };
+
+  // ==================== REMOVE FROM SET-ASIDE ====================
+  const handleRemoveFromSetAside = async (evaluationId) => {
+    if (!window.confirm('Remove this property from set-aside results?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_cme_evaluations')
+        .delete()
+        .eq('id', evaluationId);
+
+      if (error) throw error;
+
+      await loadSavedEvaluations();
+    } catch (error) {
+      console.error('Error removing from set-aside:', error);
+      alert('Failed to remove: ' + error.message);
     }
   };
 
@@ -1473,6 +1565,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           console.log('🗑️ Cleared all previous evaluations (fresh mode)');
         }
         setSavedEvaluations([]);
+        setSetAsideSubjectIds(new Set());
+        setShowAllResults(true);
       } else {
         // Keep mode: exclude properties that already have set_aside results
         const setAsidePropertyIds = new Set(
@@ -2028,8 +2122,58 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       // Display results immediately - no DB save during evaluation
-      // User saves explicitly via "Save Result Set" button
-      setEvaluationResults(results);
+      // In keep mode, merge previously set-aside results back into the display
+      let mergedResults = results;
+      if (evaluationMode === 'keep' && savedEvaluations.length > 0) {
+        const newResultIds = new Set(results.map(r => r.subject.id));
+        const restoredResults = savedEvaluations
+          .filter(e => !newResultIds.has(e.subject_property_id))
+          .map(e => {
+            // Look up the full property object for this saved evaluation
+            const subjectProp = properties.find(p => p.id === e.subject_property_id);
+            if (!subjectProp) return null;
+            // Reconstruct comparables from saved data (look up full property objects)
+            const restoredComps = (e.comparables || []).map(c => {
+              const compProp = properties.find(p => p.id === c.property_id);
+              return compProp ? {
+                ...compProp,
+                rank: c.rank,
+                adjustedPrice: c.adjustedPrice,
+                adjustmentPercent: c.adjustmentPercent,
+              } : {
+                id: c.property_id,
+                property_composite_key: c.pams_id,
+                property_location: c.address,
+                rank: c.rank,
+                adjustedPrice: c.adjustedPrice,
+                adjustmentPercent: c.adjustmentPercent,
+              };
+            });
+            return {
+              subject: subjectProp,
+              comparables: restoredComps,
+              totalFound: restoredComps.length,
+              totalValid: restoredComps.length,
+              projectedAssessment: parseFloat(e.projected_assessment) || null,
+              confidenceScore: parseFloat(e.confidence_score) || 0,
+              hasSubjectSale: false,
+              mappedBracket: null,
+              _restoredFromSetAside: true
+            };
+          })
+          .filter(Boolean);
+
+        mergedResults = [...restoredResults, ...results];
+      }
+
+      setEvaluationResults(mergedResults);
+      // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
+      const allIds = new Set(
+        mergedResults
+          .filter(r => !setAsideSubjectIds.has(r.subject.id))
+          .map(r => r.subject.id)
+      );
+      setSelectedForSetAside(allIds);
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
 
@@ -3177,16 +3321,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex flex-wrap items-end justify-center gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                    <input type="date" value={compFilters.salesDateStart} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateStart} onChange={(e) => setStagedDateStart(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                    <input type="date" value={compFilters.salesDateEnd} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateEnd} onChange={(e) => setStagedDateEnd(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
-                    <input type="text" placeholder="Search..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
+                    <input type="text" placeholder="Search..." value={stagedSearch} onChange={(e) => setStagedSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd })); setSalesPoolSearch(stagedSearch); } }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
                   </div>
+                  <button
+                    onClick={() => { setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd })); setSalesPoolSearch(stagedSearch); }}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                  >
+                    Filter
+                  </button>
+                  <button
+                    onClick={() => { setStagedDateStart(cspDateRange.start); setStagedDateEnd(cspDateRange.end); setStagedSearch(''); setCompFilters(prev => ({ ...prev, salesDateStart: cspDateRange.start, salesDateEnd: cspDateRange.end })); setSalesPoolSearch(''); }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                  >
+                    Reset
+                  </button>
                   {Object.keys(salesPoolOverrides).length > 0 && (
                     <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
                       Clear overrides ({Object.keys(salesPoolOverrides).length})
@@ -3302,6 +3458,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <SortTh field="property_block" label="Block" />
                             <SortTh field="property_lot" label="Lot" />
                             <SortTh field="property_qualifier" label="Qual" />
+                            <SortTh field="property_m4_class" label="Class" />
                             <SortTh field="property_location" label="Location" />
                             <SortTh field="asset_design_style" label="Style" />
                             <SortTh field="_currentAsmt" label="Current Asmt" align="right" />
@@ -3432,6 +3589,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="px-2 py-1.5">{p.property_block}</td>
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
+                            <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
                             <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
@@ -4279,8 +4437,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">
                     Evaluation Results
+                    {!showAllResults && setAsideSubjectIds.size > 0 && (
+                      <span className="ml-2 text-sm font-normal text-gray-500">(showing remaining only)</span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-3">
+                    {/* Show All / Show Remaining Toggle */}
+                    {setAsideSubjectIds.size > 0 && (
+                      <button
+                        onClick={() => setShowAllResults(!showAllResults)}
+                        className={`px-4 py-2 rounded text-sm font-medium border ${
+                          showAllResults
+                            ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
+                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {showAllResults ? 'Show Remaining' : `Show All Results (${evaluationResults.length})`}
+                      </button>
+                    )}
                     {/* Minimum Comps Selector */}
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-medium text-gray-700">Min Comps:</label>
@@ -4298,10 +4472,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
                     <button
                       onClick={handleSetAsideSuccessful}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length === 0}
+                      disabled={!evaluationResults || selectedForSetAside.size === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Set Aside
+                      Set Aside ({selectedForSetAside.size})
                     </button>
                     <button
                       onClick={handleSaveResultSet}
@@ -4326,6 +4500,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   <table className="min-w-full border-collapse text-xs">
                     <thead className="bg-gray-100">
                       <tr>
+                        {/* Set-Aside Checkbox */}
+                        <th rowSpan="2" className="border border-gray-300 px-1 py-2 text-center font-semibold w-8">
+                          <input
+                            type="checkbox"
+                            title="Select all / none for set-aside"
+                            checked={evaluationResults && evaluationResults.filter(r => !setAsideSubjectIds.has(r.subject.id)).length > 0 && evaluationResults.filter(r => !setAsideSubjectIds.has(r.subject.id)).every(r => selectedForSetAside.has(r.subject.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const allIds = new Set(selectedForSetAside);
+                                evaluationResults.forEach(r => {
+                                  if (!setAsideSubjectIds.has(r.subject.id)) {
+                                    allIds.add(r.subject.id);
+                                  }
+                                });
+                                setSelectedForSetAside(allIds);
+                              } else {
+                                setSelectedForSetAside(new Set());
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                        </th>
                         {/* Subject Property Info */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
@@ -4355,7 +4551,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {evaluationResults.map((result, idx) => {
+                      {evaluationResults
+                        .filter(r => showAllResults || !setAsideSubjectIds.has(r.subject.id))
+                        .map((result, idx) => {
+                        const isSetAside = setAsideSubjectIds.has(result.subject.id);
                         // Decode Type Use and Style codes
                         const typeUseDecoded = codeDefinitions
                           ? interpretCodes.getTypeName(result.subject, codeDefinitions, vendorType)
@@ -4373,9 +4572,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           : result.subject.asset_design_style || '';
 
                         return (
-                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <tr key={idx} className={`${isSetAside ? 'bg-blue-50 opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')}`}>
+                            {/* Set-Aside Checkbox */}
+                            <td className="border border-gray-300 px-1 py-2 text-center">
+                              {isSetAside ? (
+                                <span title="Already set aside" className="text-blue-500">&#x2713;</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForSetAside.has(result.subject.id)}
+                                  onChange={(e) => {
+                                    const updated = new Set(selectedForSetAside);
+                                    if (e.target.checked) {
+                                      updated.add(result.subject.id);
+                                    } else {
+                                      updated.delete(result.subject.id);
+                                    }
+                                    setSelectedForSetAside(updated);
+                                  }}
+                                  className="cursor-pointer"
+                                  title="Include in set-aside"
+                                />
+                              )}
+                            </td>
                             {/* Subject Property Info */}
-                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">
+                              {result.subject.property_vcs}
+                            </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_lot}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_qualifier || ''}</td>
@@ -4594,6 +4817,79 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
               </div>
             )}
+
+            {/* SET-ASIDE RESULTS - Show only when no active results but saved evaluations exist (e.g. after page refresh) */}
+            {!evaluationResults && savedEvaluations.length > 0 && (
+              <div className="mt-6 bg-white border border-blue-300 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-blue-900">
+                    Set-Aside Results ({savedEvaluations.length} properties)
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSaveSetAsideToAppealLog}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium flex items-center gap-2"
+                    >
+                      <Scale className="w-4 h-4" />
+                      Save to Appeal Log
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-xs">
+                    <thead className="bg-blue-50">
+                      <tr>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">PAMS</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Address</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold"># Comps</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">Projected Assessment</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Confidence</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Saved At</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedEvaluations.map((evaluation) => (
+                        <tr key={evaluation.id} className="hover:bg-blue-50">
+                          <td className="border border-gray-300 px-2 py-1.5 text-center font-mono text-xs">
+                            {evaluation.subject_pams || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-left max-w-xs truncate">
+                            {evaluation.subject_address || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            {evaluation.comparables ? evaluation.comparables.length : 0}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center font-semibold text-green-700 bg-green-50">
+                            ${(Math.round((evaluation.projected_assessment || 0) / 100) * 100).toLocaleString()}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            {evaluation.confidence_score != null
+                              ? `${(evaluation.confidence_score * 100).toFixed(0)}%`
+                              : '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center text-gray-500">
+                            {evaluation.created_at
+                              ? new Date(evaluation.created_at).toLocaleString()
+                              : '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            <button
+                              onClick={() => handleRemoveFromSetAside(evaluation.id)}
+                              className="text-red-500 hover:text-red-700 text-xs font-medium"
+                              title="Remove from set-aside"
+                            >
+                              <X className="w-3.5 h-3.5 inline" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4769,6 +5065,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   cmeBrackets={CME_BRACKETS}
                   isJobContainerLoading={isJobContainerLoading}
                   allProperties={properties}
+                  marketLandData={marketLandData}
                 />
               </div>
             )}
