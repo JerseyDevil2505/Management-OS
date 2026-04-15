@@ -11,7 +11,7 @@
 | Layer | Tech |
 |-------|------|
 | Frontend | React 18 (CRA), Tailwind CSS, Lucide icons |
-| Backend / DB | Supabase (Postgres), Row-Level Security |
+| Backend / DB | Supabase (Postgres), Row-Level Security — **Project ID: `zxvavttfvpsagzluqqwn`** |
 | Auth | Supabase Auth (email/password) |
 | Exports | jsPDF (PDF), xlsx-js-style (Excel) |
 | Multi-tenant | `organizations` table, `organization_id` FK on jobs/employees/profiles |

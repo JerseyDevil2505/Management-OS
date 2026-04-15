@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -24,14 +24,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
   // Filter state - separates pending (UI) from active (applied)
   const [pendingFilters, setPendingFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
   });
 
   const [filters, setFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
@@ -99,6 +99,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   const [pwrCamaFile, setPwrCamaFile] = useState(null);
   const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
   const [pwrCamaResult, setPwrCamaResult] = useState(null);
+
+  // Import from export state
+  const [showImportExportModal, setShowImportExportModal] = useState(false);
+  const [importExportFile, setImportExportFile] = useState(null);
+  const [importExportResult, setImportExportResult] = useState(null);
+  const [importExportProcessing, setImportExportProcessing] = useState(false);
 
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
@@ -265,9 +271,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
         if (error) throw error;
 
-        // DEBUG: Log raw data from DB
-        console.log('DEBUG: Raw appeals from DB:', data?.length);
-
         // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -286,6 +289,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
             new_vcs: property?.new_vcs || null,
             owner_name: property?.owner_name || null,
+            owner_street: property?.owner_street || null,
+            owner_csz: property?.owner_csz || null,
             property_block: appeal.property_block || property?.property_block || null,
             property_lot: appeal.property_lot || property?.property_lot || null,
             property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -294,7 +299,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         });
 
         setAppeals(enrichedAppeals);
-        console.log('DEBUG: Appeals state set with:', enrichedAppeals.length, 'records');
 
         // Emit stats on initial load
         computeAndEmitStats(enrichedAppeals);
@@ -466,7 +470,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
   // Filter and sort appeals
   const filteredAppeals = useMemo(() => {
     let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
-    console.log('DEBUG: After year filter:', result.length);
 
     // Apply active filters
     result = result.filter(a => {
@@ -489,7 +492,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       return true;
     });
 
-    console.log('DEBUG: After all filters:', result.length);
 
     // Apply sorting
     if (sortState.column) {
@@ -713,7 +715,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Extract suffix (trailing letter(s): D, L, A, X - case insensitive)
     // Using the exact regex format with proper anchoring
-    const suffix = appealNumber.trim().match(/([DLAXdlax]+)$/)
+    const suffix = appealNumber.trim().match(/([DLAXZdlaxz]+)$/)
       ?.[1]?.toUpperCase();
 
     // Map suffix to appeal_type
@@ -721,7 +723,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       'D': 'petitioner',
       'L': 'represented',
       'A': 'assessor',
-      'X': 'cross'
+      'X': 'cross',
+      'Z': 'dismissed'
     };
 
     return {
@@ -991,31 +994,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
       };
 
-      // DEBUG: Check job_id
-      console.log('DEBUG: job_id present?', !!appealData.job_id, 'value:', appealData.job_id);
-
-      // DEBUG: Log payload keys before insert
-      console.log('DEBUG: Payload keys:', Object.keys(appealData).sort());
-
-      // DEBUG: Log full payload
-      console.log('DEBUG: Attempting insert with payload:', JSON.stringify(appealData, null, 2));
-
       const { data, error } = await supabase
         .from('appeal_log')
         .insert([appealData])
         .select()
         .single();
 
-      // DEBUG: Log insert results
-      console.log('DEBUG: Insert result - data:', data);
-      console.log('DEBUG: Insert result - error:', error);
-
-      if (error) {
-        console.error('SUPABASE INSERT ERROR:', error);
-        throw error;
-      }
-
-      console.log('DEBUG: Insert succeeded, reloading appeals...');
+      if (error) throw error;
 
       // Reload appeals
       const { data: fetchData, error: fetchError } = await supabase
@@ -1025,8 +1010,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         .order('appeal_number', { ascending: true });
 
       if (fetchError) throw fetchError;
-
-      console.log('DEBUG: Fetched appeals count:', fetchData?.length || 0);
 
       const enrichedAppeals = (fetchData || []).map(appeal => {
         const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -1044,6 +1027,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1052,7 +1037,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       });
 
       setAppeals(enrichedAppeals);
-      console.log('DEBUG: Appeals state updated with', enrichedAppeals.length, 'records');
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
       handleCloseModal();
@@ -1265,10 +1249,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
       // Column index helpers
       const col = (name) => headers.findIndex(h => h === name);
 
-      console.log('CSV Headers:', headers);
-      console.log('Entry col index:', col('Entry'));
-      console.log('Hearing Type col index:', col('Hearing Type'));
-
       const idxBLQ       = col('BLQ');
       const idxAppealNum = col('Appeal #');
       const idxName      = col('Name');
@@ -1470,6 +1450,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1615,6 +1597,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
+          owner_street: property?.owner_street || null,
+          owner_csz: property?.owner_csz || null,
           property_block: appeal.property_block || property?.property_block || null,
           property_lot: appeal.property_lot || property?.property_lot || null,
           property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
@@ -1683,14 +1667,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         Inspected: inspectionDate ? 'Yes' : 'No',
         'Last Inspection': inspectionDate || '-',
         Petitioner: appeal.petitioner_name || '-',
+        'Petitioner Address': appeal.owner_street || '-',
+        'Petitioner City/State': appeal.owner_csz || '-',
         Taxpayer: appeal.taxpayer_name || '-',
         Attorney: appeal.attorney || '-',
         'Atty Address': appeal.attorney_address || '-',
         'Atty City/State': appeal.attorney_city_state || '-',
         'Atty Phone': appeal.attorney_phone || '-',
         'Atty Email': appeal.attorney_email || '-',
-        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
         'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
+        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
         'Evidence Status': appeal.evidence_status || '-',
         'Submission Type': appeal.submission_type || '-',
         'Stip Status': appeal.stip_status || '-',
@@ -1698,7 +1684,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'Current Assessment': appeal.current_assessment || 0,
         'Requested Value': appeal.requested_value || 0,
         'CME Value': appeal.cme_projected_value || 0,
-        'CME Assessment': appeal.cme_new_assessment || 0,
+        'CME Assessment': appeal.cme_projected_value && jobData?.director_ratio
+          ? Math.round(appeal.cme_projected_value * jobData.director_ratio)
+          : 0,
         Judgment: appeal.judgment_value || 0,
         Loss: '',  // Will be populated with formula
         'Loss %': '',  // Will be populated with formula
@@ -1737,7 +1725,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     // Set column widths - expand for readability
     ws['!cols'] = headers.map(key => {
       if (key.includes('Address') || key.includes('Comments')) return { wch: 30 };
-      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney')) return { wch: 28 };
+      if (key.includes('Location') || key.includes('Petitioner') || key.includes('Attorney') || key === 'Taxpayer') return { wch: 28 };
       if (key.includes('Phone') || key.includes('Email') || key.includes('Inspection')) return { wch: 22 };
       if (key.includes('Assessment') || key.includes('Judgment') || key.includes('Loss') || key.includes('Value') || key.includes('CME')) return { wch: 20 };
       if (key.includes('Bracket')) return { wch: 18 };
@@ -1778,10 +1766,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
 
     // Define a function to create proper cell style
     const getCellStyle = (columnName, bgFill, isFormula = false) => {
+      const thinBorder = { style: 'thin', color: { rgb: 'D0D0D0' } };
       const baseStyle = {
         font: { name: 'Leelawadee', sz: 10, color: { rgb: '000000' } },
         alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
-        fill: bgFill
+        fill: bgFill,
+        border: { left: thinBorder, right: thinBorder, top: thinBorder, bottom: thinBorder }
       };
 
       if (currencyColumns.includes(columnName)) {
@@ -1818,18 +1808,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     };
 
     // Format data rows
+    const defaultBgFill = { fgColor: { rgb: 'FFFFFF' }, patternType: 'solid' };
     for (let R = 1; R <= range.e.r; R++) {
-      // Use Judgment value for default row color
-      const judgmentValue = exportData[R - 1]?.Judgment || 0;
-      const defaultBgFill = { fgColor: { rgb: getBracketColor(judgmentValue) }, patternType: 'solid' };
-
       for (let C = 0; C < headers.length; C++) {
         const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
         const columnName = headers[C];
 
         if (!ws[cellRef]) ws[cellRef] = {};
 
-        // For Bracket column, use bracket-specific color
+        // For Bracket column, use bracket-specific color; all other columns use white
         let cellBgFill = defaultBgFill;
         if (C === headers.indexOf('Bracket')) {
           const bracketLabel = exportData[R - 1]?.Bracket || '-';
@@ -1868,8 +1855,175 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
     const timestamp = new Date().toISOString().split('T')[0];
     const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
 
+    // Add data validation dropdowns for Status Code and Stip Status
+    const statusCodeColIndex = headers.indexOf('Status Code');
+    const stipStatusColIndex = headers.indexOf('Stip Status');
+    if (!ws['!dataValidation']) ws['!dataValidation'] = [];
+    if (statusCodeColIndex >= 0) {
+      ws['!dataValidation'].push({
+        ref: `${XLSX.utils.encode_col(statusCodeColIndex)}2:${XLSX.utils.encode_col(statusCodeColIndex)}${range.e.r + 1}`,
+        type: 'list',
+        operator: 'equal',
+        formula1: '"D,S,H,W,Z,A,AP,AWP,NA"',
+        showDropDown: true
+      });
+    }
+    if (stipStatusColIndex >= 0) {
+      ws['!dataValidation'].push({
+        ref: `${XLSX.utils.encode_col(stipStatusColIndex)}2:${XLSX.utils.encode_col(stipStatusColIndex)}${range.e.r + 1}`,
+        type: 'list',
+        operator: 'equal',
+        formula1: '"not_started,drafted,sent,signed,filed"',
+        showDropDown: true
+      });
+    }
+
     // Save file
     XLSX.writeFile(wb, filename);
+  };
+
+  // ==================== IMPORT HANDLER (Status Code + Stip Status from exported Excel) ====================
+  const handleImportFromExport = async () => {
+    if (!importExportFile) return;
+    try {
+      setImportExportProcessing(true);
+      const arrayBuffer = await importExportFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      let updated = 0;
+      let skipped = 0;
+      let notFound = 0;
+      let invalid = 0;
+
+      for (const row of rows) {
+        const appealNumber = String(row['Appeal #'] || '').trim();
+        const appealYear = row['Appeal Year'];
+        if (!appealNumber || appealNumber === '-' || !appealYear) {
+          skipped++;
+          continue;
+        }
+
+        // Find matching appeal
+        const match = appeals.find(a =>
+          String(a.appeal_number || '').trim() === appealNumber &&
+          String(a.appeal_year) === String(appealYear)
+        );
+        if (!match) {
+          notFound++;
+          continue;
+        }
+
+        // Build update with only allowed fields
+        const updateData = {};
+        const newStatus = String(row['Status Code'] || '').trim();
+        const newStip = String(row['Stip Status'] || '').trim();
+        const validStatuses = ['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA'];
+        const validStips = ['not_started', 'drafted', 'sent', 'signed', 'filed'];
+
+        if (newStatus && newStatus !== '-') {
+          if (validStatuses.includes(newStatus)) {
+            if (newStatus !== (match.status_code || '')) updateData.status_code = newStatus;
+          } else {
+            invalid++;
+          }
+        }
+        if (newStip && newStip !== '-') {
+          if (validStips.includes(newStip)) {
+            if (newStip !== (match.stip_status || '')) updateData.stip_status = newStip;
+          } else {
+            invalid++;
+          }
+        }
+
+        // Hearing Date — parse from Excel and auto-calculate Evidence Due (7 days prior)
+        const rawHearing = row['Hearing Date'];
+        if (rawHearing && String(rawHearing).trim() !== '-' && String(rawHearing).trim() !== '') {
+          let hearingDate = null;
+          const rawStr = String(rawHearing).trim();
+          // Handle Excel serial number dates
+          if (typeof rawHearing === 'number') {
+            const excelEpoch = new Date(1899, 11, 30);
+            hearingDate = new Date(excelEpoch.getTime() + rawHearing * 86400000);
+          } else {
+            hearingDate = new Date(rawStr);
+          }
+          if (hearingDate && !isNaN(hearingDate.getTime())) {
+            const hYear = hearingDate.getFullYear();
+            const hMonth = String(hearingDate.getMonth() + 1).padStart(2, '0');
+            const hDay = String(hearingDate.getDate()).padStart(2, '0');
+            const hearingDateStr = `${hYear}-${hMonth}-${hDay}`;
+            // Only update if different from current
+            const currentHearing = match.hearing_date ? match.hearing_date.split('T')[0] : '';
+            if (hearingDateStr !== currentHearing) {
+              updateData.hearing_date = hearingDateStr;
+              // Auto-calculate evidence due date (7 days prior)
+              const evidenceDue = new Date(hearingDate);
+              evidenceDue.setDate(evidenceDue.getDate() - 7);
+              const eYear = evidenceDue.getFullYear();
+              const eMonth = String(evidenceDue.getMonth() + 1).padStart(2, '0');
+              const eDay = String(evidenceDue.getDate()).padStart(2, '0');
+              updateData.evidence_due_date = `${eYear}-${eMonth}-${eDay}`;
+            }
+          }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+          skipped++;
+          continue;
+        }
+
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(updateData)
+          .eq('id', match.id);
+
+        if (!error) updated++;
+        else skipped++;
+      }
+
+      // Refresh appeals
+      const { data: fetchData } = await supabase
+        .from('appeal_log')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('appeal_year', selectedYear);
+
+      if (fetchData) {
+        const enrichedAppeals = (fetchData || []).map(appeal => {
+          const property = properties.find(p =>
+            p.property_block === appeal.property_block &&
+            p.property_lot === appeal.property_lot &&
+            (p.property_qualifier || '') === (appeal.property_qualifier || '')
+          );
+          const { appealType } = parseAppealNumber(appeal.appeal_number);
+          return {
+            ...appeal,
+            appeal_type: appealType,
+            property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+            new_vcs: property?.new_vcs || null,
+            owner_name: property?.owner_name || null,
+            owner_street: property?.owner_street || null,
+            owner_csz: property?.owner_csz || null,
+            property_block: appeal.property_block || property?.property_block || null,
+            property_lot: appeal.property_lot || property?.property_lot || null,
+            property_qualifier: appeal.property_qualifier || property?.property_qualifier || null,
+            property_location: appeal.property_location || property?.property_location || null
+          };
+        });
+        setAppeals(enrichedAppeals);
+        computeAndEmitStats(enrichedAppeals);
+        saveSnapshot(enrichedAppeals);
+      }
+
+      setImportExportResult({ updated, skipped, notFound, invalid, total: rows.length });
+    } catch (error) {
+      console.error('Import from export error:', error);
+      alert(`Import failed: ${error.message}`);
+    } finally {
+      setImportExportProcessing(false);
+    }
   };
 
   // ==================== RENDER ====================
@@ -1916,6 +2070,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
           >
             📊 Export to Excel
+          </button>
+          <button
+            onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
+            style={{ backgroundColor: '#ea580c', color: 'white' }}
+            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import from Export
           </button>
         </div>
       </div>
@@ -2012,6 +2174,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               <span className="text-lg font-bold text-gray-900">{stats.statusCounts['W'] || 0}</span>
             </div>
             <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-600">Z:</span>
+              <span className="text-lg font-bold text-gray-900">{stats.statusCounts['Z'] || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-xs text-gray-600">NA:</span>
               <span className="text-lg font-bold text-gray-900">{stats.statusCounts['NA'] || 0}</span>
             </div>
@@ -2098,6 +2264,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                 { code: 'S', label: 'Stipulated' },
                 { code: 'H', label: 'Heard' },
                 { code: 'W', label: 'Withdrawn' },
+                { code: 'Z', label: 'Dismissed' },
                 { code: 'A', label: 'Assessor' },
                 { code: 'AP', label: 'Affirmed w/Prejudice' },
                 { code: 'AWP', label: 'Affirmed w/o Prejudice' },
@@ -2493,7 +2660,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               const ownerMismatch = hasOwnerMismatch(appeal);
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
-              const isResolved = ['S', 'W', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
+              const isResolved = ['S', 'W', 'Z', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
               const resolvedBg = '#ecfdf5'; // pastel mint green
               const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? '' : 'hover:bg-gray-50';
               const textMuted = isResolved ? 'text-gray-500' : 'text-gray-600';
@@ -2522,6 +2689,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                       <option value="S">S</option>
                       <option value="H">H</option>
                       <option value="W">W</option>
+                      <option value="Z">Z</option>
                       <option value="A">A</option>
                       <option value="AP">AP</option>
                       <option value="AWP">AWP</option>
@@ -2567,7 +2735,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '120px', maxWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'current_assessment', appeal.current_assessment, 'number')}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap ${isResolved ? 'text-blue-400' : 'text-blue-600'} font-semibold`} style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(appeal.cme_projected_value)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${isResolved ? 'text-blue-400' : 'text-blue-600'} font-semibold`} style={{ minWidth: '100px', maxWidth: '100px' }}>
+                    {renderEditableCell(appeal.id, 'cme_projected_value', appeal.cme_projected_value, 'number')}
+                  </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textStrong} font-medium`} style={{ minWidth: '100px', maxWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'judgment_value', appeal.judgment_value, 'number')}
                   </td>
@@ -2624,7 +2794,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               {/* Current Assessment */}
               <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '120px', maxWidth: '120px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
               {/* CME Value */}
-              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.cme_projected_value || 0), 0))}</td>
+              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (Number(a.cme_projected_value) || 0), 0))}</td>
               {/* Judgment */}
               <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
               {/* Loss */}
@@ -3105,6 +3275,106 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT FROM EXPORT MODAL */}
+      {showImportExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Import from Exported Excel</h3>
+              <button onClick={() => setShowImportExportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Upload a previously exported Appeal Log Excel file to update <strong>Status Code</strong>, <strong>Stip Status</strong>, and <strong>Hearing Date</strong> values.
+            </p>
+            <p className="text-xs text-gray-500 mb-3">
+              Appeals are matched by Appeal # and Appeal Year. Only Status Code, Stip Status, and Hearing Date are imported — all other columns are ignored. Evidence Due is auto-calculated (7 days before hearing).
+            </p>
+            <div className="mb-4 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <p className="text-xs font-semibold text-gray-700">Accepted Values Reference</p>
+              </div>
+              <div className="p-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-1">Status Code</p>
+                  <div className="space-y-0.5">
+                    {[
+                      ['D', 'Defend'],
+                      ['S', 'Settled'],
+                      ['H', 'Heard'],
+                      ['W', 'Withdrawn'],
+                      ['A', 'Assessor'],
+                      ['AP', 'Affirmed Pending'],
+                      ['AWP', 'Affirmed w/ Prejudice'],
+                      ['Z', 'Dismissed'],
+                      ['NA', 'Nonappearance']
+                    ].map(([code, label]) => (
+                      <div key={code} className="flex items-center gap-1.5">
+                        <code className="text-xs bg-white border border-gray-300 px-1.5 py-0.5 rounded font-mono select-all cursor-pointer" title="Click to select">{code}</code>
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-1">Stip Status</p>
+                  <div className="space-y-0.5">
+                    {[
+                      ['not_started', 'Not Started'],
+                      ['drafted', 'Drafted'],
+                      ['sent', 'Sent to Taxpayer'],
+                      ['signed', 'Signed'],
+                      ['filed', 'Filed']
+                    ].map(([code, label]) => (
+                      <div key={code} className="flex items-center gap-1.5">
+                        <code className="text-xs bg-white border border-gray-300 px-1.5 py-0.5 rounded font-mono select-all cursor-pointer" title="Click to select">{code}</code>
+                        <span className="text-xs text-gray-500">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setImportExportFile(e.target.files[0])}
+              className="w-full mb-4 text-sm"
+            />
+            {importExportResult && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
+                <p className="font-medium mb-1">Import Complete</p>
+                <p>Updated: <strong>{importExportResult.updated}</strong></p>
+                <p>Skipped (no changes): <strong>{importExportResult.skipped}</strong></p>
+                <p>Not found: <strong>{importExportResult.notFound}</strong></p>
+                {importExportResult.invalid > 0 && (
+                  <p className="text-red-600">Invalid values rejected: <strong>{importExportResult.invalid}</strong></p>
+                )}
+                <p className="text-gray-500 mt-1">Total rows: {importExportResult.total}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowImportExportModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
+              >
+                {importExportResult ? 'Close' : 'Cancel'}
+              </button>
+              {!importExportResult && (
+                <button
+                  onClick={handleImportFromExport}
+                  disabled={!importExportFile || importExportProcessing}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {importExportProcessing ? 'Importing...' : 'Import'}
+                </button>
+              )}
             </div>
           </div>
         </div>
