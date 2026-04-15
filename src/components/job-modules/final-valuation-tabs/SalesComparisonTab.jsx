@@ -90,6 +90,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
   const [setAsideSubjectIds, setSetAsideSubjectIds] = useState(new Set()); // IDs of set-aside subjects
   const [showAllResults, setShowAllResults] = useState(true); // Toggle: show all vs remaining only
+  const [selectedForSetAside, setSelectedForSetAside] = useState(new Set()); // Per-row checkbox for set-aside
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [bracketMappings, setBracketMappings] = useState([]);
@@ -509,6 +510,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       // Restore results
       setEvaluationResults(data.results);
+      // Pre-select eligible rows for set-aside checkbox
+      const eligible = new Set(
+        (data.results || [])
+          .filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id))
+          .map(r => r.subject.id)
+      );
+      setSelectedForSetAside(eligible);
 
       // Restore adjustment bracket
       if (data.adjustment_bracket) {
@@ -1093,13 +1101,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const handleSetAsideSuccessful = async () => {
     if (!evaluationResults) return;
 
-    // Only set aside results that aren't already set aside
+    // Only set aside results that are checked AND not already set aside
     const successful = evaluationResults.filter(r =>
-      r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)
+      selectedForSetAside.has(r.subject.id) &&
+      r.comparables.length >= minCompsForSuccess &&
+      !setAsideSubjectIds.has(r.subject.id)
     );
 
     if (successful.length === 0) {
-      alert(`No new properties with ${minCompsForSuccess}+ comparables to set aside`);
+      alert(`No checked properties with ${minCompsForSuccess}+ comparables to set aside.\n\nUse the checkboxes on the left to select which rows to include.`);
       return;
     }
 
@@ -2096,6 +2106,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // Display results immediately - no DB save during evaluation
       // User saves explicitly via "Save Result Set" button
       setEvaluationResults(results);
+      // Pre-select all eligible rows (with enough comps, not already set aside) for set-aside checkbox
+      const eligible = new Set(
+        results
+          .filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id))
+          .map(r => r.subject.id)
+      );
+      setSelectedForSetAside(eligible);
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
 
@@ -4380,10 +4397,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
                     <button
                       onClick={handleSetAsideSuccessful}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).length === 0}
+                      disabled={!evaluationResults || selectedForSetAside.size === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Set Aside
+                      Set Aside ({selectedForSetAside.size})
                     </button>
                     <button
                       onClick={handleSaveResultSet}
@@ -4408,6 +4425,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   <table className="min-w-full border-collapse text-xs">
                     <thead className="bg-gray-100">
                       <tr>
+                        {/* Set-Aside Checkbox */}
+                        <th rowSpan="2" className="border border-gray-300 px-1 py-2 text-center font-semibold w-8">
+                          <input
+                            type="checkbox"
+                            title="Select all / none for set-aside"
+                            checked={evaluationResults && evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).length > 0 && evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).every(r => selectedForSetAside.has(r.subject.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                // Select all eligible (not already set aside, meets comp threshold)
+                                const allEligible = new Set(selectedForSetAside);
+                                evaluationResults.forEach(r => {
+                                  if (r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)) {
+                                    allEligible.add(r.subject.id);
+                                  }
+                                });
+                                setSelectedForSetAside(allEligible);
+                              } else {
+                                setSelectedForSetAside(new Set());
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                        </th>
                         {/* Subject Property Info */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
@@ -4459,9 +4499,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
                         return (
                           <tr key={idx} className={`${isSetAside ? 'bg-blue-50 opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')}`}>
+                            {/* Set-Aside Checkbox */}
+                            <td className="border border-gray-300 px-1 py-2 text-center">
+                              {isSetAside ? (
+                                <span title="Already set aside" className="text-blue-500">&#x2713;</span>
+                              ) : (
+                                result.comparables.length >= minCompsForSuccess ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedForSetAside.has(result.subject.id)}
+                                    onChange={(e) => {
+                                      const updated = new Set(selectedForSetAside);
+                                      if (e.target.checked) {
+                                        updated.add(result.subject.id);
+                                      } else {
+                                        updated.delete(result.subject.id);
+                                      }
+                                      setSelectedForSetAside(updated);
+                                    }}
+                                    className="cursor-pointer"
+                                    title="Include in set-aside"
+                                  />
+                                ) : (
+                                  <span className="text-gray-300" title={`Needs ${minCompsForSuccess}+ comps`}>-</span>
+                                )
+                              )}
+                            </td>
                             {/* Subject Property Info */}
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">
-                              {isSetAside && <span title="Set Aside" className="text-blue-500 mr-1">&#x2713;</span>}
                               {result.subject.property_vcs}
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
