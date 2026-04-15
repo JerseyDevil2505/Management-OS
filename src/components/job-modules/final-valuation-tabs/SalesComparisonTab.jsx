@@ -1143,7 +1143,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // Reload saved evaluations to include newly set-aside ones
       await loadSavedEvaluations();
 
-      const remainingCount = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess).length;
+      // Remove newly set-aside IDs from checkbox selection
+      const updatedSelection = new Set(selectedForSetAside);
+      successful.forEach(r => updatedSelection.delete(r.subject.id));
+      setSelectedForSetAside(updatedSelection);
+
+      const newSetAsideIds = new Set(successful.map(s => s.subject.id));
+      const remainingCount = evaluationResults.filter(r =>
+        !setAsideSubjectIds.has(r.subject.id) && !newSetAsideIds.has(r.subject.id)
+      ).length;
 
       alert(`${successful.length} properties set aside successfully. ${remainingCount} properties remain for re-evaluation.\n\nUse "Show All Results" to view set-aside properties, or "Show Remaining" to focus on what's left.`);
 
@@ -2104,11 +2112,54 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       // Display results immediately - no DB save during evaluation
-      // User saves explicitly via "Save Result Set" button
-      setEvaluationResults(results);
+      // In keep mode, merge previously set-aside results back into the display
+      let mergedResults = results;
+      if (evaluationMode === 'keep' && savedEvaluations.length > 0) {
+        const newResultIds = new Set(results.map(r => r.subject.id));
+        const restoredResults = savedEvaluations
+          .filter(e => !newResultIds.has(e.subject_property_id))
+          .map(e => {
+            // Look up the full property object for this saved evaluation
+            const subjectProp = properties.find(p => p.id === e.subject_property_id);
+            if (!subjectProp) return null;
+            // Reconstruct comparables from saved data (look up full property objects)
+            const restoredComps = (e.comparables || []).map(c => {
+              const compProp = properties.find(p => p.id === c.property_id);
+              return compProp ? {
+                ...compProp,
+                rank: c.rank,
+                adjustedPrice: c.adjustedPrice,
+                adjustmentPercent: c.adjustmentPercent,
+              } : {
+                id: c.property_id,
+                property_composite_key: c.pams_id,
+                property_location: c.address,
+                rank: c.rank,
+                adjustedPrice: c.adjustedPrice,
+                adjustmentPercent: c.adjustmentPercent,
+              };
+            });
+            return {
+              subject: subjectProp,
+              comparables: restoredComps,
+              totalFound: restoredComps.length,
+              totalValid: restoredComps.length,
+              projectedAssessment: parseFloat(e.projected_assessment) || null,
+              confidenceScore: parseFloat(e.confidence_score) || 0,
+              hasSubjectSale: false,
+              mappedBracket: null,
+              _restoredFromSetAside: true
+            };
+          })
+          .filter(Boolean);
+
+        mergedResults = [...restoredResults, ...results];
+      }
+
+      setEvaluationResults(mergedResults);
       // Pre-select all eligible rows (with enough comps, not already set aside) for set-aside checkbox
       const eligible = new Set(
-        results
+        mergedResults
           .filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id))
           .map(r => r.subject.id)
       );
