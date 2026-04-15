@@ -1175,6 +1175,63 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     }
   };
 
+  // ==================== SAVE SET-ASIDE TO APPEAL LOG ====================
+  const handleSaveSetAsideToAppealLog = async () => {
+    if (!savedEvaluations || savedEvaluations.length === 0) return;
+
+    try {
+      let updatedCount = 0;
+
+      for (const evaluation of savedEvaluations) {
+        if (!evaluation.projected_assessment) continue;
+
+        const pams = evaluation.subject_pams || '';
+        const parts = pams.split('-');
+        const block = parts[0] || '';
+        const lot = parts[1] || '';
+        const qualifier = parts.slice(2).join('-') || '';
+
+        const { error } = await supabase
+          .from('appeal_log')
+          .update({
+            cme_projected_value: evaluation.projected_assessment,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('property_block', block)
+          .eq('property_lot', lot)
+          .eq('property_qualifier', qualifier);
+
+        if (!error) updatedCount++;
+      }
+
+      alert(`Saved ${updatedCount} set-aside CME values to Appeal Log`);
+
+    } catch (error) {
+      console.error('Error saving set-aside to appeal log:', error);
+      alert('Failed to save to Appeal Log: ' + error.message);
+    }
+  };
+
+  // ==================== REMOVE FROM SET-ASIDE ====================
+  const handleRemoveFromSetAside = async (evaluationId) => {
+    if (!window.confirm('Remove this property from set-aside results?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_cme_evaluations')
+        .delete()
+        .eq('id', evaluationId);
+
+      if (error) throw error;
+
+      await loadSavedEvaluations();
+    } catch (error) {
+      console.error('Error removing from set-aside:', error);
+      alert('Failed to remove: ' + error.message);
+    }
+  };
+
   // ==================== HELPER: AGGREGATE PROPERTY DATA ACROSS CARDS ====================
   // Helper to check if a card identifier is a main card
   const isMainCard = (cardValue) => {
@@ -4592,6 +4649,79 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   );
                 })()}
 
+              </div>
+            )}
+
+            {/* SET-ASIDE RESULTS - Always visible when there are saved evaluations */}
+            {savedEvaluations.length > 0 && (
+              <div className="mt-6 bg-white border border-blue-300 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-blue-900">
+                    Set-Aside Results ({savedEvaluations.length} properties)
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSaveSetAsideToAppealLog}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium flex items-center gap-2"
+                    >
+                      <Scale className="w-4 h-4" />
+                      Save to Appeal Log
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-xs">
+                    <thead className="bg-blue-50">
+                      <tr>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">PAMS</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Address</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold"># Comps</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">Projected Assessment</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Confidence</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Saved At</th>
+                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedEvaluations.map((evaluation) => (
+                        <tr key={evaluation.id} className="hover:bg-blue-50">
+                          <td className="border border-gray-300 px-2 py-1.5 text-center font-mono text-xs">
+                            {evaluation.subject_pams || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-left max-w-xs truncate">
+                            {evaluation.subject_address || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            {evaluation.comparables ? evaluation.comparables.length : 0}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center font-semibold text-green-700 bg-green-50">
+                            ${(Math.round((evaluation.projected_assessment || 0) / 100) * 100).toLocaleString()}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            {evaluation.confidence_score != null
+                              ? `${(evaluation.confidence_score * 100).toFixed(0)}%`
+                              : '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center text-gray-500">
+                            {evaluation.created_at
+                              ? new Date(evaluation.created_at).toLocaleString()
+                              : '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-center">
+                            <button
+                              onClick={() => handleRemoveFromSetAside(evaluation.id)}
+                              className="text-red-500 hover:text-red-700 text-xs font-medium"
+                              title="Remove from set-aside"
+                            >
+                              <X className="w-3.5 h-3.5 inline" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
