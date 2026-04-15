@@ -183,6 +183,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
+  // Staged filter inputs (not applied until user clicks Filter)
+  const [stagedDateStart, setStagedDateStart] = useState(compFilters.salesDateStart);
+  const [stagedDateEnd, setStagedDateEnd] = useState(compFilters.salesDateEnd);
+  const [stagedSearch, setStagedSearch] = useState('');
   const [poolAnalyticsExpanded, setPoolAnalyticsExpanded] = useState({ vcs: false, style: false, typeUse: false, view: false });
   // Pool display filters (filter the table view, not inclusion logic)
   const [poolFilterVCS, setPoolFilterVCS] = useState([]);
@@ -3317,16 +3321,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex flex-wrap items-end justify-center gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                    <input type="date" value={compFilters.salesDateStart} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateStart} onChange={(e) => setStagedDateStart(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                    <input type="date" value={compFilters.salesDateEnd} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateEnd} onChange={(e) => setStagedDateEnd(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
-                    <input type="text" placeholder="Search..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
+                    <input type="text" placeholder="Search..." value={stagedSearch} onChange={(e) => setStagedSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd })); setSalesPoolSearch(stagedSearch); } }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
                   </div>
+                  <button
+                    onClick={() => { setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd })); setSalesPoolSearch(stagedSearch); }}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                  >
+                    Filter
+                  </button>
+                  <button
+                    onClick={() => { setStagedDateStart(cspDateRange.start); setStagedDateEnd(cspDateRange.end); setStagedSearch(''); setCompFilters(prev => ({ ...prev, salesDateStart: cspDateRange.start, salesDateEnd: cspDateRange.end })); setSalesPoolSearch(''); }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
+                  >
+                    Reset
+                  </button>
                   {Object.keys(salesPoolOverrides).length > 0 && (
                     <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
                       Clear overrides ({Object.keys(salesPoolOverrides).length})
