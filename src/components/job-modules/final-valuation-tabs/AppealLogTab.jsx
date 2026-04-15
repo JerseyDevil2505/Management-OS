@@ -3,7 +3,7 @@ import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-r
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1684,13 +1684,52 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'Current Assessment': appeal.current_assessment || 0,
         'Requested Value': appeal.requested_value || 0,
         'CME Value': appeal.cme_projected_value || 0,
-        'CME Assessment': appeal.cme_projected_value && jobData?.director_ratio
-          ? Math.round(appeal.cme_projected_value * jobData.director_ratio)
-          : 0,
+        'Ratio': (() => {
+          // Director's ratio first, fallback to equalization ratio, cap at 100%
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          return Math.min(ratio, 1.0);
+        })(),
+        'CME Assessment': (() => {
+          const cmeValue = appeal.cme_projected_value || 0;
+          if (!cmeValue) return 0;
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          ratio = Math.min(ratio, 1.0);
+          return Math.round(cmeValue * ratio);
+        })(),
         Judgment: appeal.judgment_value || 0,
         Loss: '',  // Will be populated with formula
         'Loss %': '',  // Will be populated with formula
-        'Possible Loss': appeal.possible_loss || 0,
+        'Possible Loss': (() => {
+          const cmeValue = appeal.cme_projected_value || 0;
+          if (!cmeValue) return appeal.possible_loss || 0;
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          ratio = Math.min(ratio, 1.0);
+          const cmeAssessment = Math.round(cmeValue * ratio);
+          const currentAssessment = appeal.current_assessment || 0;
+          // Loss only if CME assessment is less than current
+          return cmeAssessment < currentAssessment ? currentAssessment - cmeAssessment : 0;
+        })(),
         'Appeal Type': appeal.appeal_type || '-',
         'Status Code': appeal.status_code || '-',
         Result: appeal.result || '-',

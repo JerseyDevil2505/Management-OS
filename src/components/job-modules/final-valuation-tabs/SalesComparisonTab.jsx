@@ -5047,6 +5047,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   cmeBrackets={CME_BRACKETS}
                   isJobContainerLoading={isJobContainerLoading}
                   allProperties={properties}
+                  marketLandData={marketLandData}
                 />
               </div>
             )}
