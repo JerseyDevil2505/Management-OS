@@ -510,13 +510,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       // Restore results
       setEvaluationResults(data.results);
-      // Pre-select eligible rows for set-aside checkbox
-      const eligible = new Set(
+      // Pre-select all non-set-aside rows for set-aside checkbox
+      const allIds = new Set(
         (data.results || [])
-          .filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id))
+          .filter(r => !setAsideSubjectIds.has(r.subject.id))
           .map(r => r.subject.id)
       );
-      setSelectedForSetAside(eligible);
+      setSelectedForSetAside(allIds);
 
       // Restore adjustment bracket
       if (data.adjustment_bracket) {
@@ -1109,7 +1109,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     );
 
     if (successful.length === 0) {
-      alert(`No checked properties with ${minCompsForSuccess}+ comparables to set aside.\n\nUse the checkboxes on the left to select which rows to include.`);
+      const checkedCount = evaluationResults.filter(r => selectedForSetAside.has(r.subject.id) && !setAsideSubjectIds.has(r.subject.id)).length;
+      const belowThreshold = evaluationResults.filter(r => selectedForSetAside.has(r.subject.id) && !setAsideSubjectIds.has(r.subject.id) && r.comparables.length < minCompsForSuccess).length;
+      if (belowThreshold > 0) {
+        alert(`${belowThreshold} checked propert${belowThreshold === 1 ? 'y doesn\'t' : 'ies don\'t'} meet the minimum ${minCompsForSuccess} comparables threshold.\n\nAdjust your Min Comps setting or re-run with different criteria to find more comparables.`);
+      } else {
+        alert(`No properties selected to set aside. Use the checkboxes to select rows.`);
+      }
       return;
     }
 
@@ -2157,13 +2163,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       setEvaluationResults(mergedResults);
-      // Pre-select all eligible rows (with enough comps, not already set aside) for set-aside checkbox
-      const eligible = new Set(
+      // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
+      const allIds = new Set(
         mergedResults
-          .filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id))
+          .filter(r => !setAsideSubjectIds.has(r.subject.id))
           .map(r => r.subject.id)
       );
-      setSelectedForSetAside(eligible);
+      setSelectedForSetAside(allIds);
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
 
@@ -4481,17 +4487,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           <input
                             type="checkbox"
                             title="Select all / none for set-aside"
-                            checked={evaluationResults && evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).length > 0 && evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)).every(r => selectedForSetAside.has(r.subject.id))}
+                            checked={evaluationResults && evaluationResults.filter(r => !setAsideSubjectIds.has(r.subject.id)).length > 0 && evaluationResults.filter(r => !setAsideSubjectIds.has(r.subject.id)).every(r => selectedForSetAside.has(r.subject.id))}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                // Select all eligible (not already set aside, meets comp threshold)
-                                const allEligible = new Set(selectedForSetAside);
+                                const allIds = new Set(selectedForSetAside);
                                 evaluationResults.forEach(r => {
-                                  if (r.comparables.length >= minCompsForSuccess && !setAsideSubjectIds.has(r.subject.id)) {
-                                    allEligible.add(r.subject.id);
+                                  if (!setAsideSubjectIds.has(r.subject.id)) {
+                                    allIds.add(r.subject.id);
                                   }
                                 });
-                                setSelectedForSetAside(allEligible);
+                                setSelectedForSetAside(allIds);
                               } else {
                                 setSelectedForSetAside(new Set());
                               }
@@ -4555,25 +4560,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               {isSetAside ? (
                                 <span title="Already set aside" className="text-blue-500">&#x2713;</span>
                               ) : (
-                                result.comparables.length >= minCompsForSuccess ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedForSetAside.has(result.subject.id)}
-                                    onChange={(e) => {
-                                      const updated = new Set(selectedForSetAside);
-                                      if (e.target.checked) {
-                                        updated.add(result.subject.id);
-                                      } else {
-                                        updated.delete(result.subject.id);
-                                      }
-                                      setSelectedForSetAside(updated);
-                                    }}
-                                    className="cursor-pointer"
-                                    title="Include in set-aside"
-                                  />
-                                ) : (
-                                  <span className="text-gray-300" title={`Needs ${minCompsForSuccess}+ comps`}>-</span>
-                                )
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForSetAside.has(result.subject.id)}
+                                  onChange={(e) => {
+                                    const updated = new Set(selectedForSetAside);
+                                    if (e.target.checked) {
+                                      updated.add(result.subject.id);
+                                    } else {
+                                      updated.delete(result.subject.id);
+                                    }
+                                    setSelectedForSetAside(updated);
+                                  }}
+                                  className="cursor-pointer"
+                                  title="Include in set-aside"
+                                />
                               )}
                             </td>
                             {/* Subject Property Info */}
