@@ -3442,7 +3442,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <SortTh field="property_block" label="Block" />
                             <SortTh field="property_lot" label="Lot" />
                             <SortTh field="property_qualifier" label="Qual" />
-                            <SortTh field="asset_building_class" label="Class" />
+                            <SortTh field="property_m4_class" label="Class" />
                             <SortTh field="property_location" label="Location" />
                             <SortTh field="asset_design_style" label="Style" />
                             <SortTh field="_currentAsmt" label="Current Asmt" align="right" />
@@ -3573,7 +3573,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="px-2 py-1.5">{p.property_block}</td>
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_building_class || p.property_m4_class || ''}</td>
+                            <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
                             <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
