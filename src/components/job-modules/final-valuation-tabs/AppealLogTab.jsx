@@ -3,7 +3,7 @@ import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-r
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -287,6 +287,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             appeal_type: appealType,
             // Derived fields from property match
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+            asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
             new_vcs: property?.new_vcs || null,
             owner_name: property?.owner_name || null,
             owner_street: property?.owner_street || null,
@@ -506,6 +507,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           case 'lot': aVal = parseInt(a.property_lot) || 0; bVal = parseInt(b.property_lot) || 0; break;
           case 'location': aVal = a.property_location; bVal = b.property_location; break;
           case 'class': aVal = a.property_m4_class; bVal = b.property_m4_class; break;
+          case 'type_use': aVal = a.asset_type_use; bVal = b.asset_type_use; break;
           case 'vcs': aVal = a.new_vcs; bVal = b.new_vcs; break;
           case 'current_assessment': aVal = a.current_assessment; bVal = b.current_assessment; break;
           case 'requested': aVal = a.requested_value; bVal = b.requested_value; break;
@@ -1025,6 +1027,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           ...appeal,
           appeal_type: appealType,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
           owner_street: property?.owner_street || null,
@@ -1448,6 +1451,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           ...appeal,
           appeal_type: appealType,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
           owner_street: property?.owner_street || null,
@@ -1595,6 +1599,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
           ...appeal,
           appeal_type: appealType,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+          asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
           owner_name: property?.owner_name || null,
           owner_street: property?.owner_street || null,
@@ -1662,6 +1667,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         Qual: appeal.property_qualifier || '-',
         Location: appeal.property_location || '-',
         Class: appeal.property_m4_class || '-',
+        'T/U': appeal.asset_type_use || '-',
         VCS: appeal.new_vcs || '-',
         Bracket: bracketLabel || '-',
         Inspected: inspectionDate ? 'Yes' : 'No',
@@ -1684,13 +1690,52 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
         'Current Assessment': appeal.current_assessment || 0,
         'Requested Value': appeal.requested_value || 0,
         'CME Value': appeal.cme_projected_value || 0,
-        'CME Assessment': appeal.cme_projected_value && jobData?.director_ratio
-          ? Math.round(appeal.cme_projected_value * jobData.director_ratio)
-          : 0,
+        'Ratio': (() => {
+          // Director's ratio first, fallback to equalization ratio, cap at 100%
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          return Math.min(ratio, 1.0);
+        })(),
+        'CME Assessment': (() => {
+          const cmeValue = appeal.cme_projected_value || 0;
+          if (!cmeValue) return 0;
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          ratio = Math.min(ratio, 1.0);
+          return Math.round(cmeValue * ratio);
+        })(),
         Judgment: appeal.judgment_value || 0,
         Loss: '',  // Will be populated with formula
         'Loss %': '',  // Will be populated with formula
-        'Possible Loss': appeal.possible_loss || 0,
+        'Possible Loss': (() => {
+          const cmeValue = appeal.cme_projected_value || 0;
+          if (!cmeValue) return appeal.possible_loss || 0;
+          let ratio = 1.0;
+          if (jobData?.director_ratio) {
+            ratio = parseFloat(jobData.director_ratio);
+            if (ratio > 1) ratio = ratio / 100;
+          } else if (marketLandData?.normalization_config?.equalizationRatio) {
+            ratio = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (ratio > 1) ratio = ratio / 100;
+          }
+          ratio = Math.min(ratio, 1.0);
+          const cmeAssessment = Math.round(cmeValue * ratio);
+          const currentAssessment = appeal.current_assessment || 0;
+          // Loss only if CME assessment is less than current
+          return cmeAssessment < currentAssessment ? currentAssessment - cmeAssessment : 0;
+        })(),
         'Appeal Type': appeal.appeal_type || '-',
         'Status Code': appeal.status_code || '-',
         Result: appeal.result || '-',
@@ -2002,6 +2047,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
             ...appeal,
             appeal_type: appealType,
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
+            asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
             new_vcs: property?.new_vcs || null,
             owner_name: property?.owner_name || null,
             owner_street: property?.owner_street || null,
@@ -2637,6 +2683,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
               <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
+              <SortableHeader label="T/U" columnKey="type_use" minWidth="40px" maxWidth="40px" />
               <SortableHeader label="VCS" columnKey="vcs" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Bracket" columnKey="bracket" minWidth="110px" maxWidth="110px" />
               <SortableHeader label="Inspected" columnKey="inspected" minWidth="90px" maxWidth="90px" />
@@ -2704,6 +2751,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '40px', maxWidth: '40px' }}>{appeal.asset_type_use || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '110px', maxWidth: '110px' }}>
                     {renderBracketCell(appeal)}
@@ -2777,6 +2825,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], onNavigat
               <td style={{ minWidth: '120px' }}></td>
               {/* Class */}
               <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* T/U */}
+              <td style={{ minWidth: '40px', maxWidth: '40px' }}></td>
               {/* VCS */}
               <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
               {/* Bracket */}
