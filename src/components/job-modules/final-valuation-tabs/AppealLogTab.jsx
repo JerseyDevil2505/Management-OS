@@ -506,6 +506,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           case 'lot': aVal = parseInt(a.property_lot) || 0; bVal = parseInt(b.property_lot) || 0; break;
           case 'location': aVal = a.property_location; bVal = b.property_location; break;
           case 'class': aVal = a.property_m4_class; bVal = b.property_m4_class; break;
+          case 'type_use': aVal = a.asset_type_use; bVal = b.asset_type_use; break;
           case 'vcs': aVal = a.new_vcs; bVal = b.new_vcs; break;
           case 'current_assessment': aVal = a.current_assessment; bVal = b.current_assessment; break;
           case 'requested': aVal = a.requested_value; bVal = b.requested_value; break;
@@ -1662,6 +1663,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         Qual: appeal.property_qualifier || '-',
         Location: appeal.property_location || '-',
         Class: appeal.property_m4_class || '-',
+        'T/U': appeal.asset_type_use || '-',
         VCS: appeal.new_vcs || '-',
         Bracket: bracketLabel || '-',
         Inspected: inspectionDate ? 'Yes' : 'No',
@@ -2676,6 +2678,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
               <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
+              <SortableHeader label="T/U" columnKey="type_use" minWidth="40px" maxWidth="40px" />
               <SortableHeader label="VCS" columnKey="vcs" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Bracket" columnKey="bracket" minWidth="110px" maxWidth="110px" />
               <SortableHeader label="Inspected" columnKey="inspected" minWidth="90px" maxWidth="90px" />
@@ -2743,6 +2746,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '40px', maxWidth: '40px' }}>{appeal.asset_type_use || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '60px', maxWidth: '60px' }}>{appeal.new_vcs || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '110px', maxWidth: '110px' }}>
                     {renderBracketCell(appeal)}
@@ -2816,6 +2820,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <td style={{ minWidth: '120px' }}></td>
               {/* Class */}
               <td style={{ minWidth: '50px', maxWidth: '50px' }}></td>
+              {/* T/U */}
+              <td style={{ minWidth: '40px', maxWidth: '40px' }}></td>
               {/* VCS */}
               <td style={{ minWidth: '60px', maxWidth: '60px' }}></td>
               {/* Bracket */}
