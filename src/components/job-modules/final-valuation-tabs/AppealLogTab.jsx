@@ -509,6 +509,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           case 'class': aVal = a.property_m4_class; bVal = b.property_m4_class; break;
           case 'type_use': aVal = a.asset_type_use; bVal = b.asset_type_use; break;
           case 'vcs': aVal = a.new_vcs; bVal = b.new_vcs; break;
+          case 'bracket': {
+            const getBracketIndex = (appeal) => {
+              const label = appeal.cme_bracket
+                || vcsBracketMap[appeal.new_vcs]
+                || cmeBracketMappings[appeal.new_vcs]
+                || null;
+              if (!label) return -1;
+              return CME_BRACKETS.findIndex(b => b.label === label);
+            };
+            aVal = getBracketIndex(a);
+            bVal = getBracketIndex(b);
+            break;
+          }
           case 'current_assessment': aVal = a.current_assessment; bVal = b.current_assessment; break;
           case 'requested': aVal = a.requested_value; bVal = b.requested_value; break;
           case 'cme_value': aVal = a.cme_projected_value; bVal = b.cme_projected_value; break;
@@ -773,12 +786,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     });
   };
 
-  // Handle select all checkbox
+  // Handle select all checkbox — only selects appeals whose status is 'D' (defendable)
   const handleToggleSelectAll = () => {
-    if (selectedAppeals.size === filteredAppeals.length) {
+    const defendable = filteredAppeals.filter(a => (a.status || 'NA') === 'D');
+    if (defendable.length > 0 && defendable.every(a => selectedAppeals.has(a.id))) {
       setSelectedAppeals(new Set());
     } else {
-      setSelectedAppeals(new Set(filteredAppeals.map(a => a.id)));
+      setSelectedAppeals(new Set(defendable.map(a => a.id)));
     }
   };
 
@@ -2668,12 +2682,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
               {/* CHECKBOX COLUMN */}
               <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-center border-r border-gray-200" style={{ minWidth: '50px', maxWidth: '50px' }}>
-                <input
-                  type="checkbox"
-                  checked={filteredAppeals.length > 0 && selectedAppeals.size === filteredAppeals.length}
-                  onChange={handleToggleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                />
+                {(() => {
+                  const defendable = filteredAppeals.filter(a => (a.status || 'NA') === 'D');
+                  const allDefendableSelected = defendable.length > 0 && defendable.every(a => selectedAppeals.has(a.id));
+                  return (
+                    <input
+                      type="checkbox"
+                      checked={allDefendableSelected}
+                      disabled={defendable.length === 0}
+                      onChange={handleToggleSelectAll}
+                      title={defendable.length === 0 ? 'No defendable (status D) appeals to select' : 'Select all defendable (status D) appeals'}
+                      className={`w-4 h-4 rounded border-gray-300 text-blue-600 ${defendable.length === 0 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                    />
+                  );
+                })()}
               </th>
               {/* FROZEN LEFT COLUMNS */}
               <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="85px" maxWidth="85px" />
@@ -2717,12 +2739,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={isResolved && !selectedAppeals.has(appeal.id) ? { backgroundColor: resolvedBg } : undefined}>
                   {/* CHECKBOX COLUMN */}
                   <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedAppeals.has(appeal.id)}
-                      onChange={() => handleToggleAppealSelection(appeal.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                    />
+                    {(() => {
+                      const isDefendable = (appeal.status || 'NA') === 'D';
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={selectedAppeals.has(appeal.id)}
+                          disabled={!isDefendable}
+                          onChange={() => handleToggleAppealSelection(appeal.id)}
+                          title={isDefendable ? '' : 'Only defendable (status D) appeals can be selected'}
+                          className={`w-4 h-4 rounded border-gray-300 text-blue-600 ${isDefendable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                        />
+                      );
+                    })()}
                   </td>
                   {/* FROZEN LEFT COLUMNS */}
                   <td className="sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '85px', maxWidth: '85px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
