@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
+import { evaluateAppellantComp, COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,6 +82,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   // Bracket column state
   const [vcsBracketMap, setVcsBracketMap] = useState({});
   const [cmeBracketMappings, setCmeBracketMappings] = useState({});
+
+  // Evidence (appellant comps / BS-meter) modal state
+  const [evidenceModalAppeal, setEvidenceModalAppeal] = useState(null); // appeal object being edited
+  const [evidenceDraft, setEvidenceDraft] = useState([]); // array of comp slot objects
+  const [evidenceFarmMode, setEvidenceFarmMode] = useState(false);
+  const [evidenceSaving, setEvidenceSaving] = useState(false);
 
   // Selection state for Send to CME
   const [selectedAppeals, setSelectedAppeals] = useState(new Set());
@@ -399,6 +406,146 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return <span className="text-gray-400">-</span>;
   };
 
+  // ==================== APPELLANT COMPS / EVIDENCE ====================
+
+  // Build property index by composite key (and by block/lot/qual/card) for fast comp lookup
+  const propertyByCompositeKey = useMemo(() => {
+    const map = new Map();
+    properties.forEach(p => {
+      if (p.property_composite_key) map.set(p.property_composite_key, p);
+    });
+    return map;
+  }, [properties]);
+
+  // Lookup helper for appellant comps using user-entered block/lot/qual/card
+  const findCompProperty = useCallback((block, lot, qualifier, card) => {
+    if (!block || !lot) return null;
+    const b = String(block).trim();
+    const l = String(lot).trim();
+    const q = (qualifier || '').toString().trim();
+    const c = (card || '').toString().trim();
+    return properties.find(p => {
+      if (String(p.property_block || '').trim() !== b) return false;
+      if (String(p.property_lot || '').trim() !== l) return false;
+      if (q && String(p.property_qualifier || '').trim() !== q) return false;
+      if (c && String(p.property_addl_card || p.property_card || '').trim() !== c) return false;
+      return true;
+    }) || null;
+  }, [properties]);
+
+  // Sample range for sale-date check (mirrors SalesComparisonTab CSP range)
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
+  const sampleRange = useMemo(() => {
+    if (!jobData?.end_date) return { start: '', end: '' };
+    const rawYear = new Date(jobData.end_date).getFullYear();
+    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+    return {
+      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+      end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]
+    };
+  }, [jobData?.end_date, isLojikTenant]);
+
+  // Land method (FF / AC / SF) from market_land_valuation
+  const landMethod = useMemo(() => {
+    return marketLandData?.land_method
+      || marketLandData?.valuation_mode
+      || marketLandData?.cascade_rates?.mode
+      || 'ac';
+  }, [marketLandData]);
+
+  const vendorType = jobData?.vendor_type || jobData?.vendor_detection?.vendor || 'BRT';
+
+  // Build a fresh empty draft of 5 slots
+  const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
+    slot: i + 1,
+    block: '',
+    lot: '',
+    qualifier: '',
+    card: '',
+    sales_date: '',
+    sales_price: '',
+    sales_nu: '',
+    manual_notes: ''
+  }));
+
+  const openEvidenceModal = (appeal) => {
+    const existing = Array.isArray(appeal.appellant_comps) ? appeal.appellant_comps : [];
+    const draft = buildEmptyDraft().map((empty, i) => ({ ...empty, ...(existing[i] || {}) }));
+    setEvidenceDraft(draft);
+    setEvidenceFarmMode(!!appeal.farm_mode);
+    setEvidenceModalAppeal(appeal);
+  };
+
+  const closeEvidenceModal = () => {
+    setEvidenceModalAppeal(null);
+    setEvidenceDraft([]);
+    setEvidenceFarmMode(false);
+  };
+
+  const updateEvidenceSlot = (idx, field, value) => {
+    setEvidenceDraft(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const saveEvidenceComps = async () => {
+    if (!evidenceModalAppeal) return;
+    setEvidenceSaving(true);
+    try {
+      // Strip fully empty rows but keep slot order
+      const cleaned = evidenceDraft
+        .map((s, i) => ({ ...s, slot: i + 1 }))
+        .filter(s => s.block || s.lot || s.qualifier || s.card || s.sales_date || s.sales_price || s.sales_nu || s.manual_notes);
+
+      const { error } = await supabase
+        .from('appeal_log')
+        .update({
+          appellant_comps: cleaned.length > 0 ? cleaned : null,
+          appellant_comps_updated_at: new Date().toISOString(),
+          farm_mode: evidenceFarmMode
+        })
+        .eq('id', evidenceModalAppeal.id);
+
+      if (error) {
+        // farm_mode column may not exist on appeal_log — retry without it
+        const { error: error2 } = await supabase
+          .from('appeal_log')
+          .update({
+            appellant_comps: cleaned.length > 0 ? cleaned : null,
+            appellant_comps_updated_at: new Date().toISOString()
+          })
+          .eq('id', evidenceModalAppeal.id);
+        if (error2) throw error2;
+      }
+
+      // Update local appeals state
+      setAppeals(prev => prev.map(a => a.id === evidenceModalAppeal.id
+        ? { ...a, appellant_comps: cleaned.length > 0 ? cleaned : null, appellant_comps_updated_at: new Date().toISOString() }
+        : a
+      ));
+      closeEvidenceModal();
+    } catch (e) {
+      console.error('Failed to save appellant comps:', e);
+      alert('Failed to save evidence: ' + (e.message || e));
+    } finally {
+      setEvidenceSaving(false);
+    }
+  };
+
+  // Render the Y/N evidence cell
+  const renderEvidenceCell = (appeal) => {
+    const hasEvidence = Array.isArray(appeal.appellant_comps) && appeal.appellant_comps.length > 0;
+    const cls = hasEvidence ? COLOR_CLASSES.green : COLOR_CLASSES.na;
+    return (
+      <button
+        type="button"
+        onClick={() => openEvidenceModal(appeal)}
+        title={hasEvidence ? 'View / edit appellant comps' : 'Add appellant comps'}
+        className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full text-xs font-semibold border ${cls.bg} ${cls.text} ${cls.border} hover:opacity-80 cursor-pointer`}
+      >
+        {hasEvidence ? `Y · ${appeal.appellant_comps.length}` : 'N'}
+      </button>
+    );
+  };
+
   // Helper: Render inspected cell content
   const renderInspectedCell = (appeal) => {
     const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -530,6 +677,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           case 'loss_pct': aVal = a.loss_pct; bVal = b.loss_pct; break;
           case 'hearing_date': aVal = a.hearing_date; bVal = b.hearing_date; break;
           case 'attorney': aVal = a.attorney; bVal = b.attorney; break;
+          case 'evidence': {
+            aVal = Array.isArray(a.appellant_comps) ? a.appellant_comps.length : 0;
+            bVal = Array.isArray(b.appellant_comps) ? b.appellant_comps.length : 0;
+            break;
+          }
           default: return 0;
         }
 
@@ -2711,6 +2863,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <SortableHeader label="Inspected" columnKey="inspected" minWidth="90px" maxWidth="90px" />
               <SortableHeader label="Petitioner" columnKey="petitioner_name" minWidth="120px" />
               <SortableHeader label="Attorney" columnKey="attorney" minWidth="100px" />
+              <SortableHeader label="Evidence" columnKey="evidence" minWidth="95px" maxWidth="95px" />
               <SortableHeader label="Hearing" columnKey="hearing_date" minWidth="120px" />
               <SortableHeader label="Tax Court" columnKey="tax_court_pending" minWidth="100px" />
 
@@ -2794,6 +2947,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
                   </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-center" style={{ minWidth: '95px', maxWidth: '95px' }}>
+                    {renderEvidenceCell(appeal)}
+                  </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
                   </td>
@@ -2866,6 +3022,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <td style={{ minWidth: '120px' }}></td>
               {/* Attorney */}
               <td style={{ minWidth: '100px' }}></td>
+              {/* Evidence */}
+              <td style={{ minWidth: '95px', maxWidth: '95px' }}></td>
               {/* Hearing - TOTALS label goes here */}
               <td className="px-3 py-3 text-right" style={{ minWidth: '120px' }}>TOTALS:</td>
               {/* Tax Court */}
@@ -3458,6 +3616,175 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </div>
         </div>
       )}
+
+      {/* ==================== EVIDENCE / APPELLANT COMPS MODAL ==================== */}
+      {evidenceModalAppeal && (() => {
+        const subject = propertyByCompositeKey.get(evidenceModalAppeal.property_composite_key) || null;
+        const evaluations = evidenceDraft.map(slot => {
+          const compProp = findCompProperty(slot.block, slot.lot, slot.qualifier, slot.card);
+          const evalResult = evaluateAppellantComp(subject, compProp, slot, {
+            vendorType,
+            landMethod,
+            sampleRange,
+            farmMode: evidenceFarmMode
+          });
+          return { compProp, evalResult };
+        });
+        const fmtSubjectVal = (v) => v == null || v === '' ? '\u2014' : v;
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex justify-between items-center p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Appellant Evidence Comps</h2>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {`Appeal #${evidenceModalAppeal.appeal_number || '—'} · Block ${evidenceModalAppeal.property_block} Lot ${evidenceModalAppeal.property_lot}${evidenceModalAppeal.property_qualifier ? ` Qual ${evidenceModalAppeal.property_qualifier}` : ''} · ${evidenceModalAppeal.property_location || ''}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={evidenceFarmMode}
+                      onChange={(e) => setEvidenceFarmMode(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    Farm sale mode (NU 33 acceptable)
+                  </label>
+                  <button onClick={closeEvidenceModal} className="text-gray-500 hover:text-gray-700">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Subject summary */}
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+                <div className="text-xs font-semibold text-blue-900 mb-1">Subject Property</div>
+                {subject ? (
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-gray-800">
+                    <div><span className="text-gray-500">VCS:</span> {fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div>
+                    <div><span className="text-gray-500">Design:</span> {fmtSubjectVal(subject.asset_design_style)}</div>
+                    <div><span className="text-gray-500">T&amp;U:</span> {fmtSubjectVal(subject.asset_type_use)}</div>
+                    <div><span className="text-gray-500">Cond:</span> {fmtSubjectVal(subject.asset_int_cond)}</div>
+                    <div><span className="text-gray-500">Year Built:</span> {fmtSubjectVal(subject.asset_year_built)}</div>
+                    <div><span className="text-gray-500">SFLA:</span> {fmtSubjectVal(subject.asset_sfla)}</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-red-700">Subject property not found in current dataset.</div>
+                )}
+                <div className="text-[11px] text-gray-600 mt-1">
+                  {`Sale-date range: ${sampleRange.start || '—'} → ${sampleRange.end || '—'} · Land method: ${landMethod.toUpperCase()} · Vendor: ${vendorType}`}
+                </div>
+              </div>
+
+              {/* Comp grid */}
+              <div className="p-4 overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-700">
+                      <th className="px-2 py-2 text-left font-semibold">#</th>
+                      <th className="px-2 py-2 text-left font-semibold">Block</th>
+                      <th className="px-2 py-2 text-left font-semibold">Lot</th>
+                      <th className="px-2 py-2 text-left font-semibold">Qual</th>
+                      <th className="px-2 py-2 text-left font-semibold">Card</th>
+                      <th className="px-2 py-2 text-left font-semibold">Sale Date</th>
+                      <th className="px-2 py-2 text-left font-semibold">Sale Price</th>
+                      <th className="px-2 py-2 text-left font-semibold">NU</th>
+                      <th className="px-2 py-2 text-left font-semibold">VCS</th>
+                      <th className="px-2 py-2 text-left font-semibold">Design</th>
+                      <th className="px-2 py-2 text-left font-semibold">T&amp;U</th>
+                      <th className="px-2 py-2 text-left font-semibold">Cond</th>
+                      <th className="px-2 py-2 text-left font-semibold">Year Built</th>
+                      <th className="px-2 py-2 text-left font-semibold">SFLA</th>
+                      <th className="px-2 py-2 text-left font-semibold">Lot Size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evidenceDraft.map((slot, idx) => {
+                      const { compProp, evalResult } = evaluations[idx];
+                      const cellCls = (key) => {
+                        const c = evalResult.flags[key]?.color || 'na';
+                        return `${COLOR_CLASSES[c].bg} ${COLOR_CLASSES[c].text} px-2 py-1`;
+                      };
+                      const cellTitle = (key) => evalResult.flags[key]?.detail || '';
+                      return (
+                        <tr key={idx} className="border-b border-gray-100">
+                          <td className="px-2 py-1 font-semibold text-gray-700">#{idx + 1}</td>
+                          <td className="px-2 py-1"><input type="text" value={slot.block} onChange={e => updateEvidenceSlot(idx, 'block', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                          <td className="px-2 py-1"><input type="text" value={slot.lot} onChange={e => updateEvidenceSlot(idx, 'lot', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                          <td className="px-2 py-1"><input type="text" value={slot.qualifier} onChange={e => updateEvidenceSlot(idx, 'qualifier', e.target.value)} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                          <td className={cellCls('card')} title={cellTitle('card')}>
+                            <input type="text" value={slot.card} onChange={e => updateEvidenceSlot(idx, 'card', e.target.value)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                          </td>
+                          <td className={cellCls('sale_date')} title={cellTitle('sale_date')}>
+                            <input type="date" value={slot.sales_date || ''} onChange={e => updateEvidenceSlot(idx, 'sales_date', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                          </td>
+                          <td className={cellCls('sale_price')} title={cellTitle('sale_price')}>
+                            <input type="number" value={slot.sales_price || ''} onChange={e => updateEvidenceSlot(idx, 'sales_price', e.target.value)} className="w-24 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                          </td>
+                          <td className={cellCls('sale_nu')} title={cellTitle('sale_nu')}>
+                            <input type="text" value={slot.sales_nu || ''} onChange={e => updateEvidenceSlot(idx, 'sales_nu', e.target.value)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                          </td>
+                          <td className={cellCls('vcs')} title={cellTitle('vcs')}>{compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014'}</td>
+                          <td className={cellCls('design')} title={cellTitle('design')}>{compProp?.asset_design_style || '\u2014'}</td>
+                          <td className={cellCls('type_use')} title={cellTitle('type_use')}>{compProp?.asset_type_use || '\u2014'}</td>
+                          <td className={cellCls('condition')} title={cellTitle('condition')}>{compProp?.asset_int_cond || '\u2014'}</td>
+                          <td className={cellCls('year_built')} title={cellTitle('year_built')}>{compProp?.asset_year_built || '\u2014'}</td>
+                          <td className={cellCls('sfla')} title={cellTitle('sfla')}>{compProp?.asset_sfla || '\u2014'}</td>
+                          <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>
+                            {compProp ? (compProp.asset_lot_acre || compProp.asset_lot_sf || compProp.asset_lot_frontage || '\u2014') : '\u2014'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Auto-generated comments */}
+                <div className="mt-4 border border-gray-200 rounded p-3 bg-gray-50">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Auto-Generated Comments</div>
+                  <div className="space-y-1 text-xs text-gray-800 font-mono">
+                    {evaluations.map(({ evalResult }, idx) => {
+                      const slot = evidenceDraft[idx];
+                      const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+                      if (!hasAny) return null;
+                      return (
+                        <div key={idx}>
+                          <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                        </div>
+                      );
+                    })}
+                    {evaluations.every(({ evalResult }, idx) => {
+                      const slot = evidenceDraft[idx];
+                      return !(slot.block || slot.lot || slot.sales_date || slot.sales_price);
+                    }) && (
+                      <div className="text-gray-500 italic">No comps entered yet.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div className="flex justify-end items-center gap-2 p-4 border-t border-gray-200 sticky bottom-0 bg-white">
+                <button
+                  onClick={closeEvidenceModal}
+                  className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEvidenceComps}
+                  disabled={evidenceSaving}
+                  className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {evidenceSaving ? 'Saving…' : 'Save Evidence'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
