@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { evaluateAppellantComp, COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 
@@ -454,6 +454,64 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   }, [marketLandData]);
 
   const vendorType = jobData?.vendor_type || jobData?.vendor_detection?.vendor || 'BRT';
+  const codeDefinitions = jobData?.parsed_code_definitions || null;
+
+  // Decode a vendor-specific code field on a property (design / type_use / int_cond, etc.)
+  const decodeField = useCallback((property, field) => {
+    if (!property || !codeDefinitions) return property?.[field] || null;
+    try {
+      const decoded = vendorType === 'Microsystems'
+        ? interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, field)
+        : interpretCodes.getBRTValue?.(property, codeDefinitions, field);
+      return decoded || property[field] || null;
+    } catch (e) {
+      return property[field] || null;
+    }
+  }, [codeDefinitions, vendorType]);
+
+  // Display a code + decoded name compactly: "03 · Cape Cod" (or just code if no decode)
+  const codeWithName = (property, field) => {
+    const code = property?.[field];
+    if (!code) return '—';
+    const decoded = decodeField(property, field);
+    if (!decoded || String(decoded).trim().toUpperCase() === String(code).trim().toUpperCase()) return String(code);
+    return `${code} · ${decoded}`;
+  };
+
+  // Resolve comp lot size for display (prefers asset_lot_acre, falls back to market_manual_lot_acre)
+  const compLotDisplay = (property) => {
+    if (!property) return '—';
+    if (property.asset_lot_acre && parseFloat(property.asset_lot_acre) > 0) {
+      return `${parseFloat(property.asset_lot_acre).toFixed(2)} ac`;
+    }
+    if (property.market_manual_lot_acre && parseFloat(property.market_manual_lot_acre) > 0) {
+      return `${parseFloat(property.market_manual_lot_acre).toFixed(2)} ac`;
+    }
+    if (property.asset_lot_sf && parseFloat(property.asset_lot_sf) > 0) {
+      return `${parseInt(property.asset_lot_sf, 10).toLocaleString()} sf`;
+    }
+    if (property.market_manual_lot_sf && parseFloat(property.market_manual_lot_sf) > 0) {
+      return `${parseInt(property.market_manual_lot_sf, 10).toLocaleString()} sf`;
+    }
+    if (property.asset_lot_frontage && parseFloat(property.asset_lot_frontage) > 0) {
+      return `${parseFloat(property.asset_lot_frontage).toFixed(0)} ff`;
+    }
+    try {
+      const acres = parseFloat(interpretCodes.getCalculatedAcreage(property, vendorType));
+      if (acres > 0) return `${acres.toFixed(2)} ac`;
+    } catch (e) {}
+    return '—';
+  };
+
+  // Format a sale date for display
+  const fmtCompDate = (d) => {
+    if (!d) return '';
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return '';
+      return dt.toISOString().split('T')[0];
+    } catch (e) { return ''; }
+  };
 
   // Build a fresh empty draft of 5 slots
   const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
@@ -3660,20 +3718,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
               {/* Subject summary */}
               <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-                <div className="text-xs font-semibold text-blue-900 mb-1">Subject Property</div>
+                <div className="text-sm font-semibold text-blue-900 mb-2">Subject Property</div>
                 {subject ? (
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs text-gray-800">
-                    <div><span className="text-gray-500">VCS:</span> {fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div>
-                    <div><span className="text-gray-500">Design:</span> {fmtSubjectVal(subject.asset_design_style)}</div>
-                    <div><span className="text-gray-500">T&amp;U:</span> {fmtSubjectVal(subject.asset_type_use)}</div>
-                    <div><span className="text-gray-500">Cond:</span> {fmtSubjectVal(subject.asset_int_cond)}</div>
-                    <div><span className="text-gray-500">Year Built:</span> {fmtSubjectVal(subject.asset_year_built)}</div>
-                    <div><span className="text-gray-500">SFLA:</span> {fmtSubjectVal(subject.asset_sfla)}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-sm text-gray-900">
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Cond</div><div className="font-semibold">{codeWithName(subject, 'asset_int_cond')}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
                   </div>
                 ) : (
                   <div className="text-xs text-red-700">Subject property not found in current dataset.</div>
                 )}
-                <div className="text-[11px] text-gray-600 mt-1">
+                <div className="text-[10px] text-gray-500 mt-2">
                   {`Sale-date range: ${sampleRange.start || '—'} → ${sampleRange.end || '—'} · Land method: ${landMethod.toUpperCase()} · Vendor: ${vendorType}`}
                 </div>
               </div>
@@ -3715,25 +3774,48 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                           <td className="px-2 py-1"><input type="text" value={slot.lot} onChange={e => updateEvidenceSlot(idx, 'lot', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
                           <td className="px-2 py-1"><input type="text" value={slot.qualifier} onChange={e => updateEvidenceSlot(idx, 'qualifier', e.target.value)} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
                           <td className={cellCls('card')} title={cellTitle('card')}>
-                            <input type="text" value={slot.card} onChange={e => updateEvidenceSlot(idx, 'card', e.target.value)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                            <input
+                              type="text"
+                              value={slot.card}
+                              onChange={e => updateEvidenceSlot(idx, 'card', e.target.value)}
+                              placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''}
+                              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                            />
                           </td>
                           <td className={cellCls('sale_date')} title={cellTitle('sale_date')}>
-                            <input type="date" value={slot.sales_date || ''} onChange={e => updateEvidenceSlot(idx, 'sales_date', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                            <input
+                              type="date"
+                              value={slot.sales_date || (compProp ? fmtCompDate(compProp.sales_date) : '')}
+                              onChange={e => updateEvidenceSlot(idx, 'sales_date', e.target.value)}
+                              className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                            />
                           </td>
                           <td className={cellCls('sale_price')} title={cellTitle('sale_price')}>
-                            <input type="number" value={slot.sales_price || ''} onChange={e => updateEvidenceSlot(idx, 'sales_price', e.target.value)} className="w-24 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                            <input
+                              type="number"
+                              value={slot.sales_price || (compProp?.sales_price ?? '')}
+                              onChange={e => updateEvidenceSlot(idx, 'sales_price', e.target.value)}
+                              placeholder={compProp?.sales_price ? String(compProp.sales_price) : ''}
+                              className="w-24 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                            />
                           </td>
                           <td className={cellCls('sale_nu')} title={cellTitle('sale_nu')}>
-                            <input type="text" value={slot.sales_nu || ''} onChange={e => updateEvidenceSlot(idx, 'sales_nu', e.target.value)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                            <input
+                              type="text"
+                              value={slot.sales_nu || (compProp?.sales_nu || '')}
+                              onChange={e => updateEvidenceSlot(idx, 'sales_nu', e.target.value)}
+                              placeholder={compProp?.sales_nu || ''}
+                              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                            />
                           </td>
                           <td className={cellCls('vcs')} title={cellTitle('vcs')}>{compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014'}</td>
-                          <td className={cellCls('design')} title={cellTitle('design')}>{compProp?.asset_design_style || '\u2014'}</td>
-                          <td className={cellCls('type_use')} title={cellTitle('type_use')}>{compProp?.asset_type_use || '\u2014'}</td>
-                          <td className={cellCls('condition')} title={cellTitle('condition')}>{compProp?.asset_int_cond || '\u2014'}</td>
+                          <td className={cellCls('design')} title={cellTitle('design')}>{compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014'}</td>
+                          <td className={cellCls('type_use')} title={cellTitle('type_use')}>{compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014'}</td>
+                          <td className={cellCls('condition')} title={cellTitle('condition')}>{compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014'}</td>
                           <td className={cellCls('year_built')} title={cellTitle('year_built')}>{compProp?.asset_year_built || '\u2014'}</td>
                           <td className={cellCls('sfla')} title={cellTitle('sfla')}>{compProp?.asset_sfla || '\u2014'}</td>
                           <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>
-                            {compProp ? (compProp.asset_lot_acre || compProp.asset_lot_sf || compProp.asset_lot_frontage || '\u2014') : '\u2014'}
+                            {compLotDisplay(compProp)}
                           </td>
                         </tr>
                       );
