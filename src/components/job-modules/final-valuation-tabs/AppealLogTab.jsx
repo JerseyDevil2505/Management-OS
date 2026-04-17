@@ -1369,10 +1369,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         (existingAppeals || []).map(a => a.appeal_number)
       );
 
+      // Fetch DRAFT rows (no appeal_number yet) so we can merge proactive
+      // appellant-evidence drafts into the official import instead of duplicating.
+      const { data: draftRows } = await supabase
+        .from('appeal_log')
+        .select('id, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+        .eq('job_id', jobData.id)
+        .is('appeal_number', null);
+      const draftByCompositeKey = new Map();
+      (draftRows || []).forEach(d => {
+        if (d.property_composite_key) draftByCompositeKey.set(d.property_composite_key, d);
+      });
+
       let imported = 0;
       let skipped = 0;
       let unmatched = 0;
+      let mergedDrafts = 0;
       const records = [];
+      const draftUpdates = []; // { id, payload }
 
       // Process data rows (skip header row 0)
       for (let i = 1; i < lines.length; i++) {
@@ -1462,10 +1476,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           evidence_status: ''
         };
 
+        // If a draft row already exists for this property, merge instead of insert.
+        const draftMatch = matchedProperty?.property_composite_key
+          ? draftByCompositeKey.get(matchedProperty.property_composite_key)
+          : null;
+        if (draftMatch) {
+          // Preserve evidence fields already saved by the user, overwrite the rest.
+          const { appellant_comps, appellant_comps_updated_at, farm_mode, ...officialFields } = record;
+          draftUpdates.push({
+            id: draftMatch.id,
+            payload: {
+              ...officialFields,
+              // keep existing draft evidence intact
+              appellant_comps: draftMatch.appellant_comps,
+              appellant_comps_updated_at: draftMatch.appellant_comps_updated_at,
+              farm_mode: draftMatch.farm_mode
+            }
+          });
+          mergedDrafts++;
+          // Remove from map so it isn't matched twice
+          draftByCompositeKey.delete(matchedProperty.property_composite_key);
+          continue;
+        }
+
         records.push(record);
       }
 
-      // Batch insert
+      // Apply draft merges (one update per draft to preserve evidence fields)
+      for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      // Batch insert non-draft records
       if (records.length > 0) {
         const { error } = await supabase
           .from('appeal_log')
@@ -1512,7 +1558,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setImportResult({ imported, skipped, unmatched });
+      setImportResult({ imported, skipped, unmatched, mergedDrafts });
       setImportFile(null);
 
     } catch (error) {
@@ -1541,10 +1587,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         .eq('job_id', jobData.id);
       const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
 
+      // Fetch DRAFT rows so proactive evidence drafts merge into the official import.
+      const { data: draftRows } = await supabase
+        .from('appeal_log')
+        .select('id, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+        .eq('job_id', jobData.id)
+        .is('appeal_number', null);
+      const draftByCompositeKey = new Map();
+      (draftRows || []).forEach(d => {
+        if (d.property_composite_key) draftByCompositeKey.set(d.property_composite_key, d);
+      });
+
       let imported = 0;
       let skipped = 0;
       let unmatched = 0;
+      let mergedDrafts = 0;
       const records = [];
+      const draftUpdates = [];
 
       for (const row of rows) {
         const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
@@ -1589,7 +1648,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         }
 
         const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
-        records.push({
+        const record = {
           job_id: jobData.id,
           appeal_number: appealNumber,
           appeal_year: new Date().getFullYear(),
@@ -1618,7 +1677,37 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           evidence_status: '',
           inspected: false,
           comments: row['NOTES'] ? String(row['NOTES']).trim() : ''
-        });
+        };
+
+        // Merge into existing draft row if one exists for this property.
+        const draftMatch = matchedProperty?.property_composite_key
+          ? draftByCompositeKey.get(matchedProperty.property_composite_key)
+          : null;
+        if (draftMatch) {
+          draftUpdates.push({
+            id: draftMatch.id,
+            payload: {
+              ...record,
+              appellant_comps: draftMatch.appellant_comps,
+              appellant_comps_updated_at: draftMatch.appellant_comps_updated_at,
+              farm_mode: draftMatch.farm_mode
+            }
+          });
+          mergedDrafts++;
+          draftByCompositeKey.delete(matchedProperty.property_composite_key);
+          continue;
+        }
+
+        records.push(record);
+      }
+
+      // Apply draft merges first (one update per draft to preserve evidence fields)
+      for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
       }
 
       if (records.length > 0) {
@@ -1660,7 +1749,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setPwrCamaResult({ imported, skipped, unmatched });
+      setPwrCamaResult({ imported, skipped, unmatched, mergedDrafts });
       setPwrCamaFile(null);
     } catch (error) {
       console.error('PowerCama import error:', error);
@@ -3316,6 +3405,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   {importResult.unmatched > 0 && (
                     <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
                   )}
+                  {importResult.mergedDrafts > 0 && (
+                    <p className="text-emerald-700">✓ {importResult.mergedDrafts} merged into existing draft row{importResult.mergedDrafts === 1 ? '' : 's'} (appellant evidence preserved)</p>
+                  )}
                 </div>
               )}
 
@@ -3376,6 +3468,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
                   {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
                   {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
+                  {pwrCamaResult.mergedDrafts > 0 && <p className="text-emerald-700">✓ {pwrCamaResult.mergedDrafts} merged into existing draft row{pwrCamaResult.mergedDrafts === 1 ? '' : 's'} (appellant evidence preserved)</p>}
                 </div>
               )}
               <div className="flex gap-3 justify-end pt-2">
