@@ -218,7 +218,6 @@ const AppellantEvidencePanel = ({
   };
 
   const handleSave = async () => {
-    if (!appeal?.id) return;
     setSaving(true);
     setSaveStatus(null);
     try {
@@ -226,20 +225,52 @@ const AppellantEvidencePanel = ({
         .map((s, i) => ({ ...s, slot: i + 1 }))
         .filter(s => s.block || s.lot || s.qualifier || s.card || s.sales_date || s.sales_price || s.sales_nu || s.manual_notes);
 
-      const updated = {
+      const evidencePayload = {
         appellant_comps: cleaned.length > 0 ? cleaned : null,
         appellant_comps_updated_at: new Date().toISOString(),
         farm_mode: farmMode
       };
 
+      // DRAFT INSERT path: no appeal_log row yet (proactive evidence work
+      // before the official appeal list is synced). Insert a stub row tagged
+      // with status 'D' (Draft) and the subject identifiers so the official
+      // import can later merge into it via property_composite_key.
+      if (!appeal?.id) {
+        if (!appeal?.job_id || !appeal?.property_composite_key) {
+          throw new Error('Missing job_id or property_composite_key for draft appeal.');
+        }
+        const stub = {
+          job_id: appeal.job_id,
+          property_composite_key: appeal.property_composite_key,
+          property_block: appeal.property_block || null,
+          property_lot: appeal.property_lot || null,
+          property_qualifier: appeal.property_qualifier || null,
+          property_location: appeal.property_location || null,
+          appeal_year: appeal.appeal_year || new Date().getFullYear(),
+          status: 'D',
+          ...evidencePayload
+        };
+        const { data: inserted, error: insertErr } = await supabase
+          .from('appeal_log')
+          .insert([stub])
+          .select()
+          .single();
+        if (insertErr) throw insertErr;
+        setSaveStatus('saved');
+        if (onSaved) onSaved(inserted);
+        if (mode === 'modal' && onClose) onClose();
+        return;
+      }
+
+      // UPDATE path: existing appeal_log row.
       const { error } = await supabase
         .from('appeal_log')
-        .update(updated)
+        .update(evidencePayload)
         .eq('id', appeal.id);
       if (error) throw error;
 
       setSaveStatus('saved');
-      if (onSaved) onSaved({ ...appeal, ...updated });
+      if (onSaved) onSaved({ ...appeal, ...evidencePayload });
       if (mode === 'modal' && onClose) onClose();
     } catch (e) {
       console.error('Failed to save appellant comps:', e);
@@ -312,9 +343,16 @@ const AppellantEvidencePanel = ({
       {/* Header */}
       <div className={`flex justify-between items-center p-4 border-b border-gray-200 ${isModal ? 'sticky top-0 bg-white z-10' : ''}`}>
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Appellant Evidence Comps</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-gray-900">Appellant Evidence Comps</h2>
+            {!appeal?.id && (
+              <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 bg-amber-100 border border-amber-300 rounded" title="No appeal_log row yet — saving will create a Draft row that the official appeal list will merge into.">
+                Draft (no appeal synced)
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-600 mt-0.5">
-            {`Appeal #${appeal?.appeal_number || '\u2014'} \u00b7 Block ${appeal?.property_block} Lot ${appeal?.property_lot}${appeal?.property_qualifier ? ` Qual ${appeal.property_qualifier}` : ''} \u00b7 ${appeal?.property_location || ''}`}
+            {`Appeal #${appeal?.appeal_number || (appeal?.id ? '\u2014' : 'pending')} \u00b7 Block ${appeal?.property_block} Lot ${appeal?.property_lot}${appeal?.property_qualifier ? ` Qual ${appeal.property_qualifier}` : ''} \u00b7 ${appeal?.property_location || ''}`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -434,7 +472,7 @@ const AppellantEvidencePanel = ({
                         <button
                           type="button"
                           onClick={() => onPromoteComp(compProp, slot)}
-                          className="px-2 py-0.5 text-[10px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded"
+                          className="inline-block whitespace-nowrap px-2 py-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 border border-green-700 rounded shadow-sm"
                           title="Promote into CME comp grid"
                         >
                           + Comp

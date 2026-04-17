@@ -117,6 +117,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // so saves done in AppealLog show up here and vice versa.
   const [detailedAppealRow, setDetailedAppealRow] = useState(null);
   const [detailedAppealLoading, setDetailedAppealLoading] = useState(false);
+  // null = use default (expanded if appeal exists, collapsed if draft); user override otherwise.
+  const [detailedEvidenceExpanded, setDetailedEvidenceExpanded] = useState(null);
   React.useEffect(() => {
     const compositeKey = manualEvaluationResult?.subject?.property_composite_key;
     if (!compositeKey || !jobData?.id) {
@@ -4926,57 +4928,98 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
           <div className="space-y-6">
-            {/* Appellant Evidence Panel - rendered FIRST so it sits above Manual Property Evaluation. */}
-            {manualEvaluationResult?.subject && detailedAppealRow && (
-              <AppellantEvidencePanel
-                appeal={detailedAppealRow}
-                jobData={jobData}
-                marketLandData={marketLandData}
-                properties={properties}
-                tenantConfig={tenantConfig}
-                mode="inline"
-                onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
-                onPromoteComp={(compProp) => {
-                  if (!compProp) return;
-                  const block = String(compProp.property_block || '').trim();
-                  const lot = String(compProp.property_lot || '').trim();
-                  const qualifier = String(compProp.property_qualifier || '').trim();
-                  if (!block || !lot) {
-                    alert('Cannot promote: missing block/lot on comp.');
-                    return;
-                  }
-                  // Avoid duplicate entries
-                  const dup = manualComps.some(c =>
-                    String(c.block || '').trim() === block &&
-                    String(c.lot || '').trim() === lot &&
-                    String(c.qualifier || '').trim() === qualifier
-                  );
-                  if (dup) {
-                    alert(`Comp ${block}-${lot}${qualifier ? '-' + qualifier : ''} is already in the CME grid.`);
-                    return;
-                  }
-                  // Find first empty slot
-                  const emptyIdx = manualComps.findIndex(c => !c.block && !c.lot && !c.qualifier);
-                  if (emptyIdx === -1) {
-                    alert('All 5 comp slots are filled. Clear one before promoting another comp.');
-                    return;
-                  }
-                  const newComps = [...manualComps];
-                  newComps[emptyIdx] = { block, lot, qualifier };
-                  setManualComps(newComps);
-                  // Scroll user to the manual entry grid so they can run evaluate
-                  setTimeout(() => {
-                    const el = document.querySelector('[data-cme-manual-entry]');
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 50);
-                }}
-              />
-            )}
-            {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500 italic">
-                {'No appeal on file for this subject \u2014 appellant evidence panel hidden.'}
-              </div>
-            )}
+            {/* Appellant Evidence Panel — always shown when a subject is evaluated.
+                If no appeal_log row exists yet, runs in DRAFT mode (collapsed by default) and
+                INSERTs a stub appeal_log row on save so the official appeal list can later merge
+                in via property_composite_key. */}
+            {manualEvaluationResult?.subject && (() => {
+              const subj = manualEvaluationResult.subject;
+              const hasAppeal = !!detailedAppealRow;
+              const panelAppeal = hasAppeal ? detailedAppealRow : {
+                job_id: jobData?.id,
+                property_composite_key: subj.property_composite_key,
+                property_block: subj.property_block,
+                property_lot: subj.property_lot,
+                property_qualifier: subj.property_qualifier || '',
+                property_location: subj.property_location || '',
+                appeal_year: jobData?.end_date ? new Date(jobData.end_date).getFullYear() : new Date().getFullYear(),
+                appellant_comps: null,
+                farm_mode: subj.property_m4_class === '3A'
+              };
+              const expanded = detailedEvidenceExpanded === null
+                ? hasAppeal
+                : detailedEvidenceExpanded;
+              const compsCount = Array.isArray(detailedAppealRow?.appellant_comps)
+                ? detailedAppealRow.appellant_comps.length
+                : 0;
+              return (
+                <div className={`rounded-lg border ${hasAppeal ? 'border-blue-300 bg-blue-50' : 'border-amber-300 bg-amber-50'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailedEvidenceExpanded(!expanded)}
+                    className="w-full flex justify-between items-center px-4 py-2 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-gray-900">Appellant Evidence Comps</span>
+                      {hasAppeal ? (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold text-blue-900 bg-blue-100 border border-blue-300 rounded">
+                          {`Appeal #${detailedAppealRow.appeal_number || '\u2014'} \u00b7 ${compsCount > 0 ? `${compsCount} comp${compsCount === 1 ? '' : 's'} on file` : 'no comps yet'}`}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 bg-amber-100 border border-amber-300 rounded">
+                          {detailedAppealLoading ? 'Checking for appeal\u2026' : 'No appeal synced \u2014 click to draft'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600">{expanded ? 'Hide \u25b2' : 'Show \u25bc'}</span>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-gray-200 bg-white">
+                      <AppellantEvidencePanel
+                        appeal={panelAppeal}
+                        jobData={jobData}
+                        marketLandData={marketLandData}
+                        properties={properties}
+                        tenantConfig={tenantConfig}
+                        mode="inline"
+                        onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
+                        onPromoteComp={(compProp) => {
+                          if (!compProp) return;
+                          const block = String(compProp.property_block || '').trim();
+                          const lot = String(compProp.property_lot || '').trim();
+                          const qualifier = String(compProp.property_qualifier || '').trim();
+                          if (!block || !lot) {
+                            alert('Cannot promote: missing block/lot on comp.');
+                            return;
+                          }
+                          const dup = manualComps.some(c =>
+                            String(c.block || '').trim() === block &&
+                            String(c.lot || '').trim() === lot &&
+                            String(c.qualifier || '').trim() === qualifier
+                          );
+                          if (dup) {
+                            alert(`Comp ${block}-${lot}${qualifier ? '-' + qualifier : ''} is already in the CME grid.`);
+                            return;
+                          }
+                          const emptyIdx = manualComps.findIndex(c => !c.block && !c.lot && !c.qualifier);
+                          if (emptyIdx === -1) {
+                            alert('All 5 comp slots are filled. Clear one before promoting another comp.');
+                            return;
+                          }
+                          const newComps = [...manualComps];
+                          newComps[emptyIdx] = { block, lot, qualifier };
+                          setManualComps(newComps);
+                          setTimeout(() => {
+                            const el = document.querySelector('[data-cme-manual-entry]');
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 50);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Header with Manual Entry Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
