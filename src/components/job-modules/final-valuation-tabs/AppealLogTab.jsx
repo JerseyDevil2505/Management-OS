@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
-import { evaluateAppellantComp, COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
+import { evaluateAppellantComp, COLOR_CLASSES, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -3720,7 +3720,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
                 <div className="text-sm font-semibold text-blue-900 mb-2">Subject Property</div>
                 {subject ? (
-                  <div className="grid grid-cols-2 md:grid-cols-7 gap-3 text-sm text-gray-900">
+                  <div className="grid grid-cols-2 md:grid-cols-10 gap-3 text-sm text-gray-900">
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
@@ -3728,6 +3728,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">NU</div><div className="font-semibold" title={getNuShortForm(subject.sales_nu) || ''}>{fmtSubjectVal(subject.sales_nu)}</div></div>
                   </div>
                 ) : (
                   <div className="text-xs text-red-700">Subject property not found in current dataset.</div>
@@ -3827,6 +3830,27 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <div className="mt-4 border border-gray-200 rounded p-3 bg-gray-50">
                   <div className="text-xs font-semibold text-gray-700 mb-2">Auto-Generated Comments</div>
                   <div className="space-y-1 text-xs text-gray-800 font-mono">
+                    {(() => {
+                      // Subject sale pre-note: only when sale price > $100 within past 3 years
+                      if (!subject?.sales_date || !subject?.sales_price) return null;
+                      const price = Number(subject.sales_price);
+                      if (!Number.isFinite(price) || price <= 100) return null;
+                      const saleDt = new Date(subject.sales_date);
+                      if (Number.isNaN(saleDt.getTime())) return null;
+                      const currentYear = new Date().getFullYear();
+                      if (saleDt.getFullYear() < currentYear - 3) return null;
+                      const dateStr = `${String(saleDt.getMonth() + 1).padStart(2, '0')}/${String(saleDt.getDate()).padStart(2, '0')}/${saleDt.getFullYear()}`;
+                      const priceStr = `$${price.toLocaleString()}`;
+                      const nuRaw = (subject.sales_nu == null ? '' : String(subject.sales_nu)).trim();
+                      const nuLabel = (!nuRaw || nuRaw === '0' || nuRaw === '00')
+                        ? "ARM'S LENGTH"
+                        : (getNuShortForm(nuRaw) || `NU ${nuRaw}`).toUpperCase();
+                      return (
+                        <div className="font-semibold text-blue-900">
+                          SUBJECT SOLD {dateStr} FOR {priceStr} &mdash; {nuLabel}
+                        </div>
+                      );
+                    })()}
                     {evaluations.map(({ evalResult }, idx) => {
                       const slot = evidenceDraft[idx];
                       const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
