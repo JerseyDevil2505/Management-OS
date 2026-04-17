@@ -3,6 +3,7 @@ import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {} }) => {
   const subject = result.subject;
@@ -1801,6 +1802,236 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       }
     }
 
+    // ==================== APPELLANT EVIDENCE SUMMARY PAGE ====================
+    // Rendered after the appraisal grid (and any dynamic-adjustment pages) and
+    // before Chapter 123. Only added if an appeal_log row exists for this subject.
+    // If the appeal exists but no appellant_comps are saved, we still render the
+    // page with a "No Evidence supplied by Appellant" line so the report shows
+    // that fact explicitly.
+    try {
+      const compositeKey = subject?.property_composite_key;
+      if (compositeKey && jobData?.id) {
+        const { data: appealRow } = await supabase
+          .from('appeal_log')
+          .select('id, appeal_number, appeal_year, property_block, property_lot, property_qualifier, property_location, appellant_comps, farm_mode')
+          .eq('job_id', jobData.id)
+          .eq('property_composite_key', compositeKey)
+          .maybeSingle();
+
+        if (appealRow) {
+          doc.addPage();
+          addHeader(subjectBlockLot, true);
+
+          let evY = margin + 60;
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...lojikBlue);
+          doc.text('Appellant Evidence Summary', margin, evY);
+          evY += 18;
+
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(60, 60, 60);
+          const appealLine = `Appeal #${appealRow.appeal_number || '(pending)'}  \u00b7  Block ${appealRow.property_block || subject.property_block} Lot ${appealRow.property_lot || subject.property_lot}${(appealRow.property_qualifier || subject.property_qualifier) ? ` Qual ${appealRow.property_qualifier || subject.property_qualifier}` : ''}  \u00b7  ${appealRow.property_location || subject.property_location || ''}`;
+          doc.text(appealLine, margin, evY);
+          evY += 16;
+
+          // Director's ratio (no 100% cap for FMV-by-Ratio display)
+          let evRatioDecimal = null;
+          let evRatioSource = 'none';
+          if (jobData?.director_ratio) {
+            let r = parseFloat(jobData.director_ratio);
+            if (Number.isFinite(r) && r > 0) {
+              if (r > 1) r = r / 100;
+              evRatioDecimal = r;
+              evRatioSource = "Director's";
+            }
+          }
+          if (evRatioDecimal === null && marketLandData?.normalization_config?.equalizationRatio) {
+            let r = parseFloat(marketLandData.normalization_config.equalizationRatio);
+            if (Number.isFinite(r) && r > 0) {
+              if (r > 1) r = r / 100;
+              evRatioDecimal = r;
+              evRatioSource = 'Equalization';
+            }
+          }
+          const fmvByRatio = (subject?.values_mod_total && evRatioDecimal)
+            ? Math.round(Number(subject.values_mod_total) / evRatioDecimal)
+            : null;
+
+          const currentAsmt = subject.values_mod_total
+            ? `$${Number(subject.values_mod_total).toLocaleString()}`
+            : '\u2014';
+          const fmvStr = fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014';
+          const ratioStr = evRatioDecimal ? `${(evRatioDecimal * 100).toFixed(2)}% ${evRatioSource}` : 'n/a';
+          doc.setFontSize(9);
+          doc.setTextColor(40, 40, 40);
+          doc.text(`Current Assessment: ${currentAsmt}    FMV by Ratio: ${fmvStr}    Ratio: ${ratioStr}`, margin, evY);
+          evY += 14;
+
+          const appellantComps = Array.isArray(appealRow.appellant_comps) ? appealRow.appellant_comps : [];
+
+          if (appellantComps.length === 0) {
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(150, 30, 30);
+            doc.text('No Evidence supplied by Appellant.', margin, evY + 16);
+          } else {
+            const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+            const findCompProperty = (b0, l0, q0, c0) => {
+              if (!b0 || !l0) return null;
+              const b = norm(b0), l = norm(l0), q = norm(q0), c = norm(c0);
+              return (allProperties || []).find(p => {
+                if (norm(p.property_block) !== b) return false;
+                if (norm(p.property_lot) !== l) return false;
+                if (norm(p.property_qualifier) !== q) return false;
+                if (c && norm(p.property_addl_card || p.property_card) !== c) return false;
+                return true;
+              }) || null;
+            };
+            const decodeField = (property, field) => {
+              if (!property || !codeDefinitions) return property?.[field] || '';
+              try {
+                const decoded = vendorType === 'Microsystems'
+                  ? interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, field)
+                  : interpretCodes.getBRTValue?.(property, codeDefinitions, field);
+                return decoded || property[field] || '';
+              } catch (e) { return property[field] || ''; }
+            };
+            const codeWithName = (property, field) => {
+              const code = property?.[field];
+              if (!code) return '\u2014';
+              const decoded = decodeField(property, field);
+              if (!decoded || String(decoded).trim().toUpperCase() === String(code).trim().toUpperCase()) return String(code);
+              return `${code}-${decoded}`;
+            };
+            const lotDisplay = (p) => {
+              if (!p) return '\u2014';
+              if (p.asset_lot_acre && parseFloat(p.asset_lot_acre) > 0) return `${parseFloat(p.asset_lot_acre).toFixed(2)} ac`;
+              if (p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0) return `${parseFloat(p.market_manual_lot_acre).toFixed(2)} ac`;
+              if (p.asset_lot_sf && parseFloat(p.asset_lot_sf) > 0) return `${parseInt(p.asset_lot_sf, 10).toLocaleString()} sf`;
+              if (p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0) return `${parseInt(p.market_manual_lot_sf, 10).toLocaleString()} sf`;
+              if (p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0) return `${parseFloat(p.asset_lot_frontage).toFixed(0)} ff`;
+              try {
+                const ac = parseFloat(interpretCodes.getCalculatedAcreage(p, vendorType));
+                if (ac > 0) return `${ac.toFixed(2)} ac`;
+              } catch (e) {}
+              return '\u2014';
+            };
+
+            const sampleRange = (() => {
+              if (!jobData?.end_date) return { start: '', end: '' };
+              const rawYear = new Date(jobData.end_date).getFullYear();
+              return {
+                start: new Date(rawYear - 1, 9, 1).toISOString().split('T')[0],
+                end: new Date(rawYear, 9, 31).toISOString().split('T')[0]
+              };
+            })();
+            const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
+            const farmMode = !!appealRow.farm_mode;
+
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const subjRow = [
+              'SUBJ',
+              subject.property_block || '',
+              subject.property_lot || '',
+              subject.property_qualifier || '',
+              subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
+              subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
+              subject.sales_nu || '\u2014',
+              subject.new_vcs || subject.property_vcs || '\u2014',
+              codeWithName(subject, 'asset_design_style'),
+              codeWithName(subject, 'asset_type_use'),
+              codeWithName(subject, 'asset_int_cond'),
+              subject.asset_year_built || '\u2014',
+              subject.asset_sfla || '\u2014',
+              lotDisplay(subject)
+            ];
+            const evaluations = appellantComps.map(slot => {
+              const compProp = findCompProperty(slot.block, slot.lot, slot.qualifier, slot.card);
+              const evalResult = evaluateAppellantComp(subject, compProp, slot, { vendorType, landMethod, sampleRange, farmMode });
+              return { slot, compProp, evalResult };
+            });
+            const compRows = evaluations.map(({ slot, compProp }, i) => ([
+              `#${i + 1}`,
+              slot.block || (compProp?.property_block || ''),
+              slot.lot || (compProp?.property_lot || ''),
+              slot.qualifier || (compProp?.property_qualifier || ''),
+              slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
+              (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
+              slot.sales_nu || compProp?.sales_nu || '\u2014',
+              compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
+              compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
+              compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
+              compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
+              compProp?.asset_year_built || '\u2014',
+              compProp?.asset_sfla || '\u2014',
+              lotDisplay(compProp)
+            ]));
+
+            autoTable(doc, {
+              startY: evY + 10,
+              head: evalHeader,
+              body: [subjRow, ...compRows],
+              theme: 'grid',
+              styles: { fontSize: 7, cellPadding: 2 },
+              headStyles: { fillColor: lojikBlue, textColor: 255, fontStyle: 'bold' },
+              didParseCell: (data) => {
+                if (data.row.index === 0 && data.section === 'body') {
+                  data.cell.styles.fillColor = [219, 234, 254];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              },
+              margin: { left: margin, right: margin }
+            });
+
+            let commentsY = doc.lastAutoTable.finalY + 16;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(0, 0, 0);
+            doc.text('Notes', margin, commentsY);
+            commentsY += 12;
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(40, 40, 40);
+
+            if (subject?.sales_date && subject?.sales_price) {
+              const saleDt = new Date(subject.sales_date);
+              const price = Number(subject.sales_price);
+              if (!Number.isNaN(saleDt.getTime()) && Number.isFinite(price) && price > 100) {
+                const apYear = parseInt(appealRow.appeal_year, 10) || new Date().getFullYear();
+                const subjStart = new Date(`${apYear - 2}-10-01`);
+                const subjEnd = new Date(`${apYear - 1}-10-31`);
+                const outside = saleDt < subjStart || saleDt > subjEnd;
+                const dateStr = `${String(saleDt.getMonth() + 1).padStart(2, '0')}/${String(saleDt.getDate()).padStart(2, '0')}/${saleDt.getFullYear()}`;
+                const nuRaw = (subject.sales_nu == null ? '' : String(subject.sales_nu)).trim();
+                const nuLabel = (!nuRaw || nuRaw === '0' || nuRaw === '00')
+                  ? "ARM'S LENGTH"
+                  : (getNuShortForm(nuRaw) || `NU ${nuRaw}`).toUpperCase();
+                const prefix = outside ? 'SUBJECT SOLD OUTSIDE SAMPLING PERIOD' : 'SUBJECT SOLD';
+                doc.setFont('helvetica', 'bold');
+                doc.text(`${prefix} ${dateStr} FOR $${price.toLocaleString()} \u2014 ${nuLabel}`, margin, commentsY);
+                doc.setFont('helvetica', 'normal');
+                commentsY += 12;
+              }
+            }
+
+            evaluations.forEach(({ slot, evalResult }, i) => {
+              const has = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              if (!has) return;
+              const note = `APPELLANT COMP#${i + 1} \u2014 ${evalResult.autoNote}${slot.manual_notes ? ` \u2014 ${slot.manual_notes}` : ''}`;
+              const wrapped = doc.splitTextToSize(note, doc.internal.pageSize.getWidth() - 2 * margin);
+              doc.text(wrapped, margin, commentsY);
+              commentsY += wrapped.length * 10;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to render appellant evidence summary page:', e);
+    }
+
     // ==================== CHAPTER 123 TEST ====================
     // Add Chapter 123 Analysis on a new page
     doc.addPage();
@@ -1950,7 +2181,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
