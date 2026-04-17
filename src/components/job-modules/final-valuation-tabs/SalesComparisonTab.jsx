@@ -4936,6 +4936,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 tenantConfig={tenantConfig}
                 mode="inline"
                 onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
+                onPromoteComp={(compProp) => {
+                  if (!compProp) return;
+                  const block = String(compProp.property_block || '').trim();
+                  const lot = String(compProp.property_lot || '').trim();
+                  const qualifier = String(compProp.property_qualifier || '').trim();
+                  if (!block || !lot) {
+                    alert('Cannot promote: missing block/lot on comp.');
+                    return;
+                  }
+                  // Avoid duplicate entries
+                  const dup = manualComps.some(c =>
+                    String(c.block || '').trim() === block &&
+                    String(c.lot || '').trim() === lot &&
+                    String(c.qualifier || '').trim() === qualifier
+                  );
+                  if (dup) {
+                    alert(`Comp ${block}-${lot}${qualifier ? '-' + qualifier : ''} is already in the CME grid.`);
+                    return;
+                  }
+                  // Find first empty slot
+                  const emptyIdx = manualComps.findIndex(c => !c.block && !c.lot && !c.qualifier);
+                  if (emptyIdx === -1) {
+                    alert('All 5 comp slots are filled. Clear one before promoting another comp.');
+                    return;
+                  }
+                  const newComps = [...manualComps];
+                  newComps[emptyIdx] = { block, lot, qualifier };
+                  setManualComps(newComps);
+                  // Scroll user to the manual entry grid so they can run evaluate
+                  setTimeout(() => {
+                    const el = document.querySelector('[data-cme-manual-entry]');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 50);
+                }}
               />
             )}
             {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
@@ -4955,7 +4989,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             </div>
 
             {/* Manual Entry Grid */}
-            <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
+            <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
                 <h4 className="font-semibold text-gray-900">Property Entry</h4>
               </div>
