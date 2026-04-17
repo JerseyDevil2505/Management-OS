@@ -4925,7 +4925,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
-          <div className="flex flex-col gap-6">
+          <div className="space-y-6">
+            {/* Appellant Evidence Panel - rendered FIRST so it sits above Manual Property Evaluation. */}
+            {manualEvaluationResult?.subject && detailedAppealRow && (
+              <AppellantEvidencePanel
+                appeal={detailedAppealRow}
+                jobData={jobData}
+                marketLandData={marketLandData}
+                properties={properties}
+                tenantConfig={tenantConfig}
+                mode="inline"
+                onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
+              />
+            )}
+            {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500 italic">
+                No appeal on file for this subject \u2014 appellant evidence panel hidden.
+              </div>
+            )}
+
             {/* Header with Manual Entry Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Manual Property Evaluation</h3>
@@ -5099,30 +5117,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               </div>
             )}
 
-            {/*
-              Appellant Evidence Panel - rendered at the BOTTOM of the JSX but
-              displayed at the TOP of the Detailed tab via flex `order-[-1]`.
-              This keeps line diffs minimal and avoids shifting the existing
-              Manual Property Evaluation block.
-            */}
-            {manualEvaluationResult?.subject && detailedAppealRow && (
-              <div className="order-[-1]">
-                <AppellantEvidencePanel
-                  appeal={detailedAppealRow}
-                  jobData={jobData}
-                  marketLandData={marketLandData}
-                  properties={properties}
-                  tenantConfig={tenantConfig}
-                  mode="inline"
-                  onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
-                />
-              </div>
-            )}
-            {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
-              <div className="order-[-1] bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500 italic">
-                No appeal on file for this subject \u2014 appellant evidence panel hidden.
-              </div>
-            )}
           </div>
         )}
 
