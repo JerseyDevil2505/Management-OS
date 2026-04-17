@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
+import AppellantEvidencePanel from './AppellantEvidencePanel';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -110,6 +111,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
+
+  // Appellant evidence panel state for the Detailed sub-tab.
+  // Fetched fresh from appeal_log whenever the evaluated subject changes,
+  // so saves done in AppealLog show up here and vice versa.
+  const [detailedAppealRow, setDetailedAppealRow] = useState(null);
+  const [detailedAppealLoading, setDetailedAppealLoading] = useState(false);
+  React.useEffect(() => {
+    const compositeKey = manualEvaluationResult?.subject?.property_composite_key;
+    if (!compositeKey || !jobData?.id) {
+      setDetailedAppealRow(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailedAppealLoading(true);
+    supabase
+      .from('appeal_log')
+      .select('id, appeal_number, appeal_year, property_block, property_lot, property_qualifier, property_location, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+      .eq('job_id', jobData.id)
+      .eq('property_composite_key', compositeKey)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setDetailedAppealRow(data || null);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailedAppealLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [manualEvaluationResult?.subject?.property_composite_key, jobData?.id]);
 
   // Vacant land appraisal state
   const [vacantLandSubject, setVacantLandSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -4896,7 +4925,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             {/* Header with Manual Entry Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Manual Property Evaluation</h3>
@@ -5067,6 +5096,31 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   allProperties={properties}
                   marketLandData={marketLandData}
                 />
+              </div>
+            )}
+
+            {/*
+              Appellant Evidence Panel - rendered at the BOTTOM of the JSX but
+              displayed at the TOP of the Detailed tab via flex `order-[-1]`.
+              This keeps line diffs minimal and avoids shifting the existing
+              Manual Property Evaluation block.
+            */}
+            {manualEvaluationResult?.subject && detailedAppealRow && (
+              <div className="order-[-1]">
+                <AppellantEvidencePanel
+                  appeal={detailedAppealRow}
+                  jobData={jobData}
+                  marketLandData={marketLandData}
+                  properties={properties}
+                  tenantConfig={tenantConfig}
+                  mode="inline"
+                  onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
+                />
+              </div>
+            )}
+            {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
+              <div className="order-[-1] bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500 italic">
+                No appeal on file for this subject \u2014 appellant evidence panel hidden.
               </div>
             )}
           </div>
