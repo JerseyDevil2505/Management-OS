@@ -3689,6 +3689,53 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           return { compProp, evalResult };
         });
         const fmtSubjectVal = (v) => v == null || v === '' ? '\u2014' : v;
+
+        // ----- Director's Ratio (matches DetailedAppraisalGrid logic) -----
+        let ratioDecimal = null;
+        let ratioSource = 'none';
+        let ratioUpdatedAt = null;
+        if (jobData?.director_ratio) {
+          let r = parseFloat(jobData.director_ratio);
+          if (Number.isFinite(r)) {
+            if (r > 1) r = r / 100;
+            ratioDecimal = Math.min(r, 1.0);
+            ratioSource = 'director';
+          }
+        }
+        if (ratioDecimal === null && marketLandData?.normalization_config?.equalizationRatio) {
+          let r = parseFloat(marketLandData.normalization_config.equalizationRatio);
+          if (Number.isFinite(r)) {
+            if (r > 1) r = r / 100;
+            ratioDecimal = Math.min(r, 1.0);
+            ratioSource = 'equalization';
+            ratioUpdatedAt = marketLandData?.last_normalization_run || marketLandData?.updated_at || null;
+          }
+        }
+        const ratioPctStr = ratioDecimal ? `${(ratioDecimal * 100).toFixed(2)}%` : null;
+        const fmvByRatio = (subject?.values_mod_total && ratioDecimal)
+          ? Math.round(Number(subject.values_mod_total) / ratioDecimal)
+          : null;
+        const ratioLabel = ratioSource === 'director'
+          ? "Director's Ratio"
+          : ratioSource === 'equalization'
+            ? 'Equalization Ratio (fallback)'
+            : 'Ratio not set';
+        const ratioUpdatedStr = ratioUpdatedAt
+          ? new Date(ratioUpdatedAt).toLocaleDateString()
+          : null;
+
+        // ----- Sampling window for the SUBJECT sale (driven by appeal_year) -----
+        // 10/1 of (appeal_year - 2)  →  10/31 of (appeal_year - 1)
+        const apYear = parseInt(evidenceModalAppeal.appeal_year, 10) || new Date().getFullYear();
+        const subjectWindowStart = new Date(`${apYear - 2}-10-01`);
+        const subjectWindowEnd   = new Date(`${apYear - 1}-10-31`);
+        const isSubjectSaleOutsideWindow = (() => {
+          if (!subject?.sales_date) return false;
+          const d = new Date(subject.sales_date);
+          if (Number.isNaN(d.getTime())) return false;
+          return d < subjectWindowStart || d > subjectWindowEnd;
+        })();
+
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
@@ -3701,6 +3748,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {ratioPctStr && (
+                    <div className="text-[11px] text-gray-700 leading-tight text-right">
+                      <div><span className="font-semibold">{ratioLabel}:</span> {ratioPctStr}</div>
+                      {ratioUpdatedStr && (
+                        <div className="text-[10px] text-gray-500">Updated {ratioUpdatedStr}</div>
+                      )}
+                    </div>
+                  )}
                   <label className="flex items-center gap-2 text-xs text-gray-700">
                     <input
                       type="checkbox"
@@ -3720,18 +3775,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
                 <div className="text-sm font-semibold text-blue-900 mb-2">Subject Property</div>
                 {subject ? (
-                  <div className="grid grid-cols-2 md:grid-cols-11 gap-3 text-sm text-gray-900">
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{subject.values_mod_total ? `$${Number(subject.values_mod_total).toLocaleString()}` : '\u2014'}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Cond</div><div className="font-semibold">{codeWithName(subject, 'asset_int_cond')}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">NU</div><div className="font-semibold" title={getNuShortForm(subject.sales_nu) || ''}>{fmtSubjectVal(subject.sales_nu)}</div></div>
+                  <div className="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs text-gray-900">
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{subject.values_mod_total ? `$${Number(subject.values_mod_total).toLocaleString()}` : '\u2014'}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500" title={ratioPctStr ? `${ratioLabel}: ${ratioPctStr}` : ''}>FMV by Ratio</div><div className="font-semibold">{fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014'}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Cond</div><div className="font-semibold">{codeWithName(subject, 'asset_int_cond')}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
+                    <div><div className="text-[9px] uppercase tracking-wide text-gray-500">NU</div><div className="font-semibold" title={getNuShortForm(subject.sales_nu) || ''}>{fmtSubjectVal(subject.sales_nu)}</div></div>
                   </div>
                 ) : (
                   <div className="text-xs text-red-700">Subject property not found in current dataset.</div>
@@ -3846,9 +3902,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       const nuLabel = (!nuRaw || nuRaw === '0' || nuRaw === '00')
                         ? "ARM'S LENGTH"
                         : (getNuShortForm(nuRaw) || `NU ${nuRaw}`).toUpperCase();
+                      const prefix = isSubjectSaleOutsideWindow ? 'SUBJECT SOLD OUTSIDE SAMPLING PERIOD' : 'SUBJECT SOLD';
                       return (
                         <div className="font-semibold text-blue-900">
-                          SUBJECT SOLD {dateStr} FOR {priceStr} &mdash; {nuLabel}
+                          {prefix} {dateStr} FOR {priceStr} &mdash; {nuLabel}
                         </div>
                       );
                     })()}
