@@ -1581,11 +1581,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, cellDates: true, raw: false });
 
+      // Fetch full existing rows (not just numbers) so we can refresh hearing_date
+      // and judgment fields on re-import instead of skipping.
       const { data: existingAppeals } = await supabase
         .from('appeal_log')
-        .select('appeal_number')
+        .select('id, appeal_number, current_assessment')
         .eq('job_id', jobData.id);
-      const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
+      const existingByNumber = new Map();
+      (existingAppeals || []).forEach(a => {
+        if (a.appeal_number) existingByNumber.set(String(a.appeal_number).trim(), a);
+      });
 
       // Fetch DRAFT rows so proactive evidence drafts merge into the official import.
       const { data: draftRows } = await supabase
@@ -1599,16 +1604,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       });
 
       let imported = 0;
-      let skipped = 0;
+      let refreshed = 0;
       let unmatched = 0;
       let mergedDrafts = 0;
       const records = [];
       const draftUpdates = [];
+      const refreshUpdates = []; // { id, payload } - hearing_date / judgment refresh on existing rows
 
       for (const row of rows) {
         const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
         if (!appealNumber) continue;
-        if (existingNumbers.has(appealNumber)) { skipped++; continue; }
 
         const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
         const lot = row['PROP_LOT'] != null ? String(row['PROP_LOT']).trim() : '';
@@ -1698,11 +1703,50 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           continue;
         }
 
+        // Re-import path: row already exists for this appeal_number.
+        // Refresh hearing_date, evidence_due_date, judgment_value, loss, loss_pct
+        // (and tax_court_pending). Leave user-managed fields (status, comments,
+        // appellant_comps, etc.) alone.
+        const existingRow = existingByNumber.get(appealNumber);
+        if (existingRow) {
+          // Recompute loss against the existing row's current_assessment if we
+          // didn't get a fresh one from the import row.
+          const baseAssessment = currentAssessment || existingRow.current_assessment || 0;
+          let refreshedLoss = null;
+          let refreshedLossPct = null;
+          if (judgmentValue !== null && baseAssessment) {
+            refreshedLoss = baseAssessment - judgmentValue;
+            refreshedLossPct = (refreshedLoss / baseAssessment) * 100;
+          }
+          refreshUpdates.push({
+            id: existingRow.id,
+            payload: {
+              hearing_date: hearingDate,
+              evidence_due_date: evidenceDueDate,
+              judgment_value: judgmentValue,
+              loss: refreshedLoss,
+              loss_pct: refreshedLossPct,
+              tax_court_pending: taxCourtPending
+            }
+          });
+          refreshed++;
+          continue;
+        }
+
         records.push(record);
       }
 
       // Apply draft merges first (one update per draft to preserve evidence fields)
       for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      // Apply refresh updates (hearing_date, judgment) on existing appeal rows
+      for (const { id, payload } of refreshUpdates) {
         const { error } = await supabase
           .from('appeal_log')
           .update(payload)
@@ -1749,7 +1793,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setPwrCamaResult({ imported, skipped, unmatched, mergedDrafts });
+      setPwrCamaResult({ imported, refreshed, unmatched, mergedDrafts });
       setPwrCamaFile(null);
     } catch (error) {
       console.error('PowerCama import error:', error);
@@ -3445,7 +3489,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             </div>
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Supports the PowerCama appeals export (.xlsx). All imported appeals will be set to status <strong>D (Defend)</strong>. Duplicates are skipped automatically.
+                Supports the PowerCama appeals export (.xlsx). New appeals are inserted with status <strong>D (Defend)</strong>. Re-importing an existing appeal refreshes <strong>hearing date</strong> and <strong>judgment value</strong> in place — no manual entry needed for bulk judgment loads.
               </p>
               <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
                 <input
@@ -3466,7 +3510,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
                   <p className="font-semibold text-gray-800">Import Complete</p>
                   <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
-                  {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
+                  {pwrCamaResult.refreshed > 0 && <p className="text-emerald-700">✓ {pwrCamaResult.refreshed} existing appeal{pwrCamaResult.refreshed === 1 ? '' : 's'} refreshed (hearing date / judgment updated)</p>}
                   {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
                   {pwrCamaResult.mergedDrafts > 0 && <p className="text-emerald-700">✓ {pwrCamaResult.mergedDrafts} merged into existing draft row{pwrCamaResult.mergedDrafts === 1 ? '' : 's'} (appellant evidence preserved)</p>}
                 </div>
