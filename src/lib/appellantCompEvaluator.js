@@ -49,6 +49,54 @@ export const isAcceptableNuCode = (nuCode, farmMode = false) => {
   return false;
 };
 
+// ---------- NU code dictionary (mirror of public.nu_code_dictionary) ----------
+// Source: NJ Div. of Taxation - Guidelines for Use of 36 Nonusable Categories (May 2025)
+// Kept in-sync with Supabase table; used for human-readable commentary.
+export const NU_CODE_DICTIONARY = {
+  '00': 'usable sale',
+  '01': 'family sale',
+  '02': 'love & affection',
+  '03': 'corporate affiliate',
+  '04': 'transfer of convenience',
+  '05': 'outside sampling period',
+  '06': 'split-off / apportionment',
+  '07': 'added assessment',
+  '08': 'undivided interest',
+  '09': 'tax sale / gov lien',
+  '10': 'estate sale',
+  '11': 'eminent domain',
+  '12': 'gov / nonprofit buyer',
+  '13': 'institutional buyer',
+  '14': 'lender / REO',
+  '15': 'foreclosure / short sale',
+  '16': 'unconfirmed price',
+  '17': 'sale incl. personal prop.',
+  '18': 'sale incl. multiple parcels',
+  '19': 'trade / exchange',
+  '20': 'plottage / assemblage',
+  '21': 'unusual financing',
+  '22': 'sale-leaseback',
+  '23': 'partial assessment',
+  '24': 'zoning change pending',
+  '25': 'use change',
+  '26': 'auction sale',
+  '27': 'partial interest in entity',
+  '28': 'easement / right-of-way',
+  '29': 'leasehold sale',
+  '30': 'mineral / air rights',
+  '31': 'unbuildable parcel',
+  '32': 'farmland assessed',
+  '33': 'contaminated property',
+  '34': 'partial demolition / fire',
+  '35': 'other nonusable',
+  '36': 'outlier ratio'
+};
+
+export const getNuShortForm = (nuCode) => {
+  const code = (nuCode == null ? '' : String(nuCode)).trim().padStart(2, '0');
+  return NU_CODE_DICTIONARY[code] || null;
+};
+
 // ---------- Card classification ----------
 // BRT main = '1', Microsystems main = 'M' (or numeric main)
 const isMainCard = (card) => {
@@ -112,7 +160,9 @@ const compareSaleDate = (compDateStr, rangeStart, rangeEnd) => {
 };
 
 const compareNu = (nu, farmMode) => {
-  return isAcceptableNuCode(nu, farmMode) ? flag('green') : flag('red', `NU ${nu || 'blank'} not acceptable`);
+  if (isAcceptableNuCode(nu, farmMode)) return flag('green');
+  const short = getNuShortForm(nu);
+  return flag('red', short ? `NU ${nu} - ${short}` : `NU ${nu || 'blank'} not acceptable`);
 };
 
 const compareExact = (subjVal, compVal, label) => {
@@ -243,8 +293,13 @@ const buildAutoNote = (flags) => {
   // Sale date
   if (flags.sale_date.color === 'red') parts.push('SOLD OUTSIDE SAMPLING PERIOD');
 
-  // NU (placeholder — will be replaced with NU library lookup once dictionary is wired)
-  if (flags.sale_nu.color === 'red') parts.push('NON-USABLE SALE CODE');
+  // NU - use short-form from dictionary (e.g. "NON-USABLE: ESTATE SALE")
+  if (flags.sale_nu.color === 'red') {
+    const short = flags.sale_nu.detail && flags.sale_nu.detail.includes(' - ')
+      ? flags.sale_nu.detail.split(' - ').slice(1).join(' - ')
+      : null;
+    parts.push(short ? `NON-USABLE: ${short.toUpperCase()}` : 'NON-USABLE SALE CODE');
+  }
 
   // Card
   if (flags.card.color === 'red') parts.push('CARD COUNT MISMATCH');
