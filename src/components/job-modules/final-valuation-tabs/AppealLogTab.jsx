@@ -3721,7 +3721,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <div className="text-sm font-semibold text-blue-900 mb-2">Subject Property</div>
                 {subject ? (
                   <div className="grid grid-cols-2 md:grid-cols-11 gap-3 text-sm text-gray-900">
-                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{(() => { const ca = evidenceModalAppeal?.current_assessment ?? subject.values_mod_total; return ca ? `$${Number(ca).toLocaleString()}` : '\u2014'; })()}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{subject.values_mod_total ? `$${Number(subject.values_mod_total).toLocaleString()}` : '\u2014'}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
                     <div><div className="text-[10px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
