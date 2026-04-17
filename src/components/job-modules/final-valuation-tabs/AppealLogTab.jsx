@@ -530,7 +530,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const existing = Array.isArray(appeal.appellant_comps) ? appeal.appellant_comps : [];
     const draft = buildEmptyDraft().map((empty, i) => ({ ...empty, ...(existing[i] || {}) }));
     setEvidenceDraft(draft);
-    setEvidenceFarmMode(!!appeal.farm_mode);
+    // Auto-detect farm mode from subject's property class (3A = qualified farm).
+    // Honor saved appeal.farm_mode if previously set, otherwise default from subject.
+    const subjectProp = properties.find(p => p.property_composite_key === appeal.property_composite_key);
+    const subjectIsFarm = subjectProp?.property_m4_class === '3A';
+    setEvidenceFarmMode(appeal.farm_mode != null ? !!appeal.farm_mode : subjectIsFarm);
     setEvidenceModalAppeal(appeal);
   };
 
@@ -3915,8 +3919,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
                       if (!hasAny) return null;
                       return (
-                        <div key={idx}>
-                          <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                        <div key={idx} className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                            {slot.manual_notes && (
+                              <span className="text-gray-700"> &mdash; {slot.manual_notes}</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={slot.manual_notes || ''}
+                            onChange={e => updateEvidenceSlot(idx, 'manual_notes', e.target.value)}
+                            placeholder="add note…"
+                            className="w-64 px-2 py-0.5 border border-gray-300 rounded text-xs font-sans"
+                          />
                         </div>
                       );
                     })}
