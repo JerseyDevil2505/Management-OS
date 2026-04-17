@@ -119,6 +119,31 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [detailedAppealLoading, setDetailedAppealLoading] = useState(false);
   // null = use default (expanded if appeal exists, collapsed if draft); user override otherwise.
   const [detailedEvidenceExpanded, setDetailedEvidenceExpanded] = useState(null);
+
+  // Map of property_composite_key -> { appealNumber, compsCount, hasAppeal } so the
+  // Search & Results table can show an Evidence Y/N badge per subject.
+  const [appealEvidenceMap, setAppealEvidenceMap] = useState(new Map());
+  React.useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('appeal_log')
+      .select('property_composite_key, appeal_number, appellant_comps')
+      .eq('job_id', jobData.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const m = new Map();
+        (data || []).forEach(row => {
+          if (!row.property_composite_key) return;
+          m.set(row.property_composite_key, {
+            appealNumber: row.appeal_number,
+            compsCount: Array.isArray(row.appellant_comps) ? row.appellant_comps.length : 0
+          });
+        });
+        setAppealEvidenceMap(m);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id, detailedAppealRow]);
   React.useEffect(() => {
     const compositeKey = manualEvaluationResult?.subject?.property_composite_key;
     if (!compositeKey || !jobData?.id) {
@@ -4553,6 +4578,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             className="cursor-pointer"
                           />
                         </th>
+                        {/* Appellant Evidence indicator */}
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold" title="Click to open Detailed and review appellant evidence">App Evidence</th>
                         {/* Subject Property Info */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
@@ -4625,6 +4652,64 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                   title="Include in set-aside"
                                 />
                               )}
+                            </td>
+                            {/* Appellant Evidence Y/N badge */}
+                            <td className="border border-gray-300 px-2 py-2 text-center">
+                              {(() => {
+                                const ev = appealEvidenceMap.get(result.subject.property_composite_key);
+                                const hasAppeal = !!ev;
+                                const hasEvidence = hasAppeal && ev.compsCount > 0;
+                                const cls = hasEvidence
+                                  ? 'bg-green-100 text-green-800 border-green-300'
+                                  : hasAppeal
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-gray-100 text-gray-500 border-gray-300';
+                                const label = hasEvidence
+                                  ? `Y \u00b7 ${ev.compsCount}`
+                                  : hasAppeal
+                                    ? 'N'
+                                    : '\u2014';
+                                const titleText = hasEvidence
+                                  ? `${ev.compsCount} appellant comp${ev.compsCount === 1 ? '' : 's'} on file \u2014 click to review`
+                                  : hasAppeal
+                                    ? 'Appeal on file but no evidence yet \u2014 click to add'
+                                    : 'No appeal on file \u2014 click to draft evidence';
+                                return (
+                                  <button
+                                    type="button"
+                                    title={titleText}
+                                    onClick={() => {
+                                      setManualSubject({
+                                        block: result.subject.property_block || '',
+                                        lot: result.subject.property_lot || '',
+                                        qualifier: result.subject.property_qualifier || ''
+                                      });
+                                      const newComps = [
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' }
+                                      ];
+                                      result.comparables.forEach((comp, ci) => {
+                                        if (ci < 5) newComps[ci] = {
+                                          block: comp.property_block || '',
+                                          lot: comp.property_lot || '',
+                                          qualifier: comp.property_qualifier || ''
+                                        };
+                                      });
+                                      setManualComps(newComps);
+                                      setManualEvaluationResult(result);
+                                      setEditingResultIndex(idx);
+                                      setDetailedEvidenceExpanded(true);
+                                      setActiveSubTab('detailed');
+                                    }}
+                                    className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${cls} hover:opacity-80 cursor-pointer`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })()}
                             </td>
                             {/* Subject Property Info */}
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">
