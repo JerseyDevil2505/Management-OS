@@ -111,12 +111,6 @@ const compareSaleDate = (compDateStr, rangeStart, rangeEnd) => {
   return flag('green');
 };
 
-const compareSalePrice = (price) => {
-  const n = parseFloat(price);
-  if (!Number.isFinite(n) || n <= 100) return flag('red', 'nominal/below $100');
-  return flag('green');
-};
-
 const compareNu = (nu, farmMode) => {
   return isAcceptableNuCode(nu, farmMode) ? flag('green') : flag('red', `NU ${nu || 'blank'} not acceptable`);
 };
@@ -203,9 +197,8 @@ export const evaluateAppellantComp = (subject, comp, userComp, ctx = {}) => {
     };
   }
 
-  // Use user-entered sale date/price/nu when present, else fall back to comp's recorded values
+  // Use user-entered sale date/nu when present, else fall back to comp's recorded values
   const compSaleDate  = userComp?.sales_date  || comp.sales_date;
-  const compSalePrice = userComp?.sales_price ?? comp.sales_price;
   const compNu        = userComp?.sales_nu    ?? comp.sales_nu;
 
   const subjLot = resolveLotSize(subject, vendorType, landMethod);
@@ -214,7 +207,7 @@ export const evaluateAppellantComp = (subject, comp, userComp, ctx = {}) => {
   const flags = {
     card:         compareCard(subject, comp),
     sale_date:    compareSaleDate(compSaleDate, sampleRange.start, sampleRange.end),
-    sale_price:   compareSalePrice(compSalePrice),
+    sale_price:   flag('na'),
     sale_nu:      compareNu(compNu, farmMode),
     vcs:          compareExact(subject?.new_vcs || subject?.property_vcs, comp.new_vcs || comp.property_vcs, 'VCS'),
     design:       compareExact(subject?.asset_design_style, comp.asset_design_style, 'design'),
@@ -250,10 +243,7 @@ const buildAutoNote = (flags) => {
   // Sale date
   if (flags.sale_date.color === 'red') parts.push('SOLD OUTSIDE SAMPLING PERIOD');
 
-  // Sale price
-  if (flags.sale_price.color === 'red') parts.push('NOMINAL/INVALID SALE PRICE');
-
-  // NU
+  // NU (placeholder — will be replaced with NU library lookup once dictionary is wired)
   if (flags.sale_nu.color === 'red') parts.push('NON-USABLE SALE CODE');
 
   // Card
