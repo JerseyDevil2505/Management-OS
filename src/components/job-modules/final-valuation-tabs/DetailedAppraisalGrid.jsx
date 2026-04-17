@@ -1855,12 +1855,28 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               evRatioSource = 'Equalization';
             }
           }
-          const fmvByRatio = (subject?.values_mod_total && evRatioDecimal)
-            ? Math.round(Number(subject.values_mod_total) / evRatioDecimal)
+          // Load Current Assessment source preference (synced with Detailed and Search & Results).
+          let evAssmtSource = 'mod';
+          try {
+            const { data: srcRow } = await supabase
+              .from('job_settings')
+              .select('setting_value')
+              .eq('job_id', jobData.id)
+              .eq('setting_key', 'current_assessment_source')
+              .maybeSingle();
+            if (srcRow?.setting_value === 'cama' || srcRow?.setting_value === 'mod') {
+              evAssmtSource = srcRow.setting_value;
+            }
+          } catch (e) { /* default to mod */ }
+          const subjAssmtRaw = evAssmtSource === 'cama'
+            ? (subject?.values_cama_total ?? subject?.values_mod_total ?? null)
+            : (subject?.values_mod_total ?? subject?.values_cama_total ?? null);
+          const fmvByRatio = (subjAssmtRaw && evRatioDecimal)
+            ? Math.round(Number(subjAssmtRaw) / evRatioDecimal)
             : null;
 
-          const currentAsmt = subject.values_mod_total
-            ? `$${Number(subject.values_mod_total).toLocaleString()}`
+          const currentAsmt = subjAssmtRaw
+            ? `$${Number(subjAssmtRaw).toLocaleString()} (${evAssmtSource.toUpperCase()})`
             : '\u2014';
           const fmvStr = fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014';
           const ratioStr = evRatioDecimal ? `${(evRatioDecimal * 100).toFixed(2)}% ${evRatioSource}` : 'n/a';
@@ -1969,6 +1985,32 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               lotDisplay(compProp)
             ]));
 
+            // Map PDF column index → evalResult.flags key. The PDF table omits
+            // the screen UI's Card column, so indices differ from the modal.
+            // null = column has no evidence-evaluation flag and stays uncolored.
+            const COL_TO_FLAG = [
+              null,         // 0: #
+              null,         // 1: Block
+              null,         // 2: Lot
+              null,         // 3: Qual
+              'sale_date',  // 4
+              'sale_price', // 5
+              'sale_nu',    // 6
+              'vcs',        // 7
+              'design',     // 8
+              'type_use',   // 9
+              'condition',  // 10
+              'year_built', // 11
+              'sfla',       // 12
+              'lot_size'    // 13
+            ];
+            // Same pastel hexes used in the panel UI (Tailwind {color}-100).
+            const COLOR_FILL = {
+              green:  [220, 252, 231],
+              yellow: [254, 249, 195],
+              red:    [254, 226, 226]
+            };
+
             autoTable(doc, {
               startY: evY + 10,
               head: evalHeader,
@@ -1977,10 +2019,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               styles: { fontSize: 7, cellPadding: 2 },
               headStyles: { fillColor: lojikBlue, textColor: 255, fontStyle: 'bold' },
               didParseCell: (data) => {
-                if (data.row.index === 0 && data.section === 'body') {
+                if (data.section !== 'body') return;
+                // Subject row (index 0): light blue, bold — preserves prior behavior.
+                if (data.row.index === 0) {
                   data.cell.styles.fillColor = [219, 234, 254];
                   data.cell.styles.fontStyle = 'bold';
+                  return;
                 }
+                // Comp rows: paint each cell with its evaluator color flag.
+                const compIdx = data.row.index - 1;
+                const evalResult = evaluations[compIdx]?.evalResult;
+                if (!evalResult || !evalResult.resolved) return;
+                const flagKey = COL_TO_FLAG[data.column.index];
+                if (!flagKey) return;
+                const color = evalResult.flags[flagKey]?.color;
+                const fill = COLOR_FILL[color];
+                if (fill) data.cell.styles.fillColor = fill;
               },
               margin: { left: margin, right: margin }
             });

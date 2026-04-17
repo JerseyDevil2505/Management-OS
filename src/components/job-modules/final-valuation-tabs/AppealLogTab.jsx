@@ -276,6 +276,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
         if (error) throw error;
 
+        // Auto-sync `inspected` from property_records.inspection_list_by/date.
+        // The boolean is set to false on insert and never refreshed by imports,
+        // so we recompute it here on every load. We then write back any rows
+        // where the stored value is out of sync — keeps the DB column honest
+        // for any downstream consumer (manual-edit form, future filters, etc.).
+        const inspectedSyncUpdates = [];
+
         // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -287,8 +294,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             appealType = parsed.appealType;
           }
 
+          // Compute fresh inspected status from current property data.
+          const computedInspected = !!(property?.inspection_list_by && property?.inspection_list_date);
+          if (appeal.id && appeal.inspected !== computedInspected) {
+            inspectedSyncUpdates.push({ id: appeal.id, inspected: computedInspected });
+          }
+
           return {
             ...appeal,
+            inspected: computedInspected,
             appeal_type: appealType,
             // Derived fields from property match
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
@@ -303,6 +317,32 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             property_location: appeal.property_location || property?.property_location || null
           };
         });
+
+        // Fire-and-forget bulk sync of any drifted `inspected` values. We do
+        // this in parallel so it never blocks rendering, and we batch in
+        // chunks of 100 to avoid huge single-statement UPDATEs on large jobs.
+        if (inspectedSyncUpdates.length > 0) {
+          (async () => {
+            try {
+              const CHUNK = 100;
+              for (let i = 0; i < inspectedSyncUpdates.length; i += CHUNK) {
+                const batch = inspectedSyncUpdates.slice(i, i + CHUNK);
+                // PostgREST doesn't support per-row updates in a single call, so
+                // group by value and update all ids of each group at once.
+                const trueIds = batch.filter(u => u.inspected).map(u => u.id);
+                const falseIds = batch.filter(u => !u.inspected).map(u => u.id);
+                if (trueIds.length > 0) {
+                  await supabase.from('appeal_log').update({ inspected: true }).in('id', trueIds);
+                }
+                if (falseIds.length > 0) {
+                  await supabase.from('appeal_log').update({ inspected: false }).in('id', falseIds);
+                }
+              }
+            } catch (e) {
+              console.warn('appeal_log.inspected auto-sync failed (non-critical):', e);
+            }
+          })();
+        }
 
         setAppeals(enrichedAppeals);
 

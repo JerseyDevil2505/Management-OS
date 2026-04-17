@@ -14,6 +14,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
+  // Current Assessment source: 'mod' (values_mod_total, default) or 'cama' (values_cama_total).
+  // Persisted to job_settings under key 'current_assessment_source'. Same setting is read
+  // by AppellantEvidencePanel so toggling here syncs to the Detailed view (and vice-versa).
+  const [assmtSource, setAssmtSource] = useState('mod');
+  const getCurrentAssmt = useCallback((subj) => {
+    if (!subj) return 0;
+    if (assmtSource === 'cama') return Number(subj.values_cama_total || subj.values_mod_total || 0);
+    return Number(subj.values_mod_total || subj.values_cama_total || 0);
+  }, [assmtSource]);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
   const [subjectVCS, setSubjectVCS] = useState([]);
@@ -361,6 +370,42 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
+
+  // Load Current Assessment source preference (synced with AppellantEvidencePanel).
+  // Re-runs whenever the user re-enters this tab so a change made in Detailed
+  // is reflected here on next mount.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('job_settings')
+      .select('setting_value')
+      .eq('job_id', jobData.id)
+      .eq('setting_key', 'current_assessment_source')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const v = data?.setting_value;
+        if (v === 'mod' || v === 'cama') setAssmtSource(v);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  const updateAssmtSource = async (next) => {
+    if (next !== 'mod' && next !== 'cama') return;
+    setAssmtSource(next);
+    if (!jobData?.id) return;
+    try {
+      await supabase
+        .from('job_settings')
+        .upsert(
+          { job_id: jobData.id, setting_key: 'current_assessment_source', setting_value: next },
+          { onConflict: 'job_id,setting_key' }
+        );
+    } catch (e) {
+      console.warn('Failed to persist current_assessment_source:', e);
+    }
+  };
 
   // Load code configuration on mount
   useEffect(() => {
@@ -4531,6 +4576,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <option value="5">5</option>
                       </select>
                     </div>
+                    {/* Current Assessment source radio (synced with Detailed view) */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white" title="Source for Current Assessment column. Persists per job and syncs with Detailed view.">
+                      <span className="font-medium text-gray-700">Current Assmt:</span>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="sales-assmt-src" value="mod" checked={assmtSource === 'mod'} onChange={() => updateAssmtSource('mod')} className="w-3 h-3" />
+                        MOD
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="sales-assmt-src" value="cama" checked={assmtSource === 'cama'} onChange={() => updateAssmtSource('cama')} className="w-3 h-3" />
+                        CAMA
+                      </label>
+                    </div>
                     <button
                       onClick={handleSetAsideSuccessful}
                       disabled={!evaluationResults || selectedForSetAside.size === 0}
@@ -4726,8 +4783,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50">
-                              ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50" title={`Source: values_${assmtSource}_total`}>
+                              ${getCurrentAssmt(result.subject).toLocaleString()}
                             </td>
                             <td
                               className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
@@ -4766,7 +4823,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-blue-50">
                               {(() => {
-                                const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
+                                const currentAsmt = getCurrentAssmt(result.subject);
                                 const newAsmt = result.projectedAssessment;
                                 if (!newAsmt || currentAsmt === 0) return '-';
                                 const changePercent = ((newAsmt - currentAsmt) / currentAsmt) * 100;
