@@ -89,7 +89,10 @@ const AppellantEvidencePanel = ({
     return properties.find(p => {
       if (String(p.property_block || '').trim() !== b) return false;
       if (String(p.property_lot || '').trim() !== l) return false;
-      if (q && String(p.property_qualifier || '').trim() !== q) return false;
+      // Qualifier must match exactly. A blank qualifier in the input must match a
+      // blank qualifier on the property — otherwise we'd silently grab a related
+      // condo unit (e.g. C0101) when the user meant the parent parcel.
+      if (String(p.property_qualifier || '').trim() !== q) return false;
       if (c && String(p.property_addl_card || p.property_card || '').trim() !== c) return false;
       return true;
     }) || null;
@@ -160,6 +163,26 @@ const AppellantEvidencePanel = ({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error' | null
   const [loadingFresh, setLoadingFresh] = useState(false);
+
+  // Pending edits for Block / Lot / Qualifier are held locally so we don't
+  // re-run the comp lookup (and re-render the entire grid) on every keystroke.
+  // Committed to draft on blur or Enter.
+  const [pendingBLQ, setPendingBLQ] = useState({});
+  const blqValue = (idx, field) => {
+    const key = `${idx}-${field}`;
+    return pendingBLQ[key] !== undefined ? pendingBLQ[key] : (draft[idx][field] || '');
+  };
+  const setBlqPending = (idx, field, value) => {
+    setPendingBLQ(p => ({ ...p, [`${idx}-${field}`]: value }));
+    setSaveStatus(null);
+  };
+  const commitBlq = (idx, field) => {
+    const key = `${idx}-${field}`;
+    if (pendingBLQ[key] === undefined) return;
+    const value = pendingBLQ[key];
+    setPendingBLQ(p => { const n = { ...p }; delete n[key]; return n; });
+    setDraft(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
 
   // On open / appeal change, re-fetch the latest row from supabase so we never
   // show stale state (two-way sync between Detailed and AppealLog).
@@ -280,23 +303,12 @@ const AppellantEvidencePanel = ({
   });
 
   // ----- Render -----
+  // NOTE: Do NOT define a Wrapper component inside render — React would treat it
+  // as a new component type each render and unmount/remount every input on every
+  // keystroke (focus loss, single-char typing). Inline the wrapper JSX instead.
   const isModal = mode === 'modal';
-  const Wrapper = isModal
-    ? ({ children }) => (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
-            {children}
-          </div>
-        </div>
-      )
-    : ({ children }) => (
-        <div className="bg-white rounded-lg border border-blue-300 shadow-sm">
-          {children}
-        </div>
-      );
-
-  return (
-    <Wrapper>
+  const body = (
+    <>
       {/* Header */}
       <div className={`flex justify-between items-center p-4 border-b border-gray-200 ${isModal ? 'sticky top-0 bg-white z-10' : ''}`}>
         <div>
@@ -335,7 +347,7 @@ const AppellantEvidencePanel = ({
       <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-semibold text-blue-900">Subject Property</div>
-          {loadingFresh && <div className="text-[10px] text-gray-500 italic">syncing\u2026</div>}
+          {loadingFresh && <div className="text-[10px] text-gray-500 italic">{'syncing\u2026'}</div>}
         </div>
         {subject ? (
           <div className="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs text-gray-900">
@@ -394,9 +406,9 @@ const AppellantEvidencePanel = ({
               return (
                 <tr key={idx} className="border-b border-gray-100">
                   <td className="px-2 py-1 font-semibold text-gray-700">#{idx + 1}</td>
-                  <td className="px-2 py-1"><input type="text" value={slot.block} onChange={e => updateSlot(idx, 'block', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={slot.lot} onChange={e => updateSlot(idx, 'lot', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={slot.qualifier} onChange={e => updateSlot(idx, 'qualifier', e.target.value)} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
                   <td className={cellCls('card')} title={cellTitle('card')}>
                     <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
@@ -428,7 +440,7 @@ const AppellantEvidencePanel = ({
                           + Comp
                         </button>
                       ) : (
-                        <span className="text-[10px] text-gray-400">\u2014</span>
+                        <span className="text-[10px] text-gray-400">{'\u2014'}</span>
                       )}
                     </td>
                   )}
@@ -479,7 +491,7 @@ const AppellantEvidencePanel = ({
                     type="text"
                     value={slot.manual_notes || ''}
                     onChange={e => updateSlot(idx, 'manual_notes', e.target.value)}
-                    placeholder="add note\u2026"
+                    placeholder={'add note\u2026'}
                     className="w-64 px-2 py-0.5 border border-gray-300 rounded text-xs font-sans"
                   />
                 </div>
@@ -497,7 +509,7 @@ const AppellantEvidencePanel = ({
 
       {/* Footer actions */}
       <div className={`flex justify-end items-center gap-2 p-4 border-t border-gray-200 ${isModal ? 'sticky bottom-0 bg-white' : ''}`}>
-        {saveStatus === 'saved' && <span className="text-xs text-green-700 mr-auto">\u2713 Saved</span>}
+        {saveStatus === 'saved' && <span className="text-xs text-green-700 mr-auto">{'\u2713 Saved'}</span>}
         {saveStatus === 'error' && <span className="text-xs text-red-700 mr-auto">Save failed</span>}
         {isModal && onClose && (
           <button
@@ -515,7 +527,19 @@ const AppellantEvidencePanel = ({
           {saving ? 'Saving\u2026' : 'Save Evidence'}
         </button>
       </div>
-    </Wrapper>
+    </>
+  );
+
+  return isModal ? (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
+        {body}
+      </div>
+    </div>
+  ) : (
+    <div className="bg-white rounded-lg border border-blue-300 shadow-sm">
+      {body}
+    </div>
   );
 };
 

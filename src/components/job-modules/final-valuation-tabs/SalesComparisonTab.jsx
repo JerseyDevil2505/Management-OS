@@ -4974,7 +4974,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             )}
             {manualEvaluationResult?.subject && !detailedAppealRow && !detailedAppealLoading && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500 italic">
-                No appeal on file for this subject \u2014 appellant evidence panel hidden.
+                {'No appeal on file for this subject \u2014 appellant evidence panel hidden.'}
               </div>
             )}
 
