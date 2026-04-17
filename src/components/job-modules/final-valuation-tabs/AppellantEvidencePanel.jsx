@@ -82,18 +82,21 @@ const AppellantEvidencePanel = ({
 
   const findCompProperty = useCallback((block, lot, qualifier, card) => {
     if (!block || !lot) return null;
-    const b = String(block).trim();
-    const l = String(lot).trim();
-    const q = (qualifier || '').toString().trim();
-    const c = (card || '').toString().trim();
+    // Case-insensitive trim — users frequently type qualifiers like "c0801"
+    // when the canonical value on the property is "C0801".
+    const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+    const b = norm(block);
+    const l = norm(lot);
+    const q = norm(qualifier);
+    const c = norm(card);
     return properties.find(p => {
-      if (String(p.property_block || '').trim() !== b) return false;
-      if (String(p.property_lot || '').trim() !== l) return false;
-      // Qualifier must match exactly. A blank qualifier in the input must match a
-      // blank qualifier on the property — otherwise we'd silently grab a related
+      if (norm(p.property_block) !== b) return false;
+      if (norm(p.property_lot) !== l) return false;
+      // Qualifier must match. A blank qualifier in the input must match a blank
+      // qualifier on the property — otherwise we'd silently grab a related
       // condo unit (e.g. C0101) when the user meant the parent parcel.
-      if (String(p.property_qualifier || '').trim() !== q) return false;
-      if (c && String(p.property_addl_card || p.property_card || '').trim() !== c) return false;
+      if (norm(p.property_qualifier) !== q) return false;
+      if (c && norm(p.property_addl_card || p.property_card) !== c) return false;
       return true;
     }) || null;
   }, [properties]);
