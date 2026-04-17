@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
+import AppellantEvidencePanel from './AppellantEvidencePanel';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -110,6 +111,61 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
+
+  // Appellant evidence panel state for the Detailed sub-tab.
+  // Fetched fresh from appeal_log whenever the evaluated subject changes,
+  // so saves done in AppealLog show up here and vice versa.
+  const [detailedAppealRow, setDetailedAppealRow] = useState(null);
+  const [detailedAppealLoading, setDetailedAppealLoading] = useState(false);
+  // null = use default (expanded if appeal exists, collapsed if draft); user override otherwise.
+  const [detailedEvidenceExpanded, setDetailedEvidenceExpanded] = useState(null);
+
+  // Map of property_composite_key -> { appealNumber, compsCount, hasAppeal } so the
+  // Search & Results table can show an Evidence Y/N badge per subject.
+  const [appealEvidenceMap, setAppealEvidenceMap] = useState(new Map());
+  React.useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('appeal_log')
+      .select('property_composite_key, appeal_number, appellant_comps')
+      .eq('job_id', jobData.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const m = new Map();
+        (data || []).forEach(row => {
+          if (!row.property_composite_key) return;
+          m.set(row.property_composite_key, {
+            appealNumber: row.appeal_number,
+            compsCount: Array.isArray(row.appellant_comps) ? row.appellant_comps.length : 0
+          });
+        });
+        setAppealEvidenceMap(m);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id, detailedAppealRow]);
+  React.useEffect(() => {
+    const compositeKey = manualEvaluationResult?.subject?.property_composite_key;
+    if (!compositeKey || !jobData?.id) {
+      setDetailedAppealRow(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailedAppealLoading(true);
+    supabase
+      .from('appeal_log')
+      .select('id, appeal_number, appeal_year, property_block, property_lot, property_qualifier, property_location, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+      .eq('job_id', jobData.id)
+      .eq('property_composite_key', compositeKey)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setDetailedAppealRow(data || null);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailedAppealLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [manualEvaluationResult?.subject?.property_composite_key, jobData?.id]);
 
   // Vacant land appraisal state
   const [vacantLandSubject, setVacantLandSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -2032,7 +2088,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         }
 
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
-        const assessmentYear = new Date(jobData.end_date).getFullYear();
+        // NOTE: LOJIK end_date is the job end (one year after the assessment year),
+        // so we have to subtract 1 to land on the correct assessment year — same
+        // logic as getCSPDateRange above. Without this, the CSP window shifts a
+        // year forward and valid in-window subject sales get skipped.
+        const rawAssessmentYear = new Date(jobData.end_date).getFullYear();
+        const assessmentYear = isLojikTenant ? rawAssessmentYear - 1 : rawAssessmentYear;
         const cspStart = new Date(assessmentYear - 1, 9, 1);
         const cspEnd = new Date(assessmentYear, 9, 31);
 
@@ -4522,6 +4583,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             className="cursor-pointer"
                           />
                         </th>
+                        {/* Appellant Evidence indicator */}
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold" title="Click to open Detailed and review appellant evidence">App Evidence</th>
                         {/* Subject Property Info */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
@@ -4594,6 +4657,64 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                   title="Include in set-aside"
                                 />
                               )}
+                            </td>
+                            {/* Appellant Evidence Y/N badge */}
+                            <td className="border border-gray-300 px-2 py-2 text-center">
+                              {(() => {
+                                const ev = appealEvidenceMap.get(result.subject.property_composite_key);
+                                const hasAppeal = !!ev;
+                                const hasEvidence = hasAppeal && ev.compsCount > 0;
+                                const cls = hasEvidence
+                                  ? 'bg-green-100 text-green-800 border-green-300'
+                                  : hasAppeal
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-gray-100 text-gray-500 border-gray-300';
+                                const label = hasEvidence
+                                  ? `Y \u00b7 ${ev.compsCount}`
+                                  : hasAppeal
+                                    ? 'N'
+                                    : '\u2014';
+                                const titleText = hasEvidence
+                                  ? `${ev.compsCount} appellant comp${ev.compsCount === 1 ? '' : 's'} on file \u2014 click to review`
+                                  : hasAppeal
+                                    ? 'Appeal on file but no evidence yet \u2014 click to add'
+                                    : 'No appeal on file \u2014 click to draft evidence';
+                                return (
+                                  <button
+                                    type="button"
+                                    title={titleText}
+                                    onClick={() => {
+                                      setManualSubject({
+                                        block: result.subject.property_block || '',
+                                        lot: result.subject.property_lot || '',
+                                        qualifier: result.subject.property_qualifier || ''
+                                      });
+                                      const newComps = [
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' },
+                                        { block: '', lot: '', qualifier: '' }
+                                      ];
+                                      result.comparables.forEach((comp, ci) => {
+                                        if (ci < 5) newComps[ci] = {
+                                          block: comp.property_block || '',
+                                          lot: comp.property_lot || '',
+                                          qualifier: comp.property_qualifier || ''
+                                        };
+                                      });
+                                      setManualComps(newComps);
+                                      setManualEvaluationResult(result);
+                                      setEditingResultIndex(idx);
+                                      setDetailedEvidenceExpanded(true);
+                                      setActiveSubTab('detailed');
+                                    }}
+                                    className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${cls} hover:opacity-80 cursor-pointer`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })()}
                             </td>
                             {/* Subject Property Info */}
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">
@@ -4897,6 +5018,99 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
           <div className="space-y-6">
+            {/* Appellant Evidence Panel — always shown when a subject is evaluated.
+                If no appeal_log row exists yet, runs in DRAFT mode (collapsed by default) and
+                INSERTs a stub appeal_log row on save so the official appeal list can later merge
+                in via property_composite_key. */}
+            {manualEvaluationResult?.subject && (() => {
+              const subj = manualEvaluationResult.subject;
+              const hasAppeal = !!detailedAppealRow;
+              const panelAppeal = hasAppeal ? detailedAppealRow : {
+                job_id: jobData?.id,
+                property_composite_key: subj.property_composite_key,
+                property_block: subj.property_block,
+                property_lot: subj.property_lot,
+                property_qualifier: subj.property_qualifier || '',
+                property_location: subj.property_location || '',
+                appeal_year: jobData?.end_date ? new Date(jobData.end_date).getFullYear() : new Date().getFullYear(),
+                appellant_comps: null,
+                farm_mode: subj.property_m4_class === '3A'
+              };
+              const expanded = detailedEvidenceExpanded === null
+                ? hasAppeal
+                : detailedEvidenceExpanded;
+              const compsCount = Array.isArray(detailedAppealRow?.appellant_comps)
+                ? detailedAppealRow.appellant_comps.length
+                : 0;
+              return (
+                <div className={`rounded-lg border ${hasAppeal ? 'border-blue-300 bg-blue-50' : 'border-amber-300 bg-amber-50'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailedEvidenceExpanded(!expanded)}
+                    className="w-full flex justify-between items-center px-4 py-2 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-gray-900">Appellant Evidence Comps</span>
+                      {hasAppeal ? (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold text-blue-900 bg-blue-100 border border-blue-300 rounded">
+                          {`Appeal #${detailedAppealRow.appeal_number || '\u2014'} \u00b7 ${compsCount > 0 ? `${compsCount} comp${compsCount === 1 ? '' : 's'} on file` : 'no comps yet'}`}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 bg-amber-100 border border-amber-300 rounded">
+                          {detailedAppealLoading ? 'Checking for appeal\u2026' : 'No appeal synced \u2014 click to draft'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-600">{expanded ? 'Hide \u25b2' : 'Show \u25bc'}</span>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-gray-200 bg-white">
+                      <AppellantEvidencePanel
+                        appeal={panelAppeal}
+                        jobData={jobData}
+                        marketLandData={marketLandData}
+                        properties={properties}
+                        tenantConfig={tenantConfig}
+                        mode="inline"
+                        onSaved={(updatedAppeal) => setDetailedAppealRow(updatedAppeal)}
+                        onPromoteComp={(compProp) => {
+                          if (!compProp) return;
+                          const block = String(compProp.property_block || '').trim();
+                          const lot = String(compProp.property_lot || '').trim();
+                          const qualifier = String(compProp.property_qualifier || '').trim();
+                          if (!block || !lot) {
+                            alert('Cannot promote: missing block/lot on comp.');
+                            return;
+                          }
+                          const dup = manualComps.some(c =>
+                            String(c.block || '').trim() === block &&
+                            String(c.lot || '').trim() === lot &&
+                            String(c.qualifier || '').trim() === qualifier
+                          );
+                          if (dup) {
+                            alert(`Comp ${block}-${lot}${qualifier ? '-' + qualifier : ''} is already in the CME grid.`);
+                            return;
+                          }
+                          const emptyIdx = manualComps.findIndex(c => !c.block && !c.lot && !c.qualifier);
+                          if (emptyIdx === -1) {
+                            alert('All 5 comp slots are filled. Clear one before promoting another comp.');
+                            return;
+                          }
+                          const newComps = [...manualComps];
+                          newComps[emptyIdx] = { block, lot, qualifier };
+                          setManualComps(newComps);
+                          setTimeout(() => {
+                            const el = document.querySelector('[data-cme-manual-entry]');
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 50);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Header with Manual Entry Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2">Manual Property Evaluation</h3>
@@ -4908,7 +5122,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             </div>
 
             {/* Manual Entry Grid */}
-            <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
+            <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
                 <h4 className="font-semibold text-gray-900">Property Entry</h4>
               </div>
@@ -5069,6 +5283,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 />
               </div>
             )}
+
           </div>
         )}
 

@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
+import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
+import AppellantEvidencePanel from './AppellantEvidencePanel';
 
-const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
+const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,6 +83,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   // Bracket column state
   const [vcsBracketMap, setVcsBracketMap] = useState({});
   const [cmeBracketMappings, setCmeBracketMappings] = useState({});
+
+  // Evidence (appellant comps / BS-meter) modal state — actual editing lives in AppellantEvidencePanel.
+  const [evidenceModalAppeal, setEvidenceModalAppeal] = useState(null); // appeal object being edited
 
   // Selection state for Send to CME
   const [selectedAppeals, setSelectedAppeals] = useState(new Set());
@@ -399,6 +404,28 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return <span className="text-gray-400">-</span>;
   };
 
+  // ==================== APPELLANT COMPS / EVIDENCE ====================
+
+  // Open / close the AppellantEvidencePanel modal. Editing + save logic lives in the panel itself.
+  const openEvidenceModal = (appeal) => setEvidenceModalAppeal(appeal);
+  const closeEvidenceModal = () => setEvidenceModalAppeal(null);
+
+  // Render the Y/N evidence cell
+  const renderEvidenceCell = (appeal) => {
+    const hasEvidence = Array.isArray(appeal.appellant_comps) && appeal.appellant_comps.length > 0;
+    const cls = hasEvidence ? COLOR_CLASSES.green : COLOR_CLASSES.na;
+    return (
+      <button
+        type="button"
+        onClick={() => openEvidenceModal(appeal)}
+        title={hasEvidence ? 'View / edit appellant comps' : 'Add appellant comps'}
+        className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full text-xs font-semibold border ${cls.bg} ${cls.text} ${cls.border} hover:opacity-80 cursor-pointer`}
+      >
+        {hasEvidence ? `Y · ${appeal.appellant_comps.length}` : 'N'}
+      </button>
+    );
+  };
+
   // Helper: Render inspected cell content
   const renderInspectedCell = (appeal) => {
     const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -509,6 +536,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           case 'class': aVal = a.property_m4_class; bVal = b.property_m4_class; break;
           case 'type_use': aVal = a.asset_type_use; bVal = b.asset_type_use; break;
           case 'vcs': aVal = a.new_vcs; bVal = b.new_vcs; break;
+          case 'bracket': {
+            const getBracketIndex = (appeal) => {
+              const label = appeal.cme_bracket
+                || vcsBracketMap[appeal.new_vcs]
+                || cmeBracketMappings[appeal.new_vcs]
+                || null;
+              if (!label) return -1;
+              return CME_BRACKETS.findIndex(b => b.label === label);
+            };
+            aVal = getBracketIndex(a);
+            bVal = getBracketIndex(b);
+            break;
+          }
           case 'current_assessment': aVal = a.current_assessment; bVal = b.current_assessment; break;
           case 'requested': aVal = a.requested_value; bVal = b.requested_value; break;
           case 'cme_value': aVal = a.cme_projected_value; bVal = b.cme_projected_value; break;
@@ -517,6 +557,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           case 'loss_pct': aVal = a.loss_pct; bVal = b.loss_pct; break;
           case 'hearing_date': aVal = a.hearing_date; bVal = b.hearing_date; break;
           case 'attorney': aVal = a.attorney; bVal = b.attorney; break;
+          case 'evidence': {
+            aVal = Array.isArray(a.appellant_comps) ? a.appellant_comps.length : 0;
+            bVal = Array.isArray(b.appellant_comps) ? b.appellant_comps.length : 0;
+            break;
+          }
           default: return 0;
         }
 
@@ -773,12 +818,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     });
   };
 
-  // Handle select all checkbox
+  // Handle select all checkbox — only selects appeals whose status is 'D' (defendable)
   const handleToggleSelectAll = () => {
-    if (selectedAppeals.size === filteredAppeals.length) {
+    const defendable = filteredAppeals.filter(a => (a.status || 'NA') === 'D');
+    if (defendable.length > 0 && defendable.every(a => selectedAppeals.has(a.id))) {
       setSelectedAppeals(new Set());
     } else {
-      setSelectedAppeals(new Set(filteredAppeals.map(a => a.id)));
+      setSelectedAppeals(new Set(defendable.map(a => a.id)));
     }
   };
 
@@ -1323,10 +1369,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         (existingAppeals || []).map(a => a.appeal_number)
       );
 
+      // Fetch DRAFT rows (no appeal_number yet) so we can merge proactive
+      // appellant-evidence drafts into the official import instead of duplicating.
+      const { data: draftRows } = await supabase
+        .from('appeal_log')
+        .select('id, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+        .eq('job_id', jobData.id)
+        .is('appeal_number', null);
+      const draftByCompositeKey = new Map();
+      (draftRows || []).forEach(d => {
+        if (d.property_composite_key) draftByCompositeKey.set(d.property_composite_key, d);
+      });
+
       let imported = 0;
       let skipped = 0;
       let unmatched = 0;
+      let mergedDrafts = 0;
       const records = [];
+      const draftUpdates = []; // { id, payload }
 
       // Process data rows (skip header row 0)
       for (let i = 1; i < lines.length; i++) {
@@ -1416,10 +1476,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           evidence_status: ''
         };
 
+        // If a draft row already exists for this property, merge instead of insert.
+        const draftMatch = matchedProperty?.property_composite_key
+          ? draftByCompositeKey.get(matchedProperty.property_composite_key)
+          : null;
+        if (draftMatch) {
+          // Preserve evidence fields already saved by the user, overwrite the rest.
+          const { appellant_comps, appellant_comps_updated_at, farm_mode, ...officialFields } = record;
+          draftUpdates.push({
+            id: draftMatch.id,
+            payload: {
+              ...officialFields,
+              // keep existing draft evidence intact
+              appellant_comps: draftMatch.appellant_comps,
+              appellant_comps_updated_at: draftMatch.appellant_comps_updated_at,
+              farm_mode: draftMatch.farm_mode
+            }
+          });
+          mergedDrafts++;
+          // Remove from map so it isn't matched twice
+          draftByCompositeKey.delete(matchedProperty.property_composite_key);
+          continue;
+        }
+
         records.push(record);
       }
 
-      // Batch insert
+      // Apply draft merges (one update per draft to preserve evidence fields)
+      for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      // Batch insert non-draft records
       if (records.length > 0) {
         const { error } = await supabase
           .from('appeal_log')
@@ -1466,7 +1558,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setImportResult({ imported, skipped, unmatched });
+      setImportResult({ imported, skipped, unmatched, mergedDrafts });
       setImportFile(null);
 
     } catch (error) {
@@ -1489,21 +1581,39 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, cellDates: true, raw: false });
 
+      // Fetch full existing rows (not just numbers) so we can refresh hearing_date
+      // and judgment fields on re-import instead of skipping.
       const { data: existingAppeals } = await supabase
         .from('appeal_log')
-        .select('appeal_number')
+        .select('id, appeal_number, current_assessment')
         .eq('job_id', jobData.id);
-      const existingNumbers = new Set((existingAppeals || []).map(a => a.appeal_number));
+      const existingByNumber = new Map();
+      (existingAppeals || []).forEach(a => {
+        if (a.appeal_number) existingByNumber.set(String(a.appeal_number).trim(), a);
+      });
+
+      // Fetch DRAFT rows so proactive evidence drafts merge into the official import.
+      const { data: draftRows } = await supabase
+        .from('appeal_log')
+        .select('id, property_composite_key, appellant_comps, appellant_comps_updated_at, farm_mode')
+        .eq('job_id', jobData.id)
+        .is('appeal_number', null);
+      const draftByCompositeKey = new Map();
+      (draftRows || []).forEach(d => {
+        if (d.property_composite_key) draftByCompositeKey.set(d.property_composite_key, d);
+      });
 
       let imported = 0;
-      let skipped = 0;
+      let refreshed = 0;
       let unmatched = 0;
+      let mergedDrafts = 0;
       const records = [];
+      const draftUpdates = [];
+      const refreshUpdates = []; // { id, payload } - hearing_date / judgment refresh on existing rows
 
       for (const row of rows) {
         const appealNumber = row['APPEALS'] ? String(row['APPEALS']).trim() : null;
         if (!appealNumber) continue;
-        if (existingNumbers.has(appealNumber)) { skipped++; continue; }
 
         const block = row['PROP_BLOCK'] != null ? String(row['PROP_BLOCK']).trim() : '';
         const lot = row['PROP_LOT'] != null ? String(row['PROP_LOT']).trim() : '';
@@ -1543,7 +1653,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         }
 
         const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
-        records.push({
+        const record = {
           job_id: jobData.id,
           appeal_number: appealNumber,
           appeal_year: new Date().getFullYear(),
@@ -1572,7 +1682,76 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           evidence_status: '',
           inspected: false,
           comments: row['NOTES'] ? String(row['NOTES']).trim() : ''
-        });
+        };
+
+        // Merge into existing draft row if one exists for this property.
+        const draftMatch = matchedProperty?.property_composite_key
+          ? draftByCompositeKey.get(matchedProperty.property_composite_key)
+          : null;
+        if (draftMatch) {
+          draftUpdates.push({
+            id: draftMatch.id,
+            payload: {
+              ...record,
+              appellant_comps: draftMatch.appellant_comps,
+              appellant_comps_updated_at: draftMatch.appellant_comps_updated_at,
+              farm_mode: draftMatch.farm_mode
+            }
+          });
+          mergedDrafts++;
+          draftByCompositeKey.delete(matchedProperty.property_composite_key);
+          continue;
+        }
+
+        // Re-import path: row already exists for this appeal_number.
+        // Refresh hearing_date, evidence_due_date, judgment_value, loss, loss_pct
+        // (and tax_court_pending). Leave user-managed fields (status, comments,
+        // appellant_comps, etc.) alone.
+        const existingRow = existingByNumber.get(appealNumber);
+        if (existingRow) {
+          // Recompute loss against the existing row's current_assessment if we
+          // didn't get a fresh one from the import row.
+          const baseAssessment = currentAssessment || existingRow.current_assessment || 0;
+          let refreshedLoss = null;
+          let refreshedLossPct = null;
+          if (judgmentValue !== null && baseAssessment) {
+            refreshedLoss = baseAssessment - judgmentValue;
+            refreshedLossPct = (refreshedLoss / baseAssessment) * 100;
+          }
+          refreshUpdates.push({
+            id: existingRow.id,
+            payload: {
+              hearing_date: hearingDate,
+              evidence_due_date: evidenceDueDate,
+              judgment_value: judgmentValue,
+              loss: refreshedLoss,
+              loss_pct: refreshedLossPct,
+              tax_court_pending: taxCourtPending
+            }
+          });
+          refreshed++;
+          continue;
+        }
+
+        records.push(record);
+      }
+
+      // Apply draft merges first (one update per draft to preserve evidence fields)
+      for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      // Apply refresh updates (hearing_date, judgment) on existing appeal rows
+      for (const { id, payload } of refreshUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
       }
 
       if (records.length > 0) {
@@ -1614,7 +1793,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setPwrCamaResult({ imported, skipped, unmatched });
+      setPwrCamaResult({ imported, refreshed, unmatched, mergedDrafts });
       setPwrCamaFile(null);
     } catch (error) {
       console.error('PowerCama import error:', error);
@@ -2668,12 +2847,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
               {/* CHECKBOX COLUMN */}
               <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-green-50 px-3 py-2 text-center border-r border-gray-200" style={{ minWidth: '50px', maxWidth: '50px' }}>
-                <input
-                  type="checkbox"
-                  checked={filteredAppeals.length > 0 && selectedAppeals.size === filteredAppeals.length}
-                  onChange={handleToggleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                />
+                {(() => {
+                  const defendable = filteredAppeals.filter(a => (a.status || 'NA') === 'D');
+                  const allDefendableSelected = defendable.length > 0 && defendable.every(a => selectedAppeals.has(a.id));
+                  return (
+                    <input
+                      type="checkbox"
+                      checked={allDefendableSelected}
+                      disabled={defendable.length === 0}
+                      onChange={handleToggleSelectAll}
+                      title={defendable.length === 0 ? 'No defendable (status D) appeals to select' : 'Select all defendable (status D) appeals'}
+                      className={`w-4 h-4 rounded border-gray-300 text-blue-600 ${defendable.length === 0 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                    />
+                  );
+                })()}
               </th>
               {/* FROZEN LEFT COLUMNS */}
               <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="85px" maxWidth="85px" />
@@ -2689,6 +2876,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <SortableHeader label="Inspected" columnKey="inspected" minWidth="90px" maxWidth="90px" />
               <SortableHeader label="Petitioner" columnKey="petitioner_name" minWidth="120px" />
               <SortableHeader label="Attorney" columnKey="attorney" minWidth="100px" />
+              <SortableHeader label="Evidence" columnKey="evidence" minWidth="95px" maxWidth="95px" />
               <SortableHeader label="Hearing" columnKey="hearing_date" minWidth="120px" />
               <SortableHeader label="Tax Court" columnKey="tax_court_pending" minWidth="100px" />
 
@@ -2717,12 +2905,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={isResolved && !selectedAppeals.has(appeal.id) ? { backgroundColor: resolvedBg } : undefined}>
                   {/* CHECKBOX COLUMN */}
                   <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedAppeals.has(appeal.id)}
-                      onChange={() => handleToggleAppealSelection(appeal.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                    />
+                    {(() => {
+                      const isDefendable = (appeal.status || 'NA') === 'D';
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={selectedAppeals.has(appeal.id)}
+                          disabled={!isDefendable}
+                          onChange={() => handleToggleAppealSelection(appeal.id)}
+                          title={isDefendable ? '' : 'Only defendable (status D) appeals can be selected'}
+                          className={`w-4 h-4 rounded border-gray-300 text-blue-600 ${isDefendable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                        />
+                      );
+                    })()}
                   </td>
                   {/* FROZEN LEFT COLUMNS */}
                   <td className="sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200" style={{ left: '50px', minWidth: '85px', maxWidth: '85px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
@@ -2764,6 +2959,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '100px' }}>
                     {renderEditableCell(appeal.id, 'attorney', appeal.attorney, 'text')}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-center" style={{ minWidth: '95px', maxWidth: '95px' }}>
+                    {renderEvidenceCell(appeal)}
                   </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>
                     {renderEditableCell(appeal.id, 'hearing_date', appeal.hearing_date, 'date')}
@@ -2837,6 +3035,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <td style={{ minWidth: '120px' }}></td>
               {/* Attorney */}
               <td style={{ minWidth: '100px' }}></td>
+              {/* Evidence */}
+              <td style={{ minWidth: '95px', maxWidth: '95px' }}></td>
               {/* Hearing - TOTALS label goes here */}
               <td className="px-3 py-3 text-right" style={{ minWidth: '120px' }}>TOTALS:</td>
               {/* Tax Court */}
@@ -3249,6 +3449,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   {importResult.unmatched > 0 && (
                     <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
                   )}
+                  {importResult.mergedDrafts > 0 && (
+                    <p className="text-emerald-700">✓ {importResult.mergedDrafts} merged into existing draft row{importResult.mergedDrafts === 1 ? '' : 's'} (appellant evidence preserved)</p>
+                  )}
                 </div>
               )}
 
@@ -3286,7 +3489,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             </div>
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Supports the PowerCama appeals export (.xlsx). All imported appeals will be set to status <strong>D (Defend)</strong>. Duplicates are skipped automatically.
+                Supports the PowerCama appeals export (.xlsx). New appeals are inserted with status <strong>D (Defend)</strong>. Re-importing an existing appeal refreshes <strong>hearing date</strong> and <strong>judgment value</strong> in place — no manual entry needed for bulk judgment loads.
               </p>
               <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
                 <input
@@ -3307,8 +3510,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
                   <p className="font-semibold text-gray-800">Import Complete</p>
                   <p className="text-green-700">✓ {pwrCamaResult.imported} records imported</p>
-                  {pwrCamaResult.skipped > 0 && <p className="text-amber-700">⚠ {pwrCamaResult.skipped} skipped (duplicates)</p>}
+                  {pwrCamaResult.refreshed > 0 && <p className="text-emerald-700">✓ {pwrCamaResult.refreshed} existing appeal{pwrCamaResult.refreshed === 1 ? '' : 's'} refreshed (hearing date / judgment updated)</p>}
                   {pwrCamaResult.unmatched > 0 && <p className="text-blue-700">ℹ {pwrCamaResult.unmatched} unmatched to property records</p>}
+                  {pwrCamaResult.mergedDrafts > 0 && <p className="text-emerald-700">✓ {pwrCamaResult.mergedDrafts} merged into existing draft row{pwrCamaResult.mergedDrafts === 1 ? '' : 's'} (appellant evidence preserved)</p>}
                 </div>
               )}
               <div className="flex gap-3 justify-end pt-2">
@@ -3428,6 +3632,22 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             </div>
           </div>
         </div>
+      )}
+
+      {/* ==================== EVIDENCE / APPELLANT COMPS MODAL ==================== */}
+      {evidenceModalAppeal && (
+        <AppellantEvidencePanel
+          appeal={evidenceModalAppeal}
+          jobData={jobData}
+          marketLandData={marketLandData}
+          properties={properties}
+          tenantConfig={tenantConfig}
+          mode="modal"
+          onClose={closeEvidenceModal}
+          onSaved={(updatedAppeal) => {
+            setAppeals(prev => prev.map(a => a.id === updatedAppeal.id ? { ...a, ...updatedAppeal } : a));
+          }}
+        />
       )}
     </div>
   );

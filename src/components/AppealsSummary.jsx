@@ -318,11 +318,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               </tr>
             </thead>
             <tbody>
-              {jobAppealsSummary.map((row, idx) => (
+              {jobAppealsSummary.map((row, idx) => {
+                const cmeMatchesTotal = row.totalAppeals > 0 && row.statusBreakdown.hasCME === row.totalAppeals;
+                return (
                 <tr
                   key={row.jobId}
-                  className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => onJobSelect && onJobSelect(row.jobId)}
+                  className={`border-b border-gray-200 ${cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
@@ -335,12 +336,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.hasCME}</td>
+                  <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'}</td>
                 </tr>
-              ))}
+                );
+              })}
               {/* Totals Row */}
               <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
                 <td className="px-4 py-3 text-sm text-gray-900">TOTALS</td>
