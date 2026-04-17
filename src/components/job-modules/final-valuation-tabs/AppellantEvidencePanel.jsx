@@ -1,0 +1,522 @@
+// ============================================================
+// AppellantEvidencePanel
+// ------------------------------------------------------------
+// Shared editable panel rendered in TWO places:
+//   1. AppealLogTab evidence modal
+//   2. SalesComparisonTab "Detailed" sub-tab (embedded inline)
+//
+// Both render the same UI and write to the same `appeal_log`
+// row, so saving in one place persists to the other.
+// ============================================================
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { X } from 'lucide-react';
+import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import {
+  evaluateAppellantComp,
+  COLOR_CLASSES,
+  getNuShortForm
+} from '../../../lib/appellantCompEvaluator';
+
+const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
+  slot: i + 1,
+  block: '',
+  lot: '',
+  qualifier: '',
+  card: '',
+  sales_date: '',
+  sales_price: '',
+  sales_nu: '',
+  manual_notes: ''
+}));
+
+const fmtCompDate = (d) => {
+  if (!d) return '';
+  try {
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '';
+    return dt.toISOString().split('T')[0];
+  } catch (e) { return ''; }
+};
+
+const AppellantEvidencePanel = ({
+  appeal,                 // appeal_log row (must include id, property_composite_key, appeal_number, appeal_year)
+  jobData,
+  marketLandData = {},
+  properties = [],
+  tenantConfig = null,
+  mode = 'inline',        // 'inline' | 'modal'
+  onClose,                // required when mode='modal'
+  onSaved,                // (updatedAppeal) => void — called after successful save
+  onPromoteComp           // optional — (compProperty, slotData) => void — Detailed +Comp button
+}) => {
+  // ----- Derived job/market context -----
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
+  const sampleRange = useMemo(() => {
+    if (!jobData?.end_date) return { start: '', end: '' };
+    const rawYear = new Date(jobData.end_date).getFullYear();
+    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+    return {
+      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+      end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]
+    };
+  }, [jobData?.end_date, isLojikTenant]);
+
+  const landMethod = useMemo(() => (
+    marketLandData?.land_method
+      || marketLandData?.valuation_mode
+      || marketLandData?.cascade_rates?.mode
+      || 'ac'
+  ), [marketLandData]);
+
+  const vendorType = jobData?.vendor_type || jobData?.vendor_detection?.vendor || 'BRT';
+  const codeDefinitions = jobData?.parsed_code_definitions || null;
+
+  // ----- Lookup helpers -----
+  const propertyByCompositeKey = useMemo(() => {
+    const map = new Map();
+    properties.forEach(p => {
+      if (p.property_composite_key) map.set(p.property_composite_key, p);
+    });
+    return map;
+  }, [properties]);
+
+  const findCompProperty = useCallback((block, lot, qualifier, card) => {
+    if (!block || !lot) return null;
+    const b = String(block).trim();
+    const l = String(lot).trim();
+    const q = (qualifier || '').toString().trim();
+    const c = (card || '').toString().trim();
+    return properties.find(p => {
+      if (String(p.property_block || '').trim() !== b) return false;
+      if (String(p.property_lot || '').trim() !== l) return false;
+      if (q && String(p.property_qualifier || '').trim() !== q) return false;
+      if (c && String(p.property_addl_card || p.property_card || '').trim() !== c) return false;
+      return true;
+    }) || null;
+  }, [properties]);
+
+  const decodeField = useCallback((property, field) => {
+    if (!property || !codeDefinitions) return property?.[field] || null;
+    try {
+      const decoded = vendorType === 'Microsystems'
+        ? interpretCodes.getMicrosystemsValue?.(property, codeDefinitions, field)
+        : interpretCodes.getBRTValue?.(property, codeDefinitions, field);
+      return decoded || property[field] || null;
+    } catch (e) {
+      return property[field] || null;
+    }
+  }, [codeDefinitions, vendorType]);
+
+  const codeWithName = (property, field) => {
+    const code = property?.[field];
+    if (!code) return '\u2014';
+    const decoded = decodeField(property, field);
+    if (!decoded || String(decoded).trim().toUpperCase() === String(code).trim().toUpperCase()) return String(code);
+    return `${code} \u00b7 ${decoded}`;
+  };
+
+  const compLotDisplay = (property) => {
+    if (!property) return '\u2014';
+    if (property.asset_lot_acre && parseFloat(property.asset_lot_acre) > 0) {
+      return `${parseFloat(property.asset_lot_acre).toFixed(2)} ac`;
+    }
+    if (property.market_manual_lot_acre && parseFloat(property.market_manual_lot_acre) > 0) {
+      return `${parseFloat(property.market_manual_lot_acre).toFixed(2)} ac`;
+    }
+    if (property.asset_lot_sf && parseFloat(property.asset_lot_sf) > 0) {
+      return `${parseInt(property.asset_lot_sf, 10).toLocaleString()} sf`;
+    }
+    if (property.market_manual_lot_sf && parseFloat(property.market_manual_lot_sf) > 0) {
+      return `${parseInt(property.market_manual_lot_sf, 10).toLocaleString()} sf`;
+    }
+    if (property.asset_lot_frontage && parseFloat(property.asset_lot_frontage) > 0) {
+      return `${parseFloat(property.asset_lot_frontage).toFixed(0)} ff`;
+    }
+    try {
+      const acres = parseFloat(interpretCodes.getCalculatedAcreage(property, vendorType));
+      if (acres > 0) return `${acres.toFixed(2)} ac`;
+    } catch (e) {}
+    return '\u2014';
+  };
+
+  const fmtSubjectVal = (v) => v == null || v === '' ? '\u2014' : v;
+
+  // ----- Subject -----
+  const subject = appeal?.property_composite_key
+    ? propertyByCompositeKey.get(appeal.property_composite_key) || null
+    : null;
+
+  // ----- Local editable state, hydrated from latest DB row on mount/appeal change -----
+  const [draft, setDraft] = useState(() => {
+    const existing = Array.isArray(appeal?.appellant_comps) ? appeal.appellant_comps : [];
+    return buildEmptyDraft().map((empty, i) => ({ ...empty, ...(existing[i] || {}) }));
+  });
+
+  const [farmMode, setFarmMode] = useState(() => {
+    if (appeal?.farm_mode != null) return !!appeal.farm_mode;
+    return subject?.property_m4_class === '3A';
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error' | null
+  const [loadingFresh, setLoadingFresh] = useState(false);
+
+  // On open / appeal change, re-fetch the latest row from supabase so we never
+  // show stale state (two-way sync between Detailed and AppealLog).
+  useEffect(() => {
+    if (!appeal?.id) return;
+    let cancelled = false;
+    setLoadingFresh(true);
+    supabase
+      .from('appeal_log')
+      .select('id, appellant_comps, appellant_comps_updated_at, farm_mode, appeal_year, appeal_number, property_composite_key')
+      .eq('id', appeal.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const existing = Array.isArray(data.appellant_comps) ? data.appellant_comps : [];
+        setDraft(buildEmptyDraft().map((empty, i) => ({ ...empty, ...(existing[i] || {}) })));
+        if (data.farm_mode != null) {
+          setFarmMode(!!data.farm_mode);
+        } else if (subject?.property_m4_class === '3A') {
+          setFarmMode(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFresh(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appeal?.id]);
+
+  const updateSlot = (idx, field, value) => {
+    setDraft(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+    setSaveStatus(null);
+  };
+
+  const handleSave = async () => {
+    if (!appeal?.id) return;
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      const cleaned = draft
+        .map((s, i) => ({ ...s, slot: i + 1 }))
+        .filter(s => s.block || s.lot || s.qualifier || s.card || s.sales_date || s.sales_price || s.sales_nu || s.manual_notes);
+
+      const updated = {
+        appellant_comps: cleaned.length > 0 ? cleaned : null,
+        appellant_comps_updated_at: new Date().toISOString(),
+        farm_mode: farmMode
+      };
+
+      const { error } = await supabase
+        .from('appeal_log')
+        .update(updated)
+        .eq('id', appeal.id);
+      if (error) throw error;
+
+      setSaveStatus('saved');
+      if (onSaved) onSaved({ ...appeal, ...updated });
+      if (mode === 'modal' && onClose) onClose();
+    } catch (e) {
+      console.error('Failed to save appellant comps:', e);
+      setSaveStatus('error');
+      alert('Failed to save evidence: ' + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ----- Director's Ratio (NO 100% cap — appeal-FMV is true ratio) -----
+  let ratioDecimal = null;
+  let ratioSource = 'none';
+  let ratioUpdatedAt = null;
+  if (jobData?.director_ratio) {
+    let r = parseFloat(jobData.director_ratio);
+    if (Number.isFinite(r) && r > 0) {
+      if (r > 1) r = r / 100;
+      ratioDecimal = r;
+      ratioSource = 'director';
+    }
+  }
+  if (ratioDecimal === null && marketLandData?.normalization_config?.equalizationRatio) {
+    let r = parseFloat(marketLandData.normalization_config.equalizationRatio);
+    if (Number.isFinite(r) && r > 0) {
+      if (r > 1) r = r / 100;
+      ratioDecimal = r;
+      ratioSource = 'equalization';
+      ratioUpdatedAt = marketLandData?.last_normalization_run || marketLandData?.updated_at || null;
+    }
+  }
+  const ratioPctStr = ratioDecimal ? `${(ratioDecimal * 100).toFixed(2)}%` : null;
+  const fmvByRatio = (subject?.values_mod_total && ratioDecimal)
+    ? Math.round(Number(subject.values_mod_total) / ratioDecimal)
+    : null;
+  const ratioLabel = ratioSource === 'director'
+    ? "Director's Ratio"
+    : ratioSource === 'equalization'
+      ? 'Equalization Ratio (fallback)'
+      : 'Ratio not set';
+  const ratioUpdatedStr = ratioUpdatedAt ? new Date(ratioUpdatedAt).toLocaleDateString() : null;
+
+  // ----- Sampling-window check on subject sale -----
+  const apYear = parseInt(appeal?.appeal_year, 10) || new Date().getFullYear();
+  const subjectWindowStart = new Date(`${apYear - 2}-10-01`);
+  const subjectWindowEnd   = new Date(`${apYear - 1}-10-31`);
+  const isSubjectSaleOutsideWindow = (() => {
+    if (!subject?.sales_date) return false;
+    const d = new Date(subject.sales_date);
+    if (Number.isNaN(d.getTime())) return false;
+    return d < subjectWindowStart || d > subjectWindowEnd;
+  })();
+
+  // ----- Per-row evaluation -----
+  const evaluations = draft.map(slot => {
+    const compProp = findCompProperty(slot.block, slot.lot, slot.qualifier, slot.card);
+    const evalResult = evaluateAppellantComp(subject, compProp, slot, {
+      vendorType, landMethod, sampleRange, farmMode
+    });
+    return { compProp, evalResult };
+  });
+
+  // ----- Render -----
+  const isModal = mode === 'modal';
+  const Wrapper = isModal
+    ? ({ children }) => (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
+            {children}
+          </div>
+        </div>
+      )
+    : ({ children }) => (
+        <div className="bg-white rounded-lg border border-blue-300 shadow-sm">
+          {children}
+        </div>
+      );
+
+  return (
+    <Wrapper>
+      {/* Header */}
+      <div className={`flex justify-between items-center p-4 border-b border-gray-200 ${isModal ? 'sticky top-0 bg-white z-10' : ''}`}>
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Appellant Evidence Comps</h2>
+          <p className="text-xs text-gray-600 mt-0.5">
+            {`Appeal #${appeal?.appeal_number || '\u2014'} \u00b7 Block ${appeal?.property_block} Lot ${appeal?.property_lot}${appeal?.property_qualifier ? ` Qual ${appeal.property_qualifier}` : ''} \u00b7 ${appeal?.property_location || ''}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {ratioPctStr && (
+            <div className="text-[11px] text-gray-700 leading-tight text-right">
+              <div><span className="font-semibold">{ratioLabel}:</span> {ratioPctStr}</div>
+              {ratioUpdatedStr && (
+                <div className="text-[10px] text-gray-500">Updated {ratioUpdatedStr}</div>
+              )}
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={farmMode}
+              onChange={(e) => { setFarmMode(e.target.checked); setSaveStatus(null); }}
+              className="w-4 h-4"
+            />
+            Farm sale mode (NU 33 acceptable)
+          </label>
+          {isModal && onClose && (
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Subject summary */}
+      <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold text-blue-900">Subject Property</div>
+          {loadingFresh && <div className="text-[10px] text-gray-500 italic">syncing\u2026</div>}
+        </div>
+        {subject ? (
+          <div className="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs text-gray-900">
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{subject.values_mod_total ? `$${Number(subject.values_mod_total).toLocaleString()}` : '\u2014'}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500" title={ratioPctStr ? `${ratioLabel}: ${ratioPctStr}` : ''}>FMV by Ratio</div><div className="font-semibold">{fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014'}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Cond</div><div className="font-semibold">{codeWithName(subject, 'asset_int_cond')}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">NU</div><div className="font-semibold" title={getNuShortForm(subject.sales_nu) || ''}>{fmtSubjectVal(subject.sales_nu)}</div></div>
+          </div>
+        ) : (
+          <div className="text-xs text-red-700">Subject property not found in current dataset.</div>
+        )}
+        <div className="text-[10px] text-gray-500 mt-2">
+          {`Sale-date range: ${sampleRange.start || '\u2014'} \u2192 ${sampleRange.end || '\u2014'} \u00b7 Land method: ${landMethod.toUpperCase()} \u00b7 Vendor: ${vendorType}`}
+        </div>
+      </div>
+
+      {/* Comp grid */}
+      <div className="p-4 overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-gray-700">
+              <th className="px-2 py-2 text-left font-semibold">#</th>
+              <th className="px-2 py-2 text-left font-semibold">Block</th>
+              <th className="px-2 py-2 text-left font-semibold">Lot</th>
+              <th className="px-2 py-2 text-left font-semibold">Qual</th>
+              <th className="px-2 py-2 text-left font-semibold">Card</th>
+              <th className="px-2 py-2 text-left font-semibold">Sale Date</th>
+              <th className="px-2 py-2 text-left font-semibold">Sale Price</th>
+              <th className="px-2 py-2 text-left font-semibold">NU</th>
+              <th className="px-2 py-2 text-left font-semibold">VCS</th>
+              <th className="px-2 py-2 text-left font-semibold">Design</th>
+              <th className="px-2 py-2 text-left font-semibold">T&amp;U</th>
+              <th className="px-2 py-2 text-left font-semibold">Cond</th>
+              <th className="px-2 py-2 text-left font-semibold">Year Built</th>
+              <th className="px-2 py-2 text-left font-semibold">SFLA</th>
+              <th className="px-2 py-2 text-left font-semibold">Lot Size</th>
+              {onPromoteComp && <th className="px-2 py-2 text-left font-semibold">Action</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {draft.map((slot, idx) => {
+              const { compProp, evalResult } = evaluations[idx];
+              const cellCls = (key) => {
+                const c = evalResult.flags[key]?.color || 'na';
+                return `${COLOR_CLASSES[c].bg} ${COLOR_CLASSES[c].text} px-2 py-1`;
+              };
+              const cellTitle = (key) => evalResult.flags[key]?.detail || '';
+              return (
+                <tr key={idx} className="border-b border-gray-100">
+                  <td className="px-2 py-1 font-semibold text-gray-700">#{idx + 1}</td>
+                  <td className="px-2 py-1"><input type="text" value={slot.block} onChange={e => updateSlot(idx, 'block', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className="px-2 py-1"><input type="text" value={slot.lot} onChange={e => updateSlot(idx, 'lot', e.target.value)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className="px-2 py-1"><input type="text" value={slot.qualifier} onChange={e => updateSlot(idx, 'qualifier', e.target.value)} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  <td className={cellCls('card')} title={cellTitle('card')}>
+                    <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                  </td>
+                  <td className={cellCls('sale_date')} title={cellTitle('sale_date')}>
+                    <input type="date" value={slot.sales_date || (compProp ? fmtCompDate(compProp.sales_date) : '')} onChange={e => updateSlot(idx, 'sales_date', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                  </td>
+                  <td className={cellCls('sale_price')} title={cellTitle('sale_price')}>
+                    <input type="number" value={slot.sales_price || (compProp?.sales_price ?? '')} onChange={e => updateSlot(idx, 'sales_price', e.target.value)} placeholder={compProp?.sales_price ? String(compProp.sales_price) : ''} className="w-24 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                  </td>
+                  <td className={cellCls('sale_nu')} title={cellTitle('sale_nu')}>
+                    <input type="text" value={slot.sales_nu || (compProp?.sales_nu || '')} onChange={e => updateSlot(idx, 'sales_nu', e.target.value)} placeholder={compProp?.sales_nu || ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                  </td>
+                  <td className={cellCls('vcs')} title={cellTitle('vcs')}>{compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014'}</td>
+                  <td className={cellCls('design')} title={cellTitle('design')}>{compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014'}</td>
+                  <td className={cellCls('type_use')} title={cellTitle('type_use')}>{compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014'}</td>
+                  <td className={cellCls('condition')} title={cellTitle('condition')}>{compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014'}</td>
+                  <td className={cellCls('year_built')} title={cellTitle('year_built')}>{compProp?.asset_year_built || '\u2014'}</td>
+                  <td className={cellCls('sfla')} title={cellTitle('sfla')}>{compProp?.asset_sfla || '\u2014'}</td>
+                  <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>{compLotDisplay(compProp)}</td>
+                  {onPromoteComp && (
+                    <td className="px-2 py-1">
+                      {compProp ? (
+                        <button
+                          type="button"
+                          onClick={() => onPromoteComp(compProp, slot)}
+                          className="px-2 py-0.5 text-[10px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded"
+                          title="Promote into CME comp grid"
+                        >
+                          + Comp
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">\u2014</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Auto-generated comments */}
+        <div className="mt-4 border border-gray-200 rounded p-3 bg-gray-50">
+          <div className="text-xs font-semibold text-gray-700 mb-2">Auto-Generated Comments</div>
+          <div className="space-y-1 text-xs text-gray-800 font-mono">
+            {(() => {
+              if (!subject?.sales_date || !subject?.sales_price) return null;
+              const price = Number(subject.sales_price);
+              if (!Number.isFinite(price) || price <= 100) return null;
+              const saleDt = new Date(subject.sales_date);
+              if (Number.isNaN(saleDt.getTime())) return null;
+              const currentYear = new Date().getFullYear();
+              if (saleDt.getFullYear() < currentYear - 3) return null;
+              const dateStr = `${String(saleDt.getMonth() + 1).padStart(2, '0')}/${String(saleDt.getDate()).padStart(2, '0')}/${saleDt.getFullYear()}`;
+              const priceStr = `$${price.toLocaleString()}`;
+              const nuRaw = (subject.sales_nu == null ? '' : String(subject.sales_nu)).trim();
+              const nuLabel = (!nuRaw || nuRaw === '0' || nuRaw === '00')
+                ? "ARM'S LENGTH"
+                : (getNuShortForm(nuRaw) || `NU ${nuRaw}`).toUpperCase();
+              const prefix = isSubjectSaleOutsideWindow ? 'SUBJECT SOLD OUTSIDE SAMPLING PERIOD' : 'SUBJECT SOLD';
+              return (
+                <div className="font-semibold text-blue-900">
+                  {prefix} {dateStr} FOR {priceStr} &mdash; {nuLabel}
+                </div>
+              );
+            })()}
+            {evaluations.map(({ evalResult }, idx) => {
+              const slot = draft[idx];
+              const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              if (!hasAny) return null;
+              return (
+                <div key={idx} className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                    {slot.manual_notes && (
+                      <span className="text-gray-700"> &mdash; {slot.manual_notes}</span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={slot.manual_notes || ''}
+                    onChange={e => updateSlot(idx, 'manual_notes', e.target.value)}
+                    placeholder="add note\u2026"
+                    className="w-64 px-2 py-0.5 border border-gray-300 rounded text-xs font-sans"
+                  />
+                </div>
+              );
+            })}
+            {evaluations.every(({ evalResult }, idx) => {
+              const slot = draft[idx];
+              return !(slot.block || slot.lot || slot.sales_date || slot.sales_price);
+            }) && (
+              <div className="text-gray-500 italic">No comps entered yet.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer actions */}
+      <div className={`flex justify-end items-center gap-2 p-4 border-t border-gray-200 ${isModal ? 'sticky bottom-0 bg-white' : ''}`}>
+        {saveStatus === 'saved' && <span className="text-xs text-green-700 mr-auto">\u2713 Saved</span>}
+        {saveStatus === 'error' && <span className="text-xs text-red-700 mr-auto">Save failed</span>}
+        {isModal && onClose && (
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? 'Saving\u2026' : 'Save Evidence'}
+        </button>
+      </div>
+    </Wrapper>
+  );
+};
+
+export default AppellantEvidencePanel;
