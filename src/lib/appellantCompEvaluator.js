@@ -286,11 +286,16 @@ export const evaluateAppellantComp = (subject, comp, userComp, ctx = {}) => {
   const subjLot = resolveLotSize(subject, vendorType, landMethod);
   const compLot = resolveLotSize(comp,    vendorType, landMethod);
 
+  const saleNuFlag = compareNu(compNu, farmMode);
+  // Stash the resolved NU code on the flag so buildAutoNote can append the
+  // short-form for ALL sale codes (e.g. "ARM'S LENGTH SALE - SUBSTANTIALLY
+  // IMPROVED" for 07), not just the non-usable ones.
+  saleNuFlag.code = (compNu == null ? '' : String(compNu)).trim();
   const flags = {
     card:         compareCard(subject, comp),
     sale_date:    compareSaleDate(compSaleDate, sampleRange.start, sampleRange.end),
     sale_price:   flag('na'),
-    sale_nu:      compareNu(compNu, farmMode),
+    sale_nu:      saleNuFlag,
     vcs:          compareExact(subject?.new_vcs || subject?.property_vcs, comp.new_vcs || comp.property_vcs, 'VCS'),
     design:       compareExact(subject?.asset_design_style, comp.asset_design_style, 'design'),
     type_use:     compareTypeUse(subject?.asset_type_use, comp.asset_type_use),
@@ -333,7 +338,17 @@ const buildAutoNote = (flags) => {
       : null;
     parts.push(short ? `NON-USABLE: ${short.toUpperCase()}` : 'NON-USABLE SALE CODE');
   } else if (flags.sale_nu.color === 'green') {
-    parts.push("ARM'S LENGTH SALE");
+    // Acceptable codes. Blank / 0 / 00 = pure arm's length, no qualifier needed.
+    // Other acceptable codes (07, 32, 33, 36) still get the short-form so the
+    // narrative explains WHY it's still considered usable (e.g. "ARM'S LENGTH
+    // SALE - SUBSTANTIALLY IMPROVED" for code 07).
+    const code = (flags.sale_nu.code || '').replace(/^0+/, '');
+    if (!code) {
+      parts.push("ARM'S LENGTH SALE");
+    } else {
+      const short = getNuShortForm(flags.sale_nu.code);
+      parts.push(short ? `ARM'S LENGTH SALE - ${short.toUpperCase()}` : "ARM'S LENGTH SALE");
+    }
   }
 
   // Card

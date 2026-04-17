@@ -25,8 +25,9 @@ import {
 // list with simple case-insensitive substring matching, debounced
 // at the input level.
 // ============================================================
-const AddressLookupModal = ({ properties, onSelect, onClose }) => {
+const AddressLookupModal = ({ properties, onSelect, onSelectMulti, maxMulti = 5, onClose }) => {
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState([]); // array of composite keys, in click order
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -39,71 +40,120 @@ const AddressLookupModal = ({ properties, onSelect, onClose }) => {
     return out;
   }, [query, properties]);
 
-  // z-[60] sits above the parent panel modal (z-50) so the lookup
-  // is always on top regardless of which surface opened the panel.
+  const keyFor = (p) => p.property_composite_key
+    || `${p.property_block}-${p.property_lot}-${p.property_qualifier}-${p.property_addl_card || p.property_card}`;
+
+  const toggle = (p) => {
+    const k = keyFor(p);
+    setSelected(prev => {
+      if (prev.includes(k)) return prev.filter(x => x !== k);
+      if (prev.length >= maxMulti) return prev; // cap
+      return [...prev, k];
+    });
+  };
+
+  const applyMulti = () => {
+    if (selected.length === 0) return;
+    const byKey = new Map(matches.map(p => [keyFor(p), p]));
+    const ordered = selected.map(k => byKey.get(k)).filter(Boolean);
+    if (onSelectMulti) onSelectMulti(ordered);
+  };
+
+  // z-[60] sits above the parent panel modal (z-50) so the lookup is always
+  // on top. Compact width/height so it fits centered without dwarfing the
+  // underlying panel; the result list scrolls vertically inside.
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b border-gray-200">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[70vh] flex flex-col">
+        <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200">
           <div>
-            <h3 className="text-base font-bold text-gray-900">Lookup Property by Address</h3>
-            <p className="text-xs text-gray-600 mt-0.5">Type at least 2 characters of the street address.</p>
+            <h3 className="text-sm font-bold text-gray-900">Lookup by Address</h3>
+            <p className="text-[10px] text-gray-600">{`Pick up to ${maxMulti} \u00b7 fills empty slots in order`}</p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-4 border-b border-gray-100">
+        <div className="px-3 py-2 border-b border-gray-100">
           <input
             type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={'e.g. 4 TURNBERRY or MAIN ST'}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
         <div className="flex-1 overflow-y-auto">
           {query.trim().length < 2 ? (
-            <div className="p-6 text-xs text-gray-500 italic text-center">{'Start typing to search\u2026'}</div>
+            <div className="p-4 text-[11px] text-gray-500 italic text-center">{'Start typing to search\u2026'}</div>
           ) : matches.length === 0 ? (
-            <div className="p-6 text-xs text-gray-500 italic text-center">No properties match that address.</div>
+            <div className="p-4 text-[11px] text-gray-500 italic text-center">No properties match that address.</div>
           ) : (
-            <table className="w-full text-xs">
+            <table className="w-full text-[11px]">
               <thead className="bg-gray-50 sticky top-0">
                 <tr className="text-left text-gray-700 border-b border-gray-200">
-                  <th className="px-3 py-2 font-semibold">Address</th>
-                  <th className="px-3 py-2 font-semibold">Block</th>
-                  <th className="px-3 py-2 font-semibold">Lot</th>
-                  <th className="px-3 py-2 font-semibold">Qual</th>
-                  <th className="px-3 py-2 font-semibold">Card</th>
-                  <th className="px-3 py-2 font-semibold">Class</th>
+                  <th className="px-2 py-1 font-semibold w-6"></th>
+                  <th className="px-2 py-1 font-semibold">Address</th>
+                  <th className="px-2 py-1 font-semibold">Blk</th>
+                  <th className="px-2 py-1 font-semibold">Lot</th>
+                  <th className="px-2 py-1 font-semibold">Q</th>
                 </tr>
               </thead>
               <tbody>
-                {matches.map((p) => (
-                  <tr
-                    key={p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_qualifier}-${p.property_addl_card}`}
-                    className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer"
-                    onClick={() => onSelect(p)}
-                  >
-                    <td className="px-3 py-2 text-gray-900">{p.property_location || '\u2014'}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.property_block || '\u2014'}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.property_lot || '\u2014'}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.property_qualifier || '\u2014'}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.property_addl_card || p.property_card || '\u2014'}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.property_m4_class || '\u2014'}</td>
-                  </tr>
-                ))}
+                {matches.map((p) => {
+                  const k = keyFor(p);
+                  const isSel = selected.includes(k);
+                  const order = isSel ? selected.indexOf(k) + 1 : null;
+                  return (
+                    <tr
+                      key={k}
+                      className={`border-b border-gray-100 cursor-pointer ${isSel ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                      onClick={() => toggle(p)}
+                      onDoubleClick={() => onSelect(p)}
+                      title="Click to multi-select, double-click to apply just this one"
+                    >
+                      <td className="px-2 py-1 text-center">
+                        {isSel ? (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold">{order}</span>
+                        ) : (
+                          <span className="inline-block w-4 h-4 border border-gray-300 rounded-full" />
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-gray-900 truncate max-w-[160px]">{p.property_location || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_block || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_lot || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_qualifier || '\u2014'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
         {matches.length >= 50 && (
-          <div className="p-2 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-200 text-center">
-            {'Showing first 50 matches \u2014 type more characters to narrow.'}
+          <div className="px-2 py-1 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-200 text-center">
+            {'Showing first 50 matches \u2014 type more to narrow.'}
           </div>
         )}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
+          <div className="text-[10px] text-gray-600">{`${selected.length} / ${maxMulti} selected`}</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-2 py-1 text-[11px] text-gray-700 border border-gray-300 rounded hover:bg-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyMulti}
+              disabled={selected.length === 0}
+              className="px-2 py-1 text-[11px] text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {`Apply (${selected.length})`}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -286,6 +336,15 @@ const AppellantEvidencePanel = ({
   const updateAssmtSource = async (next) => {
     if (next !== 'mod' && next !== 'cama') return;
     setAssmtSource(next);
+    // Broadcast so any other mounted panel (e.g. SalesComparisonTab Search &
+    // Results) flips live without needing to remount or refresh.
+    if (jobData?.id) {
+      try {
+        window.dispatchEvent(new CustomEvent('assmt-source-changed', {
+          detail: { jobId: jobData.id, value: next }
+        }));
+      } catch (e) {}
+    }
     if (!jobData?.id) return;
     try {
       await supabase
@@ -298,6 +357,19 @@ const AppellantEvidencePanel = ({
       console.warn('Failed to persist current_assessment_source:', e);
     }
   };
+
+  // Live-sync: react to assmt-source changes broadcast from other panels (e.g.
+  // user toggles MOD/CAMA in Search & Results while this panel is mounted).
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (jobData?.id && e.detail.jobId !== jobData.id) return;
+      const v = e.detail.value;
+      if (v === 'mod' || v === 'cama') setAssmtSource(v);
+    };
+    window.addEventListener('assmt-source-changed', handler);
+    return () => window.removeEventListener('assmt-source-changed', handler);
+  }, [jobData?.id]);
 
   // Resolve subject's current assessment based on selected source.
   const subjectAssmt = (() => {
@@ -331,6 +403,59 @@ const AppellantEvidencePanel = ({
       delete n[`${idx}-block`];
       delete n[`${idx}-lot`];
       delete n[`${idx}-qualifier`];
+      return n;
+    });
+    setSaveStatus(null);
+    setLookupSlotIdx(null);
+  };
+
+  // Apply multiple properties selected in the address-lookup modal. Fills the
+  // row the user opened the lookup from FIRST, then continues into subsequent
+  // empty slots. Skips already-populated rows so we never overwrite user data.
+  const applyLookupPropertiesMulti = (props) => {
+    if (lookupSlotIdx == null || !Array.isArray(props) || props.length === 0) {
+      setLookupSlotIdx(null);
+      return;
+    }
+    const startIdx = lookupSlotIdx;
+    setDraft(prev => {
+      const next = [...prev];
+      const isEmpty = (s) => !s.block && !s.lot && !s.qualifier && !s.card;
+      // Build the order of target slot indices: starting slot first (always
+      // overwritten), then any remaining empty slots in order.
+      const order = [startIdx];
+      for (let i = 0; i < next.length; i++) {
+        if (i === startIdx) continue;
+        if (isEmpty(next[i])) order.push(i);
+      }
+      for (let i = 0; i < props.length && i < order.length; i++) {
+        const p = props[i];
+        const idx = order[i];
+        next[idx] = {
+          ...next[idx],
+          block: String(p.property_block || '').trim(),
+          lot: String(p.property_lot || '').trim(),
+          qualifier: String(p.property_qualifier || '').trim(),
+          card: String(p.property_addl_card || p.property_card || '').trim()
+        };
+      }
+      return next;
+    });
+    // Clear any pending BLQ edits on touched rows.
+    setPendingBLQ(p => {
+      const n = { ...p };
+      const isEmpty = (s) => !s.block && !s.lot && !s.qualifier && !s.card;
+      const order = [startIdx];
+      for (let i = 0; i < draft.length; i++) {
+        if (i === startIdx) continue;
+        if (isEmpty(draft[i])) order.push(i);
+      }
+      for (let i = 0; i < props.length && i < order.length; i++) {
+        const idx = order[i];
+        delete n[`${idx}-block`];
+        delete n[`${idx}-lot`];
+        delete n[`${idx}-qualifier`];
+      }
       return n;
     });
     setSaveStatus(null);
@@ -777,6 +902,8 @@ const AppellantEvidencePanel = ({
     <AddressLookupModal
       properties={properties}
       onSelect={applyLookupProperty}
+      onSelectMulti={applyLookupPropertiesMulti}
+      maxMulti={5}
       onClose={() => setLookupSlotIdx(null)}
     />
   ) : null;

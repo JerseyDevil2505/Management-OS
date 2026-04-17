@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {} }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
 
@@ -1935,23 +1935,30 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               return '\u2014';
             };
 
+            // Mirror AppellantEvidencePanel's sample-range math EXACTLY so
+            // the PDF doesn't paint sale dates red when the on-screen panel
+            // shows them green. For Lojik (assessor) tenants the assessment
+            // year is end_date.year - 1.
             const sampleRange = (() => {
               if (!jobData?.end_date) return { start: '', end: '' };
               const rawYear = new Date(jobData.end_date).getFullYear();
+              const isLojikTenant = tenantConfig?.orgType === 'assessor';
+              const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
               return {
-                start: new Date(rawYear - 1, 9, 1).toISOString().split('T')[0],
-                end: new Date(rawYear, 9, 31).toISOString().split('T')[0]
+                start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+                end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]
               };
             })();
             const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
             const farmMode = !!appealRow.farm_mode;
 
-            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
             const subjRow = [
               'SUBJ',
               subject.property_block || '',
               subject.property_lot || '',
               subject.property_qualifier || '',
+              subject.property_addl_card || subject.property_card || '\u2014',
               subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
               subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
               subject.sales_nu || '\u2014',
@@ -1973,6 +1980,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               slot.block || (compProp?.property_block || ''),
               slot.lot || (compProp?.property_lot || ''),
               slot.qualifier || (compProp?.property_qualifier || ''),
+              slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
               slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
               (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
               slot.sales_nu || compProp?.sales_nu || '\u2014',
@@ -1985,24 +1993,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               lotDisplay(compProp)
             ]));
 
-            // Map PDF column index → evalResult.flags key. The PDF table omits
-            // the screen UI's Card column, so indices differ from the modal.
+            // Map PDF column index → evalResult.flags key. PDF columns now
+            // mirror the on-screen modal (including the Card column) so the
+            // color heat-map lines up 1:1 with what reviewers saw in the UI.
             // null = column has no evidence-evaluation flag and stays uncolored.
             const COL_TO_FLAG = [
               null,         // 0: #
               null,         // 1: Block
               null,         // 2: Lot
               null,         // 3: Qual
-              'sale_date',  // 4
-              'sale_price', // 5
-              'sale_nu',    // 6
-              'vcs',        // 7
-              'design',     // 8
-              'type_use',   // 9
-              'condition',  // 10
-              'year_built', // 11
-              'sfla',       // 12
-              'lot_size'    // 13
+              'card',       // 4: Card
+              'sale_date',  // 5
+              'sale_price', // 6
+              'sale_nu',    // 7
+              'vcs',        // 8
+              'design',     // 9
+              'type_use',   // 10
+              'condition',  // 11
+              'year_built', // 12
+              'sfla',       // 13
+              'lot_size'    // 14
             ];
             // Same pastel hexes used in the panel UI (Tailwind {color}-100).
             const COLOR_FILL = {

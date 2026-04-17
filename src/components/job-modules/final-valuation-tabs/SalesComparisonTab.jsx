@@ -391,9 +391,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     return () => { cancelled = true; };
   }, [jobData?.id]);
 
+  // Live-sync: react when AppellantEvidencePanel (or another sibling) flips
+  // the source while we're already mounted.
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (jobData?.id && e.detail.jobId !== jobData.id) return;
+      const v = e.detail.value;
+      if (v === 'mod' || v === 'cama') setAssmtSource(v);
+    };
+    window.addEventListener('assmt-source-changed', handler);
+    return () => window.removeEventListener('assmt-source-changed', handler);
+  }, [jobData?.id]);
+
   const updateAssmtSource = async (next) => {
     if (next !== 'mod' && next !== 'cama') return;
     setAssmtSource(next);
+    // Broadcast to any other mounted panel listening for live source changes.
+    if (jobData?.id) {
+      try {
+        window.dispatchEvent(new CustomEvent('assmt-source-changed', {
+          detail: { jobId: jobData.id, value: next }
+        }));
+      } catch (e) {}
+    }
     if (!jobData?.id) return;
     try {
       await supabase
@@ -5337,6 +5358,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   isJobContainerLoading={isJobContainerLoading}
                   allProperties={properties}
                   marketLandData={marketLandData}
+                  tenantConfig={tenantConfig}
                 />
               </div>
             )}
