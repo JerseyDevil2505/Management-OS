@@ -1989,7 +1989,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 0, 0);
-            doc.text('Auto-Generated Comments', margin, commentsY);
+            doc.text('Notes', margin, commentsY);
             commentsY += 12;
 
             doc.setFontSize(8);
