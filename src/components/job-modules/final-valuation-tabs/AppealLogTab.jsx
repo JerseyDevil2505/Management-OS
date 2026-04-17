@@ -3694,19 +3694,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         let ratioDecimal = null;
         let ratioSource = 'none';
         let ratioUpdatedAt = null;
+        // Note: NO 100% cap here (unlike Ch.123). FMV-by-Ratio is a true assessment ÷ ratio.
         if (jobData?.director_ratio) {
           let r = parseFloat(jobData.director_ratio);
-          if (Number.isFinite(r)) {
+          if (Number.isFinite(r) && r > 0) {
             if (r > 1) r = r / 100;
-            ratioDecimal = Math.min(r, 1.0);
+            ratioDecimal = r;
             ratioSource = 'director';
           }
         }
         if (ratioDecimal === null && marketLandData?.normalization_config?.equalizationRatio) {
           let r = parseFloat(marketLandData.normalization_config.equalizationRatio);
-          if (Number.isFinite(r)) {
+          if (Number.isFinite(r) && r > 0) {
             if (r > 1) r = r / 100;
-            ratioDecimal = Math.min(r, 1.0);
+            ratioDecimal = r;
             ratioSource = 'equalization';
             ratioUpdatedAt = marketLandData?.last_normalization_run || marketLandData?.updated_at || null;
           }
