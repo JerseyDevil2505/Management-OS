@@ -1857,23 +1857,25 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     // Always show default adjustments
                     if (adj.is_default) return true;
 
-                    // HIDE OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+                    // Single aggregated rows for barn / pole_barn / stable - show when ANY code is configured
                     if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+                      return (codeConfig[adj.adjustment_id] || []).length > 0;
+                    }
+
+                    // HIDE legacy per-code rows for barn/pole_barn/stable (replaced by single aggregated row)
+                    if (adj.adjustment_id.startsWith('barn_') ||
+                        adj.adjustment_id.startsWith('pole_barn_') ||
+                        adj.adjustment_id.startsWith('stable_')) {
                       return false;
                     }
 
-                    // For dynamic adjustments, only show if configuration has been saved
-                    // Check if this adjustment has corresponding codes in codeConfig
-                    const isDynamic = adj.adjustment_id.includes('barn_') ||
-                                    adj.adjustment_id.includes('pole_barn_') ||
-                                    adj.adjustment_id.includes('stable_') ||
-                                    adj.adjustment_id.includes('miscellaneous_') ||
+                    // For per-code dynamic adjustments (miscellaneous / land), only show if code is configured
+                    const isDynamic = adj.adjustment_id.includes('miscellaneous_') ||
                                     adj.adjustment_id.includes('land_positive_') ||
                                     adj.adjustment_id.includes('land_negative_');
 
                     if (isDynamic) {
-                      // Check if codes are saved for this attribute type (all create per-code rows now)
-                      const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+                      const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
                       if (match) {
                         const [, type, code] = match;
                         const isConfigured = (codeConfig[type] || []).includes(code);
