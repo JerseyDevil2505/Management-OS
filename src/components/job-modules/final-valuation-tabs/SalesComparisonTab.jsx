@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -108,6 +108,62 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
   const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
   const [savedPoolOverrideSets, setSavedPoolOverrideSets] = useState([]); // Saved pool override sets from DB
+
+  // ==================== PINNED COMPS (per-subject, localStorage only) ====================
+  // Shape: { [subjectId]: string[] of pinned comp property ids }
+  const pinnedCompsKey = useMemo(
+    () => `cme_pinned_comps_${jobData?.id || 'default'}`,
+    [jobData?.id]
+  );
+  const [pinnedComps, setPinnedComps] = useState({});
+
+  // Load pins from localStorage on mount / job change
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(pinnedCompsKey);
+      setPinnedComps(raw ? JSON.parse(raw) : {});
+    } catch (_) {
+      setPinnedComps({});
+    }
+  }, [pinnedCompsKey]);
+
+  // Persist pins whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(pinnedCompsKey, JSON.stringify(pinnedComps));
+    } catch (_) { /* quota or serialization issue - ignore */ }
+  }, [pinnedComps, pinnedCompsKey]);
+
+  const isCompPinned = (subjectId, compId) => {
+    if (!subjectId || !compId) return false;
+    return (pinnedComps[subjectId] || []).includes(String(compId));
+  };
+
+  const toggleCompPin = (subjectId, compId) => {
+    if (!subjectId || !compId) return;
+    setPinnedComps(prev => {
+      const cur = new Set((prev[subjectId] || []).map(String));
+      const idStr = String(compId);
+      if (cur.has(idStr)) cur.delete(idStr); else cur.add(idStr);
+      const next = { ...prev };
+      if (cur.size === 0) {
+        delete next[subjectId];
+      } else {
+        next[subjectId] = Array.from(cur);
+      }
+      return next;
+    });
+  };
+
+  const clearPinsForSubject = (subjectId) => {
+    if (!subjectId) return;
+    setPinnedComps(prev => {
+      if (!prev[subjectId]) return prev;
+      const next = { ...prev };
+      delete next[subjectId];
+      return next;
+    });
+  };
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -2239,7 +2295,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         // SELECT TOP 5 (or Top 4 if subject sale exists)
         const maxComps = priorityComp ? 4 : 5;
-        let topComps = validComps.slice(0, maxComps);
+
+        // PINNED COMPS: pull user-pinned comps first regardless of metrics/tolerance.
+        // These survive any re-evaluation, mode change, or filter tweak.
+        const pinnedIdsForSubject = (pinnedComps[subject.id] || []).map(String);
+        let pinnedSelected = [];
+        if (pinnedIdsForSubject.length > 0) {
+          pinnedSelected = pinnedIdsForSubject
+            .map(pid => {
+              // Look in computed comps first (full adjustments); else fall back to raw eligible sales
+              const fromComputed = compsWithAdjustments.find(c => String(c.id) === pid);
+              if (fromComputed) return { ...fromComputed, isPinned: true };
+              const fromPool = aggregatedSales.find(s => String(s.id) === pid);
+              if (!fromPool) return null;
+              const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
+                calculateAllAdjustments(subject, fromPool, subjectMapping?.bracket);
+              const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
+              const compBasePrice = fromPool.sales_price || 0;
+              const grossAdjustmentPercent = compBasePrice > 0
+                ? (grossAdjustment / compBasePrice) * 100
+                : 0;
+              return {
+                ...fromPool,
+                adjustments,
+                totalAdjustment,
+                grossAdjustment,
+                grossAdjustmentPercent,
+                adjustedPrice,
+                adjustmentPercent,
+                passesTolerance: true,
+                isPinned: true
+              };
+            })
+            .filter(Boolean)
+            .slice(0, maxComps); // never exceed slot count
+        }
+
+        // Fill remaining slots from valid (math-ranked) comps, excluding any already pinned
+        const pinnedIdSet = new Set(pinnedSelected.map(c => String(c.id)));
+        const remainingSlots = Math.max(0, maxComps - pinnedSelected.length);
+        const fillerComps = validComps
+          .filter(c => !pinnedIdSet.has(String(c.id)))
+          .slice(0, remainingSlots);
+
+        let topComps = [...pinnedSelected, ...fillerComps];
 
         // Add subject sale as Comp #1 if it exists
         if (priorityComp) {
@@ -4912,13 +5011,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               }
                               // Format BLQ with / separator and preserve full values
                               const blqFormatted = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? `/${comp.property_qualifier}` : ''}`;
+                              const pinned = isCompPinned(result.subject?.id, comp.id);
+                              const pinDisabled = !result.subject?.id || !comp.id || comp.isSubjectSale;
 
                               return (
                                 <React.Fragment key={compIdx}>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs">
-                                    {blqFormatted}
+                                  <td className={`border border-gray-300 px-2 py-2 text-center text-xs ${pinned ? 'bg-amber-50' : ''}`}>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (pinDisabled) return;
+                                          toggleCompPin(result.subject.id, comp.id);
+                                        }}
+                                        disabled={pinDisabled}
+                                        title={
+                                          pinDisabled
+                                            ? (comp.isSubjectSale ? 'Subject sale (always Comp #1)' : 'Pin unavailable')
+                                            : (pinned ? 'Unpin (allow re-evaluation to replace)' : 'Pin this comp (always kept on re-evaluate)')
+                                        }
+                                        className={`p-0.5 rounded hover:bg-amber-100 ${pinned ? 'text-amber-600' : 'text-gray-300 hover:text-amber-500'} ${pinDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                      >
+                                        {pinned
+                                          ? <Pin className="w-3 h-3 fill-current" />
+                                          : <Pin className="w-3 h-3" />}
+                                      </button>
+                                      <span>{blqFormatted}</span>
+                                    </div>
                                   </td>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs font-semibold">
+                                  <td className={`border border-gray-300 px-2 py-2 text-center text-xs font-semibold ${pinned ? 'bg-amber-50' : ''}`}>
                                     ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
                                   </td>
                                 </React.Fragment>
