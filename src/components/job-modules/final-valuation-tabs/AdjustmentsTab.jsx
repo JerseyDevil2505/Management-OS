@@ -845,6 +845,12 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
           if (key.startsWith('bracket_')) {
             const parsed = parseFloat(adj[key]);
             cleaned[key] = isNaN(parsed) ? 0 : parsed;
+          } else if (key === 'id') {
+            // Only include id when it's a real UUID. Sending id: null overrides
+            // the column's gen_random_uuid() default and trips the NOT NULL
+            // constraint — exactly the error seen on freshly-seeded defaults
+            // for newly-archived jobs (e.g. Lindenwold).
+            if (adj[key]) cleaned[key] = adj[key];
           } else {
             cleaned[key] = adj[key];
           }
