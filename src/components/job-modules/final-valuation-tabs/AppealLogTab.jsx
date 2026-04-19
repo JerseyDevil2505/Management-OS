@@ -2379,20 +2379,32 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return s;
       };
 
+      // Excel-safe wrapper for block/lot/qualifier values. Without this Excel
+      // converts "10.10" -> 10.1 and drops trailing zeros (".100" becomes ".1"),
+      // which breaks BLQ identifiers like "10.100" or "5.10".
+      // Using the ="..." formula syntax forces Excel to import the cell as text
+      // verbatim while still being readable as a normal string by other tools.
+      const textCell = (val) => {
+        const s = val == null ? '' : String(val);
+        if (s === '') return '';
+        const inner = s.replace(/"/g, '""');
+        return `"=""${inner}"""`;
+      };
+
       const lines = [header.map(escape).join(',')];
       exportable.forEach(r => {
         const cells = [
-          r.appeal_number,
-          r.result_set_name,
-          r.subj_block,
-          r.subj_lot,
-          r.subj_qualifier
+          escape(r.appeal_number),
+          escape(r.result_set_name),
+          textCell(r.subj_block),
+          textCell(r.subj_lot),
+          textCell(r.subj_qualifier)
         ];
         for (let i = 0; i < maxComps; i++) {
           const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
-          cells.push(c.block, c.lot, c.qualifier);
+          cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
         }
-        lines.push(cells.map(escape).join(','));
+        lines.push(cells.join(','));
       });
 
       const csv = lines.join('\n');
@@ -2428,7 +2440,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <button
             onClick={handleExportSavedCompsCsv}
             title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
-            className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium text-sm hover:bg-teal-700 flex items-center gap-2"
+            style={{ backgroundColor: '#ea580c', color: 'white' }}
+            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             Export CSV (PowerComp)
@@ -2456,21 +2469,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </button>
           <button
             onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
             Import PwrCama Appeals
           </button>
           <button
             onClick={handleExportToExcel}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             📊 Export to Excel
           </button>
           <button
             onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
-            style={{ backgroundColor: '#ea580c', color: 'white' }}
-            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
             Import from Export
