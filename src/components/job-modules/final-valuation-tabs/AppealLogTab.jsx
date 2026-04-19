@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
@@ -2291,18 +2291,122 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
   };
 
+  // ==================== EXPORT SAVED COMPS CSV (for BRT PowerComp) ====================
+  // Pulls set-aside CME evaluations from job_cme_evaluations, joins to the in-memory
+  // appeals list by subject composite key (block-lot-qualifier) to attach an appeal
+  // number, and emits one row per appeal with the subject + each comp's block/lot/qualifier.
+  // Only appeals that actually have saved comps are included.
+  const handleExportSavedCompsCsv = async () => {
+    if (!jobData?.id) return;
+    try {
+      const { data: savedEvals, error } = await supabase
+        .from('job_cme_evaluations')
+        .select('subject_pams, comparables')
+        .eq('job_id', jobData.id)
+        .eq('status', 'set_aside');
+      if (error) throw error;
+
+      const splitPams = (pams) => {
+        const parts = String(pams || '').split('-');
+        return {
+          block: parts[0] || '',
+          lot: parts[1] || '',
+          qualifier: parts.slice(2).join('-') || ''
+        };
+      };
+
+      // Index appeals by composite key for appeal_number lookup
+      const appealByKey = new Map();
+      (appeals || []).forEach(a => {
+        const key = a.property_composite_key
+          || `${a.property_block || ''}-${a.property_lot || ''}-${a.property_qualifier || ''}`;
+        if (key && !appealByKey.has(key)) appealByKey.set(key, a);
+      });
+
+      // Build rows: only include rows that have at least one comp
+      const rows = [];
+      let maxComps = 0;
+      (savedEvals || []).forEach(ev => {
+        const comps = Array.isArray(ev.comparables) ? ev.comparables.filter(c => c?.pams_id) : [];
+        if (comps.length === 0) return;
+        if (comps.length > maxComps) maxComps = comps.length;
+        const subj = splitPams(ev.subject_pams);
+        const appeal = appealByKey.get(ev.subject_pams);
+        rows.push({
+          appeal_number: appeal?.appeal_number || '',
+          subj_block: subj.block,
+          subj_lot: subj.lot,
+          subj_qualifier: subj.qualifier,
+          comps: comps.map(c => splitPams(c.pams_id))
+        });
+      });
+
+      if (rows.length === 0) {
+        alert('No saved CME comps found for this job.\n\nGo to Sales Comparison (CME) → Search & Results, run an evaluation, and use "Set Aside" to save comps before exporting.');
+        return;
+      }
+
+      // Header
+      const header = ['Appeal #', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
+      for (let i = 1; i <= maxComps; i++) {
+        header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
+      }
+
+      const escape = (val) => {
+        const s = val == null ? '' : String(val);
+        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      const lines = [header.map(escape).join(',')];
+      rows.forEach(r => {
+        const cells = [r.appeal_number, r.subj_block, r.subj_lot, r.subj_qualifier];
+        for (let i = 0; i < maxComps; i++) {
+          const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
+          cells.push(c.block, c.lot, c.qualifier);
+        }
+        lines.push(cells.map(escape).join(','));
+      });
+
+      const csv = lines.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
+      a.href = url;
+      a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export saved comps CSV failed:', e);
+      alert('Export failed: ' + (e?.message || e));
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
     <div className="space-y-6">
       {/* TOOLBAR */}
       <div className="flex justify-between items-center">
-        <button
-          onClick={handleOpenModal}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
-        >
-          + Add Appeal
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenModal}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
+          >
+            + Add Appeal
+          </button>
+          <button
+            onClick={handleExportSavedCompsCsv}
+            title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium text-sm hover:bg-teal-700 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV (PowerComp)
+          </button>
+        </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
