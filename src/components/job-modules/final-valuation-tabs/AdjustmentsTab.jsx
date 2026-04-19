@@ -846,15 +846,22 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             const parsed = parseFloat(adj[key]);
             cleaned[key] = isNaN(parsed) ? 0 : parsed;
           } else if (key === 'id') {
-            // Only include id when it's a real UUID. Sending id: null overrides
-            // the column's gen_random_uuid() default and trips the NOT NULL
-            // constraint — exactly the error seen on freshly-seeded defaults
-            // for newly-archived jobs (e.g. Lindenwold).
+            // Skip null/undefined id here; we'll assign a UUID below if needed.
             if (adj[key]) cleaned[key] = adj[key];
           } else {
             cleaned[key] = adj[key];
           }
         });
+        // ROOT-CAUSE FIX: PostgREST builds the INSERT column list from the UNION
+        // of keys across all rows. If even one row in this batch has an `id`,
+        // any row missing it gets sent as id=NULL — which overrides the column's
+        // gen_random_uuid() default and trips the NOT NULL constraint.
+        // This is why Lindenwold/Kingwood (PPA archived jobs with existing
+        // dynamic rows but no static defaults in DB) failed: defaults were
+        // freshly seeded with no id, dynamic rows had real UUIDs, and the mix
+        // produced a NULL id on the seeded rows. Assigning a UUID here makes
+        // every row carry an id, so PostgREST no longer NULLs anything.
+        if (!cleaned.id) cleaned.id = crypto.randomUUID();
         // Required NOT NULL columns
         if (!cleaned.job_id || !cleaned.adjustment_id || !cleaned.adjustment_name || !cleaned.adjustment_type) {
           rejected.push({ index: i, row: adj });
