@@ -95,6 +95,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [evaluationMode, setEvaluationMode] = useState('fresh'); // 'fresh' or 'keep'
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
+  const [preEvalCheck, setPreEvalCheck] = useState(null); // { configMissing, adjustmentsMissing } | null
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
@@ -1617,12 +1618,54 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   };
 
   // ==================== EVALUATE COMPARABLES ====================
+  // Verifies the user has saved the Adjustments Configuration AND the Adjustments grid
+  // before letting an Evaluate run go through. Only blocks the FIRST evaluate per session per job.
+  const checkAdjustmentReadiness = async () => {
+    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false };
+    try {
+      const [{ data: settingsRows }, { data: gridRows }] = await Promise.all([
+        supabase
+          .from('job_settings')
+          .select('setting_key')
+          .eq('job_id', jobData.id)
+          .like('setting_key', 'adjustment_codes_%'),
+        supabase
+          .from('job_adjustment_grid')
+          .select('id, is_default')
+          .eq('job_id', jobData.id)
+      ]);
+      const configMissing = !settingsRows || settingsRows.length === 0;
+      const hasDefaults = (gridRows || []).some(r => r.is_default === true);
+      const adjustmentsMissing = !hasDefaults;
+      return { configMissing, adjustmentsMissing };
+    } catch (e) {
+      console.warn('Pre-evaluate readiness check failed (allowing evaluate):', e?.message);
+      return { configMissing: false, adjustmentsMissing: false };
+    }
+  };
+
   const handleEvaluate = async () => {
     // Validate: adjustment bracket must be selected
     if (!compFilters.adjustmentBracket) {
       alert('Please select an Adjustment Bracket before evaluating.');
       return;
     }
+
+    // First-evaluate-per-session readiness check: confirm Adjustments Configuration AND
+    // the adjustments grid have been saved at least once. Only shown the first time per
+    // session per job to keep subsequent evaluates frictionless.
+    try {
+      const ackKey = `cme_eval_ack_${jobData?.id}`;
+      const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
+      if (!alreadyAcked) {
+        const { configMissing, adjustmentsMissing } = await checkAdjustmentReadiness();
+        if (configMissing || adjustmentsMissing) {
+          setPreEvalCheck({ configMissing, adjustmentsMissing });
+          return; // Block evaluate until user resolves
+        }
+        sessionStorage.setItem(ackKey, '1');
+      }
+    } catch (_) { /* non-critical */ }
 
     setIsEvaluating(true);
     setEvaluationProgress({ current: 0, total: 0 });
@@ -6263,6 +6306,72 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Evaluate readiness modal: shown on FIRST evaluate per session if config or adjustments not saved */}
+      {preEvalCheck && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="text-amber-500 text-3xl leading-none">⚠️</div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Setup required before evaluating</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Two quick clicks before you run the first evaluation on this job:
+                </p>
+              </div>
+            </div>
+
+            <ul className="space-y-2 mb-5">
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.configMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.configMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Adjustments Configuration</strong> — open <em>Adjustments → Configuration</em> and click <strong>Save Configuration</strong>.
+                  This maps vendor codes (garage, det garage, pool, barn, etc.) so the parser can populate derived fields.
+                </span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.adjustmentsMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.adjustmentsMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Adjustments Grid</strong> — open <em>Adjustments → Adjustment Grid</em> and click <strong>Save Adjustments</strong>.
+                  This locks in bracket values used during evaluation.
+                </span>
+              </li>
+            </ul>
+
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900 mb-5">
+              After saving, return here and click <strong>Evaluate</strong> again.
+              {' '}If derived fields (garage / det garage etc.) are still empty afterward,
+              use the <strong>Reparse Source File</strong> button on the Configuration tab.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  // Allow user to bypass for this session if they're sure
+                  try { sessionStorage.setItem(`cme_eval_ack_${jobData?.id}`, '1'); } catch (_) {}
+                  setPreEvalCheck(null);
+                }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+              >
+                Proceed anyway
+              </button>
+              <button
+                onClick={() => {
+                  setPreEvalCheck(null);
+                  setActiveSubTab('adjustments');
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+              >
+                Go to Adjustments
               </button>
             </div>
           </div>

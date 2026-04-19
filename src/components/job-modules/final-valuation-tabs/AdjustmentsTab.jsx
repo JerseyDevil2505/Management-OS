@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
+import { supabase, getRawDataForJob, propertyService } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Valid sales codes for CME averages (matches SalesComparisonTab defaults)
@@ -30,6 +30,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReparsing, setIsReparsing] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
   const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
@@ -1327,6 +1328,89 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     return availableCodes[category] || [];
   };
 
+  // Reparse the source file using the stored raw_file_content - avoids re-downloading from vendor
+  const handleReparse = async () => {
+    if (!jobData?.id) return;
+    if (!window.confirm(
+      'Reparse Source File?\n\n' +
+      'This re-runs the parser against the last uploaded source file using your current ' +
+      'attribute configuration. Use this after saving Configuration to populate derived ' +
+      'fields (garage, det garage, pool, barn, etc.) WITHOUT re-downloading from the vendor.\n\n' +
+      'This may take a couple of minutes for large jobs. Continue?'
+    )) return;
+
+    try {
+      setIsReparsing(true);
+
+      // Pull stored content + minimal metadata from jobs row
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs')
+        .select('id, vendor_type, raw_file_content, code_file_content, ccdd_code, start_date, source_file_name')
+        .eq('id', jobData.id)
+        .single();
+      if (jobErr) throw jobErr;
+
+      if (!job?.raw_file_content) {
+        alert('No stored source file content found for this job. You will need to use Update File to upload the source file once before Reparse can work.');
+        return;
+      }
+      if (!job?.code_file_content) {
+        alert('No stored code file content found for this job. Please upload the code file first.');
+        return;
+      }
+
+      const yearCreated = job.start_date
+        ? parseInt(String(job.start_date).substring(0, 4), 10)
+        : new Date().getFullYear();
+
+      // Bump file_version so updater treats this as a new pass
+      let newFileVersion = 2;
+      try {
+        const { data: vRow } = await supabase
+          .from('property_records')
+          .select('file_version')
+          .eq('job_id', job.id)
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single();
+        newFileVersion = (vRow?.file_version || 1) + 1;
+      } catch (_) { /* ignore */ }
+
+      const result = await propertyService.updateCSVData(
+        job.raw_file_content,
+        job.code_file_content,
+        job.id,
+        yearCreated,
+        job.ccdd_code || '',
+        job.vendor_type,
+        {
+          source_file_name: job.source_file_name || 'reparse',
+          source_file_version_id: crypto.randomUUID(),
+          source_file_uploaded_at: new Date().toISOString(),
+          file_version: newFileVersion
+        }
+      );
+
+      // Touch jobs.source_file_uploaded_at so downstream "stale" checks update
+      await supabase
+        .from('jobs')
+        .update({ source_file_uploaded_at: new Date().toISOString() })
+        .eq('id', job.id);
+
+      alert(
+        `Reparse complete.\n\n` +
+        `Processed: ${result?.processed ?? 'n/a'}\n` +
+        `Errors: ${result?.errors ?? 0}\n\n` +
+        `Refresh the page to see the updated derived fields (garage / det garage / pool / barn etc.).`
+      );
+    } catch (error) {
+      console.error('Reparse failed:', error);
+      alert(`Reparse failed: ${error?.message || error}`);
+    } finally {
+      setIsReparsing(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1764,8 +1848,16 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 </div>
               </div>
 
-              {/* Save Button */}
-              <div className="flex justify-end pt-4 border-t">
+              {/* Save / Reparse Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <button
+                  onClick={handleReparse}
+                  disabled={isReparsing}
+                  title="Re-runs the parser using the stored source file content. Skip the vendor download + re-upload step."
+                  className="inline-flex items-center gap-2 px-6 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
+                </button>
                 <button
                   onClick={handleSaveCodeConfig}
                   className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
