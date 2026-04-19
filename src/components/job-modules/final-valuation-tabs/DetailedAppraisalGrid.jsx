@@ -1015,6 +1015,43 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Combine static and dynamic attributes
   const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes]);
 
+  // Amenity-area attributes that should be hidden when neither subject nor any comp has them
+  // (mirrors the "hide when all NONE" behavior already used for dynamic adjustments / land)
+  const AMENITY_AREA_FIELD_MAP = {
+    garage_area: 'garage_area',
+    det_garage_area: 'det_garage_area',
+    deck_area: 'deck_area',
+    patio_area: 'patio_area',
+    open_porch_area: 'open_porch_area',
+    enclosed_porch_area: 'enclosed_porch_area',
+    pool_area: 'pool_area',
+    basement_area: 'basement_area',
+    fin_bsmt_area: 'fin_basement_area',
+    ac_area: 'ac_area'
+  };
+
+  // Returns true if the given property has a non-empty value for the amenity attribute
+  const propertyHasAmenity = (prop, attrId) => {
+    if (!prop) return false;
+    const field = AMENITY_AREA_FIELD_MAP[attrId];
+    if (!field) return true; // Not an amenity area attr -> don't filter
+    const raw = prop[field];
+    return raw !== null && raw !== undefined && Number(raw) > 0;
+  };
+
+  // Returns true if at least the subject or one comp meets criteria for this attribute
+  const attributeMeetsCriteria = (attr, subjectProp, compsList) => {
+    // Dynamic adjustments are filtered separately by their render() == 'NONE' check
+    if (attr.isDynamic) return true;
+    // Only filter known amenity-area rows; everything else always shows
+    if (!AMENITY_AREA_FIELD_MAP[attr.id]) return true;
+    if (propertyHasAmenity(subjectProp, attr.id)) return true;
+    for (let i = 0; i < (compsList?.length || 0); i++) {
+      if (propertyHasAmenity(compsList[i], attr.id)) return true;
+    }
+    return false;
+  };
+
   // Generate a storage key based on job data to persist visibility per job
   const storageKey = useMemo(() => {
     const jobId = jobData?.id || 'default';
