@@ -821,18 +821,42 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     try {
       setIsSaving(true);
 
-      // Normalize all bracket values to numbers before saving
-      const normalizedAdjustments = adjustments.map(adj => {
-        const normalized = { ...adj };
-        for (let i = 0; i < 10; i++) {
-          const key = `bracket_${i}`;
-          if (normalized[key] !== undefined) {
-            const parsed = parseFloat(normalized[key]);
-            normalized[key] = isNaN(parsed) ? 0 : parsed;
+      // Whitelist of columns that exist on job_adjustment_grid. Anything else
+      // (e.g. a stray client-only field accumulated by the UI) gets dropped
+      // before upsert so Postgres never errors on an unknown column.
+      const ALLOWED_COLS = new Set([
+        'id', 'job_id', 'adjustment_id', 'adjustment_name', 'adjustment_type',
+        'category', 'is_default', 'sort_order',
+        'bracket_0', 'bracket_1', 'bracket_2', 'bracket_3', 'bracket_4',
+        'bracket_5', 'bracket_6', 'bracket_7', 'bracket_8', 'bracket_9'
+      ]);
+
+      // Normalize bracket values to numbers AND filter to allowed columns only.
+      // Any row missing required NOT NULL fields is rejected with a clear log
+      // line so the user knows exactly which row blew up.
+      const normalizedAdjustments = [];
+      const rejected = [];
+      adjustments.forEach((adj, i) => {
+        const cleaned = {};
+        Object.keys(adj).forEach(key => {
+          if (!ALLOWED_COLS.has(key)) return;
+          if (key.startsWith('bracket_')) {
+            const parsed = parseFloat(adj[key]);
+            cleaned[key] = isNaN(parsed) ? 0 : parsed;
+          } else {
+            cleaned[key] = adj[key];
           }
+        });
+        // Required NOT NULL columns
+        if (!cleaned.job_id || !cleaned.adjustment_id || !cleaned.adjustment_name || !cleaned.adjustment_type) {
+          rejected.push({ index: i, row: adj });
+          return;
         }
-        return normalized;
+        normalizedAdjustments.push(cleaned);
       });
+      if (rejected.length > 0) {
+        console.warn('⚠️ Skipping invalid adjustment rows (missing required fields):', rejected);
+      }
 
       const { error } = await supabase
         .from('job_adjustment_grid')
@@ -844,10 +868,22 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
       // Update local state with normalized values
       setAdjustments(normalizedAdjustments);
-      alert('Adjustments saved successfully!');
+      const skippedNote = rejected.length > 0
+        ? `\n\n${rejected.length} row(s) skipped due to missing required fields (see console).`
+        : '';
+      alert(`Adjustments saved successfully!${skippedNote}`);
     } catch (error) {
-      console.error('Error saving adjustments:', error);
-      alert(`Failed to save: ${error.message}`);
+      // Supabase errors carry message/details/hint/code; logging the bare
+      // object is what produced the unhelpful "[object Object]" string.
+      console.error('Error saving adjustments:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        raw: error
+      });
+      const msg = error?.message || error?.details || error?.hint || error?.code || JSON.stringify(error) || 'unknown error';
+      alert(`Failed to save: ${msg}`);
     } finally {
       setIsSaving(false);
     }
