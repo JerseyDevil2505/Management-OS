@@ -994,7 +994,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           return 'NONE';
         }
 
-        // Legacy: For non-coded dynamic adjustments with area columns
+        // Legacy / single-aggregated dynamic rows for barn / pole_barn / stable
+        // Always normalize to YES/NONE so the "hide if all NONE" filter works in
+        // both the UI and the PDF export (matches how land adjustments behave).
         const columnMap = {
           'barn': 'barn_area',
           'stable': 'stable_area',
@@ -1002,11 +1004,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         };
 
         const columnName = columnMap[adj.adjustment_id];
-        if (columnName && prop[columnName] !== undefined && prop[columnName] !== null) {
-          return prop[columnName] > 0 ? `YES (${prop[columnName].toLocaleString()} SF)` : 'NONE';
+        if (columnName) {
+          const val = prop[columnName];
+          if (val !== undefined && val !== null && val > 0) {
+            return `YES (${val.toLocaleString()} SF)`;
+          }
+          return 'NONE';
         }
 
-        return 'N/A';
+        return 'NONE';
       },
       adjustmentName: adj.adjustment_name,
       isDynamic: true
