@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, getRawDataForJob, propertyService } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 
 // Valid sales codes for CME averages (matches SalesComparisonTab defaults)
 const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
@@ -38,6 +38,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     name: '',
     attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
+  const [editingBracketId, setEditingBracketId] = useState(null); // null = create mode, set = edit mode
   const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
 
   // Bracket mapping state
@@ -900,9 +901,31 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       };
     });
 
+    setEditingBracketId(null);
     setCustomBracket({
       name: '',
       attributeValues: initialValues
+    });
+    setShowCustomModal(true);
+  };
+
+  // Open the modal in EDIT mode for an existing custom bracket
+  const handleEditCustomBracket = (bracket) => {
+    // Merge stored values with the current adjustment list so newly-added attributes
+    // are also editable (defaulting to 0 / their type).
+    const merged = {};
+    adjustments.forEach(adj => {
+      const stored = bracket.adjustment_values?.[adj.adjustment_id];
+      merged[adj.adjustment_id] = {
+        value: stored?.value ?? 0,
+        type: stored?.type ?? adj.adjustment_type
+      };
+    });
+
+    setEditingBracketId(bracket.bracket_id);
+    setCustomBracket({
+      name: bracket.bracket_name || '',
+      attributeValues: merged
     });
     setShowCustomModal(true);
   };
@@ -914,25 +937,45 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     }
 
     try {
-      const bracketId = `custom_${Date.now()}`;
-      const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
+      if (editingBracketId) {
+        // EDIT MODE: update existing bracket in place
+        const { error } = await supabase
+          .from('job_custom_brackets')
+          .update({
+            bracket_name: customBracket.name,
+            adjustment_values: customBracket.attributeValues,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('bracket_id', editingBracketId);
 
-      const { error } = await supabase
-        .from('job_custom_brackets')
-        .insert({
-          job_id: jobData.id,
-          bracket_id: bracketId,
-          bracket_name: customBracket.name,
-          adjustment_values: customBracket.attributeValues,
-          sort_order: maxSortOrder + 1
-        });
+        if (error) throw error;
 
-      if (error) throw error;
+        await loadCustomBrackets();
+        setShowCustomModal(false);
+        setEditingBracketId(null);
+        alert('Custom bracket updated successfully!');
+      } else {
+        // CREATE MODE
+        const bracketId = `custom_${Date.now()}`;
+        const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
 
-      // Reload custom brackets
-      await loadCustomBrackets();
-      setShowCustomModal(false);
-      alert('Custom bracket created successfully!');
+        const { error } = await supabase
+          .from('job_custom_brackets')
+          .insert({
+            job_id: jobData.id,
+            bracket_id: bracketId,
+            bracket_name: customBracket.name,
+            adjustment_values: customBracket.attributeValues,
+            sort_order: maxSortOrder + 1
+          });
+
+        if (error) throw error;
+
+        await loadCustomBrackets();
+        setShowCustomModal(false);
+        alert('Custom bracket created successfully!');
+      }
     } catch (error) {
       console.error('Error saving custom bracket:', error);
       alert(`Failed to save: ${error.message}`);
@@ -1929,6 +1972,13 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                       <div className="flex items-center justify-center gap-2">
                         <span>{customBracket.bracket_name}</span>
                         <button
+                          onClick={() => handleEditCustomBracket(customBracket)}
+                          className="text-purple-600 hover:text-purple-800"
+                          title="Edit custom bracket values"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
                           onClick={() => handleDeleteCustomBracket(customBracket.bracket_id)}
                           className="text-purple-600 hover:text-purple-800"
                           title="Delete custom bracket"
@@ -2087,11 +2137,15 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 {/* Fixed Header */}
                 <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment Bracket</h3>
-                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column</p>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {editingBracketId ? 'Edit Custom Adjustment Bracket' : 'Create Custom Adjustment Bracket'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {editingBracketId ? 'Update the name or attribute values for this bracket' : 'Define a custom price bracket column'}
+                    </p>
                   </div>
                   <button
-                    onClick={() => setShowCustomModal(false)}
+                    onClick={() => { setShowCustomModal(false); setEditingBracketId(null); }}
                     className="text-gray-400 hover:text-gray-600 ml-4 flex-shrink-0"
                     title="Close"
                   >
@@ -2197,7 +2251,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 {/* Fixed Footer */}
                 <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0">
                   <button
-                    onClick={() => setShowCustomModal(false)}
+                    onClick={() => { setShowCustomModal(false); setEditingBracketId(null); }}
                     className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 bg-white font-medium"
                   >
                     Cancel
@@ -2206,7 +2260,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     onClick={handleSaveCustomAdjustment}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
                   >
-                    Save Custom Bracket
+                    {editingBracketId ? 'Update Custom Bracket' : 'Save Custom Bracket'}
                   </button>
                 </div>
               </div>
