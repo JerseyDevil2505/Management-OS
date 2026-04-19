@@ -2292,62 +2292,83 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   };
 
   // ==================== EXPORT SAVED COMPS CSV (for BRT PowerComp) ====================
-  // Pulls set-aside CME evaluations from job_cme_evaluations, joins to the in-memory
-  // appeals list by subject composite key (block-lot-qualifier) to attach an appeal
-  // number, and emits one row per appeal with the subject + each comp's block/lot/qualifier.
+  // Pulls named CME result sets from job_cme_result_sets (the "Saved Result Sets" the
+  // user creates from Sales Comparison → Search & Results), joins to the in-memory
+  // appeals list by subject block/lot/qualifier to attach an appeal number, and
+  // emits one row per appeal with the subject + each comp's block/lot/qualifier.
+  // If multiple result sets contain the same subject, the most recently saved set wins.
   // Only appeals that actually have saved comps are included.
   const handleExportSavedCompsCsv = async () => {
     if (!jobData?.id) return;
     try {
-      const { data: savedEvals, error } = await supabase
-        .from('job_cme_evaluations')
-        .select('subject_pams, comparables')
+      const { data: resultSets, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name, created_at, updated_at, results')
         .eq('job_id', jobData.id)
-        .eq('status', 'set_aside');
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
       if (error) throw error;
 
-      const splitPams = (pams) => {
-        const parts = String(pams || '').split('-');
-        return {
-          block: parts[0] || '',
-          lot: parts[1] || '',
-          qualifier: parts.slice(2).join('-') || ''
-        };
-      };
-
-      // Index appeals by composite key for appeal_number lookup
+      // Build appeal_number lookup: composite "block-lot-qualifier" → appeal
+      const norm = (v) => (v == null ? '' : String(v).trim());
+      const compositeOf = (block, lot, qualifier) =>
+        `${norm(block)}-${norm(lot)}-${norm(qualifier)}`;
       const appealByKey = new Map();
       (appeals || []).forEach(a => {
         const key = a.property_composite_key
-          || `${a.property_block || ''}-${a.property_lot || ''}-${a.property_qualifier || ''}`;
+          || compositeOf(a.property_block, a.property_lot, a.property_qualifier);
         if (key && !appealByKey.has(key)) appealByKey.set(key, a);
       });
 
-      // Build rows: only include rows that have at least one comp
+      // Walk result sets newest-first; keep the first (most-recent) occurrence per subject.
+      // Each `result` has full property objects: subject + comparables[].
+      const seenSubjects = new Set();
       const rows = [];
       let maxComps = 0;
-      (savedEvals || []).forEach(ev => {
-        const comps = Array.isArray(ev.comparables) ? ev.comparables.filter(c => c?.pams_id) : [];
-        if (comps.length === 0) return;
-        if (comps.length > maxComps) maxComps = comps.length;
-        const subj = splitPams(ev.subject_pams);
-        const appeal = appealByKey.get(ev.subject_pams);
-        rows.push({
-          appeal_number: appeal?.appeal_number || '',
-          subj_block: subj.block,
-          subj_lot: subj.lot,
-          subj_qualifier: subj.qualifier,
-          comps: comps.map(c => splitPams(c.pams_id))
+
+      (resultSets || []).forEach(rs => {
+        (rs.results || []).forEach(r => {
+          const subj = r?.subject;
+          if (!subj) return;
+          const subjKey = subj.property_composite_key
+            || compositeOf(subj.property_block, subj.property_lot, subj.property_qualifier);
+          if (!subjKey || seenSubjects.has(subjKey)) return;
+
+          const comps = (Array.isArray(r.comparables) ? r.comparables : [])
+            .filter(c => c && (c.property_block || c.property_lot));
+          if (comps.length === 0) return;
+
+          if (comps.length > maxComps) maxComps = comps.length;
+          seenSubjects.add(subjKey);
+
+          rows.push({
+            appeal_number: appealByKey.get(subjKey)?.appeal_number || '',
+            result_set_name: rs.name || '',
+            subj_block: norm(subj.property_block),
+            subj_lot: norm(subj.property_lot),
+            subj_qualifier: norm(subj.property_qualifier),
+            comps: comps.map(c => ({
+              block: norm(c.property_block),
+              lot: norm(c.property_lot),
+              qualifier: norm(c.property_qualifier)
+            }))
+          });
         });
       });
 
-      if (rows.length === 0) {
-        alert('No saved CME comps found for this job.\n\nGo to Sales Comparison (CME) → Search & Results, run an evaluation, and use "Set Aside" to save comps before exporting.');
+      // Drop rows without an appeal number — PowerComp needs the appeal# to attach comps
+      const exportable = rows.filter(r => r.appeal_number);
+      if (exportable.length === 0) {
+        alert(
+          'No saved result sets matched any appeals.\n\n' +
+          'Run an evaluation in Sales Comparison (CME) → Search & Results, click "Save Result Set", ' +
+          'then come back here and export. Only subjects that match an appeal in this log are included.'
+        );
         return;
       }
 
-      // Header
-      const header = ['Appeal #', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
+      // Header — appeal_number first so PowerComp can key on it
+      const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
       for (let i = 1; i <= maxComps; i++) {
         header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
       }
@@ -2359,8 +2380,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       };
 
       const lines = [header.map(escape).join(',')];
-      rows.forEach(r => {
-        const cells = [r.appeal_number, r.subj_block, r.subj_lot, r.subj_qualifier];
+      exportable.forEach(r => {
+        const cells = [
+          r.appeal_number,
+          r.result_set_name,
+          r.subj_block,
+          r.subj_lot,
+          r.subj_qualifier
+        ];
         for (let i = 0; i < maxComps; i++) {
           const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
           cells.push(c.block, c.lot, c.qualifier);
