@@ -31,6 +31,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isReparsing, setIsReparsing] = useState(false);
+  const [reparseProgress, setReparseProgress] = useState(null); // { processed, total, batch, totalBatches }
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
   const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
@@ -1397,6 +1398,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
     try {
       setIsReparsing(true);
+      setReparseProgress({ processed: 0, total: 0, batch: 0, totalBatches: 0 });
 
       // Pull stored content + minimal metadata from jobs row
       const { data: job, error: jobErr } = await supabase
@@ -1443,7 +1445,9 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
           source_file_name: job.source_file_name || 'reparse',
           source_file_version_id: crypto.randomUUID(),
           source_file_uploaded_at: new Date().toISOString(),
-          file_version: newFileVersion
+          file_version: newFileVersion,
+          // Live progress: BRT/Microsystems updaters call this after every batch
+          onProgress: (p) => setReparseProgress(p)
         }
       );
 
@@ -1464,6 +1468,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       alert(`Reparse failed: ${error?.message || error}`);
     } finally {
       setIsReparsing(false);
+      setReparseProgress(null);
     }
   };
 
@@ -1905,23 +1910,54 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
               </div>
 
               {/* Save / Reparse Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  onClick={handleReparse}
-                  disabled={isReparsing}
-                  title="Re-runs the parser using the stored source file content. Skip the vendor download + re-upload step."
-                  style={{ backgroundColor: '#ea580c', color: 'white' }}
-                  className="inline-flex items-center gap-2 px-6 py-2 rounded font-bold border-2 border-orange-800 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  ⚡ {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
-                </button>
-                <button
-                  onClick={handleSaveCodeConfig}
-                  className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Configuration
-                </button>
+              <div className="pt-4 border-t">
+                {isReparsing && reparseProgress && (
+                  <div className="mb-3 bg-orange-50 border border-orange-300 rounded p-3">
+                    <div className="flex justify-between items-center mb-1 text-xs font-medium text-orange-900">
+                      <span>
+                        {reparseProgress.total > 0
+                          ? `Reparsing batch ${reparseProgress.batch} of ${reparseProgress.totalBatches}`
+                          : 'Preparing reparse…'}
+                      </span>
+                      <span>
+                        {reparseProgress.total > 0
+                          ? `${reparseProgress.processed.toLocaleString()} / ${reparseProgress.total.toLocaleString()} records (${Math.round((reparseProgress.processed / reparseProgress.total) * 100)}%)`
+                          : ''}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-orange-200 rounded overflow-hidden">
+                      <div
+                        className="h-full bg-orange-600 transition-all duration-200"
+                        style={{
+                          width: reparseProgress.total > 0
+                            ? `${Math.min(100, (reparseProgress.processed / reparseProgress.total) * 100)}%`
+                            : '0%'
+                        }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-orange-800 mt-1 italic">
+                      Don't navigate away — the reparse runs in this tab. Refresh the page once it completes to see updated derived fields.
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={handleReparse}
+                    disabled={isReparsing}
+                    title="Re-runs the parser using the stored source file content. Skip the vendor download + re-upload step."
+                    style={{ backgroundColor: '#ea580c', color: 'white' }}
+                    className="inline-flex items-center gap-2 px-6 py-2 rounded font-bold border-2 border-orange-800 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    ⚡ {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
+                  </button>
+                  <button
+                    onClick={handleSaveCodeConfig}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Configuration
+                  </button>
+                </div>
               </div>
             </div>
           )}

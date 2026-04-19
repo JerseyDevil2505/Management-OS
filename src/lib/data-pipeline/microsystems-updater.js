@@ -997,7 +997,17 @@ export class MicrosystemsUpdater {
         } else {
           results.processed += batch.length;
           console.log(`✅ UPSERT Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
-          
+
+          // Live progress callback (used by AdjustmentsTab Reparse button)
+          try {
+            versionInfo?.onProgress?.({
+              processed: results.processed,
+              total: propertyRecords.length,
+              batch: batchNumber,
+              totalBatches
+            });
+          } catch (_) { /* never let progress UI break the pipeline */ }
+
           // Track successful batch for potential rollback
           successfulBatches.push({
             batchNumber,
