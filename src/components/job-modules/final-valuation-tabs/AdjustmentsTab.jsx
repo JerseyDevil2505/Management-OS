@@ -1123,8 +1123,10 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       };
 
       // Attributes that create individual rows per code (using code description as name)
-      // Detached items (barn, pole_barn, stable), miscellaneous, and land adjustments all create one row per code
-      const individualRowAttributes = ['barn', 'pole_barn', 'stable', 'miscellaneous', 'land_positive', 'land_negative'];
+      // Miscellaneous and land adjustments create one row per code.
+      // Barn / Pole Barn / Stable are SINGLE rows (their areas are pre-aggregated into
+      // barn_area / pole_barn_area / stable_area on property_records).
+      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
 
       const newAdjustments = [];
       let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
@@ -1218,24 +1220,31 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       const rowsToDelete = [];
       adjustments.forEach(adj => {
         if (!adj.is_default) {
-          // Delete OLD LEGACY rows (barn, pole_barn, stable without code suffix)
-          if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+          // Delete LEGACY per-code rows for barn/pole_barn/stable (replaced by single aggregated row)
+          if (adj.adjustment_id.startsWith('barn_') ||
+              adj.adjustment_id.startsWith('pole_barn_') ||
+              adj.adjustment_id.startsWith('stable_')) {
             rowsToDelete.push(adj.adjustment_id);
-            console.log(`🗑️ Marking LEGACY row for deletion: ${adj.adjustment_id} (replaced by per-code rows)`);
+            console.log(`🗑️ Marking LEGACY per-code row for deletion: ${adj.adjustment_id} (replaced by single aggregated row)`);
             return;
           }
 
-          // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
-          const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
-                               adj.adjustment_id.startsWith('pole_barn_') ||
-                               adj.adjustment_id.startsWith('stable_') ||
-                               adj.adjustment_id.startsWith('miscellaneous_') ||
+          // If single barn/pole_barn/stable row exists but no codes selected, remove it
+          if ((adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable')
+              && (codeConfig[adj.adjustment_id] || []).length === 0) {
+            rowsToDelete.push(adj.adjustment_id);
+            console.log(`🗑️ Marking for deletion: ${adj.adjustment_id} (no codes selected)`);
+            return;
+          }
+
+          // Check if this is a per-code dynamic adjustment row (miscellaneous or land adjustments)
+          const isDynamicRow = adj.adjustment_id.startsWith('miscellaneous_') ||
                                adj.adjustment_id.startsWith('land_positive_') ||
                                adj.adjustment_id.startsWith('land_negative_');
 
           if (isDynamicRow) {
             // Extract the type and code from adjustment_id
-            const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+            const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
             if (match) {
               const [, type, code] = match;
               const selectedCodes = codeConfig[type] || [];
