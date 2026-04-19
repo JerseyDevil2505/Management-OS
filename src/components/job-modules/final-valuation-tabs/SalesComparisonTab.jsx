@@ -5242,6 +5242,60 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               </p>
             </div>
 
+            {/* Adjustment Bracket - mirrors Search & Results selection (shared compFilters state).
+                Lets the user pick a different bracket (default or custom) and re-evaluate without
+                bouncing back to Search & Results. */}
+            <div className="bg-white border border-gray-300 rounded-lg p-4">
+              <div className="flex justify-center items-center gap-4 flex-wrap">
+                <label className="text-sm font-medium text-gray-700">Adjustment Bracket</label>
+                <select
+                  value={compFilters.adjustmentBracket || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCompFilters(prev => ({
+                      ...prev,
+                      adjustmentBracket: newValue,
+                      autoAdjustment: newValue === 'auto'
+                    }));
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded w-64"
+                >
+                  <option value="">Select bracket...</option>
+                  <option value="auto">Auto (based on mapping)</option>
+                  <optgroup label="Default Brackets">
+                    {CME_BRACKETS.map((bracket, idx) => (
+                      <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
+                    ))}
+                  </optgroup>
+                  {customBrackets.length > 0 && (
+                    <optgroup label="Custom Brackets">
+                      {customBrackets.map((bracket) => (
+                        <option key={bracket.bracket_id} value={bracket.bracket_id}>{bracket.bracket_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={compFilters.adjustmentBracket === 'auto'}
+                    onChange={(e) => {
+                      setCompFilters(prev => ({
+                        ...prev,
+                        adjustmentBracket: e.target.checked ? 'auto' : '',
+                        autoAdjustment: e.target.checked
+                      }));
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-gray-700">Auto</span>
+                </label>
+                <span className="text-xs text-gray-500 ml-2">
+                  Tweak the bracket and re-run the manual evaluation to compare different adjustment scales.
+                </span>
+              </div>
+            </div>
+
             {/* Manual Entry Grid */}
             <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
