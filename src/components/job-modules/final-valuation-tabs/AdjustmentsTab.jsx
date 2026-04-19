@@ -1910,9 +1910,10 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                   onClick={handleReparse}
                   disabled={isReparsing}
                   title="Re-runs the parser using the stored source file content. Skip the vendor download + re-upload step."
-                  className="inline-flex items-center gap-2 px-6 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: '#ea580c', color: 'white' }}
+                  className="inline-flex items-center gap-2 px-6 py-2 rounded font-bold border-2 border-orange-800 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
+                  ⚡ {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
                 </button>
                 <button
                   onClick={handleSaveCodeConfig}
