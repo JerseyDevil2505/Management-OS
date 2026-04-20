@@ -332,26 +332,46 @@ async function fetchAllJobProperties(jobId) {
   return all;
 }
 
+// Vendor-aware "is this row the main card" check. BRT uses '1' (or null/blank),
+// Microsystems uses 'M'. Anything else is treated as an additional card so we
+// don't double-count parcels with sub-cards (A, B, C, …) toward totals or %.
+// Used by every "main cards only" filter in this component.
+const MAIN_CARD_VALUES = new Set(['1', 'M']);
+function isMainCardRow(p) {
+  if (!p) return false;
+  const raw = p.property_addl_card;
+  if (raw == null) return true;
+  const v = String(raw).trim().toUpperCase();
+  if (v === '') return true;
+  return MAIN_CARD_VALUES.has(v);
+}
+
 async function fetchCoverageForJob(jobId) {
-  // Only count main cards (property_addl_card = '1') so additional cards on the
-  // same parcel don't inflate totals or punish the % complete.
-  const total = await supabase
-    .from('property_records')
-    .select('id', { count: 'exact', head: true })
-    .eq('job_id', jobId)
-    .eq('property_addl_card', '1');
-  const geocoded = await supabase
-    .from('property_records')
-    .select('id', { count: 'exact', head: true })
-    .eq('job_id', jobId)
-    .eq('property_addl_card', '1')
-    .not('property_latitude', 'is', null);
-  const skipped = await supabase
-    .from('property_records')
-    .select('id', { count: 'exact', head: true })
-    .eq('job_id', jobId)
-    .eq('property_addl_card', '1')
-    .eq('geocode_source', 'skipped');
+  // Only count main cards so additional cards on the same parcel don't
+  // inflate totals or punish the % complete. We accept both BRT ('1' / null)
+  // and Microsystems ('M') main markers — a hardcoded '1' filter silently
+  // returned 0 of 0 for every Microsystems town.
+  const mainCardFilter = (q) => q.in('property_addl_card', ['1', 'M']);
+  const total = await mainCardFilter(
+    supabase
+      .from('property_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('job_id', jobId),
+  );
+  const geocoded = await mainCardFilter(
+    supabase
+      .from('property_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('job_id', jobId)
+      .not('property_latitude', 'is', null),
+  );
+  const skipped = await mainCardFilter(
+    supabase
+      .from('property_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('job_id', jobId)
+      .eq('geocode_source', 'skipped'),
+  );
   return {
     total: total.count || 0,
     geocoded: geocoded.count || 0,
@@ -531,7 +551,7 @@ const GeocodingTool = () => {
     if (!properties || properties.length === 0) return [];
     const counts = new Map();
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (!ownerMatchesSitus(p.property_location, p.owner_street)) continue;
       const parsed = parseCsz(p.owner_csz);
       if (!parsed) continue;
@@ -602,7 +622,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     const candidates = [];
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (!(p.property_location || '').trim()) continue;
       if (!hasStreetNumber(p.property_location)) continue;
       if (p.property_latitude != null) continue;
@@ -704,7 +724,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     const candidates = [];
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (!(p.property_location || '').trim()) continue;
       if (!hasStreetNumber(p.property_location)) continue;
       if (p.property_latitude != null) continue;
@@ -1012,7 +1032,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     let n = 0;
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (!(p.property_latitude == null && p.geocode_source !== 'skipped')) continue;
       const id = parcelIdentity(p);
       if (seen.has(id)) continue;
@@ -1026,7 +1046,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     let n = 0;
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (p.geocode_source !== 'skipped') continue;
       const id = parcelIdentity(p);
       if (seen.has(id)) continue;
@@ -1042,7 +1062,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     const list = [];
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (p.property_latitude != null) continue;
       if (p.geocode_source === 'skipped') continue;
       const addr = (p.property_location || '').trim();
@@ -1193,7 +1213,7 @@ const GeocodingTool = () => {
     const seen = new Set();
     const rows = [];
     for (const p of properties) {
-      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!isMainCardRow(p)) continue;
       if (p.property_latitude != null) continue;
       if (p.geocode_source === 'skipped') continue;
       const addr = (p.property_location || '').trim();
@@ -1758,7 +1778,7 @@ const GeocodingTool = () => {
                 let ungeocoded = 0;
                 let ownerHits = 0;
                 for (const p of properties) {
-                  if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+                  if (!isMainCardRow(p)) continue;
                   if (!(p.property_location || '').trim()) continue;
                   if (!hasStreetNumber(p.property_location)) continue;
                   if (p.property_latitude != null) continue;
