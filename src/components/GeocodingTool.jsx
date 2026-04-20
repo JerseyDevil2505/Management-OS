@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa from 'papaparse';
 import { supabase } from '../lib/supabaseClient';
+import { njCityForZip } from '../data/njZipToCity';
+
+// ---------- Variant CSV (postal-ZIP sweep) helpers ----------
+// Synthetic ID format used by the variant CSV: "{compositeKey}__{zipIdx}".
+// On result-import we strip everything after the "__" so multiple variant
+// rows for the same parcel collapse back into one update.
+const VARIANT_DELIM = '__';
+function stripVariantSuffix(key) {
+  if (!key) return key;
+  const i = String(key).indexOf(VARIANT_DELIM);
+  return i === -1 ? key : String(key).slice(0, i);
+}
+function variantSuffix(key) {
+  if (!key) return null;
+  const i = String(key).indexOf(VARIANT_DELIM);
+  return i === -1 ? null : String(key).slice(i + VARIANT_DELIM.length);
+}
 
 /**
  * GeocodingTool
@@ -278,6 +295,15 @@ const GeocodingTool = () => {
   const [coverage, setCoverage] = useState({}); // { jobId: { total, geocoded } }
   const [coverageLoading, setCoverageLoading] = useState(false);
 
+  // ---- Variant CSV state (ZIP-keyed recovery sweep) ----
+  // List of ZIPs configured for the currently-selected job. Persisted in
+  // job_settings under the key 'variant_postal_zips' (JSON array of 5-digit
+  // strings). Empty until the admin opens the modal and saves.
+  const [variantZips, setVariantZips] = useState([]);
+  const [variantZipsLoading, setVariantZipsLoading] = useState(false);
+  const [variantZipsSaving, setVariantZipsSaving] = useState(false);
+  const [variantModalOpen, setVariantModalOpen] = useState(false);
+
   // Manual entry
   const [manualSearch, setManualSearch] = useState('');
   const [manualEdits, setManualEdits] = useState({}); // { compositeKey: { lat, lng } }
@@ -373,6 +399,96 @@ const GeocodingTool = () => {
     return () => {
       mounted = false;
     };
+  }, [selectedJobId]);
+
+  // Load saved variant ZIPs for the selected job from job_settings. Reset to
+  // empty when no job is selected so the modal/card doesn't carry over.
+  useEffect(() => {
+    if (!selectedJobId) {
+      setVariantZips([]);
+      return;
+    }
+    let mounted = true;
+    setVariantZipsLoading(true);
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('job_settings')
+          .select('setting_value')
+          .eq('job_id', selectedJobId)
+          .eq('setting_key', 'variant_postal_zips')
+          .maybeSingle();
+        if (!mounted) return;
+        let parsed = [];
+        if (data?.setting_value) {
+          try {
+            const arr = JSON.parse(data.setting_value);
+            if (Array.isArray(arr)) {
+              parsed = arr.filter((z) => /^\d{5}$/.test(String(z))).map(String);
+            }
+          } catch (e) { /* ignore */ }
+        }
+        setVariantZips(parsed);
+      } catch (e) {
+        // non-fatal
+      } finally {
+        if (mounted) setVariantZipsLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [selectedJobId]);
+
+  // Suggest ZIPs from owner mailing data (owner-occupied parcels' ZIPs).
+  // Returns array of { zip, count } sorted by count desc. Used to pre-fill
+  // the modal so the admin doesn't type the obvious ones.
+  const ownerDerivedZips = useMemo(() => {
+    if (!properties || properties.length === 0) return [];
+    const counts = new Map();
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!ownerMatchesSitus(p.property_location, p.owner_street)) continue;
+      const parsed = parseCsz(p.owner_csz);
+      if (!parsed) continue;
+      counts.set(parsed.zip, (counts.get(parsed.zip) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([zip, count]) => ({ zip, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [properties]);
+
+  const saveVariantZips = useCallback(async (zips) => {
+    if (!selectedJobId) return;
+    setVariantZipsSaving(true);
+    try {
+      const value = JSON.stringify(zips);
+      // Upsert by (job_id, setting_key). job_settings has no composite UNIQUE
+      // constraint by default, so do select-then-update/insert.
+      const { data: existing } = await supabase
+        .from('job_settings')
+        .select('id')
+        .eq('job_id', selectedJobId)
+        .eq('setting_key', 'variant_postal_zips')
+        .maybeSingle();
+      if (existing?.id) {
+        await supabase
+          .from('job_settings')
+          .update({ setting_value: value, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('job_settings')
+          .insert({
+            job_id: selectedJobId,
+            setting_key: 'variant_postal_zips',
+            setting_value: value,
+          });
+      }
+      setVariantZips(zips);
+    } catch (e) {
+      setError(`Failed to save ZIP variants: ${e.message || e}`);
+    } finally {
+      setVariantZipsSaving(false);
+    }
   }, [selectedJobId]);
 
   const stats = useMemo(() => {
@@ -480,6 +596,72 @@ const GeocodingTool = () => {
     });
   }, [selectedJob, properties]);
 
+  const generateVariantCsvBatches = useCallback(() => {
+    if (!selectedJob || properties.length === 0 || variantZips.length === 0) return;
+
+    // Same filter logic as the main CSV: pending main cards with a real
+    // street number, deduped across roll years.
+    const seen = new Set();
+    const candidates = [];
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!(p.property_location || '').trim()) continue;
+      if (!hasStreetNumber(p.property_location)) continue;
+      if (p.property_latitude != null) continue;
+      if (p.geocode_source === 'skipped') continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      candidates.push(p);
+    }
+
+    if (candidates.length === 0) {
+      setStatus({
+        kind: 'info',
+        message: 'No ungeocoded properties with addresses found for this job.',
+      });
+      return;
+    }
+
+    // Build one row per parcel × per ZIP. The synthetic ID encodes the ZIP
+    // index (0..N-1) so the result parser can attribute matches back to a
+    // specific variant for the per-ZIP recovery breakdown.
+    const rows = [];
+    for (const p of candidates) {
+      variantZips.forEach((zip, zipIdx) => {
+        const city = sanitizeForCsv(njCityForZip(zip) || '');
+        rows.push([
+          `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}`,
+          sanitizeForCsv(p.property_location),
+          city,
+          'NJ',
+          sanitizeForCsv(zip),
+        ].join(','));
+      });
+    }
+
+    const totalChunks = Math.ceil(rows.length / CENSUS_BATCH_LIMIT);
+    const safeJobName = (selectedJob.job_name || 'job')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+
+    for (let i = 0; i < totalChunks; i++) {
+      const slice = rows.slice(i * CENSUS_BATCH_LIMIT, (i + 1) * CENSUS_BATCH_LIMIT);
+      const csv = slice.join('\n');
+      const filename =
+        totalChunks === 1
+          ? `${safeJobName}_geocode-variants.csv`
+          : `${safeJobName}_geocode-variants_part-${i + 1}-of-${totalChunks}.csv`;
+      downloadFile(filename, csv);
+    }
+
+    setStatus({
+      kind: 'success',
+      message: `Generated ${totalChunks} variant CSV(s) — ${candidates.length.toLocaleString()} parcels × ${variantZips.length} ZIP(s) = ${rows.length.toLocaleString()} rows. Upload each to Census.`,
+    });
+  }, [selectedJob, properties, variantZips]);
+
   const handleResultUpload = useCallback((event) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
@@ -513,7 +695,11 @@ const GeocodingTool = () => {
               }
             }
             allRows.push({
-              compositeKey,
+              // Underlying composite key (variant suffix stripped) — used to
+              // match back to property_records.
+              compositeKey: stripVariantSuffix(compositeKey),
+              // Original key including __zipIdx (null for non-variant rows).
+              variantIdx: variantSuffix(compositeKey),
               matchStatus,
               matchType: row[3] || '',
               matchedAddress: row[4] || '',
@@ -542,27 +728,67 @@ const GeocodingTool = () => {
 
   const resultStats = useMemo(() => {
     if (parsedResults.length === 0) return null;
-    const matched = parsedResults.filter((r) => r.latitude != null && r.longitude != null);
-    const noMatch = parsedResults.filter((r) => r.matchStatus === 'No_Match');
-    const tie = parsedResults.filter((r) => r.matchStatus === 'Tie');
-    const exact = parsedResults.filter((r) => r.matchType === 'Exact');
-    const nonExact = parsedResults.filter((r) => r.matchType === 'Non_Exact');
+    // Variant CSVs explode each parcel into N rows (one per ZIP). For headline
+    // stats we want unique-parcel counts, not raw row counts. We collapse by
+    // underlying composite_key, preferring the BEST match: Exact > Non_Exact
+    // > everything else. Ties / No_Match collapse to a single failed row.
+    const isVariant = parsedResults.some((r) => r.variantIdx != null);
+    const byParcel = new Map();
+    for (const r of parsedResults) {
+      const key = r.compositeKey;
+      const existing = byParcel.get(key);
+      const rank = (rr) => (rr.matchType === 'Exact' ? 3
+        : rr.matchType === 'Non_Exact' ? 2
+        : rr.latitude != null ? 1 : 0);
+      if (!existing || rank(r) > rank(existing)) byParcel.set(key, r);
+    }
+    const collapsed = Array.from(byParcel.values());
+    const matched = collapsed.filter((r) => r.latitude != null && r.longitude != null);
+    const noMatch = collapsed.filter((r) => r.matchStatus === 'No_Match');
+    const tie = collapsed.filter((r) => r.matchStatus === 'Tie');
+    const exact = collapsed.filter((r) => r.matchType === 'Exact');
+    const nonExact = collapsed.filter((r) => r.matchType === 'Non_Exact');
+    // Per-ZIP recovery: only meaningful for variant-CSV uploads. Maps zipIdx
+    // -> count of parcels whose WINNING match came from that variant.
+    const perZip = new Map();
+    if (isVariant) {
+      for (const r of matched) {
+        const idx = r.variantIdx;
+        if (idx == null) continue;
+        perZip.set(idx, (perZip.get(idx) || 0) + 1);
+      }
+    }
     return {
       total: parsedResults.length,
+      uniqueParcels: collapsed.length,
+      isVariant,
       matched: matched.length,
       noMatch: noMatch.length,
       tie: tie.length,
       exact: exact.length,
       nonExact: nonExact.length,
-      matchPct: parsedResults.length
-        ? ((matched.length / parsedResults.length) * 100).toFixed(1)
+      matchPct: collapsed.length
+        ? ((matched.length / collapsed.length) * 100).toFixed(1)
         : '0.0',
+      perZip,
     };
   }, [parsedResults]);
 
   const commitResults = useCallback(async () => {
     if (parsedResults.length === 0 || !selectedJobId) return;
-    const matched = parsedResults.filter((r) => r.latitude != null && r.longitude != null);
+    // Collapse multi-variant rows to one best row per underlying parcel so
+    // we don't issue multiple updates that would overwrite each other.
+    const rank = (rr) => (rr.matchType === 'Exact' ? 3
+      : rr.matchType === 'Non_Exact' ? 2
+      : rr.latitude != null ? 1 : 0);
+    const bestByParcel = new Map();
+    for (const r of parsedResults) {
+      const existing = bestByParcel.get(r.compositeKey);
+      if (!existing || rank(r) > rank(existing)) bestByParcel.set(r.compositeKey, r);
+    }
+    const matched = Array.from(bestByParcel.values()).filter(
+      (r) => r.latitude != null && r.longitude != null
+    );
     if (matched.length === 0) {
       setError('No matched coordinates to commit.');
       return;
@@ -1474,6 +1700,56 @@ const GeocodingTool = () => {
               >
                 ⬇ Generate &amp; Download CSV(s)
               </button>
+
+              {/* ----- Recovery sweep (ZIP variant CSV, optional) ----- */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: 14,
+                  background: '#f9fafb',
+                  border: '1px dashed #d1d5db',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
+                  Recovery sweep (optional, ZIP variants)
+                </div>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 10px 0' }}>
+                  For long-tail recovery in towns with multiple postal cities (Franklin Twp →
+                  Somerset / Princeton / Kingston / Zarephath / etc). Explodes each remaining
+                  parcel into one row per ZIP and lets Census pick the best match. Run only after
+                  the main CSV has done its pass.
+                </p>
+                <div style={{ fontSize: 12, color: '#374151', marginBottom: 10 }}>
+                  ZIPs configured for this town:{' '}
+                  <strong>{variantZipsLoading ? '…' : variantZips.length}</strong>
+                  {variantZips.length > 0 && (
+                    <span style={{ color: '#6b7280' }}>
+                      {' '}({variantZips.map((z) => `${z} ${njCityForZip(z) || 'unknown'}`).join(' · ')})
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    style={smallButton}
+                    onClick={() => setVariantModalOpen(true)}
+                    disabled={propsLoading || variantZipsLoading}
+                  >
+                    ⚙ Configure ZIPs
+                  </button>
+                  <button
+                    style={{
+                      ...smallPrimary,
+                      opacity: variantZips.length === 0 ? 0.5 : 1,
+                    }}
+                    onClick={generateVariantCsvBatches}
+                    disabled={propsLoading || variantZips.length === 0 || stats.total === 0}
+                    title={variantZips.length === 0 ? 'Add at least one ZIP first' : ''}
+                  >
+                    ⬇ Generate Variant CSV
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </section>
@@ -1521,7 +1797,42 @@ const GeocodingTool = () => {
                   <strong>{resultStats.noMatch.toLocaleString()}</strong> · Tie:{' '}
                   <strong>{resultStats.tie.toLocaleString()}</strong>
                 </div>
+                {resultStats.isVariant && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#374151' }}>
+                    Variant CSV detected — collapsed{' '}
+                    <strong>{resultStats.total.toLocaleString()}</strong> rows to{' '}
+                    <strong>{resultStats.uniqueParcels.toLocaleString()}</strong> unique parcels.
+                  </div>
+                )}
               </div>
+
+              {resultStats.isVariant && variantZips.length > 0 && resultStats.perZip.size > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    borderRadius: 6,
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: '#075985', marginBottom: 4 }}>
+                    Per-ZIP recovery (winning variant per parcel)
+                  </div>
+                  {variantZips.map((zip, idx) => {
+                    const n = resultStats.perZip.get(String(idx)) || 0;
+                    const city = njCityForZip(zip) || 'unknown';
+                    return (
+                      <div key={zip} style={{ color: n > 0 ? '#075985' : '#9ca3af' }}>
+                        <strong style={{ fontFamily: 'monospace' }}>{zip}</strong> {city}:{' '}
+                        <strong>{n.toLocaleString()}</strong>
+                        {n === 0 && <span> — consider removing</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <h3 style={{ fontSize: 14, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>
                 Preview (first 10 rows)
@@ -1862,6 +2173,240 @@ const GeocodingTool = () => {
           {status.message}
         </div>
       )}
+
+      {/* ===================== Configure ZIPs Modal ===================== */}
+      {variantModalOpen && (
+        <VariantZipModal
+          municipality={selectedJob?.municipality || ''}
+          initialZips={variantZips}
+          suggestions={ownerDerivedZips}
+          saving={variantZipsSaving}
+          onCancel={() => setVariantModalOpen(false)}
+          onSave={async (zips) => {
+            await saveVariantZips(zips);
+            setVariantModalOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ============================================================
+// VariantZipModal — typo-safe ZIP entry with bundled USPS city
+// ============================================================
+const VariantZipModal = ({ municipality, initialZips, suggestions, saving, onCancel, onSave }) => {
+  const [zips, setZips] = useState(initialZips || []);
+  const [draft, setDraft] = useState('');
+  const [draftErr, setDraftErr] = useState('');
+
+  const addZip = (raw) => {
+    const v = String(raw || '').trim();
+    if (!/^\d{5}$/.test(v)) {
+      setDraftErr('Enter a 5-digit ZIP.');
+      return false;
+    }
+    if (zips.includes(v)) {
+      setDraftErr('Already in the list.');
+      return false;
+    }
+    setZips((prev) => [...prev, v]);
+    setDraft('');
+    setDraftErr('');
+    return true;
+  };
+
+  const removeZip = (z) => setZips((prev) => prev.filter((x) => x !== z));
+
+  const overlay = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: 20,
+  };
+  const modal = {
+    background: '#ffffff',
+    borderRadius: 10,
+    width: 'min(560px, 100%)',
+    maxHeight: '85vh',
+    overflowY: 'auto',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  };
+  const headerStyle = {
+    padding: '16px 20px',
+    borderBottom: '1px solid #e5e7eb',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  };
+  const body = { padding: 20 };
+  const footer = {
+    padding: '12px 20px',
+    borderTop: '1px solid #e5e7eb',
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    background: '#f9fafb',
+  };
+  const chip = (good) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 10px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    background: good ? '#dcfce7' : '#fef3c7',
+    color: good ? '#166534' : '#92400e',
+    border: `1px solid ${good ? '#86efac' : '#fcd34d'}`,
+    marginRight: 6,
+    marginBottom: 6,
+  });
+
+  return (
+    <div style={overlay} onClick={onCancel}>
+      <div style={modal} onClick={(e) => e.stopPropagation()}>
+        <div style={headerStyle}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Postal ZIP variants</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{municipality}</div>
+          </div>
+          <button style={{ ...buttonBase, padding: '4px 10px' }} onClick={onCancel}>✕</button>
+        </div>
+
+        <div style={body}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+              Add a ZIP
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <input
+                value={draft}
+                onChange={(e) => { setDraft(e.target.value.replace(/\D/g, '').slice(0, 5)); setDraftErr(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addZip(draft); } }}
+                placeholder="e.g. 08823"
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  border: `1px solid ${draftErr ? '#ef4444' : '#d1d5db'}`,
+                  borderRadius: 6,
+                  fontSize: 14,
+                  fontFamily: 'monospace',
+                }}
+                inputMode="numeric"
+                maxLength={5}
+              />
+              <button style={smallPrimary} onClick={() => addZip(draft)} type="button">
+                Add
+              </button>
+            </div>
+            {draftErr && (
+              <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{draftErr}</div>
+            )}
+            {draft.length === 5 && !draftErr && (
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                Will save as <strong>{draft}</strong>{' '}
+                {njCityForZip(draft)
+                  ? <span style={{ color: '#16a34a' }}>· {njCityForZip(draft)} ✓</span>
+                  : <span style={{ color: '#92400e' }}>· unknown (still works, ZIP-only)</span>}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+              Configured ({zips.length})
+            </div>
+            {zips.length === 0 ? (
+              <div style={{ color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>
+                None yet. Type a ZIP above or click a suggestion below.
+              </div>
+            ) : (
+              <div>
+                {zips.map((z) => {
+                  const city = njCityForZip(z);
+                  return (
+                    <span key={z} style={chip(!!city)}>
+                      <strong>{z}</strong>
+                      <span>· {city || 'unknown'}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeZip(z)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          lineHeight: 1,
+                          padding: 0,
+                        }}
+                        title="Remove"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {suggestions && suggestions.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                Suggested from owner data
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+                ZIPs from owner_csz where owner street matches situs (owner-occupied parcels).
+                Click to add.
+              </div>
+              <div>
+                {suggestions.slice(0, 12).map((s) => {
+                  const already = zips.includes(s.zip);
+                  const city = njCityForZip(s.zip);
+                  return (
+                    <button
+                      key={s.zip}
+                      type="button"
+                      disabled={already}
+                      onClick={() => addZip(s.zip)}
+                      style={{
+                        ...buttonBase,
+                        padding: '4px 10px',
+                        marginRight: 6,
+                        marginBottom: 6,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        background: already ? '#e5e7eb' : '#ffffff',
+                        color: already ? '#6b7280' : '#374151',
+                        cursor: already ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {s.zip} {city ? `(${city})` : ''} · {s.count.toLocaleString()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={footer}>
+          <button style={buttonBase} onClick={onCancel} disabled={saving}>Cancel</button>
+          <button
+            style={primaryButton}
+            onClick={() => onSave(zips)}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save ZIPs'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
