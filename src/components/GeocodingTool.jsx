@@ -995,10 +995,11 @@ const GeocodingTool = () => {
   // ---------- Manual entry helpers ----------
 
   const manualCandidates = useMemo(() => {
-    // Always restrict to main cards in the manual list.
-    let list = properties.filter(
-      (p) => p.property_addl_card == null || String(p.property_addl_card) === '1'
-    );
+    // Always restrict to main cards in the manual list. Vendor-aware so
+    // Microsystems jobs (Carneys Point, etc.) actually populate — their
+    // main marker is 'M', not '1', and the old hardcoded filter was hiding
+    // every parcel.
+    let list = properties.filter(isMainCardRow);
     if (manualFilter === 'ungeocoded') {
       list = list.filter(
         (p) => p.property_latitude == null && p.geocode_source !== 'skipped'

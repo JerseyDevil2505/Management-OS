@@ -470,6 +470,30 @@ const NJ_ZIP_TO_CITY = {
   '07675': 'WESTWOOD',
   '07676': 'WESTWOOD',
   '07677': 'WOODCLIFF LAKE',
+
+  // Salem / Cumberland / Gloucester corridor — Carneys Point and neighbors.
+  // Several Carneys Point parcels mail to PENNSVILLE, PEDRICKTOWN, etc.
+  '08023': 'DEEPWATER',
+  '08027': 'GIBBSTOWN',
+  '08038': 'NEWFIELD',
+  '08039': 'PEDRICKTOWN',
+  '08066': 'PAULSBORO',
+  '08067': 'PEDRICKTOWN',
+  '08069': 'PENNSVILLE',
+  '08070': 'PENNSVILLE',
+  '08079': 'SALEM',
+  '08085': 'SWEDESBORO',
+  '08086': 'THOROFARE',
+  '08090': 'WENONAH',
+  '08093': 'WESTVILLE',
+  '08094': 'WILLIAMSTOWN',
+  '08096': 'WOODBURY',
+  '08097': 'WOODBURY HEIGHTS',
+  '08098': 'WOODSTOWN',
+  '08311': 'BRIDGETON',
+  '08318': 'ELMER',
+  '08344': 'MILLVILLE',
+  '08360': 'VINELAND',
 };
 
 /**
