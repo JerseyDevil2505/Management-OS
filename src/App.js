@@ -1506,6 +1506,23 @@ const App = () => {
                 💵 Revenue
               </button>
               )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('geocoding-tool')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'geocoding-tool'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'geocoding-tool' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                🗺️ Geocoder
+              </button>
+              )}
             </nav>
           )}
           
