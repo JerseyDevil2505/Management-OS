@@ -1134,8 +1134,8 @@ const GeocodingTool = () => {
                         </div>
                       </td>
                       <td style={td}>
-                        {p.property_block || '—'} / {p.property_lot || '—'}
-                        {p.property_qualifier ? ` (${p.property_qualifier})` : ''}
+                        {p.property_block || '—'}/{p.property_lot || '—'}/
+                        {p.property_qualifier || 'NONE'}
                       </td>
                       <td style={td}>
                         {p.property_m4_class ? (
