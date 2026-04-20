@@ -88,6 +88,15 @@ function parcelIdentity(p) {
   ].join('|');
 }
 
+// True if the address string begins with a street number (digit, optionally
+// followed by letters/fractions like "12A" or "12-1/2"). Census batch geocoding
+// requires a street number; entries like "WILLOW DR" or "REAR LIN BLVD" can
+// never match and just create No_Match noise.
+function hasStreetNumber(address) {
+  if (!address) return false;
+  return /^\s*\d/.test(String(address));
+}
+
 function sanitizeForCsv(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -279,13 +288,16 @@ const GeocodingTool = () => {
   const generateCsvBatches = useCallback(() => {
     if (!selectedJob || properties.length === 0) return;
 
-    // Only main cards, with an address, not yet geocoded, and not skipped.
-    // Dedupe across roll years — one row per unique parcel.
+    // Only main cards, with an address that has a street number, not yet
+    // geocoded, and not skipped. Dedupe across roll years — one row per
+    // unique parcel. Addresses without a leading street number ("WILLOW DR",
+    // "REAR LIN BLVD") are excluded — Census can't match them anyway.
     const seen = new Set();
     const candidates = [];
     for (const p of properties) {
       if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
       if (!(p.property_location || '').trim()) continue;
+      if (!hasStreetNumber(p.property_location)) continue;
       if (p.property_latitude != null) continue;
       if (p.geocode_source === 'skipped') continue;
       const id = parcelIdentity(p);
@@ -560,6 +572,94 @@ const GeocodingTool = () => {
     }
     return n;
   }, [properties]);
+
+  // Count of unique main-card parcels with no street number that are still
+  // unresolved (no coords, not already skipped). These are auto-skip candidates.
+  const noNumberCandidates = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (p.property_latitude != null) continue;
+      if (p.geocode_source === 'skipped') continue;
+      const addr = (p.property_location || '').trim();
+      if (!addr) continue; // separate concern; leave blanks alone
+      if (hasStreetNumber(addr)) continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      list.push(p);
+    }
+    return list;
+  }, [properties]);
+
+  const [bulkSkipping, setBulkSkipping] = useState(false);
+
+  const bulkSkipNoNumber = useCallback(async () => {
+    if (noNumberCandidates.length === 0 || !selectedJobId) return;
+    if (
+      !window.confirm(
+        `Auto-skip ${noNumberCandidates.length} parcels with no street number? ` +
+          `(Census can't match these — they'll be marked skipped across all roll years.)`
+      )
+    )
+      return;
+    setBulkSkipping(true);
+    setError(null);
+    const now = new Date().toISOString();
+    try {
+      const BATCH = 50;
+      let updated = 0;
+      let failed = 0;
+      for (let i = 0; i < noNumberCandidates.length; i += BATCH) {
+        const slice = noNumberCandidates.slice(i, i + BATCH);
+        // eslint-disable-next-line no-await-in-loop
+        const results = await Promise.all(
+          slice.map((property) => {
+            let q = supabase
+              .from('property_records')
+              .update({
+                geocode_source: 'skipped',
+                geocode_match_quality: 'no_street_number',
+                geocoded_at: now,
+              })
+              .eq('job_id', selectedJobId)
+              .eq('property_block', property.property_block)
+              .eq('property_lot', property.property_lot)
+              .eq('property_addl_card', property.property_addl_card);
+            if (property.property_qualifier == null) {
+              q = q.is('property_qualifier', null);
+            } else {
+              q = q.eq('property_qualifier', property.property_qualifier);
+            }
+            return q;
+          })
+        );
+        for (const r of results) {
+          if (r.error) failed += 1;
+          else updated += 1;
+        }
+      }
+      const skipIds = new Set(noNumberCandidates.map(parcelIdentity));
+      setProperties((prev) =>
+        prev.map((p) =>
+          skipIds.has(parcelIdentity(p)) ? { ...p, geocode_source: 'skipped' } : p
+        )
+      );
+      const c = await fetchCoverageForJob(selectedJobId);
+      setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+      setStatus({
+        kind: 'success',
+        message: `Auto-skipped ${updated} no-street-number parcels${
+          failed > 0 ? ` (${failed} failed)` : ''
+        }.`,
+      });
+    } catch (e) {
+      setError(`Bulk skip failed: ${e.message || e}`);
+    } finally {
+      setBulkSkipping(false);
+    }
+  }, [noNumberCandidates, selectedJobId]);
 
   const setManualField = (key, field, value) => {
     setManualEdits((prev) => ({
@@ -912,6 +1012,7 @@ const GeocodingTool = () => {
                 for (const p of properties) {
                   if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
                   if (!(p.property_location || '').trim()) continue;
+                  if (!hasStreetNumber(p.property_location)) continue;
                   if (p.property_latitude != null) continue;
                   if (p.geocode_source === 'skipped') continue;
                   const id = parcelIdentity(p);
@@ -1100,6 +1201,37 @@ const GeocodingTool = () => {
               showing {manualCandidates.length} (capped at 100)
             </span>
           </div>
+
+          {noNumberCandidates.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 10,
+                marginBottom: 12,
+                background: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                <strong>{noNumberCandidates.length}</strong> unresolved parcels have
+                addresses without a street number (e.g. “WILLOW DR”, “REAR LIN BLVD”).
+                Census can't match these.
+              </span>
+              <button
+                style={primaryButton}
+                onClick={bulkSkipNoNumber}
+                disabled={bulkSkipping}
+              >
+                {bulkSkipping
+                  ? 'skipping…'
+                  : `Auto-skip ${noNumberCandidates.length} no-number addresses`}
+              </button>
+            </div>
+          )}
 
           <div style={{ overflowX: 'auto', maxHeight: 480, overflowY: 'auto' }}>
             <table style={table}>
