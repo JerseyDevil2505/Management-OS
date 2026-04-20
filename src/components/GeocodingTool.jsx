@@ -154,6 +154,30 @@ const ORDINAL_WORD_TO_NUM = {
   NINETEENTH: '19TH', TWENTIETH: '20TH',
 };
 
+// Reverse of ORDINAL_WORD_TO_NUM. Used to emit a second variant row
+// ("1ST AVE" + "FIRST AVE") so the geocoder can pick whichever form TIGER
+// has indexed for that segment.
+const ORDINAL_NUM_TO_WORD = Object.fromEntries(
+  Object.entries(ORDINAL_WORD_TO_NUM).map(([w, n]) => [n, w]),
+);
+
+// If the normalized address contains a numeric ordinal token (1ST/2ND/...),
+// return the address with that token swapped to its word form. Returns null
+// when nothing changes.
+function ordinalWordVariant(normalizedAddr) {
+  if (!normalizedAddr) return null;
+  const tokens = String(normalizedAddr).split(' ');
+  let changed = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const w = ORDINAL_NUM_TO_WORD[tokens[i]];
+    if (w) {
+      tokens[i] = w;
+      changed = true;
+    }
+  }
+  return changed ? tokens.join(' ') : null;
+}
+
 // Normalize a property address for Census batch geocoding:
 //   * Collapse street suffixes to USPS-canonical form (LA / LANE → LN,
 //     AVE. → AVE, BOULEVARD → BLVD, etc.) using the existing SUFFIX_LOOKUP.
@@ -607,7 +631,8 @@ const GeocodingTool = () => {
     // gives Census the real postal city + ZIP, which dramatically improves
     // match rates in townships where the postal city differs from the
     // municipal name (e.g. Franklin Twp → Somerset / Franklin Park).
-    const buildRow = (p) => {
+    let ordinalVariantRows = 0;
+    const buildRows = (p) => {
       let city = fallbackCity;
       let state = fallbackState;
       let zip = '';
@@ -620,13 +645,23 @@ const GeocodingTool = () => {
           ownerHits += 1;
         }
       }
-      return [
-        sanitizeForCsv(p.property_composite_key),
-        sanitizeForCsv(normalizeAddressForCensus(p.property_location)),
-        city,
-        state,
-        zip,
-      ].join(',');
+      const normalized = normalizeAddressForCensus(p.property_location);
+      const key = sanitizeForCsv(p.property_composite_key);
+      const rows = [
+        [key, sanitizeForCsv(normalized), city, state, zip].join(','),
+      ];
+      // Emit a second row with the word-form ordinal so the geocoder can
+      // resolve whichever form TIGER has on file for that segment. Tagged
+      // with __o1 so the result parser collapses it back onto the same
+      // parcel and keeps the better match.
+      const wordForm = ordinalWordVariant(normalized);
+      if (wordForm) {
+        rows.push(
+          [`${key}${VARIANT_DELIM}o1`, sanitizeForCsv(wordForm), city, state, zip].join(','),
+        );
+        ordinalVariantRows += 1;
+      }
+      return rows;
     };
 
     const totalChunks = Math.ceil(candidates.length / CENSUS_BATCH_LIMIT);
@@ -637,7 +672,7 @@ const GeocodingTool = () => {
 
     for (let i = 0; i < totalChunks; i++) {
       const slice = candidates.slice(i * CENSUS_BATCH_LIMIT, (i + 1) * CENSUS_BATCH_LIMIT);
-      const csv = slice.map(buildRow).join('\n');
+      const csv = slice.flatMap(buildRows).join('\n');
       const filename =
         totalChunks === 1
           ? `${safeJobName}_geocode-input.csv`
@@ -648,13 +683,16 @@ const GeocodingTool = () => {
     const ownerNote = ownerHits > 0
       ? ` ${ownerHits.toLocaleString()} rows used owner-derived city/ZIP.`
       : '';
+    const ordinalNote = ordinalVariantRows > 0
+      ? ` Added ${ordinalVariantRows.toLocaleString()} ordinal variant row(s) (1ST↔FIRST).`
+      : '';
     setStatus({
       kind: 'success',
       message:
         (totalChunks === 1
           ? `Generated 1 CSV with ${candidates.length} addresses. Upload it to Census.`
           : `Generated ${totalChunks} CSVs (${candidates.length} addresses total, ${CENSUS_BATCH_LIMIT}-row chunks). Upload each to Census separately.`) +
-        ownerNote,
+        ownerNote + ordinalNote,
     });
   }, [selectedJob, properties]);
 
@@ -1756,8 +1794,10 @@ const GeocodingTool = () => {
                       Addresses are normalized before sending: <code>LA</code>/<code>LANE</code>{' '}
                       → <code>LN</code>, <code>RT 27</code> → <code>NJ 27</code>,{' '}
                       <code>RT 1</code> → <code>US 1</code>, <code>AVE.</code> →{' '}
-                      <code>AVE</code>, <code>FIRST</code> → <code>1ST</code>,{' '}
-                      <code>SECOND</code> → <code>2ND</code>, etc.
+                      <code>AVE</code>, etc. Numbered streets (<code>1ST</code> /{' '}
+                      <code>FIRST</code>, <code>2ND</code> / <code>SECOND</code>, …) are sent in{' '}
+                      <strong>both</strong> forms so the geocoder picks whichever TIGER has
+                      indexed.
                     </span>
                   </p>
                 );
