@@ -2624,30 +2624,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           >
             + Add Appeal
           </button>
-          <button
-            onClick={handleExportSavedCompsCsv}
-            title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
-            style={{ backgroundColor: '#ea580c', color: 'white' }}
-            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV (PowerComp)
-          </button>
-          <button
-            onClick={() => {
-              setShowPwrCompPdfModal(true);
-              setPwrCompPdfFile(null);
-              setPwrCompPdfBytes(null);
-              setPwrCompPdfPreview(null);
-              setPwrCompPdfSaveResult(null);
-            }}
-            title="Import a PowerComp Batch Taxpayer Report PDF and attach photo packets to each subject"
-            style={{ backgroundColor: '#0f766e', color: 'white' }}
-            className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
-          >
-            <FileText className="w-4 h-4" />
-            Import PowerComp PDF
-          </button>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -3441,6 +3417,40 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         </table>
       </div>
       )}
+
+      {/* POWERCOMP ROUND-TRIP ACTIONS (kept under the table to reduce toolbar crowding) */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[200px]">
+          <p className="text-sm font-semibold text-gray-800">PowerComp Round-Trip</p>
+          <p className="text-xs text-gray-500">
+            Export saved comps to BRT PowerComp, then re-import the returned Batch Taxpayer Report PDF to attach photo packets per subject.
+          </p>
+        </div>
+        <button
+          onClick={handleExportSavedCompsCsv}
+          title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
+          style={{ backgroundColor: '#ea580c', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+        >
+          <Download className="w-4 h-4" />
+          Export CSV (PowerComp)
+        </button>
+        <button
+          onClick={() => {
+            setShowPwrCompPdfModal(true);
+            setPwrCompPdfFile(null);
+            setPwrCompPdfBytes(null);
+            setPwrCompPdfPreview(null);
+            setPwrCompPdfSaveResult(null);
+          }}
+          title="Import a PowerComp Batch Taxpayer Report PDF and attach photo packets to each subject"
+          style={{ backgroundColor: '#0f766e', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          Import PowerComp PDF
+        </button>
+      </div>
 
       {/* MODAL */}
       {showModal && (
