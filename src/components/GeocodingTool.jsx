@@ -88,6 +88,24 @@ function parcelIdentity(p) {
   ].join('|');
 }
 
+// A condo "child" record — same block/lot as the mother lot, but with a
+// C-qualifier (C0001, C0002, ...). Its property_location is often missing the
+// unit number, or is identical to the mother lot's address, so geocoding it
+// independently is a waste — it lives at the same building footprint.
+function isCondoChild(p) {
+  return /^C\d/i.test(String(p.property_qualifier || '').trim());
+}
+
+// Mother-lot identity (ignores qualifier) — used to find the parent parcel for
+// a condo child. block | lot | addl_card.
+function motherLotKey(p) {
+  return [
+    p.property_block || '',
+    p.property_lot || '',
+    p.property_addl_card == null ? '' : String(p.property_addl_card),
+  ].join('|');
+}
+
 // True if the address string begins with a street number (digit, optionally
 // followed by letters/fractions like "12A" or "12-1/2"). Census batch geocoding
 // requires a street number; entries like "WILLOW DR" or "REAR LIN BLVD" can
@@ -507,7 +525,7 @@ const GeocodingTool = () => {
     } finally {
       setCommitting(false);
     }
-  }, [parsedResults, selectedJobId]);
+  }, [parsedResults, selectedJobId, properties]);
 
   // ---------- Manual entry helpers ----------
 
@@ -595,10 +613,124 @@ const GeocodingTool = () => {
 
   const [bulkSkipping, setBulkSkipping] = useState(false);
 
-  // Download an address-only CSV (address, city, state) for the unresolved
-  // parcels in the currently selected job. No composite key, no header — just
-  // the raw lines so you can paste/upload into Google Maps, a different
-  // geocoder, or hand off to someone else.
+  // ---------- Condo mother-lot inheritance ----------
+  // Build a one-shot list of unresolved condo (C-qualifier) parcels whose
+  // mother lot (same block/lot/addl_card, no/non-C qualifier) already has
+  // coordinates. We can copy the mother lot's coords into every child unit.
+  const condoInheritCandidates = useMemo(() => {
+    // Index mother lots by motherLotKey — prefer rows that already have coords.
+    const motherCoords = new Map(); // key -> {lat, lng}
+    for (const p of properties) {
+      if (isCondoChild(p)) continue;
+      if (p.property_latitude == null || p.property_longitude == null) continue;
+      const k = motherLotKey(p);
+      if (!motherCoords.has(k)) {
+        motherCoords.set(k, {
+          lat: Number(p.property_latitude),
+          lng: Number(p.property_longitude),
+        });
+      }
+    }
+    // Now collect unresolved condo children that have a matching mother.
+    const seen = new Set();
+    const list = [];
+    for (const p of properties) {
+      if (!isCondoChild(p)) continue;
+      if (p.property_latitude != null) continue;
+      if (p.geocode_source === 'skipped') continue;
+      const m = motherCoords.get(motherLotKey(p));
+      if (!m) continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      list.push({ property: p, mother: m });
+    }
+    return list;
+  }, [properties]);
+
+  const [inheriting, setInheriting] = useState(false);
+
+  const inheritFromMotherLots = useCallback(async () => {
+    if (condoInheritCandidates.length === 0 || !selectedJobId) return;
+    if (
+      !window.confirm(
+        `Copy mother-lot coordinates to ${condoInheritCandidates.length} unresolved condo units? ` +
+          `(All units inherit the building's lat/lng, propagated across roll years.)`
+      )
+    )
+      return;
+    setInheriting(true);
+    setError(null);
+    const now = new Date().toISOString();
+    try {
+      const BATCH = 50;
+      let updated = 0;
+      let failed = 0;
+      for (let i = 0; i < condoInheritCandidates.length; i += BATCH) {
+        const slice = condoInheritCandidates.slice(i, i + BATCH);
+        // eslint-disable-next-line no-await-in-loop
+        const results = await Promise.all(
+          slice.map(({ property, mother }) => {
+            let q = supabase
+              .from('property_records')
+              .update({
+                property_latitude: mother.lat,
+                property_longitude: mother.lng,
+                geocode_source: 'inherited_motherlot',
+                geocode_match_quality: 'inherited_motherlot',
+                geocoded_at: now,
+              })
+              .eq('job_id', selectedJobId)
+              .eq('property_block', property.property_block)
+              .eq('property_lot', property.property_lot)
+              .eq('property_addl_card', property.property_addl_card)
+              .eq('property_qualifier', property.property_qualifier);
+            return q;
+          })
+        );
+        for (const r of results) {
+          if (r.error) failed += 1;
+          else updated += 1;
+        }
+      }
+      // Refresh local state
+      const inheritedIds = new Map(
+        condoInheritCandidates.map(({ property, mother }) => [
+          parcelIdentity(property),
+          mother,
+        ])
+      );
+      setProperties((prev) =>
+        prev.map((p) => {
+          const m = inheritedIds.get(parcelIdentity(p));
+          return m
+            ? {
+                ...p,
+                property_latitude: m.lat,
+                property_longitude: m.lng,
+                geocode_source: 'inherited_motherlot',
+              }
+            : p;
+        })
+      );
+      const c = await fetchCoverageForJob(selectedJobId);
+      setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+      setStatus({
+        kind: 'success',
+        message: `Inherited mother-lot coords for ${updated} condo units${
+          failed > 0 ? ` (${failed} failed)` : ''
+        }.`,
+      });
+    } catch (e) {
+      setError(`Inherit failed: ${e.message || e}`);
+    } finally {
+      setInheriting(false);
+    }
+  }, [condoInheritCandidates, selectedJobId]);
+
+  // Download an address-only CSV (one full address per line) for the
+  // unresolved parcels in the currently selected job. Useful for pasting into
+  // Google Maps, Geocodio, BatchGeo, etc.
   const downloadAddressOnlyCsv = useCallback(() => {
     if (!selectedJob) return;
     const seen = new Set();
@@ -838,18 +970,68 @@ const GeocodingTool = () => {
         const { error: upErr } = await q;
         if (upErr) throw upErr;
 
-        // Update local state — propagate to every roll-year copy of this parcel.
+        // If this is a mother lot (non-condo), also push the same coords down
+        // to any unresolved condo children (same block/lot/addl_card,
+        // C-qualifier). One save = whole building handled.
+        let condoChildrenUpdated = 0;
+        if (!isCondoChild(property)) {
+          const motherKey = motherLotKey(property);
+          const childIds = new Set();
+          for (const p of properties) {
+            if (motherLotKey(p) !== motherKey) continue;
+            if (!isCondoChild(p)) continue;
+            if (p.property_latitude != null) continue;
+            if (p.geocode_source === 'skipped') continue;
+            childIds.add(parcelIdentity(p));
+          }
+          if (childIds.size > 0) {
+            const { error: childErr } = await supabase
+              .from('property_records')
+              .update({
+                property_latitude: lat,
+                property_longitude: lng,
+                geocode_source: 'inherited_motherlot',
+                geocode_match_quality: 'inherited_motherlot',
+                geocoded_at: new Date().toISOString(),
+              })
+              .eq('job_id', selectedJobId)
+              .eq('property_block', property.property_block)
+              .eq('property_lot', property.property_lot)
+              .eq('property_addl_card', property.property_addl_card)
+              .like('property_qualifier', 'C%')
+              .is('property_latitude', null);
+            if (!childErr) condoChildrenUpdated = childIds.size;
+          }
+        }
+
+        // Update local state — propagate to every roll-year copy of this
+        // parcel, plus any condo children that just inherited.
         setProperties((prev) =>
-          prev.map((p) =>
-            parcelIdentity(p) === id
-              ? {
-                  ...p,
-                  property_latitude: lat,
-                  property_longitude: lng,
-                  geocode_source: 'manual',
-                }
-              : p
-          )
+          prev.map((p) => {
+            if (parcelIdentity(p) === id) {
+              return {
+                ...p,
+                property_latitude: lat,
+                property_longitude: lng,
+                geocode_source: 'manual',
+              };
+            }
+            if (
+              !isCondoChild(property) &&
+              isCondoChild(p) &&
+              motherLotKey(p) === motherLotKey(property) &&
+              p.property_latitude == null &&
+              p.geocode_source !== 'skipped'
+            ) {
+              return {
+                ...p,
+                property_latitude: lat,
+                property_longitude: lng,
+                geocode_source: 'inherited_motherlot',
+              };
+            }
+            return p;
+          })
         );
         setManualEdits((prev) => {
           const next = { ...prev };
@@ -859,6 +1041,12 @@ const GeocodingTool = () => {
         // refresh coverage tally for this job
         const c = await fetchCoverageForJob(selectedJobId);
         setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+        if (condoChildrenUpdated > 0) {
+          setStatus({
+            kind: 'success',
+            message: `Saved + propagated to ${condoChildrenUpdated} condo unit(s).`,
+          });
+        }
       } catch (e) {
         setError(`Save failed for ${key}: ${e.message || e}`);
       } finally {
@@ -869,7 +1057,7 @@ const GeocodingTool = () => {
         });
       }
     },
-    [manualEdits, selectedJobId]
+    [manualEdits, selectedJobId, properties]
   );
 
   const buildMapsUrl = (p) => {
@@ -1249,6 +1437,37 @@ const GeocodingTool = () => {
               ⬇ address-only CSV
             </button>
           </div>
+
+          {condoInheritCandidates.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 10,
+                marginBottom: 12,
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                <strong>{condoInheritCandidates.length}</strong> unresolved condo units
+                have a mother lot (same block/lot, no C-qualifier) that's already
+                geocoded. Inherit those coords?
+              </span>
+              <button
+                style={primaryButton}
+                onClick={inheritFromMotherLots}
+                disabled={inheriting}
+              >
+                {inheriting
+                  ? 'inheriting…'
+                  : `Inherit ${condoInheritCandidates.length} from mother lot`}
+              </button>
+            </div>
+          )}
 
           {noNumberCandidates.length > 0 && (
             <div
