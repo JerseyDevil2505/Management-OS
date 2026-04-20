@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
@@ -276,6 +276,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
         if (error) throw error;
 
+        // Auto-sync `inspected` from property_records.inspection_list_by/date.
+        // The boolean is set to false on insert and never refreshed by imports,
+        // so we recompute it here on every load. We then write back any rows
+        // where the stored value is out of sync — keeps the DB column honest
+        // for any downstream consumer (manual-edit form, future filters, etc.).
+        const inspectedSyncUpdates = [];
+
         // Enrich with property data and re-parse appeal_type if null
         const enrichedAppeals = (data || []).map(appeal => {
           const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
@@ -287,8 +294,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             appealType = parsed.appealType;
           }
 
+          // Compute fresh inspected status from current property data.
+          const computedInspected = !!(property?.inspection_list_by && property?.inspection_list_date);
+          if (appeal.id && appeal.inspected !== computedInspected) {
+            inspectedSyncUpdates.push({ id: appeal.id, inspected: computedInspected });
+          }
+
           return {
             ...appeal,
+            inspected: computedInspected,
             appeal_type: appealType,
             // Derived fields from property match
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
@@ -303,6 +317,32 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             property_location: appeal.property_location || property?.property_location || null
           };
         });
+
+        // Fire-and-forget bulk sync of any drifted `inspected` values. We do
+        // this in parallel so it never blocks rendering, and we batch in
+        // chunks of 100 to avoid huge single-statement UPDATEs on large jobs.
+        if (inspectedSyncUpdates.length > 0) {
+          (async () => {
+            try {
+              const CHUNK = 100;
+              for (let i = 0; i < inspectedSyncUpdates.length; i += CHUNK) {
+                const batch = inspectedSyncUpdates.slice(i, i + CHUNK);
+                // PostgREST doesn't support per-row updates in a single call, so
+                // group by value and update all ids of each group at once.
+                const trueIds = batch.filter(u => u.inspected).map(u => u.id);
+                const falseIds = batch.filter(u => !u.inspected).map(u => u.id);
+                if (trueIds.length > 0) {
+                  await supabase.from('appeal_log').update({ inspected: true }).in('id', trueIds);
+                }
+                if (falseIds.length > 0) {
+                  await supabase.from('appeal_log').update({ inspected: false }).in('id', falseIds);
+                }
+              }
+            } catch (e) {
+              console.warn('appeal_log.inspected auto-sync failed (non-critical):', e);
+            }
+          })();
+        }
 
         setAppeals(enrichedAppeals);
 
@@ -2251,18 +2291,162 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
   };
 
+  // ==================== EXPORT SAVED COMPS CSV (for BRT PowerComp) ====================
+  // Pulls named CME result sets from job_cme_result_sets (the "Saved Result Sets" the
+  // user creates from Sales Comparison → Search & Results), joins to the in-memory
+  // appeals list by subject block/lot/qualifier to attach an appeal number, and
+  // emits one row per appeal with the subject + each comp's block/lot/qualifier.
+  // If multiple result sets contain the same subject, the most recently saved set wins.
+  // Only appeals that actually have saved comps are included.
+  const handleExportSavedCompsCsv = async () => {
+    if (!jobData?.id) return;
+    try {
+      const { data: resultSets, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name, created_at, updated_at, results')
+        .eq('job_id', jobData.id)
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      // Build appeal_number lookup: composite "block-lot-qualifier" → appeal
+      const norm = (v) => (v == null ? '' : String(v).trim());
+      const compositeOf = (block, lot, qualifier) =>
+        `${norm(block)}-${norm(lot)}-${norm(qualifier)}`;
+      const appealByKey = new Map();
+      (appeals || []).forEach(a => {
+        const key = a.property_composite_key
+          || compositeOf(a.property_block, a.property_lot, a.property_qualifier);
+        if (key && !appealByKey.has(key)) appealByKey.set(key, a);
+      });
+
+      // Walk result sets newest-first; keep the first (most-recent) occurrence per subject.
+      // Each `result` has full property objects: subject + comparables[].
+      const seenSubjects = new Set();
+      const rows = [];
+      let maxComps = 0;
+
+      (resultSets || []).forEach(rs => {
+        (rs.results || []).forEach(r => {
+          const subj = r?.subject;
+          if (!subj) return;
+          const subjKey = subj.property_composite_key
+            || compositeOf(subj.property_block, subj.property_lot, subj.property_qualifier);
+          if (!subjKey || seenSubjects.has(subjKey)) return;
+
+          const comps = (Array.isArray(r.comparables) ? r.comparables : [])
+            .filter(c => c && (c.property_block || c.property_lot));
+          if (comps.length === 0) return;
+
+          if (comps.length > maxComps) maxComps = comps.length;
+          seenSubjects.add(subjKey);
+
+          rows.push({
+            appeal_number: appealByKey.get(subjKey)?.appeal_number || '',
+            result_set_name: rs.name || '',
+            subj_block: norm(subj.property_block),
+            subj_lot: norm(subj.property_lot),
+            subj_qualifier: norm(subj.property_qualifier),
+            comps: comps.map(c => ({
+              block: norm(c.property_block),
+              lot: norm(c.property_lot),
+              qualifier: norm(c.property_qualifier)
+            }))
+          });
+        });
+      });
+
+      // Drop rows without an appeal number — PowerComp needs the appeal# to attach comps
+      const exportable = rows.filter(r => r.appeal_number);
+      if (exportable.length === 0) {
+        alert(
+          'No saved result sets matched any appeals.\n\n' +
+          'Run an evaluation in Sales Comparison (CME) → Search & Results, click "Save Result Set", ' +
+          'then come back here and export. Only subjects that match an appeal in this log are included.'
+        );
+        return;
+      }
+
+      // Header — appeal_number first so PowerComp can key on it
+      const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
+      for (let i = 1; i <= maxComps; i++) {
+        header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
+      }
+
+      const escape = (val) => {
+        const s = val == null ? '' : String(val);
+        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      // Excel-safe wrapper for block/lot/qualifier values. Without this Excel
+      // converts "10.10" -> 10.1 and drops trailing zeros (".100" becomes ".1"),
+      // which breaks BLQ identifiers like "10.100" or "5.10".
+      // Using the ="..." formula syntax forces Excel to import the cell as text
+      // verbatim while still being readable as a normal string by other tools.
+      const textCell = (val) => {
+        const s = val == null ? '' : String(val);
+        if (s === '') return '';
+        const inner = s.replace(/"/g, '""');
+        return `"=""${inner}"""`;
+      };
+
+      const lines = [header.map(escape).join(',')];
+      exportable.forEach(r => {
+        const cells = [
+          escape(r.appeal_number),
+          escape(r.result_set_name),
+          textCell(r.subj_block),
+          textCell(r.subj_lot),
+          textCell(r.subj_qualifier)
+        ];
+        for (let i = 0; i < maxComps; i++) {
+          const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
+          cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+        }
+        lines.push(cells.join(','));
+      });
+
+      const csv = lines.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
+      a.href = url;
+      a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export saved comps CSV failed:', e);
+      alert('Export failed: ' + (e?.message || e));
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
     <div className="space-y-6">
       {/* TOOLBAR */}
       <div className="flex justify-between items-center">
-        <button
-          onClick={handleOpenModal}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
-        >
-          + Add Appeal
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenModal}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
+          >
+            + Add Appeal
+          </button>
+          <button
+            onClick={handleExportSavedCompsCsv}
+            title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
+            style={{ backgroundColor: '#ea580c', color: 'white' }}
+            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV (PowerComp)
+          </button>
+        </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
@@ -2285,21 +2469,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </button>
           <button
             onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
             Import PwrCama Appeals
           </button>
           <button
             onClick={handleExportToExcel}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-300"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             📊 Export to Excel
           </button>
           <button
             onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
-            style={{ backgroundColor: '#ea580c', color: 'white' }}
-            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
             Import from Export

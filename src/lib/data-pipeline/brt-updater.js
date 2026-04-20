@@ -349,11 +349,27 @@ export class BRTUpdater {
         if (line.startsWith('{') || inJsonBlock) {
           inJsonBlock = true;
           jsonBuffer += line;
-          
-          const openBrackets = (jsonBuffer.match(/\{/g) || []).length;
-          const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
-          
-          if (openBrackets === closeBrackets && openBrackets > 0) {
+
+          // Count brackets outside of string values to avoid false matches
+          // (matches the processor's logic — naive regex counts would also
+          // match `{` / `}` inside JSON string literals, which is exactly
+          // what was causing "Error parsing JSON section Residential" on
+          // reparse for large BRT code files.)
+          let depth = 0;
+          let inString = false;
+          let escaped = false;
+          for (let c = 0; c < jsonBuffer.length; c++) {
+            const ch = jsonBuffer[c];
+            if (escaped) { escaped = false; continue; }
+            if (ch === '\\') { escaped = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (!inString) {
+              if (ch === '{') depth++;
+              else if (ch === '}') depth--;
+            }
+          }
+
+          if (depth === 0 && jsonBuffer.includes('{')) {
             if (currentSection) {
               this.parseJsonSection(jsonBuffer, currentSection);
             }
@@ -415,7 +431,7 @@ export class BRTUpdater {
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
       console.log('💾 Storing complete code file in jobs table (UPDATER)...');
-      
+
       const { error } = await supabase
         .from('jobs')
         .update({
@@ -1158,7 +1174,17 @@ export class BRTUpdater {
         } else {
           results.processed += batch.length;
           console.log(`✅ UPSERT Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
-          
+
+          // Live progress callback (used by AdjustmentsTab Reparse button)
+          try {
+            versionInfo?.onProgress?.({
+              processed: results.processed,
+              total: propertyRecords.length,
+              batch: batchNumber,
+              totalBatches
+            });
+          } catch (_) { /* never let progress UI break the pipeline */ }
+
           // Track successful batch for potential rollback
           successfulBatches.push({
             batchNumber,

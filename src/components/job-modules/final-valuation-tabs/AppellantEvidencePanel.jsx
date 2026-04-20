@@ -9,13 +9,155 @@
 // row, so saving in one place persists to the other.
 // ============================================================
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { X, Search } from 'lucide-react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import {
   evaluateAppellantComp,
   COLOR_CLASSES,
-  getNuShortForm
+  getNuShortForm,
+  loadNuDictionary
 } from '../../../lib/appellantCompEvaluator';
+
+// ============================================================
+// AddressLookupModal — modal-on-modal for finding a property by
+// partial street address when the appellant only supplied an
+// address (no block/lot). Filters the in-memory `properties`
+// list with simple case-insensitive substring matching, debounced
+// at the input level.
+// ============================================================
+const AddressLookupModal = ({ properties, onSelect, onSelectMulti, maxMulti = 5, onClose }) => {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState([]); // array of composite keys, in click order
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const out = [];
+    for (let i = 0; i < properties.length && out.length < 50; i++) {
+      const p = properties[i];
+      const loc = (p.property_location || '').toLowerCase();
+      if (loc.includes(q)) out.push(p);
+    }
+    return out;
+  }, [query, properties]);
+
+  const keyFor = (p) => p.property_composite_key
+    || `${p.property_block}-${p.property_lot}-${p.property_qualifier}-${p.property_addl_card || p.property_card}`;
+
+  const toggle = (p) => {
+    const k = keyFor(p);
+    setSelected(prev => {
+      if (prev.includes(k)) return prev.filter(x => x !== k);
+      if (prev.length >= maxMulti) return prev; // cap
+      return [...prev, k];
+    });
+  };
+
+  const applyMulti = () => {
+    if (selected.length === 0) return;
+    const byKey = new Map(matches.map(p => [keyFor(p), p]));
+    const ordered = selected.map(k => byKey.get(k)).filter(Boolean);
+    if (onSelectMulti) onSelectMulti(ordered);
+  };
+
+  // z-[60] sits above the parent panel modal (z-50) so the lookup is always
+  // on top. Compact width/height so it fits centered without dwarfing the
+  // underlying panel; the result list scrolls vertically inside.
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[70vh] flex flex-col">
+        <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Lookup by Address</h3>
+            <p className="text-[10px] text-gray-600">{`Pick up to ${maxMulti} \u00b7 fills empty slots in order`}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-3 py-2 border-b border-gray-100">
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={'e.g. 4 TURNBERRY or MAIN ST'}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {query.trim().length < 2 ? (
+            <div className="p-4 text-[11px] text-gray-500 italic text-center">{'Start typing to search\u2026'}</div>
+          ) : matches.length === 0 ? (
+            <div className="p-4 text-[11px] text-gray-500 italic text-center">No properties match that address.</div>
+          ) : (
+            <table className="w-full text-[11px]">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr className="text-left text-gray-700 border-b border-gray-200">
+                  <th className="px-2 py-1 font-semibold w-6"></th>
+                  <th className="px-2 py-1 font-semibold">Address</th>
+                  <th className="px-2 py-1 font-semibold">Blk</th>
+                  <th className="px-2 py-1 font-semibold">Lot</th>
+                  <th className="px-2 py-1 font-semibold">Q</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matches.map((p) => {
+                  const k = keyFor(p);
+                  const isSel = selected.includes(k);
+                  const order = isSel ? selected.indexOf(k) + 1 : null;
+                  return (
+                    <tr
+                      key={k}
+                      className={`border-b border-gray-100 cursor-pointer ${isSel ? 'bg-blue-100' : 'hover:bg-blue-50'}`}
+                      onClick={() => toggle(p)}
+                      onDoubleClick={() => onSelect(p)}
+                      title="Click to multi-select, double-click to apply just this one"
+                    >
+                      <td className="px-2 py-1 text-center">
+                        {isSel ? (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold">{order}</span>
+                        ) : (
+                          <span className="inline-block w-4 h-4 border border-gray-300 rounded-full" />
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-gray-900 truncate max-w-[160px]">{p.property_location || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_block || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_lot || '\u2014'}</td>
+                      <td className="px-2 py-1 text-gray-700">{p.property_qualifier || '\u2014'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {matches.length >= 50 && (
+          <div className="px-2 py-1 text-[10px] text-amber-700 bg-amber-50 border-t border-amber-200 text-center">
+            {'Showing first 50 matches \u2014 type more to narrow.'}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
+          <div className="text-[10px] text-gray-600">{`${selected.length} / ${maxMulti} selected`}</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-2 py-1 text-[11px] text-gray-700 border border-gray-300 rounded hover:bg-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyMulti}
+              disabled={selected.length === 0}
+              className="px-2 py-1 text-[11px] text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {`Apply (${selected.length})`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
   slot: i + 1,
@@ -166,6 +308,168 @@ const AppellantEvidencePanel = ({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error' | null
   const [loadingFresh, setLoadingFresh] = useState(false);
+  const [nuDictReady, setNuDictReady] = useState(false);
+  const [lookupSlotIdx, setLookupSlotIdx] = useState(null); // open address-lookup modal for which row
+  // Current Assessment source: 'mod' (values_mod_total, default) or 'cama' (values_cama_total).
+  // Persisted to job_settings under key 'current_assessment_source' so the choice
+  // syncs between this panel (Detailed view) and SalesComparisonTab (Search & Results).
+  const [assmtSource, setAssmtSource] = useState('mod');
+
+  // Load assessment-source preference once per job.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('job_settings')
+      .select('setting_value')
+      .eq('job_id', jobData.id)
+      .eq('setting_key', 'current_assessment_source')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const v = data?.setting_value;
+        if (v === 'mod' || v === 'cama') setAssmtSource(v);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  const updateAssmtSource = async (next) => {
+    if (next !== 'mod' && next !== 'cama') return;
+    setAssmtSource(next);
+    // Broadcast so any other mounted panel (e.g. SalesComparisonTab Search &
+    // Results) flips live without needing to remount or refresh.
+    if (jobData?.id) {
+      try {
+        window.dispatchEvent(new CustomEvent('assmt-source-changed', {
+          detail: { jobId: jobData.id, value: next }
+        }));
+      } catch (e) {}
+    }
+    if (!jobData?.id) return;
+    try {
+      await supabase
+        .from('job_settings')
+        .upsert(
+          { job_id: jobData.id, setting_key: 'current_assessment_source', setting_value: next },
+          { onConflict: 'job_id,setting_key' }
+        );
+    } catch (e) {
+      console.warn('Failed to persist current_assessment_source:', e);
+    }
+  };
+
+  // Live-sync: react to assmt-source changes broadcast from other panels (e.g.
+  // user toggles MOD/CAMA in Search & Results while this panel is mounted).
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (jobData?.id && e.detail.jobId !== jobData.id) return;
+      const v = e.detail.value;
+      if (v === 'mod' || v === 'cama') setAssmtSource(v);
+    };
+    window.addEventListener('assmt-source-changed', handler);
+    return () => window.removeEventListener('assmt-source-changed', handler);
+  }, [jobData?.id]);
+
+  // Resolve subject's current assessment based on selected source.
+  const subjectAssmt = (() => {
+    if (!subject) return null;
+    if (assmtSource === 'cama') return subject.values_cama_total ?? subject.values_mod_total ?? null;
+    return subject.values_mod_total ?? subject.values_cama_total ?? null;
+  })();
+
+  // Apply a property selected in the address-lookup modal to the active comp slot.
+  const applyLookupProperty = (property) => {
+    if (lookupSlotIdx == null || !property) {
+      setLookupSlotIdx(null);
+      return;
+    }
+    const idx = lookupSlotIdx;
+    const newBlock = String(property.property_block || '').trim();
+    const newLot = String(property.property_lot || '').trim();
+    const newQual = String(property.property_qualifier || '').trim();
+    const newCard = String(property.property_addl_card || property.property_card || '').trim();
+    setDraft(prev => prev.map((s, i) => i === idx ? {
+      ...s,
+      block: newBlock,
+      lot: newLot,
+      qualifier: newQual,
+      card: newCard
+    } : s));
+    // Clear any pending uncommitted edits on this row's BLQ inputs so the
+    // freshly-applied values take precedence.
+    setPendingBLQ(p => {
+      const n = { ...p };
+      delete n[`${idx}-block`];
+      delete n[`${idx}-lot`];
+      delete n[`${idx}-qualifier`];
+      return n;
+    });
+    setSaveStatus(null);
+    setLookupSlotIdx(null);
+  };
+
+  // Apply multiple properties selected in the address-lookup modal. Fills the
+  // row the user opened the lookup from FIRST, then continues into subsequent
+  // empty slots. Skips already-populated rows so we never overwrite user data.
+  const applyLookupPropertiesMulti = (props) => {
+    if (lookupSlotIdx == null || !Array.isArray(props) || props.length === 0) {
+      setLookupSlotIdx(null);
+      return;
+    }
+    const startIdx = lookupSlotIdx;
+    setDraft(prev => {
+      const next = [...prev];
+      const isEmpty = (s) => !s.block && !s.lot && !s.qualifier && !s.card;
+      // Build the order of target slot indices: starting slot first (always
+      // overwritten), then any remaining empty slots in order.
+      const order = [startIdx];
+      for (let i = 0; i < next.length; i++) {
+        if (i === startIdx) continue;
+        if (isEmpty(next[i])) order.push(i);
+      }
+      for (let i = 0; i < props.length && i < order.length; i++) {
+        const p = props[i];
+        const idx = order[i];
+        next[idx] = {
+          ...next[idx],
+          block: String(p.property_block || '').trim(),
+          lot: String(p.property_lot || '').trim(),
+          qualifier: String(p.property_qualifier || '').trim(),
+          card: String(p.property_addl_card || p.property_card || '').trim()
+        };
+      }
+      return next;
+    });
+    // Clear any pending BLQ edits on touched rows.
+    setPendingBLQ(p => {
+      const n = { ...p };
+      const isEmpty = (s) => !s.block && !s.lot && !s.qualifier && !s.card;
+      const order = [startIdx];
+      for (let i = 0; i < draft.length; i++) {
+        if (i === startIdx) continue;
+        if (isEmpty(draft[i])) order.push(i);
+      }
+      for (let i = 0; i < props.length && i < order.length; i++) {
+        const idx = order[i];
+        delete n[`${idx}-block`];
+        delete n[`${idx}-lot`];
+        delete n[`${idx}-qualifier`];
+      }
+      return n;
+    });
+    setSaveStatus(null);
+    setLookupSlotIdx(null);
+  };
+
+  // Load NU dictionary from Supabase once; triggers a re-render so
+  // freshly-merged short forms (like "ESTATE SALE" for code 10) appear
+  // immediately in the auto-generated comments.
+  useEffect(() => {
+    let cancelled = false;
+    loadNuDictionary().then(() => { if (!cancelled) setNuDictReady(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Pending edits for Block / Lot / Qualifier are held locally so we don't
   // re-run the comp lookup (and re-render the entire grid) on every keystroke.
@@ -306,8 +610,8 @@ const AppellantEvidencePanel = ({
     }
   }
   const ratioPctStr = ratioDecimal ? `${(ratioDecimal * 100).toFixed(2)}%` : null;
-  const fmvByRatio = (subject?.values_mod_total && ratioDecimal)
-    ? Math.round(Number(subject.values_mod_total) / ratioDecimal)
+  const fmvByRatio = (subjectAssmt && ratioDecimal)
+    ? Math.round(Number(subjectAssmt) / ratioDecimal)
     : null;
   const ratioLabel = ratioSource === 'director'
     ? "Director's Ratio"
@@ -367,6 +671,17 @@ const AppellantEvidencePanel = ({
               )}
             </div>
           )}
+          <div className="flex items-center gap-2 text-xs text-gray-700 border border-gray-300 rounded px-2 py-1 bg-white" title="Source for Current Assessment. Persists per job and syncs with Search & Results.">
+            <span className="font-semibold">Current Assmt:</span>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="assmt-src" value="mod" checked={assmtSource === 'mod'} onChange={() => updateAssmtSource('mod')} className="w-3 h-3" />
+              MOD
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="assmt-src" value="cama" checked={assmtSource === 'cama'} onChange={() => updateAssmtSource('cama')} className="w-3 h-3" />
+              CAMA
+            </label>
+          </div>
           <label className="flex items-center gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
@@ -392,7 +707,7 @@ const AppellantEvidencePanel = ({
         </div>
         {subject ? (
           <div className="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs text-gray-900">
-            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Current Assmt</div><div className="font-semibold">{subject.values_mod_total ? `$${Number(subject.values_mod_total).toLocaleString()}` : '\u2014'}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500" title={`Source: ${assmtSource === 'cama' ? 'values_cama_total' : 'values_mod_total'}`}>{`Current Assmt (${assmtSource.toUpperCase()})`}</div><div className="font-semibold">{subjectAssmt ? `$${Number(subjectAssmt).toLocaleString()}` : '\u2014'}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500" title={ratioPctStr ? `${ratioLabel}: ${ratioPctStr}` : ''}>FMV by Ratio</div><div className="font-semibold">{fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014'}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">VCS</div><div className="font-semibold">{fmtSubjectVal(subject.new_vcs || subject.property_vcs)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Design</div><div className="font-semibold">{codeWithName(subject, 'asset_design_style')}</div></div>
@@ -446,7 +761,19 @@ const AppellantEvidencePanel = ({
               const cellTitle = (key) => evalResult.flags[key]?.detail || '';
               return (
                 <tr key={idx} className="border-b border-gray-100">
-                  <td className="px-2 py-1 font-semibold text-gray-700">#{idx + 1}</td>
+                  <td className="px-2 py-1 font-semibold text-gray-700">
+                    <div className="flex items-center gap-1">
+                      <span>#{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setLookupSlotIdx(idx)}
+                        className="p-0.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                        title="Look up property by address"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
                   <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
                   <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
@@ -571,16 +898,32 @@ const AppellantEvidencePanel = ({
     </>
   );
 
+  const lookupModal = lookupSlotIdx != null ? (
+    <AddressLookupModal
+      properties={properties}
+      onSelect={applyLookupProperty}
+      onSelectMulti={applyLookupPropertiesMulti}
+      maxMulti={5}
+      onClose={() => setLookupSlotIdx(null)}
+    />
+  ) : null;
+
   return isModal ? (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
+    <>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[92vh] overflow-y-auto">
+          {body}
+        </div>
+      </div>
+      {lookupModal}
+    </>
+  ) : (
+    <>
+      <div className="bg-white rounded-lg border border-blue-300 shadow-sm">
         {body}
       </div>
-    </div>
-  ) : (
-    <div className="bg-white rounded-lg border border-blue-300 shadow-sm">
-      {body}
-    </div>
+      {lookupModal}
+    </>
   );
 };
 
