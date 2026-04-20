@@ -132,6 +132,51 @@ function hasStreetNumber(address) {
   return /^\s*\d/.test(String(address));
 }
 
+// US Highway numbers that pass through New Jersey. Used by
+// normalizeAddressForCensus to decide whether `RT 1` should become `US 1`
+// (federal highway) or `NJ 1` (state highway). NJ has no NJ-1, NJ-9 etc —
+// those are all US routes — so a generic `RT N` rewrite would silently
+// produce a non-existent address for those.
+const NJ_US_HIGHWAY_NUMBERS = new Set([
+  '1', '9', '22', '30', '40', '46', '130', '202', '206', '322',
+]);
+
+// Normalize a property address for Census batch geocoding:
+//   * Collapse street suffixes to USPS-canonical form (LA / LANE → LN,
+//     AVE. → AVE, BOULEVARD → BLVD, etc.) using the existing SUFFIX_LOOKUP.
+//   * Rewrite `RT NN` / `RTE NN` / `ROUTE NN` → `US NN` for known US
+//     highway numbers, `NJ NN` for everything else (state + county routes).
+//     This pulls 100+ Franklin / Lebanon / Hunterdon parcels off the
+//     pending list because TIGER indexes routes under NJ/US prefixes
+//     rather than the local "RT" abbreviation.
+//   * Strip stray periods (`AVE.` → `AVE`) and collapse whitespace.
+//   * Preserve the leading street number — the rest of the pipeline
+//     already drops rows that don't have one.
+function normalizeAddressForCensus(addr) {
+  if (!addr) return addr;
+  let s = String(addr)
+    .toUpperCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return s;
+
+  // Route rewrite: RT/RTE/ROUTE <NN> → US <NN> or NJ <NN>.
+  s = s.replace(/\b(RT|RTE|ROUTE)\s+(\d{1,3})\b/g, (_, _kw, num) => {
+    return NJ_US_HIGHWAY_NUMBERS.has(num) ? `US ${num}` : `NJ ${num}`;
+  });
+
+  // Suffix canonicalization: walk tokens and collapse known aliases. Only
+  // apply to tokens AFTER the first one (so a leading directional like "N"
+  // isn't mistaken for a suffix). Keep order intact.
+  const tokens = s.split(' ');
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (SUFFIX_LOOKUP[t]) tokens[i] = SUFFIX_LOOKUP[t];
+  }
+  return tokens.join(' ').trim();
+}
+
 function sanitizeForCsv(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -560,7 +605,7 @@ const GeocodingTool = () => {
       }
       return [
         sanitizeForCsv(p.property_composite_key),
-        sanitizeForCsv(p.property_location),
+        sanitizeForCsv(normalizeAddressForCensus(p.property_location)),
         city,
         state,
         zip,
@@ -632,7 +677,7 @@ const GeocodingTool = () => {
         const city = sanitizeForCsv(njCityForZip(zip) || '');
         rows.push([
           `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}`,
-          sanitizeForCsv(p.property_location),
+          sanitizeForCsv(normalizeAddressForCensus(p.property_location)),
           city,
           'NJ',
           sanitizeForCsv(zip),
@@ -1689,6 +1734,13 @@ const GeocodingTool = () => {
                       owner's mailing city/ZIP (owner street fuzzy-matches situs).
                     </span>{' '}
                     The rest fall back to <code>{selectedJob?.municipality || ''}, NJ</code>.
+                    <br />
+                    <span style={{ color: '#6b7280', fontSize: 12 }}>
+                      Addresses are normalized before sending: <code>LA</code>/<code>LANE</code>{' '}
+                      → <code>LN</code>, <code>RT 27</code> → <code>NJ 27</code>,{' '}
+                      <code>RT 1</code> → <code>US 1</code>, <code>AVE.</code> →{' '}
+                      <code>AVE</code>, etc.
+                    </span>
                   </p>
                 );
               })()}
