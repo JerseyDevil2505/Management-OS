@@ -9,7 +9,7 @@
 // plus an auto-generated narrative line in the legacy phrasing.
 // ============================================================
 
-import { interpretCodes } from './supabaseClient';
+import { interpretCodes, supabase } from './supabaseClient';
 
 // ---------- Type & Use grouping (mirrors OverallAnalysisTab.getTypeCategory) ----------
 export const getTypeUseCategory = (typeCode) => {
@@ -49,9 +49,13 @@ export const isAcceptableNuCode = (nuCode, farmMode = false) => {
   return false;
 };
 
-// ---------- NU code dictionary (mirror of public.nu_code_dictionary) ----------
+// ---------- NU code dictionary ----------
+// SOURCE OF TRUTH: public.nu_code_dictionary in Supabase. Loaded once per
+// session via loadNuDictionary() and cached at module scope. The hard-coded
+// values below are only a synchronous fallback for the brief window before
+// the table loads (or when offline).
+//
 // Source: NJ Div. of Taxation - Guidelines for Use of 36 Nonusable Categories (May 2025)
-// Kept in-sync with Supabase table; used for human-readable commentary.
 export const NU_CODE_DICTIONARY = {
   '00': 'usable sale',
   '01': 'family sale',
@@ -95,6 +99,28 @@ export const NU_CODE_DICTIONARY = {
 export const getNuShortForm = (nuCode) => {
   const code = (nuCode == null ? '' : String(nuCode)).trim().padStart(2, '0');
   return NU_CODE_DICTIONARY[code] || null;
+};
+
+// ---------- Async dictionary loader (call once on app/panel mount) ----------
+// Merges Supabase nu_code_dictionary.short_form into the in-memory dictionary
+// so any future codes added to the table are picked up without a code change.
+let nuDictLoadPromise = null;
+export const loadNuDictionary = () => {
+  if (nuDictLoadPromise) return nuDictLoadPromise;
+  nuDictLoadPromise = supabase
+    .from('nu_code_dictionary')
+    .select('code, short_form')
+    .then(({ data, error }) => {
+      if (error || !Array.isArray(data)) return NU_CODE_DICTIONARY;
+      data.forEach(row => {
+        if (!row?.code) return;
+        const key = String(row.code).trim().padStart(2, '0');
+        if (row.short_form) NU_CODE_DICTIONARY[key] = String(row.short_form).toLowerCase();
+      });
+      return NU_CODE_DICTIONARY;
+    })
+    .catch(() => NU_CODE_DICTIONARY);
+  return nuDictLoadPromise;
 };
 
 // ---------- Card classification ----------
@@ -247,18 +273,29 @@ export const evaluateAppellantComp = (subject, comp, userComp, ctx = {}) => {
     };
   }
 
-  // Use user-entered sale date/nu when present, else fall back to comp's recorded values
+  // Use user-entered sale date/nu when present, else fall back to comp's recorded values.
+  // IMPORTANT: use `||` (not `??`) so empty-string slot values fall back to comp data.
+  // The input UI displays comp values as the visible value when the slot is empty
+  // (`value={slot.sales_nu || comp.sales_nu}`), so the evaluator must mirror that
+  // exact fallback or we get a green NU flag while the screen shows a non-usable code.
   const compSaleDate  = userComp?.sales_date  || comp.sales_date;
-  const compNu        = userComp?.sales_nu    ?? comp.sales_nu;
+  const compNu        = (userComp?.sales_nu != null && String(userComp.sales_nu).trim() !== '')
+                          ? userComp.sales_nu
+                          : comp.sales_nu;
 
   const subjLot = resolveLotSize(subject, vendorType, landMethod);
   const compLot = resolveLotSize(comp,    vendorType, landMethod);
 
+  const saleNuFlag = compareNu(compNu, farmMode);
+  // Stash the resolved NU code on the flag so buildAutoNote can append the
+  // short-form for ALL sale codes (e.g. "ARM'S LENGTH SALE - SUBSTANTIALLY
+  // IMPROVED" for 07), not just the non-usable ones.
+  saleNuFlag.code = (compNu == null ? '' : String(compNu)).trim();
   const flags = {
     card:         compareCard(subject, comp),
     sale_date:    compareSaleDate(compSaleDate, sampleRange.start, sampleRange.end),
     sale_price:   flag('na'),
-    sale_nu:      compareNu(compNu, farmMode),
+    sale_nu:      saleNuFlag,
     vcs:          compareExact(subject?.new_vcs || subject?.property_vcs, comp.new_vcs || comp.property_vcs, 'VCS'),
     design:       compareExact(subject?.asset_design_style, comp.asset_design_style, 'design'),
     type_use:     compareTypeUse(subject?.asset_type_use, comp.asset_type_use),
@@ -293,12 +330,25 @@ const buildAutoNote = (flags) => {
   // Sale date
   if (flags.sale_date.color === 'red') parts.push('SOLD OUTSIDE SAMPLING PERIOD');
 
-  // NU - use short-form from dictionary (e.g. "NON-USABLE: ESTATE SALE")
+  // NU - ALWAYS comment on the sale. Acceptable codes => "ARM'S LENGTH SALE".
+  // Non-usable codes => "NON-USABLE: <SHORT FORM>" pulled from nu_code_dictionary.
   if (flags.sale_nu.color === 'red') {
     const short = flags.sale_nu.detail && flags.sale_nu.detail.includes(' - ')
       ? flags.sale_nu.detail.split(' - ').slice(1).join(' - ')
       : null;
     parts.push(short ? `NON-USABLE: ${short.toUpperCase()}` : 'NON-USABLE SALE CODE');
+  } else if (flags.sale_nu.color === 'green') {
+    // Acceptable codes. Blank / 0 / 00 = pure arm's length, no qualifier needed.
+    // Other acceptable codes (07, 32, 33, 36) still get the short-form so the
+    // narrative explains WHY it's still considered usable (e.g. "ARM'S LENGTH
+    // SALE - SUBSTANTIALLY IMPROVED" for code 07).
+    const code = (flags.sale_nu.code || '').replace(/^0+/, '');
+    if (!code) {
+      parts.push("ARM'S LENGTH SALE");
+    } else {
+      const short = getNuShortForm(flags.sale_nu.code);
+      parts.push(short ? `ARM'S LENGTH SALE - ${short.toUpperCase()}` : "ARM'S LENGTH SALE");
+    }
   }
 
   // Card

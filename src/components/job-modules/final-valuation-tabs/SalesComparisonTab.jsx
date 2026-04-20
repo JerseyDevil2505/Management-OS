@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -14,6 +14,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
+  // Current Assessment source: 'mod' (values_mod_total, default) or 'cama' (values_cama_total).
+  // Persisted to job_settings under key 'current_assessment_source'. Same setting is read
+  // by AppellantEvidencePanel so toggling here syncs to the Detailed view (and vice-versa).
+  const [assmtSource, setAssmtSource] = useState('mod');
+  const getCurrentAssmt = useCallback((subj) => {
+    if (!subj) return 0;
+    if (assmtSource === 'cama') return Number(subj.values_cama_total || subj.values_mod_total || 0);
+    return Number(subj.values_mod_total || subj.values_cama_total || 0);
+  }, [assmtSource]);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
   const [subjectVCS, setSubjectVCS] = useState([]);
@@ -86,6 +95,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [evaluationMode, setEvaluationMode] = useState('fresh'); // 'fresh' or 'keep'
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
+  const [preEvalCheck, setPreEvalCheck] = useState(null); // { configMissing, adjustmentsMissing } | null
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
@@ -98,6 +108,62 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
   const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
   const [savedPoolOverrideSets, setSavedPoolOverrideSets] = useState([]); // Saved pool override sets from DB
+
+  // ==================== PINNED COMPS (per-subject, localStorage only) ====================
+  // Shape: { [subjectId]: string[] of pinned comp property ids }
+  const pinnedCompsKey = useMemo(
+    () => `cme_pinned_comps_${jobData?.id || 'default'}`,
+    [jobData?.id]
+  );
+  const [pinnedComps, setPinnedComps] = useState({});
+
+  // Load pins from localStorage on mount / job change
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(pinnedCompsKey);
+      setPinnedComps(raw ? JSON.parse(raw) : {});
+    } catch (_) {
+      setPinnedComps({});
+    }
+  }, [pinnedCompsKey]);
+
+  // Persist pins whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(pinnedCompsKey, JSON.stringify(pinnedComps));
+    } catch (_) { /* quota or serialization issue - ignore */ }
+  }, [pinnedComps, pinnedCompsKey]);
+
+  const isCompPinned = (subjectId, compId) => {
+    if (!subjectId || !compId) return false;
+    return (pinnedComps[subjectId] || []).includes(String(compId));
+  };
+
+  const toggleCompPin = (subjectId, compId) => {
+    if (!subjectId || !compId) return;
+    setPinnedComps(prev => {
+      const cur = new Set((prev[subjectId] || []).map(String));
+      const idStr = String(compId);
+      if (cur.has(idStr)) cur.delete(idStr); else cur.add(idStr);
+      const next = { ...prev };
+      if (cur.size === 0) {
+        delete next[subjectId];
+      } else {
+        next[subjectId] = Array.from(cur);
+      }
+      return next;
+    });
+  };
+
+  const clearPinsForSubject = (subjectId) => {
+    if (!subjectId) return;
+    setPinnedComps(prev => {
+      if (!prev[subjectId]) return prev;
+      const next = { ...prev };
+      delete next[subjectId];
+      return next;
+    });
+  };
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -361,6 +427,63 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
+
+  // Load Current Assessment source preference (synced with AppellantEvidencePanel).
+  // Re-runs whenever the user re-enters this tab so a change made in Detailed
+  // is reflected here on next mount.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('job_settings')
+      .select('setting_value')
+      .eq('job_id', jobData.id)
+      .eq('setting_key', 'current_assessment_source')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const v = data?.setting_value;
+        if (v === 'mod' || v === 'cama') setAssmtSource(v);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  // Live-sync: react when AppellantEvidencePanel (or another sibling) flips
+  // the source while we're already mounted.
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (jobData?.id && e.detail.jobId !== jobData.id) return;
+      const v = e.detail.value;
+      if (v === 'mod' || v === 'cama') setAssmtSource(v);
+    };
+    window.addEventListener('assmt-source-changed', handler);
+    return () => window.removeEventListener('assmt-source-changed', handler);
+  }, [jobData?.id]);
+
+  const updateAssmtSource = async (next) => {
+    if (next !== 'mod' && next !== 'cama') return;
+    setAssmtSource(next);
+    // Broadcast to any other mounted panel listening for live source changes.
+    if (jobData?.id) {
+      try {
+        window.dispatchEvent(new CustomEvent('assmt-source-changed', {
+          detail: { jobId: jobData.id, value: next }
+        }));
+      } catch (e) {}
+    }
+    if (!jobData?.id) return;
+    try {
+      await supabase
+        .from('job_settings')
+        .upsert(
+          { job_id: jobData.id, setting_key: 'current_assessment_source', setting_value: next },
+          { onConflict: 'job_id,setting_key' }
+        );
+    } catch (e) {
+      console.warn('Failed to persist current_assessment_source:', e);
+    }
+  };
 
   // Load code configuration on mount
   useEffect(() => {
@@ -1551,12 +1674,54 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   };
 
   // ==================== EVALUATE COMPARABLES ====================
+  // Verifies the user has saved the Adjustments Configuration AND the Adjustments grid
+  // before letting an Evaluate run go through. Only blocks the FIRST evaluate per session per job.
+  const checkAdjustmentReadiness = async () => {
+    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false };
+    try {
+      const [{ data: settingsRows }, { data: gridRows }] = await Promise.all([
+        supabase
+          .from('job_settings')
+          .select('setting_key')
+          .eq('job_id', jobData.id)
+          .like('setting_key', 'adjustment_codes_%'),
+        supabase
+          .from('job_adjustment_grid')
+          .select('id, is_default')
+          .eq('job_id', jobData.id)
+      ]);
+      const configMissing = !settingsRows || settingsRows.length === 0;
+      const hasDefaults = (gridRows || []).some(r => r.is_default === true);
+      const adjustmentsMissing = !hasDefaults;
+      return { configMissing, adjustmentsMissing };
+    } catch (e) {
+      console.warn('Pre-evaluate readiness check failed (allowing evaluate):', e?.message);
+      return { configMissing: false, adjustmentsMissing: false };
+    }
+  };
+
   const handleEvaluate = async () => {
     // Validate: adjustment bracket must be selected
     if (!compFilters.adjustmentBracket) {
       alert('Please select an Adjustment Bracket before evaluating.');
       return;
     }
+
+    // First-evaluate-per-session readiness check: confirm Adjustments Configuration AND
+    // the adjustments grid have been saved at least once. Only shown the first time per
+    // session per job to keep subsequent evaluates frictionless.
+    try {
+      const ackKey = `cme_eval_ack_${jobData?.id}`;
+      const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
+      if (!alreadyAcked) {
+        const { configMissing, adjustmentsMissing } = await checkAdjustmentReadiness();
+        if (configMissing || adjustmentsMissing) {
+          setPreEvalCheck({ configMissing, adjustmentsMissing });
+          return; // Block evaluate until user resolves
+        }
+        sessionStorage.setItem(ackKey, '1');
+      }
+    } catch (_) { /* non-critical */ }
 
     setIsEvaluating(true);
     setEvaluationProgress({ current: 0, total: 0 });
@@ -2130,7 +2295,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         // SELECT TOP 5 (or Top 4 if subject sale exists)
         const maxComps = priorityComp ? 4 : 5;
-        let topComps = validComps.slice(0, maxComps);
+
+        // PINNED COMPS: pull user-pinned comps first regardless of metrics/tolerance.
+        // These survive any re-evaluation, mode change, or filter tweak.
+        const pinnedIdsForSubject = (pinnedComps[subject.id] || []).map(String);
+        let pinnedSelected = [];
+        if (pinnedIdsForSubject.length > 0) {
+          pinnedSelected = pinnedIdsForSubject
+            .map(pid => {
+              // Look in computed comps first (full adjustments); else fall back to raw eligible sales
+              const fromComputed = compsWithAdjustments.find(c => String(c.id) === pid);
+              if (fromComputed) return { ...fromComputed, isPinned: true };
+              const fromPool = aggregatedSales.find(s => String(s.id) === pid);
+              if (!fromPool) return null;
+              const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
+                calculateAllAdjustments(subject, fromPool, subjectMapping?.bracket);
+              const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
+              const compBasePrice = fromPool.sales_price || 0;
+              const grossAdjustmentPercent = compBasePrice > 0
+                ? (grossAdjustment / compBasePrice) * 100
+                : 0;
+              return {
+                ...fromPool,
+                adjustments,
+                totalAdjustment,
+                grossAdjustment,
+                grossAdjustmentPercent,
+                adjustedPrice,
+                adjustmentPercent,
+                passesTolerance: true,
+                isPinned: true
+              };
+            })
+            .filter(Boolean)
+            .slice(0, maxComps); // never exceed slot count
+        }
+
+        // Fill remaining slots from valid (math-ranked) comps, excluding any already pinned
+        const pinnedIdSet = new Set(pinnedSelected.map(c => String(c.id)));
+        const remainingSlots = Math.max(0, maxComps - pinnedSelected.length);
+        const fillerComps = validComps
+          .filter(c => !pinnedIdSet.has(String(c.id)))
+          .slice(0, remainingSlots);
+
+        let topComps = [...pinnedSelected, ...fillerComps];
 
         // Add subject sale as Comp #1 if it exists
         if (priorityComp) {
@@ -4531,6 +4739,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <option value="5">5</option>
                       </select>
                     </div>
+                    {/* Current Assessment source radio (synced with Detailed view) */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white" title="Source for Current Assessment column. Persists per job and syncs with Detailed view.">
+                      <span className="font-medium text-gray-700">Current Assmt:</span>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="sales-assmt-src" value="mod" checked={assmtSource === 'mod'} onChange={() => updateAssmtSource('mod')} className="w-3 h-3" />
+                        MOD
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="sales-assmt-src" value="cama" checked={assmtSource === 'cama'} onChange={() => updateAssmtSource('cama')} className="w-3 h-3" />
+                        CAMA
+                      </label>
+                    </div>
                     <button
                       onClick={handleSetAsideSuccessful}
                       disabled={!evaluationResults || selectedForSetAside.size === 0}
@@ -4726,8 +4946,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50">
-                              ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50" title={`Source: values_${assmtSource}_total`}>
+                              ${getCurrentAssmt(result.subject).toLocaleString()}
                             </td>
                             <td
                               className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
@@ -4766,7 +4986,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-blue-50">
                               {(() => {
-                                const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
+                                const currentAsmt = getCurrentAssmt(result.subject);
                                 const newAsmt = result.projectedAssessment;
                                 if (!newAsmt || currentAsmt === 0) return '-';
                                 const changePercent = ((newAsmt - currentAsmt) / currentAsmt) * 100;
@@ -4791,13 +5011,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               }
                               // Format BLQ with / separator and preserve full values
                               const blqFormatted = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? `/${comp.property_qualifier}` : ''}`;
+                              const pinned = isCompPinned(result.subject?.id, comp.id);
+                              const pinDisabled = !result.subject?.id || !comp.id || comp.isSubjectSale;
 
                               return (
                                 <React.Fragment key={compIdx}>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs">
-                                    {blqFormatted}
+                                  <td className={`border border-gray-300 px-2 py-2 text-center text-xs ${pinned ? 'bg-amber-50' : ''}`}>
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (pinDisabled) return;
+                                          toggleCompPin(result.subject.id, comp.id);
+                                        }}
+                                        disabled={pinDisabled}
+                                        title={
+                                          pinDisabled
+                                            ? (comp.isSubjectSale ? 'Subject sale (always Comp #1)' : 'Pin unavailable')
+                                            : (pinned ? 'Unpin (allow re-evaluation to replace)' : 'Pin this comp (always kept on re-evaluate)')
+                                        }
+                                        className={`p-0.5 rounded hover:bg-amber-100 ${pinned ? 'text-amber-600' : 'text-gray-300 hover:text-amber-500'} ${pinDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                      >
+                                        {pinned
+                                          ? <Pin className="w-3 h-3 fill-current" />
+                                          : <Pin className="w-3 h-3" />}
+                                      </button>
+                                      <span>{blqFormatted}</span>
+                                    </div>
                                   </td>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs font-semibold">
+                                  <td className={`border border-gray-300 px-2 py-2 text-center text-xs font-semibold ${pinned ? 'bg-amber-50' : ''}`}>
                                     ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
                                   </td>
                                 </React.Fragment>
@@ -5121,6 +5364,60 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               </p>
             </div>
 
+            {/* Adjustment Bracket - mirrors Search & Results selection (shared compFilters state).
+                Lets the user pick a different bracket (default or custom) and re-evaluate without
+                bouncing back to Search & Results. */}
+            <div className="bg-white border border-gray-300 rounded-lg p-4">
+              <div className="flex justify-center items-center gap-4 flex-wrap">
+                <label className="text-sm font-medium text-gray-700">Adjustment Bracket</label>
+                <select
+                  value={compFilters.adjustmentBracket || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCompFilters(prev => ({
+                      ...prev,
+                      adjustmentBracket: newValue,
+                      autoAdjustment: newValue === 'auto'
+                    }));
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded w-64"
+                >
+                  <option value="">Select bracket...</option>
+                  <option value="auto">Auto (based on mapping)</option>
+                  <optgroup label="Default Brackets">
+                    {CME_BRACKETS.map((bracket, idx) => (
+                      <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
+                    ))}
+                  </optgroup>
+                  {customBrackets.length > 0 && (
+                    <optgroup label="Custom Brackets">
+                      {customBrackets.map((bracket) => (
+                        <option key={bracket.bracket_id} value={bracket.bracket_id}>{bracket.bracket_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={compFilters.adjustmentBracket === 'auto'}
+                    onChange={(e) => {
+                      setCompFilters(prev => ({
+                        ...prev,
+                        adjustmentBracket: e.target.checked ? 'auto' : '',
+                        autoAdjustment: e.target.checked
+                      }));
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-gray-700">Auto</span>
+                </label>
+                <span className="text-xs text-gray-500 ml-2">
+                  Tweak the bracket and re-run the manual evaluation to compare different adjustment scales.
+                </span>
+              </div>
+            </div>
+
             {/* Manual Entry Grid */}
             <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
               <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
@@ -5280,6 +5577,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   isJobContainerLoading={isJobContainerLoading}
                   allProperties={properties}
                   marketLandData={marketLandData}
+                  tenantConfig={tenantConfig}
                 />
               </div>
             )}
@@ -6184,6 +6482,72 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Evaluate readiness modal: shown on FIRST evaluate per session if config or adjustments not saved */}
+      {preEvalCheck && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="text-amber-500 text-3xl leading-none">⚠️</div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Setup required before evaluating</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Two quick clicks before you run the first evaluation on this job:
+                </p>
+              </div>
+            </div>
+
+            <ul className="space-y-2 mb-5">
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.configMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.configMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Adjustments Configuration</strong> — open <em>Adjustments → Configuration</em> and click <strong>Save Configuration</strong>.
+                  This maps vendor codes (garage, det garage, pool, barn, etc.) so the parser can populate derived fields.
+                </span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.adjustmentsMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.adjustmentsMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Adjustments Grid</strong> — open <em>Adjustments → Adjustment Grid</em> and click <strong>Save Adjustments</strong>.
+                  This locks in bracket values used during evaluation.
+                </span>
+              </li>
+            </ul>
+
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900 mb-5">
+              After saving, return here and click <strong>Evaluate</strong> again.
+              {' '}If derived fields (garage / det garage etc.) are still empty afterward,
+              use the <strong>Reparse Source File</strong> button on the Configuration tab.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  // Allow user to bypass for this session if they're sure
+                  try { sessionStorage.setItem(`cme_eval_ack_${jobData?.id}`, '1'); } catch (_) {}
+                  setPreEvalCheck(null);
+                }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+              >
+                Proceed anyway
+              </button>
+              <button
+                onClick={() => {
+                  setPreEvalCheck(null);
+                  setActiveSubTab('adjustments');
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+              >
+                Go to Adjustments
               </button>
             </div>
           </div>

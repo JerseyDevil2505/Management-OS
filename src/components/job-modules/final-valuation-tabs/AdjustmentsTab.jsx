@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
+import { supabase, getRawDataForJob, propertyService } from '../../../lib/supabaseClient';
+import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 
 // Valid sales codes for CME averages (matches SalesComparisonTab defaults)
 const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
@@ -30,6 +30,8 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReparsing, setIsReparsing] = useState(false);
+  const [reparseProgress, setReparseProgress] = useState(null); // { processed, total, batch, totalBatches }
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
   const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
@@ -37,6 +39,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     name: '',
     attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
+  const [editingBracketId, setEditingBracketId] = useState(null); // null = create mode, set = edit mode
   const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
 
   // Bracket mapping state
@@ -821,18 +824,55 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     try {
       setIsSaving(true);
 
-      // Normalize all bracket values to numbers before saving
-      const normalizedAdjustments = adjustments.map(adj => {
-        const normalized = { ...adj };
-        for (let i = 0; i < 10; i++) {
-          const key = `bracket_${i}`;
-          if (normalized[key] !== undefined) {
-            const parsed = parseFloat(normalized[key]);
-            normalized[key] = isNaN(parsed) ? 0 : parsed;
+      // Whitelist of columns that exist on job_adjustment_grid. Anything else
+      // (e.g. a stray client-only field accumulated by the UI) gets dropped
+      // before upsert so Postgres never errors on an unknown column.
+      const ALLOWED_COLS = new Set([
+        'id', 'job_id', 'adjustment_id', 'adjustment_name', 'adjustment_type',
+        'category', 'is_default', 'sort_order',
+        'bracket_0', 'bracket_1', 'bracket_2', 'bracket_3', 'bracket_4',
+        'bracket_5', 'bracket_6', 'bracket_7', 'bracket_8', 'bracket_9'
+      ]);
+
+      // Normalize bracket values to numbers AND filter to allowed columns only.
+      // Any row missing required NOT NULL fields is rejected with a clear log
+      // line so the user knows exactly which row blew up.
+      const normalizedAdjustments = [];
+      const rejected = [];
+      adjustments.forEach((adj, i) => {
+        const cleaned = {};
+        Object.keys(adj).forEach(key => {
+          if (!ALLOWED_COLS.has(key)) return;
+          if (key.startsWith('bracket_')) {
+            const parsed = parseFloat(adj[key]);
+            cleaned[key] = isNaN(parsed) ? 0 : parsed;
+          } else if (key === 'id') {
+            // Skip null/undefined id here; we'll assign a UUID below if needed.
+            if (adj[key]) cleaned[key] = adj[key];
+          } else {
+            cleaned[key] = adj[key];
           }
+        });
+        // ROOT-CAUSE FIX: PostgREST builds the INSERT column list from the UNION
+        // of keys across all rows. If even one row in this batch has an `id`,
+        // any row missing it gets sent as id=NULL — which overrides the column's
+        // gen_random_uuid() default and trips the NOT NULL constraint.
+        // This is why Lindenwold/Kingwood (PPA archived jobs with existing
+        // dynamic rows but no static defaults in DB) failed: defaults were
+        // freshly seeded with no id, dynamic rows had real UUIDs, and the mix
+        // produced a NULL id on the seeded rows. Assigning a UUID here makes
+        // every row carry an id, so PostgREST no longer NULLs anything.
+        if (!cleaned.id) cleaned.id = crypto.randomUUID();
+        // Required NOT NULL columns
+        if (!cleaned.job_id || !cleaned.adjustment_id || !cleaned.adjustment_name || !cleaned.adjustment_type) {
+          rejected.push({ index: i, row: adj });
+          return;
         }
-        return normalized;
+        normalizedAdjustments.push(cleaned);
       });
+      if (rejected.length > 0) {
+        console.warn('⚠️ Skipping invalid adjustment rows (missing required fields):', rejected);
+      }
 
       const { error } = await supabase
         .from('job_adjustment_grid')
@@ -844,10 +884,22 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
 
       // Update local state with normalized values
       setAdjustments(normalizedAdjustments);
-      alert('Adjustments saved successfully!');
+      const skippedNote = rejected.length > 0
+        ? `\n\n${rejected.length} row(s) skipped due to missing required fields (see console).`
+        : '';
+      alert(`Adjustments saved successfully!${skippedNote}`);
     } catch (error) {
-      console.error('Error saving adjustments:', error);
-      alert(`Failed to save: ${error.message}`);
+      // Supabase errors carry message/details/hint/code; logging the bare
+      // object is what produced the unhelpful "[object Object]" string.
+      console.error('Error saving adjustments:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        raw: error
+      });
+      const msg = error?.message || error?.details || error?.hint || error?.code || JSON.stringify(error) || 'unknown error';
+      alert(`Failed to save: ${msg}`);
     } finally {
       setIsSaving(false);
     }
@@ -863,9 +915,31 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       };
     });
 
+    setEditingBracketId(null);
     setCustomBracket({
       name: '',
       attributeValues: initialValues
+    });
+    setShowCustomModal(true);
+  };
+
+  // Open the modal in EDIT mode for an existing custom bracket
+  const handleEditCustomBracket = (bracket) => {
+    // Merge stored values with the current adjustment list so newly-added attributes
+    // are also editable (defaulting to 0 / their type).
+    const merged = {};
+    adjustments.forEach(adj => {
+      const stored = bracket.adjustment_values?.[adj.adjustment_id];
+      merged[adj.adjustment_id] = {
+        value: stored?.value ?? 0,
+        type: stored?.type ?? adj.adjustment_type
+      };
+    });
+
+    setEditingBracketId(bracket.bracket_id);
+    setCustomBracket({
+      name: bracket.bracket_name || '',
+      attributeValues: merged
     });
     setShowCustomModal(true);
   };
@@ -877,25 +951,45 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     }
 
     try {
-      const bracketId = `custom_${Date.now()}`;
-      const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
+      if (editingBracketId) {
+        // EDIT MODE: update existing bracket in place
+        const { error } = await supabase
+          .from('job_custom_brackets')
+          .update({
+            bracket_name: customBracket.name,
+            adjustment_values: customBracket.attributeValues,
+            updated_at: new Date().toISOString()
+          })
+          .eq('job_id', jobData.id)
+          .eq('bracket_id', editingBracketId);
 
-      const { error } = await supabase
-        .from('job_custom_brackets')
-        .insert({
-          job_id: jobData.id,
-          bracket_id: bracketId,
-          bracket_name: customBracket.name,
-          adjustment_values: customBracket.attributeValues,
-          sort_order: maxSortOrder + 1
-        });
+        if (error) throw error;
 
-      if (error) throw error;
+        await loadCustomBrackets();
+        setShowCustomModal(false);
+        setEditingBracketId(null);
+        alert('Custom bracket updated successfully!');
+      } else {
+        // CREATE MODE
+        const bracketId = `custom_${Date.now()}`;
+        const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
 
-      // Reload custom brackets
-      await loadCustomBrackets();
-      setShowCustomModal(false);
-      alert('Custom bracket created successfully!');
+        const { error } = await supabase
+          .from('job_custom_brackets')
+          .insert({
+            job_id: jobData.id,
+            bracket_id: bracketId,
+            bracket_name: customBracket.name,
+            adjustment_values: customBracket.attributeValues,
+            sort_order: maxSortOrder + 1
+          });
+
+        if (error) throw error;
+
+        await loadCustomBrackets();
+        setShowCustomModal(false);
+        alert('Custom bracket created successfully!');
+      }
     } catch (error) {
       console.error('Error saving custom bracket:', error);
       alert(`Failed to save: ${error.message}`);
@@ -1087,8 +1181,10 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       };
 
       // Attributes that create individual rows per code (using code description as name)
-      // Detached items (barn, pole_barn, stable), miscellaneous, and land adjustments all create one row per code
-      const individualRowAttributes = ['barn', 'pole_barn', 'stable', 'miscellaneous', 'land_positive', 'land_negative'];
+      // Miscellaneous and land adjustments create one row per code.
+      // Barn / Pole Barn / Stable are SINGLE rows (their areas are pre-aggregated into
+      // barn_area / pole_barn_area / stable_area on property_records).
+      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
 
       const newAdjustments = [];
       let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
@@ -1182,24 +1278,31 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       const rowsToDelete = [];
       adjustments.forEach(adj => {
         if (!adj.is_default) {
-          // Delete OLD LEGACY rows (barn, pole_barn, stable without code suffix)
-          if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+          // Delete LEGACY per-code rows for barn/pole_barn/stable (replaced by single aggregated row)
+          if (adj.adjustment_id.startsWith('barn_') ||
+              adj.adjustment_id.startsWith('pole_barn_') ||
+              adj.adjustment_id.startsWith('stable_')) {
             rowsToDelete.push(adj.adjustment_id);
-            console.log(`🗑️ Marking LEGACY row for deletion: ${adj.adjustment_id} (replaced by per-code rows)`);
+            console.log(`🗑️ Marking LEGACY per-code row for deletion: ${adj.adjustment_id} (replaced by single aggregated row)`);
             return;
           }
 
-          // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
-          const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
-                               adj.adjustment_id.startsWith('pole_barn_') ||
-                               adj.adjustment_id.startsWith('stable_') ||
-                               adj.adjustment_id.startsWith('miscellaneous_') ||
+          // If single barn/pole_barn/stable row exists but no codes selected, remove it
+          if ((adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable')
+              && (codeConfig[adj.adjustment_id] || []).length === 0) {
+            rowsToDelete.push(adj.adjustment_id);
+            console.log(`🗑️ Marking for deletion: ${adj.adjustment_id} (no codes selected)`);
+            return;
+          }
+
+          // Check if this is a per-code dynamic adjustment row (miscellaneous or land adjustments)
+          const isDynamicRow = adj.adjustment_id.startsWith('miscellaneous_') ||
                                adj.adjustment_id.startsWith('land_positive_') ||
                                adj.adjustment_id.startsWith('land_negative_');
 
           if (isDynamicRow) {
             // Extract the type and code from adjustment_id
-            const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+            const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
             if (match) {
               const [, type, code] = match;
               const selectedCodes = codeConfig[type] || [];
@@ -1282,6 +1385,93 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     return availableCodes[category] || [];
   };
 
+  // Reparse the source file using the stored raw_file_content - avoids re-downloading from vendor
+  const handleReparse = async () => {
+    if (!jobData?.id) return;
+    if (!window.confirm(
+      'Reparse Source File?\n\n' +
+      'This re-runs the parser against the last uploaded source file using your current ' +
+      'attribute configuration. Use this after saving Configuration to populate derived ' +
+      'fields (garage, det garage, pool, barn, etc.) WITHOUT re-downloading from the vendor.\n\n' +
+      'This may take a couple of minutes for large jobs. Continue?'
+    )) return;
+
+    try {
+      setIsReparsing(true);
+      setReparseProgress({ processed: 0, total: 0, batch: 0, totalBatches: 0 });
+
+      // Pull stored content + minimal metadata from jobs row
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs')
+        .select('id, vendor_type, raw_file_content, code_file_content, ccdd_code, start_date, source_file_name')
+        .eq('id', jobData.id)
+        .single();
+      if (jobErr) throw jobErr;
+
+      if (!job?.raw_file_content) {
+        alert('No stored source file content found for this job. You will need to use Update File to upload the source file once before Reparse can work.');
+        return;
+      }
+      if (!job?.code_file_content) {
+        alert('No stored code file content found for this job. Please upload the code file first.');
+        return;
+      }
+
+      const yearCreated = job.start_date
+        ? parseInt(String(job.start_date).substring(0, 4), 10)
+        : new Date().getFullYear();
+
+      // Bump file_version so updater treats this as a new pass
+      let newFileVersion = 2;
+      try {
+        const { data: vRow } = await supabase
+          .from('property_records')
+          .select('file_version')
+          .eq('job_id', job.id)
+          .order('file_version', { ascending: false })
+          .limit(1)
+          .single();
+        newFileVersion = (vRow?.file_version || 1) + 1;
+      } catch (_) { /* ignore */ }
+
+      const result = await propertyService.updateCSVData(
+        job.raw_file_content,
+        job.code_file_content,
+        job.id,
+        yearCreated,
+        job.ccdd_code || '',
+        job.vendor_type,
+        {
+          source_file_name: job.source_file_name || 'reparse',
+          source_file_version_id: crypto.randomUUID(),
+          source_file_uploaded_at: new Date().toISOString(),
+          file_version: newFileVersion,
+          // Live progress: BRT/Microsystems updaters call this after every batch
+          onProgress: (p) => setReparseProgress(p)
+        }
+      );
+
+      // Touch jobs.source_file_uploaded_at so downstream "stale" checks update
+      await supabase
+        .from('jobs')
+        .update({ source_file_uploaded_at: new Date().toISOString() })
+        .eq('id', job.id);
+
+      alert(
+        `Reparse complete.\n\n` +
+        `Processed: ${result?.processed ?? 'n/a'}\n` +
+        `Errors: ${result?.errors ?? 0}\n\n` +
+        `Refresh the page to see the updated derived fields (garage / det garage / pool / barn etc.).`
+      );
+    } catch (error) {
+      console.error('Reparse failed:', error);
+      alert(`Reparse failed: ${error?.message || error}`);
+    } finally {
+      setIsReparsing(false);
+      setReparseProgress(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1324,7 +1514,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <Map className="w-4 h-4" />
+            <MapIcon className="w-4 h-4" />
             Bracket Mapping
             {bracketMappings.length > 0 && (
               <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{bracketMappings.length}</span>
@@ -1719,15 +1909,66 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 </div>
               </div>
 
-              {/* Save Button */}
-              <div className="flex justify-end pt-4 border-t">
-                <button
-                  onClick={handleSaveCodeConfig}
-                  className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Configuration
-                </button>
+              {/* Save / Reparse Buttons */}
+              <div className="pt-4 border-t">
+                {isReparsing && reparseProgress && (
+                  <div className="mb-3 bg-orange-50 border border-orange-300 rounded p-3">
+                    <div className="flex justify-between items-center mb-1 text-xs font-medium text-orange-900">
+                      <span>
+                        {reparseProgress.total > 0
+                          ? `Reparsing batch ${reparseProgress.batch} of ${reparseProgress.totalBatches}`
+                          : 'Preparing reparse…'}
+                      </span>
+                      <span>
+                        {reparseProgress.total > 0
+                          ? `${reparseProgress.processed.toLocaleString()} / ${reparseProgress.total.toLocaleString()} records (${Math.round((reparseProgress.processed / reparseProgress.total) * 100)}%)`
+                          : ''}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-orange-200 rounded overflow-hidden">
+                      <div
+                        className="h-full bg-orange-600 transition-all duration-200"
+                        style={{
+                          width: reparseProgress.total > 0
+                            ? `${Math.min(100, (reparseProgress.processed / reparseProgress.total) * 100)}%`
+                            : '0%'
+                        }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-orange-800 mt-1 italic">
+                      Don't navigate away — the reparse runs in this tab. Refresh the page once it completes to see updated derived fields.
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-end gap-3">
+                  {/*
+                    Reparse Source File button — temporarily hidden from the UI
+                    while the reparse pipeline is investigated. The handler
+                    (`handleReparse`) and the parser-side progress hooks remain
+                    in place, so the feature can be re-enabled by simply
+                    restoring the button JSX below.
+
+                    Use the traditional "Update File" upload flow instead.
+                  */}
+                  {false && (
+                    <button
+                      onClick={handleReparse}
+                      disabled={isReparsing}
+                      title="Re-runs the parser using the stored source file content. Skip the vendor download + re-upload step."
+                      style={{ backgroundColor: '#ea580c', color: 'white' }}
+                      className="inline-flex items-center gap-2 px-6 py-2 rounded font-bold border-2 border-orange-800 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ⚡ {isReparsing ? 'Reparsing...' : 'Reparse Source File'}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleSaveCodeConfig}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Configuration
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1792,6 +2033,13 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                       <div className="flex items-center justify-center gap-2">
                         <span>{customBracket.bracket_name}</span>
                         <button
+                          onClick={() => handleEditCustomBracket(customBracket)}
+                          className="text-purple-600 hover:text-purple-800"
+                          title="Edit custom bracket values"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
                           onClick={() => handleDeleteCustomBracket(customBracket.bracket_id)}
                           className="text-purple-600 hover:text-purple-800"
                           title="Delete custom bracket"
@@ -1812,23 +2060,25 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     // Always show default adjustments
                     if (adj.is_default) return true;
 
-                    // HIDE OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+                    // Single aggregated rows for barn / pole_barn / stable - show when ANY code is configured
                     if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+                      return (codeConfig[adj.adjustment_id] || []).length > 0;
+                    }
+
+                    // HIDE legacy per-code rows for barn/pole_barn/stable (replaced by single aggregated row)
+                    if (adj.adjustment_id.startsWith('barn_') ||
+                        adj.adjustment_id.startsWith('pole_barn_') ||
+                        adj.adjustment_id.startsWith('stable_')) {
                       return false;
                     }
 
-                    // For dynamic adjustments, only show if configuration has been saved
-                    // Check if this adjustment has corresponding codes in codeConfig
-                    const isDynamic = adj.adjustment_id.includes('barn_') ||
-                                    adj.adjustment_id.includes('pole_barn_') ||
-                                    adj.adjustment_id.includes('stable_') ||
-                                    adj.adjustment_id.includes('miscellaneous_') ||
+                    // For per-code dynamic adjustments (miscellaneous / land), only show if code is configured
+                    const isDynamic = adj.adjustment_id.includes('miscellaneous_') ||
                                     adj.adjustment_id.includes('land_positive_') ||
                                     adj.adjustment_id.includes('land_negative_');
 
                     if (isDynamic) {
-                      // Check if codes are saved for this attribute type (all create per-code rows now)
-                      const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+                      const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
                       if (match) {
                         const [, type, code] = match;
                         const isConfigured = (codeConfig[type] || []).includes(code);
@@ -1948,11 +2198,15 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 {/* Fixed Header */}
                 <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment Bracket</h3>
-                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column</p>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {editingBracketId ? 'Edit Custom Adjustment Bracket' : 'Create Custom Adjustment Bracket'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {editingBracketId ? 'Update the name or attribute values for this bracket' : 'Define a custom price bracket column'}
+                    </p>
                   </div>
                   <button
-                    onClick={() => setShowCustomModal(false)}
+                    onClick={() => { setShowCustomModal(false); setEditingBracketId(null); }}
                     className="text-gray-400 hover:text-gray-600 ml-4 flex-shrink-0"
                     title="Close"
                   >
@@ -2058,7 +2312,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                 {/* Fixed Footer */}
                 <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0">
                   <button
-                    onClick={() => setShowCustomModal(false)}
+                    onClick={() => { setShowCustomModal(false); setEditingBracketId(null); }}
                     className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 bg-white font-medium"
                   >
                     Cancel
@@ -2067,7 +2321,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     onClick={handleSaveCustomAdjustment}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
                   >
-                    Save Custom Bracket
+                    {editingBracketId ? 'Update Custom Bracket' : 'Save Custom Bracket'}
                   </button>
                 </div>
               </div>

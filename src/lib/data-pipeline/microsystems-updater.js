@@ -997,7 +997,17 @@ export class MicrosystemsUpdater {
         } else {
           results.processed += batch.length;
           console.log(`✅ UPSERT Batch ${batchNumber} completed successfully (${results.processed}/${propertyRecords.length} total)`);
-          
+
+          // Live progress callback (used by AdjustmentsTab Reparse button)
+          try {
+            versionInfo?.onProgress?.({
+              processed: results.processed,
+              total: propertyRecords.length,
+              batch: batchNumber,
+              totalBatches
+            });
+          } catch (_) { /* never let progress UI break the pipeline */ }
+
           // Track successful batch for potential rollback
           successfulBatches.push({
             batchNumber,
@@ -1208,15 +1218,27 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Extract open porch area (sum of Op, Bi Op, Bi Op2, Bi Gp, and Porch)
+   * Extract open porch area from Microsystems raw record.
+   *
+   * Standalone columns: 'Op', 'Bi Gp', 'Porch'.
+   * Built-in open porches ship as a single combined column header
+   * 'Bi Op Bi Op2'; falls back to individual 'Bi Op' / 'Bi Op2'
+   * columns for legacy/variant exports.
    */
   extractOpenPorchArea(rawRecord) {
+    const sumNumeric = (keys) =>
+      keys.reduce((acc, k) => acc + (this.parseNumeric(rawRecord[k]) || 0), 0);
+
     let total = 0;
     total += this.parseNumeric(rawRecord['Op']) || 0;
-    total += this.parseNumeric(rawRecord['Bi Op']) || 0;
-    total += this.parseNumeric(rawRecord['Bi Op2']) || 0;
     total += this.parseNumeric(rawRecord['Bi Gp']) || 0;
     total += this.parseNumeric(rawRecord['Porch']) || 0;
+
+    const biOpCombined = this.parseNumeric(rawRecord['Bi Op Bi Op2']);
+    total += biOpCombined != null
+      ? biOpCombined
+      : sumNumeric(['Bi Op', 'Bi Op2']);
+
     return total > 0 ? total : null;
   }
 
@@ -1231,17 +1253,46 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Extract garage area (sum of Attgar, Attgar2, Bi Ga, Big, Big2, Big3)
+   * Extract attached garage area from Microsystems raw record.
+   *
+   * Microsystems CSV exports group these as THREE combined column headers
+   * (not seven individual headers):
+   *   1. 'Attgar Attgar2'
+   *   2. 'Bi Ga Big Big2 Big3'
+   *   3. 'Basmtgar'
+   *
+   * For each group we prefer the combined header value; if it's missing
+   * (older / variant exports) we fall back to summing the individual
+   * sub-column names so legacy files still parse.
    */
   extractGarageArea(rawRecord) {
+    const firstNumeric = (keys) => {
+      for (const k of keys) {
+        const v = this.parseNumeric(rawRecord[k]);
+        if (v) return v;
+      }
+      return 0;
+    };
+    const sumNumeric = (keys) =>
+      keys.reduce((acc, k) => acc + (this.parseNumeric(rawRecord[k]) || 0), 0);
+
     let total = 0;
-    total += this.parseNumeric(rawRecord['Attgar']) || 0;
-    total += this.parseNumeric(rawRecord['Attgar2']) || 0;
+
+    // Group 1: attached garage
+    const attgarCombined = this.parseNumeric(rawRecord['Attgar Attgar2']);
+    total += attgarCombined != null
+      ? attgarCombined
+      : sumNumeric(['Attgar', 'Attgar2']);
+
+    // Group 2: built-in garage
+    const biGaCombined = this.parseNumeric(rawRecord['Bi Ga Big Big2 Big3']);
+    total += biGaCombined != null
+      ? biGaCombined
+      : sumNumeric(['Bi Ga', 'Big', 'Big2', 'Big3']);
+
+    // Group 3: basement garage (always its own column)
     total += this.parseNumeric(rawRecord['Basmtgar']) || 0;
-    total += this.parseNumeric(rawRecord['Bi Ga']) || 0;
-    total += this.parseNumeric(rawRecord['Big']) || 0;
-    total += this.parseNumeric(rawRecord['Big2']) || 0;
-    total += this.parseNumeric(rawRecord['Big3']) || 0;
+
     return total > 0 ? total : null;
   }
 

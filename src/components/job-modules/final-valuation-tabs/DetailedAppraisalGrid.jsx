@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {} }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
 
@@ -994,7 +994,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           return 'NONE';
         }
 
-        // Legacy: For non-coded dynamic adjustments with area columns
+        // Legacy / single-aggregated dynamic rows for barn / pole_barn / stable
+        // Always normalize to YES/NONE so the "hide if all NONE" filter works in
+        // both the UI and the PDF export (matches how land adjustments behave).
         const columnMap = {
           'barn': 'barn_area',
           'stable': 'stable_area',
@@ -1002,11 +1004,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         };
 
         const columnName = columnMap[adj.adjustment_id];
-        if (columnName && prop[columnName] !== undefined && prop[columnName] !== null) {
-          return prop[columnName] > 0 ? `YES (${prop[columnName].toLocaleString()} SF)` : 'NONE';
+        if (columnName) {
+          const val = prop[columnName];
+          if (val !== undefined && val !== null && val > 0) {
+            return `YES (${val.toLocaleString()} SF)`;
+          }
+          return 'NONE';
         }
 
-        return 'N/A';
+        return 'NONE';
       },
       adjustmentName: adj.adjustment_name,
       isDynamic: true
@@ -1410,7 +1416,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     addHeader(subjectBlockLot);
 
     // Prepare table data
-    const visibleAttributes = allAttributes.filter(attr => rowVisibility[attr.id]);
+    const visibleAttributes = allAttributes
+      .filter(attr => rowVisibility[attr.id])
+      .filter(attr => {
+        // Mirror the on-screen filter: hide dynamic rows (barn / pole_barn / stable / land / misc)
+        // when neither the subject nor any comp meets the criteria.
+        if (!attr.isDynamic) return true;
+        const subjectVal = attr.render(aggregatedSubject);
+        if (subjectVal !== 'NONE') return true;
+        for (let i = 0; i < aggregatedComps.length; i++) {
+          if (aggregatedComps[i]) {
+            const compVal = attr.render(aggregatedComps[i]);
+            if (compVal !== 'NONE') return true;
+          }
+        }
+        return false;
+      });
 
     // Build headers with additional cards badge
     const subjectAdditionalCards = aggregatedSubject._additionalCardsCount || 0;
@@ -1855,12 +1876,28 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               evRatioSource = 'Equalization';
             }
           }
-          const fmvByRatio = (subject?.values_mod_total && evRatioDecimal)
-            ? Math.round(Number(subject.values_mod_total) / evRatioDecimal)
+          // Load Current Assessment source preference (synced with Detailed and Search & Results).
+          let evAssmtSource = 'mod';
+          try {
+            const { data: srcRow } = await supabase
+              .from('job_settings')
+              .select('setting_value')
+              .eq('job_id', jobData.id)
+              .eq('setting_key', 'current_assessment_source')
+              .maybeSingle();
+            if (srcRow?.setting_value === 'cama' || srcRow?.setting_value === 'mod') {
+              evAssmtSource = srcRow.setting_value;
+            }
+          } catch (e) { /* default to mod */ }
+          const subjAssmtRaw = evAssmtSource === 'cama'
+            ? (subject?.values_cama_total ?? subject?.values_mod_total ?? null)
+            : (subject?.values_mod_total ?? subject?.values_cama_total ?? null);
+          const fmvByRatio = (subjAssmtRaw && evRatioDecimal)
+            ? Math.round(Number(subjAssmtRaw) / evRatioDecimal)
             : null;
 
-          const currentAsmt = subject.values_mod_total
-            ? `$${Number(subject.values_mod_total).toLocaleString()}`
+          const currentAsmt = subjAssmtRaw
+            ? `$${Number(subjAssmtRaw).toLocaleString()} (${evAssmtSource.toUpperCase()})`
             : '\u2014';
           const fmvStr = fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014';
           const ratioStr = evRatioDecimal ? `${(evRatioDecimal * 100).toFixed(2)}% ${evRatioSource}` : 'n/a';
@@ -1919,23 +1956,30 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               return '\u2014';
             };
 
+            // Mirror AppellantEvidencePanel's sample-range math EXACTLY so
+            // the PDF doesn't paint sale dates red when the on-screen panel
+            // shows them green. For Lojik (assessor) tenants the assessment
+            // year is end_date.year - 1.
             const sampleRange = (() => {
               if (!jobData?.end_date) return { start: '', end: '' };
               const rawYear = new Date(jobData.end_date).getFullYear();
+              const isLojikTenant = tenantConfig?.orgType === 'assessor';
+              const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
               return {
-                start: new Date(rawYear - 1, 9, 1).toISOString().split('T')[0],
-                end: new Date(rawYear, 9, 31).toISOString().split('T')[0]
+                start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+                end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]
               };
             })();
             const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
             const farmMode = !!appealRow.farm_mode;
 
-            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
             const subjRow = [
               'SUBJ',
               subject.property_block || '',
               subject.property_lot || '',
               subject.property_qualifier || '',
+              subject.property_addl_card || subject.property_card || '\u2014',
               subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
               subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
               subject.sales_nu || '\u2014',
@@ -1957,6 +2001,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               slot.block || (compProp?.property_block || ''),
               slot.lot || (compProp?.property_lot || ''),
               slot.qualifier || (compProp?.property_qualifier || ''),
+              slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
               slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
               (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
               slot.sales_nu || compProp?.sales_nu || '\u2014',
@@ -1969,6 +2014,34 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               lotDisplay(compProp)
             ]));
 
+            // Map PDF column index → evalResult.flags key. PDF columns now
+            // mirror the on-screen modal (including the Card column) so the
+            // color heat-map lines up 1:1 with what reviewers saw in the UI.
+            // null = column has no evidence-evaluation flag and stays uncolored.
+            const COL_TO_FLAG = [
+              null,         // 0: #
+              null,         // 1: Block
+              null,         // 2: Lot
+              null,         // 3: Qual
+              'card',       // 4: Card
+              'sale_date',  // 5
+              'sale_price', // 6
+              'sale_nu',    // 7
+              'vcs',        // 8
+              'design',     // 9
+              'type_use',   // 10
+              'condition',  // 11
+              'year_built', // 12
+              'sfla',       // 13
+              'lot_size'    // 14
+            ];
+            // Same pastel hexes used in the panel UI (Tailwind {color}-100).
+            const COLOR_FILL = {
+              green:  [220, 252, 231],
+              yellow: [254, 249, 195],
+              red:    [254, 226, 226]
+            };
+
             autoTable(doc, {
               startY: evY + 10,
               head: evalHeader,
@@ -1977,10 +2050,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               styles: { fontSize: 7, cellPadding: 2 },
               headStyles: { fillColor: lojikBlue, textColor: 255, fontStyle: 'bold' },
               didParseCell: (data) => {
-                if (data.row.index === 0 && data.section === 'body') {
+                if (data.section !== 'body') return;
+                // Subject row (index 0): light blue, bold — preserves prior behavior.
+                if (data.row.index === 0) {
                   data.cell.styles.fillColor = [219, 234, 254];
                   data.cell.styles.fontStyle = 'bold';
+                  return;
                 }
+                // Comp rows: paint each cell with its evaluator color flag.
+                const compIdx = data.row.index - 1;
+                const evalResult = evaluations[compIdx]?.evalResult;
+                if (!evalResult || !evalResult.resolved) return;
+                const flagKey = COL_TO_FLAG[data.column.index];
+                if (!flagKey) return;
+                const color = evalResult.flags[flagKey]?.color;
+                const fill = COLOR_FILL[color];
+                if (fill) data.cell.styles.fillColor = fill;
               },
               margin: { left: margin, right: margin }
             });
