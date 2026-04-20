@@ -141,6 +141,19 @@ const NJ_US_HIGHWAY_NUMBERS = new Set([
   '1', '9', '22', '30', '40', '46', '130', '202', '206', '322',
 ]);
 
+// Word-form ordinals → numeric ordinals. TIGER indexes numbered streets in
+// the numeric form ("1ST", "2ND", "3RD", "42ND"), so a parcel on
+// "FIRST AVENUE" or "TWENTY-THIRD STREET" is invisible to a literal Census
+// match. We canonicalize to the numeric form on the way out, and also strip
+// hyphens so "TWENTY-THIRD" / "TWENTY THIRD" both work.
+const ORDINAL_WORD_TO_NUM = {
+  FIRST: '1ST', SECOND: '2ND', THIRD: '3RD', FOURTH: '4TH', FIFTH: '5TH',
+  SIXTH: '6TH', SEVENTH: '7TH', EIGHTH: '8TH', NINTH: '9TH', TENTH: '10TH',
+  ELEVENTH: '11TH', TWELFTH: '12TH', THIRTEENTH: '13TH', FOURTEENTH: '14TH',
+  FIFTEENTH: '15TH', SIXTEENTH: '16TH', SEVENTEENTH: '17TH', EIGHTEENTH: '18TH',
+  NINETEENTH: '19TH', TWENTIETH: '20TH',
+};
+
 // Normalize a property address for Census batch geocoding:
 //   * Collapse street suffixes to USPS-canonical form (LA / LANE → LN,
 //     AVE. → AVE, BOULEVARD → BLVD, etc.) using the existing SUFFIX_LOOKUP.
@@ -157,6 +170,7 @@ function normalizeAddressForCensus(addr) {
   let s = String(addr)
     .toUpperCase()
     .replace(/[.,#]/g, ' ')
+    .replace(/-/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (!s) return s;
@@ -168,11 +182,14 @@ function normalizeAddressForCensus(addr) {
 
   // Suffix canonicalization: walk tokens and collapse known aliases. Only
   // apply to tokens AFTER the first one (so a leading directional like "N"
-  // isn't mistaken for a suffix). Keep order intact.
+  // isn't mistaken for a suffix). Keep order intact. Same loop also folds
+  // word-ordinals to numeric ("FIRST" → "1ST") so TIGER's numbered-street
+  // index can find them.
   const tokens = s.split(' ');
   for (let i = 1; i < tokens.length; i++) {
     const t = tokens[i];
-    if (SUFFIX_LOOKUP[t]) tokens[i] = SUFFIX_LOOKUP[t];
+    if (ORDINAL_WORD_TO_NUM[t]) tokens[i] = ORDINAL_WORD_TO_NUM[t];
+    else if (SUFFIX_LOOKUP[t]) tokens[i] = SUFFIX_LOOKUP[t];
   }
   return tokens.join(' ').trim();
 }
@@ -1739,7 +1756,8 @@ const GeocodingTool = () => {
                       Addresses are normalized before sending: <code>LA</code>/<code>LANE</code>{' '}
                       → <code>LN</code>, <code>RT 27</code> → <code>NJ 27</code>,{' '}
                       <code>RT 1</code> → <code>US 1</code>, <code>AVE.</code> →{' '}
-                      <code>AVE</code>, etc.
+                      <code>AVE</code>, <code>FIRST</code> → <code>1ST</code>,{' '}
+                      <code>SECOND</code> → <code>2ND</code>, etc.
                     </span>
                   </p>
                 );
