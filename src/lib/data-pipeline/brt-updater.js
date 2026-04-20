@@ -432,39 +432,27 @@ export class BRTUpdater {
     try {
       console.log('💾 Storing complete code file in jobs table (UPDATER)...');
 
-      const newSectionCount = Object.keys(this.allCodeSections).length;
-      const updatePayload = {
-        code_file_content: codeFileContent,
-        code_file_name: 'BRT_Code_File.txt',
-        code_file_uploaded_at: new Date().toISOString()
-      };
-
-      // DEFENSIVE: only overwrite parsed_code_definitions if this parse
-      // actually produced sections. If a future parse fails for any
-      // reason, leave the previously-good code book in place rather than
-      // wiping it to an empty stub.
-      if (newSectionCount > 0) {
-        updatePayload.parsed_code_definitions = {
-          vendor_type: 'BRT',
-          sections: this.allCodeSections,
-          summary: {
-            total_sections: newSectionCount,
-            residential_codes: Object.keys(this.allCodeSections.Residential || {}).length,
-            mobile_codes: Object.keys(this.allCodeSections.Mobile || {}).length,
-            qf_codes: Object.keys(this.allCodeSections.QF || {}).length,
-            depth_codes: Object.keys(this.allCodeSections.Depth || {}).length,
-            depr_codes: Object.keys(this.allCodeSections.Depr || {}).length,
-            vcs_codes: Object.keys(this.allCodeSections.VCS || {}).length,
-            parsed_at: new Date().toISOString()
-          }
-        };
-      } else {
-        console.warn('⚠️ Parsed code book is empty — preserving existing parsed_code_definitions on jobs row');
-      }
-
       const { error } = await supabase
         .from('jobs')
-        .update(updatePayload)
+        .update({
+          code_file_content: codeFileContent,
+          code_file_name: 'BRT_Code_File.txt',
+          code_file_uploaded_at: new Date().toISOString(),
+          parsed_code_definitions: {
+            vendor_type: 'BRT',
+            sections: this.allCodeSections,
+            summary: {
+              total_sections: Object.keys(this.allCodeSections).length,
+              residential_codes: Object.keys(this.allCodeSections.Residential || {}).length,
+              mobile_codes: Object.keys(this.allCodeSections.Mobile || {}).length,
+              qf_codes: Object.keys(this.allCodeSections.QF || {}).length,
+              depth_codes: Object.keys(this.allCodeSections.Depth || {}).length,
+              depr_codes: Object.keys(this.allCodeSections.Depr || {}).length,
+              vcs_codes: Object.keys(this.allCodeSections.VCS || {}).length,
+              parsed_at: new Date().toISOString()
+            }
+          }
+        })
         .eq('id', jobId);
 
       if (error) {
