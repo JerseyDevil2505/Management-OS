@@ -1106,7 +1106,7 @@ const GeocodingTool = () => {
               <thead>
                 <tr>
                   <th style={th}>Address</th>
-                  <th style={th}>Block / Lot</th>
+                  <th style={th}>Block/Lot/Qual</th>
                   <th style={th}>Class</th>
                   <th style={th}>Current</th>
                   <th style={th}>Lat</th>
