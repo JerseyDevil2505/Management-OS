@@ -107,18 +107,29 @@ async function fetchAllJobProperties(jobId) {
 }
 
 async function fetchCoverageForJob(jobId) {
+  // Only count main cards (property_addl_card = '1') so additional cards on the
+  // same parcel don't inflate totals or punish the % complete.
   const total = await supabase
     .from('property_records')
     .select('id', { count: 'exact', head: true })
-    .eq('job_id', jobId);
+    .eq('job_id', jobId)
+    .eq('property_addl_card', '1');
   const geocoded = await supabase
     .from('property_records')
     .select('id', { count: 'exact', head: true })
     .eq('job_id', jobId)
+    .eq('property_addl_card', '1')
     .not('property_latitude', 'is', null);
+  const skipped = await supabase
+    .from('property_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', jobId)
+    .eq('property_addl_card', '1')
+    .eq('geocode_source', 'skipped');
   return {
     total: total.count || 0,
     geocoded: geocoded.count || 0,
+    skipped: skipped.count || 0,
   };
 }
 
@@ -255,8 +266,13 @@ const GeocodingTool = () => {
   const generateCsvBatches = useCallback(() => {
     if (!selectedJob || properties.length === 0) return;
 
+    // Only main cards, with an address, not yet geocoded, and not skipped.
     const candidates = properties.filter(
-      (p) => (p.property_location || '').trim() && p.property_latitude == null
+      (p) =>
+        (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
+        (p.property_location || '').trim() &&
+        p.property_latitude == null &&
+        p.geocode_source !== 'skipped'
     );
 
     if (candidates.length === 0) {
@@ -446,9 +462,16 @@ const GeocodingTool = () => {
   // ---------- Manual entry helpers ----------
 
   const manualCandidates = useMemo(() => {
-    let list = properties;
+    // Always restrict to main cards in the manual list.
+    let list = properties.filter(
+      (p) => p.property_addl_card == null || String(p.property_addl_card) === '1'
+    );
     if (manualFilter === 'ungeocoded') {
-      list = list.filter((p) => p.property_latitude == null);
+      list = list.filter(
+        (p) => p.property_latitude == null && p.geocode_source !== 'skipped'
+      );
+    } else if (manualFilter === 'skipped') {
+      list = list.filter((p) => p.geocode_source === 'skipped');
     }
     const q = manualSearch.trim().toLowerCase();
     if (q) {
@@ -464,7 +487,23 @@ const GeocodingTool = () => {
   }, [properties, manualSearch, manualFilter]);
 
   const manualUngeocodedCount = useMemo(
-    () => properties.filter((p) => p.property_latitude == null).length,
+    () =>
+      properties.filter(
+        (p) =>
+          (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
+          p.property_latitude == null &&
+          p.geocode_source !== 'skipped'
+      ).length,
+    [properties]
+  );
+
+  const manualSkippedCount = useMemo(
+    () =>
+      properties.filter(
+        (p) =>
+          (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
+          p.geocode_source === 'skipped'
+      ).length,
     [properties]
   );
 
@@ -474,6 +513,82 @@ const GeocodingTool = () => {
       [key]: { ...(prev[key] || {}), [field]: value },
     }));
   };
+
+  const skipManual = useCallback(
+    async (property) => {
+      const key = property.property_composite_key;
+      setError(null);
+      setManualSaving((prev) => ({ ...prev, [key]: true }));
+      try {
+        const { error: upErr } = await supabase
+          .from('property_records')
+          .update({
+            geocode_source: 'skipped',
+            geocode_match_quality: 'skipped',
+            geocoded_at: new Date().toISOString(),
+          })
+          .eq('property_composite_key', key)
+          .eq('job_id', selectedJobId);
+        if (upErr) throw upErr;
+        setProperties((prev) =>
+          prev.map((p) =>
+            p.property_composite_key === key
+              ? { ...p, geocode_source: 'skipped' }
+              : p
+          )
+        );
+        const c = await fetchCoverageForJob(selectedJobId);
+        setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+      } catch (e) {
+        setError(`Skip failed for ${key}: ${e.message || e}`);
+      } finally {
+        setManualSaving((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    },
+    [selectedJobId]
+  );
+
+  const unskipManual = useCallback(
+    async (property) => {
+      const key = property.property_composite_key;
+      setError(null);
+      setManualSaving((prev) => ({ ...prev, [key]: true }));
+      try {
+        const { error: upErr } = await supabase
+          .from('property_records')
+          .update({
+            geocode_source: null,
+            geocode_match_quality: null,
+            geocoded_at: null,
+          })
+          .eq('property_composite_key', key)
+          .eq('job_id', selectedJobId);
+        if (upErr) throw upErr;
+        setProperties((prev) =>
+          prev.map((p) =>
+            p.property_composite_key === key
+              ? { ...p, geocode_source: null }
+              : p
+          )
+        );
+        const c = await fetchCoverageForJob(selectedJobId);
+        setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+      } catch (e) {
+        setError(`Unskip failed for ${key}: ${e.message || e}`);
+      } finally {
+        setManualSaving((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    },
+    [selectedJobId]
+  );
 
   const saveManual = useCallback(
     async (property) => {
@@ -550,15 +665,18 @@ const GeocodingTool = () => {
       const c = coverage[j.id];
       const total = c?.total ?? null;
       const geocoded = c?.geocoded ?? null;
+      const skipped = c?.skipped ?? 0;
       let pct = null;
       let bucket = 'unknown';
       if (total != null && geocoded != null) {
-        pct = total > 0 ? (geocoded / total) * 100 : 0;
-        if (pct === 0) bucket = 'none';
+        // Treat skipped as "addressed" for completion purposes.
+        const addressed = geocoded + skipped;
+        pct = total > 0 ? (addressed / total) * 100 : 0;
+        if (addressed === 0) bucket = 'none';
         else if (pct < 95) bucket = 'partial';
         else bucket = 'complete';
       }
-      return { job: j, total, geocoded, pct, bucket };
+      return { job: j, total, geocoded, skipped, pct, bucket };
     });
   }, [jobs, coverage]);
 
@@ -607,7 +725,7 @@ const GeocodingTool = () => {
               </tr>
             </thead>
             <tbody>
-              {coverageRows.map(({ job, total, geocoded, pct, bucket }) => (
+              {coverageRows.map(({ job, total, geocoded, skipped, pct, bucket }) => (
                 <tr key={job.id}>
                   <td style={td}>{job.job_name}</td>
                   <td style={td}>{job.municipality || '—'}</td>
@@ -617,6 +735,11 @@ const GeocodingTool = () => {
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     {geocoded != null ? geocoded.toLocaleString() : '…'}
+                    {skipped > 0 && (
+                      <span style={{ color: '#6b7280', fontSize: 11 }}>
+                        {' '}+{skipped} skip
+                      </span>
+                    )}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     {total != null ? total.toLocaleString() : '…'}
@@ -704,7 +827,11 @@ const GeocodingTool = () => {
 
               {(() => {
                 const ungeocoded = properties.filter(
-                  (p) => (p.property_location || '').trim() && p.property_latitude == null
+                  (p) =>
+                    (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
+                    (p.property_location || '').trim() &&
+                    p.property_latitude == null &&
+                    p.geocode_source !== 'skipped'
                 ).length;
                 const chunks = Math.ceil(ungeocoded / CENSUS_BATCH_LIMIT);
                 return (
@@ -879,8 +1006,9 @@ const GeocodingTool = () => {
               onChange={(e) => setManualFilter(e.target.value)}
               style={buttonBase}
             >
-              <option value="ungeocoded">Show ungeocoded only ({manualUngeocodedCount.toLocaleString()})</option>
-              <option value="all">Show all ({properties.length.toLocaleString()})</option>
+              <option value="ungeocoded">Ungeocoded only ({manualUngeocodedCount.toLocaleString()})</option>
+              <option value="skipped">Skipped only ({manualSkippedCount.toLocaleString()})</option>
+              <option value="all">All main cards</option>
             </select>
             <span style={{ fontSize: 12, color: '#6b7280' }}>
               showing {manualCandidates.length} (capped at 100)
@@ -955,13 +1083,34 @@ const GeocodingTool = () => {
                         />
                       </td>
                       <td style={td}>
-                        <button
-                          style={smallPrimary}
-                          onClick={() => saveManual(p)}
-                          disabled={saving || !edit.lat || !edit.lng}
-                        >
-                          {saving ? 'saving…' : 'save'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button
+                            style={smallPrimary}
+                            onClick={() => saveManual(p)}
+                            disabled={saving || !edit.lat || !edit.lng}
+                          >
+                            {saving ? 'saving…' : 'save'}
+                          </button>
+                          {p.geocode_source === 'skipped' ? (
+                            <button
+                              style={smallButton}
+                              onClick={() => unskipManual(p)}
+                              disabled={saving}
+                              title="Unskip — return to ungeocoded list"
+                            >
+                              unskip
+                            </button>
+                          ) : (
+                            <button
+                              style={smallButton}
+                              onClick={() => skipManual(p)}
+                              disabled={saving}
+                              title="Skip — class 6A/5A/15, vacant ROW, etc."
+                            >
+                              skip
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
