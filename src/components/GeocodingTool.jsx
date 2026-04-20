@@ -595,6 +595,45 @@ const GeocodingTool = () => {
 
   const [bulkSkipping, setBulkSkipping] = useState(false);
 
+  // Download an address-only CSV (address, city, state) for the unresolved
+  // parcels in the currently selected job. No composite key, no header — just
+  // the raw lines so you can paste/upload into Google Maps, a different
+  // geocoder, or hand off to someone else.
+  const downloadAddressOnlyCsv = useCallback(() => {
+    if (!selectedJob) return;
+    const seen = new Set();
+    const rows = [];
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (p.property_latitude != null) continue;
+      if (p.geocode_source === 'skipped') continue;
+      const addr = (p.property_location || '').trim();
+      if (!addr) continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      rows.push(p);
+    }
+    if (rows.length === 0) {
+      setStatus({ kind: 'info', message: 'No unresolved parcels to export.' });
+      return;
+    }
+    const city = sanitizeForCsv(selectedJob.municipality || '');
+    const state = 'NJ';
+    const csv = rows
+      .map((p) => `${sanitizeForCsv(p.property_location)},${city},${state}`)
+      .join('\n');
+    const safeJobName = (selectedJob.job_name || 'job')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+    downloadFile(`${safeJobName}_addresses-only.csv`, csv);
+    setStatus({
+      kind: 'success',
+      message: `Downloaded ${rows.length} addresses (city + NJ).`,
+    });
+  }, [selectedJob, properties]);
+
   const bulkSkipNoNumber = useCallback(async () => {
     if (noNumberCandidates.length === 0 || !selectedJobId) return;
     if (
@@ -1200,6 +1239,13 @@ const GeocodingTool = () => {
             <span style={{ fontSize: 12, color: '#6b7280' }}>
               showing {manualCandidates.length} (capped at 100)
             </span>
+            <button
+              style={smallButton}
+              onClick={downloadAddressOnlyCsv}
+              title="Download address,city,state CSV of all unresolved parcels"
+            >
+              ⬇ address-only CSV
+            </button>
           </div>
 
           {noNumberCandidates.length > 0 && (
