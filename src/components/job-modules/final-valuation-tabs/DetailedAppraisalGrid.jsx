@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
-import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
+import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
+import AppealMap from '../../AppealMap';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
@@ -99,6 +101,47 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
+  const [includeMap, setIncludeMap] = useState(true); // Embed subject+comps map in PDF
+  const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
+
+  // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
+  // already-aggregated subject/comps. If the subject is not geocoded, the
+  // map will render a placeholder and the PDF export skips it gracefully.
+  const mapData = useMemo(() => {
+    const sLat = parseFloat(subject?.property_latitude);
+    const sLng = parseFloat(subject?.property_longitude);
+    const subjectPayload = (!isNaN(sLat) && !isNaN(sLng))
+      ? {
+          latitude: sLat,
+          longitude: sLng,
+          address: subject?.property_location || '',
+          block: subject?.property_block || '',
+          lot: subject?.property_lot || '',
+          qualifier: subject?.property_qualifier || '',
+        }
+      : null;
+    const compsPayload = (comps || [])
+      .map((c, idx) => {
+        const lat = parseFloat(c.property_latitude);
+        const lng = parseFloat(c.property_longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          address: c.property_location || '',
+          block: c.property_block || '',
+          lot: c.property_lot || '',
+          qualifier: c.property_qualifier || '',
+          rank: idx + 1,
+        };
+      })
+      .filter(Boolean);
+    return { subject: subjectPayload, comps: compsPayload };
+  }, [subject, comps]);
+
+  const mapHasSubject = !!mapData.subject;
+  const mapGeocodedCount = (mapData.subject ? 1 : 0) + mapData.comps.length;
+  const mapTotalCount = 1 + (comps?.length || 0);
 
   // Editable data for export modal - stores property overrides
   // Structure: { subject: {...propertyOverrides}, comp_0: {...}, comp_1: {...}, etc. }
@@ -2258,6 +2301,70 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ch123TableEndY + 12
     );
 
+    // ============== Subject + Comps Map page (optional) ==============
+    if (includeMap && mapHasSubject && mapCaptureRef.current) {
+      try {
+        // Wait one tick so any tile loads in the DOM are flushed before capture
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        const canvas = await html2canvas(mapCaptureRef.current, {
+          useCORS: true,
+          allowTaint: false,
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const mapImg = canvas.toDataURL('image/png');
+
+        doc.addPage();
+        addLogoToPage(margin, 30);
+        doc.setFontSize(14);
+        doc.setTextColor(...lojikBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Subject & Comps Location Map', pageWidth / 2, 70, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        doc.setFont('helvetica', 'normal');
+        doc.text(
+          `Subject: ${subject?.property_location || ''}  ·  Block ${subject?.property_block || ''}/${subject?.property_lot || ''}${subject?.property_qualifier ? '/' + subject.property_qualifier : ''}`,
+          pageWidth / 2,
+          90,
+          { align: 'center' }
+        );
+
+        // Image: keep aspect ratio, fit page width minus margins.
+        const maxW = pageWidth - margin * 2;
+        const maxH = 460;
+        const ratio = canvas.width / canvas.height;
+        let imgW = maxW;
+        let imgH = imgW / ratio;
+        if (imgH > maxH) {
+          imgH = maxH;
+          imgW = imgH * ratio;
+        }
+        const imgX = (pageWidth - imgW) / 2;
+        doc.addImage(mapImg, 'PNG', imgX, 110, imgW, imgH);
+
+        // Legend + attribution under map
+        const legendY = 110 + imgH + 18;
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        doc.text('S = Subject   ·   1-' + mapData.comps.length + ' = Comparables', pageWidth / 2, legendY, { align: 'center' });
+        doc.setFontSize(7);
+        doc.setTextColor(120, 120, 120);
+        doc.text(
+          'Map data © OpenStreetMap contributors. Coordinates from U.S. Census Bureau geocoder, manual verification, or mother-lot inheritance.',
+          pageWidth / 2,
+          legendY + 14,
+          { align: 'center', maxWidth: pageWidth - margin * 2 }
+        );
+      } catch (mapErr) {
+        // Map capture failure is non-fatal — PDF still saves without it.
+        // eslint-disable-next-line no-console
+        console.warn('Map capture failed:', mapErr);
+      }
+    }
+
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const block = subject.property_block || '';
@@ -2266,7 +2373,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2576,6 +2683,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     Hide Adjustments
                   </span>
                 </label>
+                {mapHasSubject && (
+                  <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeMap}
+                      onChange={(e) => setIncludeMap(e.target.checked)}
+                      className="rounded border-white text-blue-600"
+                    />
+                    <span className="flex items-center gap-1">
+                      <MapIcon size={14} />
+                      Include Map
+                    </span>
+                  </label>
+                )}
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -2816,6 +2937,37 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 </tbody>
               </table>
             </div>
+
+            {/* Map preview (also captured by html2canvas for the PDF) */}
+            {includeMap && mapHasSubject && (
+              <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <MapIcon size={16} className="text-blue-600" />
+                    Subject &amp; Comps Map
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {mapGeocodedCount} of {mapTotalCount} parcels geocoded ·
+                    OpenStreetMap tiles
+                  </span>
+                </div>
+                <div ref={mapCaptureRef}>
+                  <AppealMap
+                    subject={mapData.subject}
+                    comps={mapData.comps}
+                    height={320}
+                    id="appeal-map-capture"
+                  />
+                </div>
+                {mapGeocodedCount < mapTotalCount && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    {mapTotalCount - mapGeocodedCount} parcel(s) missing
+                    coordinates won't appear on the map. Use the Geocoder to
+                    add them.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
