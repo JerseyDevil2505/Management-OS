@@ -124,6 +124,89 @@ function sanitizeForCsv(value) {
     .trim();
 }
 
+// ---------- Owner address fuzzy match helpers ----------
+// USPS street suffix normalization map. Anything on the right collapses to
+// the left so "PEAR TREE LANE" and "PEAR TREE LA" both reduce to "PEAR TREE LN".
+const STREET_SUFFIX_MAP = {
+  ST: ['ST', 'STR', 'STREET'],
+  AVE: ['AV', 'AVE', 'AVN', 'AVENUE'],
+  BLVD: ['BL', 'BLV', 'BLVD', 'BOULEVARD'],
+  RD: ['RD', 'ROAD'],
+  DR: ['DR', 'DRV', 'DRIVE'],
+  LN: ['LA', 'LN', 'LANE'],
+  CT: ['CT', 'CRT', 'COURT'],
+  PL: ['PL', 'PLACE'],
+  CIR: ['CIR', 'CIRC', 'CIRCLE'],
+  TER: ['TR', 'TER', 'TERR', 'TERRACE'],
+  WAY: ['WY', 'WAY'],
+  PKWY: ['PK', 'PKY', 'PKWY', 'PARKWAY'],
+  HWY: ['HW', 'HWY', 'HIGHWAY'],
+  TRL: ['TR', 'TRL', 'TRAIL'],
+  ALY: ['AL', 'ALY', 'ALLEY'],
+  SQ: ['SQ', 'SQUARE'],
+  XING: ['XING', 'CROSSING'],
+  RUN: ['RUN'],
+  PATH: ['PATH'],
+  ROW: ['ROW'],
+};
+const SUFFIX_LOOKUP = (() => {
+  const m = {};
+  for (const [canon, aliases] of Object.entries(STREET_SUFFIX_MAP)) {
+    for (const a of aliases) m[a] = canon;
+  }
+  return m;
+})();
+const DIRECTIONALS = new Set(['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW',
+  'NORTH', 'SOUTH', 'EAST', 'WEST']);
+const DIR_CANON = {
+  NORTH: 'N', SOUTH: 'S', EAST: 'E', WEST: 'W',
+  N: 'N', S: 'S', E: 'E', W: 'W', NE: 'NE', NW: 'NW', SE: 'SE', SW: 'SW',
+};
+
+function normalizeStreet(s) {
+  if (!s) return '';
+  const cleaned = String(s)
+    .toUpperCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned === '.') return '';
+  const tokens = cleaned.split(' ');
+  return tokens
+    .map((t, i) => {
+      // Canonicalize leading directional
+      if (i === 1 && DIRECTIONALS.has(t)) return DIR_CANON[t] || t;
+      // Canonicalize trailing suffix
+      if (SUFFIX_LOOKUP[t]) return SUFFIX_LOOKUP[t];
+      return t;
+    })
+    .join(' ');
+}
+
+// "FRANKLIN PARK, NJ 08823" or "FRANKLIN PARK NJ 08823" -> {city, state, zip}
+function parseCsz(csz) {
+  if (!csz) return null;
+  const cleaned = String(csz).replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  // Capture trailing 5-digit zip (optionally +4)
+  const m = cleaned.match(/^(.+?)\s+([A-Z]{2})\s+(\d{5})(?:-?\d{4})?$/i);
+  if (!m) return null;
+  const city = m[1].trim().toUpperCase();
+  const state = m[2].toUpperCase();
+  const zip = m[3];
+  if (!city || city === '.' || zip === '99999') return null;
+  return { city, state, zip };
+}
+
+// Compare property situs street to owner mailing street. Returns true if the
+// normalized forms match exactly (so "25 PEAR TREE LA" == "25 PEAR TREE LANE").
+function ownerMatchesSitus(propertyLocation, ownerStreet) {
+  const a = normalizeStreet(propertyLocation);
+  const b = normalizeStreet(ownerStreet);
+  if (!a || !b) return false;
+  return a === b;
+}
+
 async function fetchAllJobProperties(jobId) {
   const PAGE = 1000;
   let from = 0;
@@ -133,7 +216,7 @@ async function fetchAllJobProperties(jobId) {
     const { data, error } = await supabase
       .from('property_records')
       .select(
-        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source'
+        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source, owner_street, owner_csz'
       )
       .eq('job_id', jobId)
       .range(from, from + PAGE - 1);
@@ -332,17 +415,37 @@ const GeocodingTool = () => {
       return;
     }
 
-    const city = sanitizeForCsv(selectedJob.municipality || '');
-    const state = 'NJ';
+    const fallbackCity = sanitizeForCsv(selectedJob.municipality || '');
+    const fallbackState = 'NJ';
 
-    const buildRow = (p) =>
-      [
+    let ownerHits = 0;
+
+    // For each parcel, prefer the owner's mailing city/state/zip when the
+    // owner street fuzzy-matches the property location (owner-occupied). This
+    // gives Census the real postal city + ZIP, which dramatically improves
+    // match rates in townships where the postal city differs from the
+    // municipal name (e.g. Franklin Twp → Somerset / Franklin Park).
+    const buildRow = (p) => {
+      let city = fallbackCity;
+      let state = fallbackState;
+      let zip = '';
+      if (ownerMatchesSitus(p.property_location, p.owner_street)) {
+        const parsed = parseCsz(p.owner_csz);
+        if (parsed) {
+          city = sanitizeForCsv(parsed.city);
+          state = sanitizeForCsv(parsed.state);
+          zip = sanitizeForCsv(parsed.zip);
+          ownerHits += 1;
+        }
+      }
+      return [
         sanitizeForCsv(p.property_composite_key),
         sanitizeForCsv(p.property_location),
         city,
         state,
-        '',
+        zip,
       ].join(',');
+    };
 
     const totalChunks = Math.ceil(candidates.length / CENSUS_BATCH_LIMIT);
     const safeJobName = (selectedJob.job_name || 'job')
@@ -360,12 +463,16 @@ const GeocodingTool = () => {
       downloadFile(filename, csv);
     }
 
+    const ownerNote = ownerHits > 0
+      ? ` ${ownerHits.toLocaleString()} rows used owner-derived city/ZIP.`
+      : '';
     setStatus({
       kind: 'success',
       message:
-        totalChunks === 1
+        (totalChunks === 1
           ? `Generated 1 CSV with ${candidates.length} addresses. Upload it to Census.`
-          : `Generated ${totalChunks} CSVs (${candidates.length} addresses total, ${CENSUS_BATCH_LIMIT}-row chunks). Upload each to Census separately.`,
+          : `Generated ${totalChunks} CSVs (${candidates.length} addresses total, ${CENSUS_BATCH_LIMIT}-row chunks). Upload each to Census separately.`) +
+        ownerNote,
     });
   }, [selectedJob, properties]);
 
@@ -1238,6 +1345,7 @@ const GeocodingTool = () => {
               {(() => {
                 const seen = new Set();
                 let ungeocoded = 0;
+                let ownerHits = 0;
                 for (const p of properties) {
                   if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
                   if (!(p.property_location || '').trim()) continue;
@@ -1248,13 +1356,28 @@ const GeocodingTool = () => {
                   if (seen.has(id)) continue;
                   seen.add(id);
                   ungeocoded += 1;
+                  if (
+                    ownerMatchesSitus(p.property_location, p.owner_street) &&
+                    parseCsz(p.owner_csz)
+                  ) {
+                    ownerHits += 1;
+                  }
                 }
                 const chunks = Math.ceil(ungeocoded / CENSUS_BATCH_LIMIT);
+                const ownerPct = ungeocoded > 0
+                  ? ((ownerHits / ungeocoded) * 100).toFixed(0)
+                  : '0';
                 return (
                   <p style={{ fontSize: 14, color: '#374151', marginTop: 12 }}>
                     Will generate <strong>{chunks}</strong> CSV file{chunks === 1 ? '' : 's'} (
                     {ungeocoded.toLocaleString()} unique parcels, max{' '}
                     {CENSUS_BATCH_LIMIT.toLocaleString()} rows per file).
+                    <br />
+                    <span style={{ color: '#16a34a' }}>
+                      <strong>{ownerHits.toLocaleString()}</strong> ({ownerPct}%) will use the
+                      owner's mailing city/ZIP (owner street fuzzy-matches situs).
+                    </span>{' '}
+                    The rest fall back to <code>{selectedJob?.municipality || ''}, NJ</code>.
                   </p>
                 );
               })()}
