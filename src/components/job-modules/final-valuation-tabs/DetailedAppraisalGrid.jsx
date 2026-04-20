@@ -103,6 +103,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
   const [includeMap, setIncludeMap] = useState(true); // Embed subject+comps map in PDF
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
+  // Appellant-supplied comps (loaded from appeal_log on modal open). Each
+  // entry is the saved slot enriched with the resolved property record so we
+  // can pull lat/lng for the map. Empty array if no appeal exists or no
+  // appellant comps were saved.
+  const [appellantCompsState, setAppellantCompsState] = useState([]);
 
   // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
   // already-aggregated subject/comps. If the subject is not geocoded, the
@@ -136,18 +141,57 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         };
       })
       .filter(Boolean);
-    return { subject: subjectPayload, comps: compsPayload };
-  }, [subject, comps]);
+    // Appellant comps: each saved slot is resolved to its property record
+    // (block/lot/qualifier/card) in `appellantCompsState`, then we pull
+    // lat/lng off that record. Slots whose property isn't geocoded are
+    // dropped silently (same behavior as appraisal comps above).
+    const appellantPayload = (appellantCompsState || [])
+      .map((entry, idx) => {
+        const p = entry.property;
+        if (!p) return null;
+        const lat = parseFloat(p.property_latitude);
+        const lng = parseFloat(p.property_longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          address: p.property_location || '',
+          block: p.property_block || entry.slot?.block || '',
+          lot: p.property_lot || entry.slot?.lot || '',
+          qualifier: p.property_qualifier || entry.slot?.qualifier || '',
+          rank: idx + 1,
+        };
+      })
+      .filter(Boolean);
+
+    return { subject: subjectPayload, comps: compsPayload, appellantComps: appellantPayload };
+  }, [subject, comps, appellantCompsState]);
 
   const mapHasSubject = !!mapData.subject;
-  const mapGeocodedCount = (mapData.subject ? 1 : 0) + mapData.comps.length;
-  const mapTotalCount = 1 + (comps?.length || 0);
+  const mapGeocodedCount =
+    (mapData.subject ? 1 : 0) + mapData.comps.length + mapData.appellantComps.length;
+  const mapTotalCount =
+    1 + (comps?.length || 0) + (appellantCompsState?.length || 0);
 
   // Per-comp distance (miles) from subject. Always 1 decimal.
   const compDistances = useMemo(() => {
     if (!mapData.subject) return [];
     const subjLL = [mapData.subject.latitude, mapData.subject.longitude];
     return mapData.comps.map((c) => ({
+      rank: c.rank,
+      address: c.address,
+      block: c.block,
+      lot: c.lot,
+      qualifier: c.qualifier,
+      miles: distanceMiles(subjLL, [c.latitude, c.longitude]),
+    }));
+  }, [mapData]);
+
+  // Per-appellant-comp distance (miles) from subject.
+  const appellantDistances = useMemo(() => {
+    if (!mapData.subject) return [];
+    const subjLL = [mapData.subject.latitude, mapData.subject.longitude];
+    return mapData.appellantComps.map((c) => ({
       rank: c.rank,
       address: c.address,
       block: c.block,
@@ -1358,34 +1402,66 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setEditedAdjustments({});
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
+    setAppellantCompsState([]);
     setShowExportModal(true);
 
-    // Auto-detect appeal number for subject
+    // Auto-detect appeal number for subject AND load appellant_comps so the
+    // map preview can paint orange "A#" pins alongside the blue appraisal
+    // comps. Appellant slots are resolved against allProperties to pick up
+    // lat/lng.
     if (subject && jobData?.id) {
       try {
         const { data } = await supabase
           .from('appeal_log')
-          .select('appeal_number, status')
+          .select('appeal_number, status, appellant_comps, property_composite_key')
           .eq('job_id', jobData.id)
           .eq('property_block', subject.property_block)
           .eq('property_lot', subject.property_lot);
 
+        let active = null;
         if (data && data.length > 0) {
-          const active = data.find(a => a.status !== 'C');
+          active = data.find(a => a.status !== 'C') || null;
           if (active && active.appeal_number) {
             setAppealNumber(active.appeal_number);
             setAppealAutoDetected(true);
-            return;
+          } else {
+            setAppealNumber('');
+            setAppealAutoDetected(false);
           }
+        } else {
+          setAppealNumber('');
+          setAppealAutoDetected(false);
         }
-        // No active appeal - clear
-        setAppealNumber('');
-        setAppealAutoDetected(false);
+
+        // Resolve appellant_comps -> property records (for lat/lng + address).
+        const slots = Array.isArray(active?.appellant_comps) ? active.appellant_comps : [];
+        if (slots.length > 0 && Array.isArray(allProperties) && allProperties.length > 0) {
+          const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+          const resolved = slots.map((slot) => {
+            const b = norm(slot.block);
+            const l = norm(slot.lot);
+            const q = norm(slot.qualifier);
+            const c = norm(slot.card);
+            if (!b || !l) return { slot, property: null };
+            const property = allProperties.find((p) => {
+              if (norm(p.property_block) !== b) return false;
+              if (norm(p.property_lot) !== l) return false;
+              if (norm(p.property_qualifier) !== q) return false;
+              if (c && norm(p.property_addl_card || p.property_card) !== c) return false;
+              return true;
+            }) || null;
+            return { slot, property };
+          });
+          setAppellantCompsState(resolved);
+        } else {
+          setAppellantCompsState([]);
+        }
       } catch (err) {
         console.warn('Could not look up appeal:', err.message);
+        setAppellantCompsState([]);
       }
     }
-  }, [subject, jobData?.id]);
+  }, [subject, jobData?.id, allProperties]);
 
   // Generate PDF document
   const generatePDF = useCallback(async () => {
@@ -2370,25 +2446,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         doc.text(subjAddrLines, rightX + 18, cursorY + 25);
         cursorY += 26 + (subjAddrLines.length - 1) * 9 + 8;
 
-        // Comp cards
-        compDistances.forEach((c) => {
-          // Estimated height per card ~= 32 + extra address lines
+        // Helper to draw a comp/appellant card in the right column with a
+        // colored circular badge. Returns the new cursorY (or null if it
+        // wouldn't fit).
+        const drawCard = (c, fillRGB, badgeLabel, titlePrefix) => {
           const addrLines = doc.splitTextToSize(c.address || '', rightColW - 22);
           const cardH = 26 + (addrLines.length - 1) * 9;
-          // Page break safety
-          if (cursorY + cardH > topY + mapH + 30) return;
+          if (cursorY + cardH > topY + mapH + 30) return false;
 
-          doc.setFillColor(37, 99, 235);
+          doc.setFillColor(...fillRGB);
           doc.circle(rightX + 7, cursorY + 7, 6, 'F');
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(8);
+          doc.setFontSize(badgeLabel.length > 1 ? 7 : 8);
           doc.setFont('helvetica', 'bold');
-          doc.text(String(c.rank), rightX + 7, cursorY + 9, { align: 'center' });
+          doc.text(badgeLabel, rightX + 7, cursorY + 9, { align: 'center' });
 
           doc.setTextColor(20, 20, 20);
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
-          const titleLine = `COMP ${c.rank}${c.miles != null ? `  ·  ${c.miles.toFixed(1)} mi` : ''}`;
+          const titleLine = `${titlePrefix}${c.miles != null ? `  ·  ${c.miles.toFixed(1)} mi` : ''}`;
           doc.text(titleLine, rightX + 18, cursorY + 6);
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8);
@@ -2396,7 +2472,30 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           doc.text(compBlq, rightX + 18, cursorY + 16);
           doc.text(addrLines, rightX + 18, cursorY + 25);
           cursorY += cardH + 6;
+          return true;
+        };
+
+        // Comp cards (blue)
+        compDistances.forEach((c) => {
+          drawCard(c, [37, 99, 235], String(c.rank), `COMP ${c.rank}`);
         });
+
+        // Appellant comp cards (orange) — separated by a thin label
+        if (appellantDistances.length > 0) {
+          if (cursorY + 18 < topY + mapH + 30) {
+            doc.setDrawColor(220, 220, 220);
+            doc.line(rightX, cursorY, rightX + rightColW, cursorY);
+            cursorY += 8;
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(194, 65, 12);
+            doc.text('APPELLANT COMPS', rightX, cursorY);
+            cursorY += 10;
+          }
+          appellantDistances.forEach((c) => {
+            drawCard(c, [234, 88, 12], `A${c.rank}`, `APPELLANT ${c.rank}`);
+          });
+        }
 
         // Attribution under map
         const footerY = topY + mapH + 16;
@@ -2424,7 +2523,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3009,6 +3108,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     <AppealMap
                       subject={mapData.subject}
                       comps={mapData.comps}
+                      appellantComps={mapData.appellantComps}
                       height={420}
                       id="appeal-map-capture"
                     />
@@ -3046,6 +3146,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                           </div>
                         </div>
                       ))}
+                      {appellantDistances.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="font-semibold text-orange-700 mb-1">Appellant Comps</div>
+                          {appellantDistances.map((c) => (
+                            <div key={`a-${c.rank}`} className="flex items-start gap-2 mb-1.5">
+                              <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                                style={{ background: '#ea580c', width: 18, height: 18, fontSize: 9, lineHeight: 1 }}>A{c.rank}</span>
+                              <div>
+                                <div className="font-semibold">APPELLANT {c.rank}</div>
+                                <div className="text-gray-600">
+                                  {c.block}/{c.lot}{c.qualifier ? `/${c.qualifier}` : ''}
+                                  {c.miles != null && (
+                                    <span className="ml-1 text-orange-700 font-medium">
+                                      · {c.miles.toFixed(1)} mi
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-gray-700">{c.address}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

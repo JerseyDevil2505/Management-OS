@@ -92,6 +92,7 @@ export function distanceMiles(a, b) {
 const AppealMap = ({
   subject,
   comps = [],
+  appellantComps = [],
   height = 360,
   showLines = true,
   id = 'appeal-map',
@@ -123,12 +124,31 @@ const AppealMap = ({
       .filter(Boolean);
   }, [comps]);
 
+  const appellantPoints = useMemo(() => {
+    return appellantComps
+      .map((c, idx) => {
+        const lat = parseFloat(c.latitude);
+        const lng = parseFloat(c.longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latLng: [lat, lng],
+          rank: c.rank ?? idx + 1,
+          address: c.address || '',
+          block: c.block || '',
+          lot: c.lot || '',
+          qualifier: c.qualifier || '',
+        };
+      })
+      .filter(Boolean);
+  }, [appellantComps]);
+
   const allPoints = useMemo(() => {
     const pts = [];
     if (subjectLatLng) pts.push(subjectLatLng);
     compPoints.forEach((c) => pts.push(c.latLng));
+    appellantPoints.forEach((c) => pts.push(c.latLng));
     return pts;
-  }, [subjectLatLng, compPoints]);
+  }, [subjectLatLng, compPoints, appellantPoints]);
 
   if (!subjectLatLng) {
     return (
@@ -214,6 +234,24 @@ const AppealMap = ({
           </Marker>
         ))}
 
+        {/* Appellant comp markers — orange "A" prefix */}
+        {appellantPoints.map((c, idx) => (
+          <Marker
+            key={`ap-${idx}`}
+            position={c.latLng}
+            icon={buildPin({ label: `A${c.rank}`, color: '#ea580c', size: 30 })}
+          >
+            <Popup>
+              <strong>APPELLANT COMP {c.rank}</strong>
+              <br />
+              {c.address}
+              <br />
+              Block {c.block}/{c.lot}
+              {c.qualifier ? `/${c.qualifier}` : ''}
+            </Popup>
+          </Marker>
+        ))}
+
         {/* Connector lines from subject to each comp */}
         {showLines &&
           compPoints.map((c, idx) => (
@@ -225,6 +263,20 @@ const AppealMap = ({
                 weight: 1.5,
                 opacity: 0.45,
                 dashArray: '4 4',
+              }}
+            />
+          ))}
+
+        {showLines &&
+          appellantPoints.map((c, idx) => (
+            <Polyline
+              key={`ap-line-${idx}`}
+              positions={[subjectLatLng, c.latLng]}
+              pathOptions={{
+                color: '#ea580c',
+                weight: 1.5,
+                opacity: 0.5,
+                dashArray: '2 5',
               }}
             />
           ))}
