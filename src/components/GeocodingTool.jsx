@@ -270,6 +270,10 @@ const GeocodingTool = () => {
   const [committing, setCommitting] = useState(false);
   const [commitSummary, setCommitSummary] = useState(null);
 
+  // Shared progress for any batched operation (Census commit, bulk skip,
+  // mother-lot inherit). { label, current, total } | null.
+  const [batchProgress, setBatchProgress] = useState(null);
+
   // Coverage overview
   const [coverage, setCoverage] = useState({}); // { jobId: { total, geocoded } }
   const [coverageLoading, setCoverageLoading] = useState(false);
@@ -606,6 +610,7 @@ const GeocodingTool = () => {
         return q;
       };
 
+      setBatchProgress({ label: 'Committing Census results', current: 0, total: matched.length });
       for (let i = 0; i < matched.length; i += BATCH) {
         const slice = matched.slice(i, i + BATCH);
         // eslint-disable-next-line no-await-in-loop
@@ -614,7 +619,13 @@ const GeocodingTool = () => {
           if (res.error) failed += 1;
           else updated += 1;
         }
+        setBatchProgress({
+          label: 'Committing Census results',
+          current: Math.min(i + BATCH, matched.length),
+          total: matched.length,
+        });
       }
+      setBatchProgress(null);
 
       setCommitSummary({ updated, failed, attempted: matched.length });
       setStatus({
@@ -630,6 +641,7 @@ const GeocodingTool = () => {
     } catch (e) {
       setError(`Commit failed: ${e.message || e}`);
     } finally {
+      setBatchProgress(null);
       setCommitting(false);
     }
   }, [parsedResults, selectedJobId, properties]);
@@ -773,6 +785,11 @@ const GeocodingTool = () => {
       const BATCH = 50;
       let updated = 0;
       let failed = 0;
+      setBatchProgress({
+        label: 'Inheriting mother-lot coords',
+        current: 0,
+        total: condoInheritCandidates.length,
+      });
       for (let i = 0; i < condoInheritCandidates.length; i += BATCH) {
         const slice = condoInheritCandidates.slice(i, i + BATCH);
         // eslint-disable-next-line no-await-in-loop
@@ -799,7 +816,13 @@ const GeocodingTool = () => {
           if (r.error) failed += 1;
           else updated += 1;
         }
+        setBatchProgress({
+          label: 'Inheriting mother-lot coords',
+          current: Math.min(i + BATCH, condoInheritCandidates.length),
+          total: condoInheritCandidates.length,
+        });
       }
+      setBatchProgress(null);
       // Refresh local state
       const inheritedIds = new Map(
         condoInheritCandidates.map(({ property, mother }) => [
@@ -831,6 +854,7 @@ const GeocodingTool = () => {
     } catch (e) {
       setError(`Inherit failed: ${e.message || e}`);
     } finally {
+      setBatchProgress(null);
       setInheriting(false);
     }
   }, [condoInheritCandidates, selectedJobId]);
@@ -891,6 +915,11 @@ const GeocodingTool = () => {
       const BATCH = 50;
       let updated = 0;
       let failed = 0;
+      setBatchProgress({
+        label: 'Auto-skipping no-number addresses',
+        current: 0,
+        total: noNumberCandidates.length,
+      });
       for (let i = 0; i < noNumberCandidates.length; i += BATCH) {
         const slice = noNumberCandidates.slice(i, i + BATCH);
         // eslint-disable-next-line no-await-in-loop
@@ -919,7 +948,13 @@ const GeocodingTool = () => {
           if (r.error) failed += 1;
           else updated += 1;
         }
+        setBatchProgress({
+          label: 'Auto-skipping no-number addresses',
+          current: Math.min(i + BATCH, noNumberCandidates.length),
+          total: noNumberCandidates.length,
+        });
       }
+      setBatchProgress(null);
       const skipIds = new Set(noNumberCandidates.map(parcelIdentity));
       setProperties((prev) =>
         prev.map((p) =>
@@ -937,6 +972,7 @@ const GeocodingTool = () => {
     } catch (e) {
       setError(`Bulk skip failed: ${e.message || e}`);
     } finally {
+      setBatchProgress(null);
       setBulkSkipping(false);
     }
   }, [noNumberCandidates, selectedJobId]);
@@ -1214,6 +1250,55 @@ const GeocodingTool = () => {
         One-time geocoding of property addresses via the free U.S. Census Bureau batch geocoder.
         Manual upload/download flow — admin only.
       </p>
+
+      {/* Sticky batch progress */}
+      {batchProgress && (
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: '#1e3a8a',
+            color: '#ffffff',
+            padding: '10px 14px',
+            borderRadius: 6,
+            marginBottom: 16,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+            <span>
+              <strong>{batchProgress.label}…</strong>{' '}
+              {batchProgress.current.toLocaleString()} / {batchProgress.total.toLocaleString()}
+            </span>
+            <span>
+              {batchProgress.total > 0
+                ? `${((batchProgress.current / batchProgress.total) * 100).toFixed(1)}%`
+                : '0%'}
+            </span>
+          </div>
+          <div
+            style={{
+              height: 8,
+              background: 'rgba(255,255,255,0.25)',
+              borderRadius: 4,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width:
+                  batchProgress.total > 0
+                    ? `${(batchProgress.current / batchProgress.total) * 100}%`
+                    : '0%',
+                background: '#22c55e',
+                transition: 'width 120ms ease-out',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Coverage overview */}
       <section style={section}>
