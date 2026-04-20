@@ -6,6 +6,7 @@ import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
+import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -55,6 +56,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     salesDateEnd: cspDateRange.end,
     vcs: [],
     sameVCS: true, // Default checked
+    // Distance filter — Haversine miles from subject. 0 / blank = no filter.
+    // Only applied when the subject (and the comp being tested) both have
+    // lat/lng. Gated in the UI so a non-geocoded subject can't enable it.
+    maxDistanceMiles: '',
     neighborhood: [],
     sameNeighborhood: false,
     // Lot Size filter
@@ -1930,6 +1935,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
           // Note: Sales codes and date range filtering is handled by the Sales Pool tab.
           // The eligible sales passed to this loop are already curated by the pool.
+
+          // Distance filter (Haversine miles from subject). Only applied when
+          // the user set a positive radius AND the subject has lat/lng. Comps
+          // missing coords are excluded under this rule — they can't be
+          // distance-checked, so including them would silently break the cap.
+          const maxDistance = parseFloat(compFilters.maxDistanceMiles);
+          if (Number.isFinite(maxDistance) && maxDistance > 0) {
+            const sLat = parseFloat(subject.property_latitude);
+            const sLng = parseFloat(subject.property_longitude);
+            if (Number.isFinite(sLat) && Number.isFinite(sLng)) {
+              const cLat = parseFloat(comp.property_latitude);
+              const cLng = parseFloat(comp.property_longitude);
+              if (!Number.isFinite(cLat) || !Number.isFinite(cLng)) {
+                if (isFirstProperty) debugFilters.distance = (debugFilters.distance || 0) + 1;
+                logExclusion('distance', 'comp not geocoded');
+                return false;
+              }
+              const miles = distanceMiles([sLat, sLng], [cLat, cLng]);
+              if (miles == null || miles > maxDistance) {
+                if (isFirstProperty) debugFilters.distance = (debugFilters.distance || 0) + 1;
+                logExclusion('distance', `${miles?.toFixed(2)} mi > ${maxDistance} mi cap`);
+                return false;
+              }
+              // Stash miles on the comp so the results table can show it
+              // without a second Haversine pass.
+              comp._distanceMiles = miles;
+            }
+          }
 
           // VCS filter - always user-controlled via comp filters
           if (compFilters.sameVCS) {
@@ -4250,6 +4283,69 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   </div>
                 </div>
               </div>
+
+              {/* Row 1.5: Search Radius (centered, gated on subject geocode).
+                  Sits above the VCS row so the admin sees it as one of the
+                  primary "narrow the pool" knobs. Disabled with an explanation
+                  when no subject is loaded yet or the subject has no lat/lng —
+                  in that case we can't compute Haversine distances, so we
+                  don't pretend we can. */}
+              {(() => {
+                const probe = (Array.isArray(window.__cmeSubjectsForGeo) && window.__cmeSubjectsForGeo[0]) || null;
+                const subjectGeocoded = !!(
+                  probe &&
+                  Number.isFinite(parseFloat(probe.property_latitude)) &&
+                  Number.isFinite(parseFloat(probe.property_longitude))
+                );
+                // Fall back to a simpler check if the probe isn't populated:
+                // `properties` always has lat/lng on geocoded rows, so we
+                // just look at whether ANY property has coords. The actual
+                // per-subject gate happens at filter time inside the loop.
+                const anyGeocoded = subjectGeocoded || (Array.isArray(properties) && properties.some(p =>
+                  Number.isFinite(parseFloat(p?.property_latitude)) &&
+                  Number.isFinite(parseFloat(p?.property_longitude))
+                ));
+                const disabled = !anyGeocoded;
+                return (
+                  <div className="max-w-xl mx-auto mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search Radius (miles from subject)
+                      {disabled && (
+                        <span className="ml-2 text-xs font-normal text-amber-700">
+                          — geocode data required
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        value={compFilters.maxDistanceMiles}
+                        onChange={(e) => setCompFilters(prev => ({ ...prev, maxDistanceMiles: e.target.value }))}
+                        placeholder={disabled ? 'Geocode subject first' : 'e.g. 1.0 — blank for no limit'}
+                        disabled={disabled}
+                        className={`flex-1 px-2 py-1 border border-gray-300 rounded text-sm ${disabled ? 'bg-gray-100 text-gray-400' : ''}`}
+                      />
+                      <span className="text-sm text-gray-500 whitespace-nowrap">miles</span>
+                      {compFilters.maxDistanceMiles && (
+                        <button
+                          type="button"
+                          onClick={() => setCompFilters(prev => ({ ...prev, maxDistanceMiles: '' }))}
+                          className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {disabled
+                        ? 'No properties in this job have lat/lng yet. Run the Geocoder, then come back here.'
+                        : 'Straight-line distance from subject. Comps without coordinates are excluded when set. Blank or 0 = no distance limit.'}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Row 2: VCS (centered) */}
               <div className="max-w-xl mx-auto mb-4">
