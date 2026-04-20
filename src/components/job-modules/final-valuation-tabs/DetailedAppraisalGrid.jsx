@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 import AppealMap, { distanceMiles } from '../../AppealMap';
+import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
@@ -109,24 +110,44 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // appellant comps were saved.
   const [appellantCompsState, setAppellantCompsState] = useState([]);
 
+  // Local in-memory overrides for geocode coordinates set via the inline
+  // GeocodeStatusChip edit modal. Keyed by property_composite_key. Lets the
+  // user fix a missing/wrong geocode and have the map + PDF reflect it
+  // without a full grid reload. Persisted to property_records by the chip.
+  const [geocodePatches, setGeocodePatches] = useState({});
+  const applyGeocodePatch = useCallback(
+    (p) => {
+      if (!p || !p.property_composite_key) return p;
+      const patch = geocodePatches[p.property_composite_key];
+      return patch ? { ...p, ...patch } : p;
+    },
+    [geocodePatches],
+  );
+  const handleGeocodeSaved = useCallback((compositeKey, patch) => {
+    if (!compositeKey) return;
+    setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
+  }, []);
+
   // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
   // already-aggregated subject/comps. If the subject is not geocoded, the
   // map will render a placeholder and the PDF export skips it gracefully.
   const mapData = useMemo(() => {
-    const sLat = parseFloat(subject?.property_latitude);
-    const sLng = parseFloat(subject?.property_longitude);
+    const subjectPatched = applyGeocodePatch(subject);
+    const sLat = parseFloat(subjectPatched?.property_latitude);
+    const sLng = parseFloat(subjectPatched?.property_longitude);
     const subjectPayload = (!isNaN(sLat) && !isNaN(sLng))
       ? {
           latitude: sLat,
           longitude: sLng,
-          address: subject?.property_location || '',
-          block: subject?.property_block || '',
-          lot: subject?.property_lot || '',
-          qualifier: subject?.property_qualifier || '',
+          address: subjectPatched?.property_location || '',
+          block: subjectPatched?.property_block || '',
+          lot: subjectPatched?.property_lot || '',
+          qualifier: subjectPatched?.property_qualifier || '',
         }
       : null;
     const compsPayload = (comps || [])
-      .map((c, idx) => {
+      .map((rawC, idx) => {
+        const c = applyGeocodePatch(rawC);
         const lat = parseFloat(c.property_latitude);
         const lng = parseFloat(c.property_longitude);
         if (isNaN(lat) || isNaN(lng)) return null;
@@ -147,7 +168,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // dropped silently (same behavior as appraisal comps above).
     const appellantPayload = (appellantCompsState || [])
       .map((entry, idx) => {
-        const p = entry.property;
+        const p = applyGeocodePatch(entry.property);
         if (!p) return null;
         const lat = parseFloat(p.property_latitude);
         const lng = parseFloat(p.property_longitude);
@@ -165,7 +186,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       .filter(Boolean);
 
     return { subject: subjectPayload, comps: compsPayload, appellantComps: appellantPayload };
-  }, [subject, comps, appellantCompsState]);
+  }, [subject, comps, appellantCompsState, applyGeocodePatch]);
 
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
@@ -1465,6 +1486,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Generate PDF document
   const generatePDF = useCallback(async () => {
+    // Pre-export geocode gate: warn if subject or any displayed comp is
+    // missing lat/lng. The user can still proceed (some reports don't need
+    // a map), but at least they won't be surprised by a blank map page.
+    const checkList = [
+      { label: 'Subject', p: applyGeocodePatch(aggregatedSubject) },
+      ...(aggregatedComps || [])
+        .map((c, i) => ({ label: `Comparable ${i + 1}`, p: applyGeocodePatch(c) }))
+        .filter((x) => x.p),
+    ];
+    const missing = checkList.filter(({ p }) => {
+      if (!p) return false;
+      const lat = parseFloat(p.property_latitude);
+      const lng = parseFloat(p.property_longitude);
+      return isNaN(lat) || isNaN(lng);
+    });
+    if (missing.length > 0 && includeMap) {
+      const lines = missing
+        .map(({ label, p }) => `  • ${label}: ${p.property_location || '(no address)'}`)
+        .join('\n');
+      const proceed = window.confirm(
+        `${missing.length} propert${missing.length === 1 ? 'y is' : 'ies are'} missing geocode coordinates and won't appear on the map:\n\n${lines}\n\nClose this dialog and click the 📍? chip on the column header to fix them now,\nor click OK to export anyway.`,
+      );
+      if (!proceed) return;
+    }
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'pt',
@@ -2523,7 +2569,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2554,7 +2600,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 Attribute
               </th>
               <th className="px-3 py-3 text-center font-semibold bg-slate-100">
-                Subject
+                <div className="flex items-center justify-center gap-1">
+                  <span>Subject</span>
+                  <GeocodeStatusChip
+                    property={applyGeocodePatch(aggregatedSubject)}
+                    onSaved={(patch) =>
+                      handleGeocodeSaved(aggregatedSubject?.property_composite_key, patch)
+                    }
+                  />
+                </div>
                 {aggregatedSubject._additionalCardsCount > 0 && (
                   <span className="block text-xs text-purple-700 font-semibold mt-1 bg-purple-100 rounded px-1">
                     (+{aggregatedSubject._additionalCardsCount} cards)
@@ -2566,7 +2620,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
                 return (
                   <th key={compNum} className={`px-3 py-3 text-center font-semibold ${bgColor} border-l border-gray-300`}>
-                    Comparable {compNum}
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Comparable {compNum}</span>
+                      {comp && (
+                        <GeocodeStatusChip
+                          property={applyGeocodePatch(comp)}
+                          onSaved={(patch) =>
+                            handleGeocodeSaved(comp?.property_composite_key, patch)
+                          }
+                        />
+                      )}
+                    </div>
                     {comp?.isSubjectSale && (
                       <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
                     )}
