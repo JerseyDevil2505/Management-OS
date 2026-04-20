@@ -349,11 +349,27 @@ export class BRTUpdater {
         if (line.startsWith('{') || inJsonBlock) {
           inJsonBlock = true;
           jsonBuffer += line;
-          
-          const openBrackets = (jsonBuffer.match(/\{/g) || []).length;
-          const closeBrackets = (jsonBuffer.match(/\}/g) || []).length;
-          
-          if (openBrackets === closeBrackets && openBrackets > 0) {
+
+          // Count brackets outside of string values to avoid false matches
+          // (matches the processor's logic — naive regex counts would also
+          // match `{` / `}` inside JSON string literals, which is exactly
+          // what was causing "Error parsing JSON section Residential" on
+          // reparse for large BRT code files.)
+          let depth = 0;
+          let inString = false;
+          let escaped = false;
+          for (let c = 0; c < jsonBuffer.length; c++) {
+            const ch = jsonBuffer[c];
+            if (escaped) { escaped = false; continue; }
+            if (ch === '\\') { escaped = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (!inString) {
+              if (ch === '{') depth++;
+              else if (ch === '}') depth--;
+            }
+          }
+
+          if (depth === 0 && jsonBuffer.includes('{')) {
             if (currentSection) {
               this.parseJsonSection(jsonBuffer, currentSection);
             }
@@ -415,28 +431,40 @@ export class BRTUpdater {
   async storeCodeFileInDatabase(codeFileContent, jobId) {
     try {
       console.log('💾 Storing complete code file in jobs table (UPDATER)...');
-      
+
+      const newSectionCount = Object.keys(this.allCodeSections).length;
+      const updatePayload = {
+        code_file_content: codeFileContent,
+        code_file_name: 'BRT_Code_File.txt',
+        code_file_uploaded_at: new Date().toISOString()
+      };
+
+      // DEFENSIVE: only overwrite parsed_code_definitions if this parse
+      // actually produced sections. If a future parse fails for any
+      // reason, leave the previously-good code book in place rather than
+      // wiping it to an empty stub.
+      if (newSectionCount > 0) {
+        updatePayload.parsed_code_definitions = {
+          vendor_type: 'BRT',
+          sections: this.allCodeSections,
+          summary: {
+            total_sections: newSectionCount,
+            residential_codes: Object.keys(this.allCodeSections.Residential || {}).length,
+            mobile_codes: Object.keys(this.allCodeSections.Mobile || {}).length,
+            qf_codes: Object.keys(this.allCodeSections.QF || {}).length,
+            depth_codes: Object.keys(this.allCodeSections.Depth || {}).length,
+            depr_codes: Object.keys(this.allCodeSections.Depr || {}).length,
+            vcs_codes: Object.keys(this.allCodeSections.VCS || {}).length,
+            parsed_at: new Date().toISOString()
+          }
+        };
+      } else {
+        console.warn('⚠️ Parsed code book is empty — preserving existing parsed_code_definitions on jobs row');
+      }
+
       const { error } = await supabase
         .from('jobs')
-        .update({
-          code_file_content: codeFileContent,
-          code_file_name: 'BRT_Code_File.txt',
-          code_file_uploaded_at: new Date().toISOString(),
-          parsed_code_definitions: {
-            vendor_type: 'BRT',
-            sections: this.allCodeSections,
-            summary: {
-              total_sections: Object.keys(this.allCodeSections).length,
-              residential_codes: Object.keys(this.allCodeSections.Residential || {}).length,
-              mobile_codes: Object.keys(this.allCodeSections.Mobile || {}).length,
-              qf_codes: Object.keys(this.allCodeSections.QF || {}).length,
-              depth_codes: Object.keys(this.allCodeSections.Depth || {}).length,
-              depr_codes: Object.keys(this.allCodeSections.Depr || {}).length,
-              vcs_codes: Object.keys(this.allCodeSections.VCS || {}).length,
-              parsed_at: new Date().toISOString()
-            }
-          }
-        })
+        .update(updatePayload)
         .eq('id', jobId);
 
       if (error) {
