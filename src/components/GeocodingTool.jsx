@@ -75,6 +75,19 @@ function downloadFile(filename, content, mimeType = 'text/csv') {
   URL.revokeObjectURL(url);
 }
 
+// Build a parcel-identity key that is stable across roll years (i.e. ignores
+// the YYYYMMDD date prefix in property_composite_key). Used to dedupe
+// CSV generation and to propagate manual save / skip / Census commits to
+// every roll-year copy of the same parcel within the same job.
+function parcelIdentity(p) {
+  return [
+    p.property_block || '',
+    p.property_lot || '',
+    p.property_qualifier || '',
+    p.property_addl_card == null ? '' : String(p.property_addl_card),
+  ].join('|');
+}
+
 function sanitizeForCsv(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -267,13 +280,19 @@ const GeocodingTool = () => {
     if (!selectedJob || properties.length === 0) return;
 
     // Only main cards, with an address, not yet geocoded, and not skipped.
-    const candidates = properties.filter(
-      (p) =>
-        (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
-        (p.property_location || '').trim() &&
-        p.property_latitude == null &&
-        p.geocode_source !== 'skipped'
-    );
+    // Dedupe across roll years — one row per unique parcel.
+    const seen = new Set();
+    const candidates = [];
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!(p.property_location || '').trim()) continue;
+      if (p.property_latitude != null) continue;
+      if (p.geocode_source === 'skipped') continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      candidates.push(p);
+    }
 
     if (candidates.length === 0) {
       setStatus({
@@ -418,18 +437,37 @@ const GeocodingTool = () => {
       let updated = 0;
       let failed = 0;
 
-      const updateOne = (r) =>
-        supabase
-          .from('property_records')
-          .update({
-            property_latitude: r.latitude,
-            property_longitude: r.longitude,
-            geocode_source: 'census',
-            geocode_match_quality: r.matchType || r.matchStatus || null,
-            geocoded_at: now,
-          })
-          .eq('property_composite_key', r.compositeKey)
-          .eq('job_id', selectedJobId);
+      // Look up parcel identity for each result composite key so we can
+      // propagate the same lat/lng to every roll-year copy in this job.
+      const propsByKey = new Map(
+        properties.map((p) => [p.property_composite_key, p])
+      );
+
+      const updateOne = (r) => {
+        const src = propsByKey.get(r.compositeKey);
+        const payload = {
+          property_latitude: r.latitude,
+          property_longitude: r.longitude,
+          geocode_source: 'census',
+          geocode_match_quality: r.matchType || r.matchStatus || null,
+          geocoded_at: now,
+        };
+        let q = supabase.from('property_records').update(payload).eq('job_id', selectedJobId);
+        if (src) {
+          q = q
+            .eq('property_block', src.property_block)
+            .eq('property_lot', src.property_lot)
+            .eq('property_addl_card', src.property_addl_card);
+          if (src.property_qualifier == null) {
+            q = q.is('property_qualifier', null);
+          } else {
+            q = q.eq('property_qualifier', src.property_qualifier);
+          }
+        } else {
+          q = q.eq('property_composite_key', r.compositeKey);
+        }
+        return q;
+      };
 
       for (let i = 0; i < matched.length; i += BATCH) {
         const slice = matched.slice(i, i + BATCH);
@@ -483,29 +521,45 @@ const GeocodingTool = () => {
           (p.property_lot || '').toString().toLowerCase().includes(q)
       );
     }
-    return list.slice(0, 100); // cap render
+    // Dedupe across roll years — one row per unique parcel identity.
+    const seen = new Set();
+    const deduped = [];
+    for (const p of list) {
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      deduped.push(p);
+    }
+    return deduped.slice(0, 100); // cap render
   }, [properties, manualSearch, manualFilter]);
 
-  const manualUngeocodedCount = useMemo(
-    () =>
-      properties.filter(
-        (p) =>
-          (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
-          p.property_latitude == null &&
-          p.geocode_source !== 'skipped'
-      ).length,
-    [properties]
-  );
+  const manualUngeocodedCount = useMemo(() => {
+    const seen = new Set();
+    let n = 0;
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (!(p.property_latitude == null && p.geocode_source !== 'skipped')) continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      n += 1;
+    }
+    return n;
+  }, [properties]);
 
-  const manualSkippedCount = useMemo(
-    () =>
-      properties.filter(
-        (p) =>
-          (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
-          p.geocode_source === 'skipped'
-      ).length,
-    [properties]
-  );
+  const manualSkippedCount = useMemo(() => {
+    const seen = new Set();
+    let n = 0;
+    for (const p of properties) {
+      if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+      if (p.geocode_source !== 'skipped') continue;
+      const id = parcelIdentity(p);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      n += 1;
+    }
+    return n;
+  }, [properties]);
 
   const setManualField = (key, field, value) => {
     setManualEdits((prev) => ({
@@ -517,22 +571,31 @@ const GeocodingTool = () => {
   const skipManual = useCallback(
     async (property) => {
       const key = property.property_composite_key;
+      const id = parcelIdentity(property);
       setError(null);
       setManualSaving((prev) => ({ ...prev, [key]: true }));
       try {
-        const { error: upErr } = await supabase
+        let q = supabase
           .from('property_records')
           .update({
             geocode_source: 'skipped',
             geocode_match_quality: 'skipped',
             geocoded_at: new Date().toISOString(),
           })
-          .eq('property_composite_key', key)
-          .eq('job_id', selectedJobId);
+          .eq('job_id', selectedJobId)
+          .eq('property_block', property.property_block)
+          .eq('property_lot', property.property_lot)
+          .eq('property_addl_card', property.property_addl_card);
+        if (property.property_qualifier == null) {
+          q = q.is('property_qualifier', null);
+        } else {
+          q = q.eq('property_qualifier', property.property_qualifier);
+        }
+        const { error: upErr } = await q;
         if (upErr) throw upErr;
         setProperties((prev) =>
           prev.map((p) =>
-            p.property_composite_key === key
+            parcelIdentity(p) === id
               ? { ...p, geocode_source: 'skipped' }
               : p
           )
@@ -555,22 +618,31 @@ const GeocodingTool = () => {
   const unskipManual = useCallback(
     async (property) => {
       const key = property.property_composite_key;
+      const id = parcelIdentity(property);
       setError(null);
       setManualSaving((prev) => ({ ...prev, [key]: true }));
       try {
-        const { error: upErr } = await supabase
+        let q = supabase
           .from('property_records')
           .update({
             geocode_source: null,
             geocode_match_quality: null,
             geocoded_at: null,
           })
-          .eq('property_composite_key', key)
-          .eq('job_id', selectedJobId);
+          .eq('job_id', selectedJobId)
+          .eq('property_block', property.property_block)
+          .eq('property_lot', property.property_lot)
+          .eq('property_addl_card', property.property_addl_card);
+        if (property.property_qualifier == null) {
+          q = q.is('property_qualifier', null);
+        } else {
+          q = q.eq('property_qualifier', property.property_qualifier);
+        }
+        const { error: upErr } = await q;
         if (upErr) throw upErr;
         setProperties((prev) =>
           prev.map((p) =>
-            p.property_composite_key === key
+            parcelIdentity(p) === id
               ? { ...p, geocode_source: null }
               : p
           )
@@ -600,10 +672,11 @@ const GeocodingTool = () => {
         setError(`Invalid lat/lng for ${key}`);
         return;
       }
+      const id = parcelIdentity(property);
       setError(null);
       setManualSaving((prev) => ({ ...prev, [key]: true }));
       try {
-        const { error: upErr } = await supabase
+        let q = supabase
           .from('property_records')
           .update({
             property_latitude: lat,
@@ -612,14 +685,22 @@ const GeocodingTool = () => {
             geocode_match_quality: 'manual',
             geocoded_at: new Date().toISOString(),
           })
-          .eq('property_composite_key', key)
-          .eq('job_id', selectedJobId);
+          .eq('job_id', selectedJobId)
+          .eq('property_block', property.property_block)
+          .eq('property_lot', property.property_lot)
+          .eq('property_addl_card', property.property_addl_card);
+        if (property.property_qualifier == null) {
+          q = q.is('property_qualifier', null);
+        } else {
+          q = q.eq('property_qualifier', property.property_qualifier);
+        }
+        const { error: upErr } = await q;
         if (upErr) throw upErr;
 
-        // Update local state
+        // Update local state — propagate to every roll-year copy of this parcel.
         setProperties((prev) =>
           prev.map((p) =>
-            p.property_composite_key === key
+            parcelIdentity(p) === id
               ? {
                   ...p,
                   property_latitude: lat,
@@ -826,18 +907,23 @@ const GeocodingTool = () => {
               </div>
 
               {(() => {
-                const ungeocoded = properties.filter(
-                  (p) =>
-                    (p.property_addl_card == null || String(p.property_addl_card) === '1') &&
-                    (p.property_location || '').trim() &&
-                    p.property_latitude == null &&
-                    p.geocode_source !== 'skipped'
-                ).length;
+                const seen = new Set();
+                let ungeocoded = 0;
+                for (const p of properties) {
+                  if (!(p.property_addl_card == null || String(p.property_addl_card) === '1')) continue;
+                  if (!(p.property_location || '').trim()) continue;
+                  if (p.property_latitude != null) continue;
+                  if (p.geocode_source === 'skipped') continue;
+                  const id = parcelIdentity(p);
+                  if (seen.has(id)) continue;
+                  seen.add(id);
+                  ungeocoded += 1;
+                }
                 const chunks = Math.ceil(ungeocoded / CENSUS_BATCH_LIMIT);
                 return (
                   <p style={{ fontSize: 14, color: '#374151', marginTop: 12 }}>
                     Will generate <strong>{chunks}</strong> CSV file{chunks === 1 ? '' : 's'} (
-                    {ungeocoded.toLocaleString()} addresses, max{' '}
+                    {ungeocoded.toLocaleString()} unique parcels, max{' '}
                     {CENSUS_BATCH_LIMIT.toLocaleString()} rows per file).
                   </p>
                 );
