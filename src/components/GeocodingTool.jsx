@@ -620,8 +620,10 @@ const GeocodingTool = () => {
     }
     const city = sanitizeForCsv(selectedJob.municipality || '');
     const state = 'NJ';
+    // Single-column "full address" format — works as-is in Geocodio,
+    // BatchGeo, etc.
     const csv = rows
-      .map((p) => `${sanitizeForCsv(p.property_location)},${city},${state}`)
+      .map((p) => `${sanitizeForCsv(p.property_location)} ${city} ${state}`.replace(/\s+/g, ' ').trim())
       .join('\n');
     const safeJobName = (selectedJob.job_name || 'job')
       .replace(/[^a-z0-9]+/gi, '-')
