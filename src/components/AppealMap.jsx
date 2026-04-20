@@ -47,19 +47,46 @@ function buildPin({ label, color, textColor = '#ffffff', size = 30 }) {
 }
 
 // Helper component — Leaflet does not auto-fit on mount in react-leaflet v4.
-// This child component grabs the map instance via useMap() and calls fitBounds.
+// Calls fitBounds with a tight padding so the cluster fills the viewport
+// rather than floating in a sea of whitespace.
 function FitBounds({ points }) {
   const map = useMap();
   useEffect(() => {
     if (!points || points.length === 0) return;
     if (points.length === 1) {
-      map.setView([points[0][0], points[0][1]], 15);
+      map.setView([points[0][0], points[0][1]], 16);
       return;
     }
     const bounds = L.latLngBounds(points.map((p) => [p[0], p[1]]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    // Tight padding (20px each side) + cap at 16 so we never zoom past street
+    // level; for very close clusters Leaflet still rounds down to a sensible
+    // street-level zoom rather than rooftop.
+    map.fitBounds(bounds, { padding: [20, 20], maxZoom: 16 });
+    // Nudge zoom one step closer if Leaflet picked an overly conservative
+    // level (common when bounds are small and the viewport is tall).
+    setTimeout(() => {
+      const z = map.getZoom();
+      if (z < 14) map.setZoom(Math.min(z + 1, 15));
+    }, 100);
   }, [points, map]);
   return null;
+}
+
+// Haversine distance in miles between two [lat, lng] points.
+export function distanceMiles(a, b) {
+  if (!a || !b) return null;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const R = 3958.8; // earth radius in miles
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const x =
+    sinDLat * sinDLat + sinDLng * sinDLng * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  return R * c;
 }
 
 const AppealMap = ({

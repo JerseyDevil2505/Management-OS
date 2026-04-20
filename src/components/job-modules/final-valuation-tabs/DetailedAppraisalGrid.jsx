@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
-import AppealMap from '../../AppealMap';
+import AppealMap, { distanceMiles } from '../../AppealMap';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
@@ -142,6 +142,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount = (mapData.subject ? 1 : 0) + mapData.comps.length;
   const mapTotalCount = 1 + (comps?.length || 0);
+
+  // Per-comp distance (miles) from subject. Always 1 decimal.
+  const compDistances = useMemo(() => {
+    if (!mapData.subject) return [];
+    const subjLL = [mapData.subject.latitude, mapData.subject.longitude];
+    return mapData.comps.map((c) => ({
+      rank: c.rank,
+      address: c.address,
+      block: c.block,
+      lot: c.lot,
+      qualifier: c.qualifier,
+      miles: distanceMiles(subjLL, [c.latitude, c.longitude]),
+    }));
+  }, [mapData]);
 
   // Editable data for export modal - stores property overrides
   // Structure: { subject: {...propertyOverrides}, comp_0: {...}, comp_1: {...}, etc. }
@@ -2305,7 +2319,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (includeMap && mapHasSubject && mapCaptureRef.current) {
       try {
         // Wait one tick so any tile loads in the DOM are flushed before capture
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        await new Promise((resolve) => setTimeout(resolve, 700));
         const canvas = await html2canvas(mapCaptureRef.current, {
           useCORS: true,
           allowTaint: false,
@@ -2322,41 +2336,78 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         doc.setFont('helvetica', 'bold');
         doc.text('Subject & Comps Location Map', pageWidth / 2, 70, { align: 'center' });
 
-        doc.setFontSize(10);
-        doc.setTextColor(80, 80, 80);
-        doc.setFont('helvetica', 'normal');
-        doc.text(
-          `Subject: ${subject?.property_location || ''}  ·  Block ${subject?.property_block || ''}/${subject?.property_lot || ''}${subject?.property_qualifier ? '/' + subject.property_qualifier : ''}`,
-          pageWidth / 2,
-          90,
-          { align: 'center' }
-        );
-
-        // Image: keep aspect ratio, fit page width minus margins.
-        const maxW = pageWidth - margin * 2;
-        const maxH = 460;
+        // Two-column layout: map on the left (~58% width), info table on
+        // the right (~38% width). Bottom margin reserved for attribution.
+        const topY = 95;
+        const colGap = 14;
+        const rightColW = 200;
+        const mapW = pageWidth - margin * 2 - colGap - rightColW;
         const ratio = canvas.width / canvas.height;
-        let imgW = maxW;
-        let imgH = imgW / ratio;
-        if (imgH > maxH) {
-          imgH = maxH;
-          imgW = imgH * ratio;
-        }
-        const imgX = (pageWidth - imgW) / 2;
-        doc.addImage(mapImg, 'PNG', imgX, 110, imgW, imgH);
+        const mapH = Math.min(mapW / ratio, 480);
+        doc.addImage(mapImg, 'PNG', margin, topY, mapW, mapH);
 
-        // Legend + attribution under map
-        const legendY = 110 + imgH + 18;
+        // Right column: subject + comp list with distances
+        const rightX = margin + mapW + colGap;
+        let cursorY = topY;
+
+        // Subject card
+        doc.setFillColor(220, 38, 38);
+        doc.circle(rightX + 7, cursorY + 7, 6, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('S', rightX + 7, cursorY + 9, { align: 'center' });
+
+        doc.setTextColor(20, 20, 20);
         doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        doc.text('S = Subject   ·   1-' + mapData.comps.length + ' = Comparables', pageWidth / 2, legendY, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.text('SUBJECT', rightX + 18, cursorY + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const subjBlq = `Block ${subject?.property_block || ''}/${subject?.property_lot || ''}${subject?.property_qualifier ? '/' + subject.property_qualifier : ''}`;
+        doc.text(subjBlq, rightX + 18, cursorY + 16);
+        const subjAddrLines = doc.splitTextToSize(subject?.property_location || '', rightColW - 22);
+        doc.text(subjAddrLines, rightX + 18, cursorY + 25);
+        cursorY += 26 + (subjAddrLines.length - 1) * 9 + 8;
+
+        // Comp cards
+        compDistances.forEach((c) => {
+          // Estimated height per card ~= 32 + extra address lines
+          const addrLines = doc.splitTextToSize(c.address || '', rightColW - 22);
+          const cardH = 26 + (addrLines.length - 1) * 9;
+          // Page break safety
+          if (cursorY + cardH > topY + mapH + 30) return;
+
+          doc.setFillColor(37, 99, 235);
+          doc.circle(rightX + 7, cursorY + 7, 6, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.text(String(c.rank), rightX + 7, cursorY + 9, { align: 'center' });
+
+          doc.setTextColor(20, 20, 20);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          const titleLine = `COMP ${c.rank}${c.miles != null ? `  ·  ${c.miles.toFixed(1)} mi` : ''}`;
+          doc.text(titleLine, rightX + 18, cursorY + 6);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          const compBlq = `Block ${c.block || ''}/${c.lot || ''}${c.qualifier ? '/' + c.qualifier : ''}`;
+          doc.text(compBlq, rightX + 18, cursorY + 16);
+          doc.text(addrLines, rightX + 18, cursorY + 25);
+          cursorY += cardH + 6;
+        });
+
+        // Attribution under map
+        const footerY = topY + mapH + 16;
         doc.setFontSize(7);
         doc.setTextColor(120, 120, 120);
+        doc.setFont('helvetica', 'normal');
         doc.text(
-          'Map data © OpenStreetMap contributors. Coordinates from U.S. Census Bureau geocoder, manual verification, or mother-lot inheritance.',
-          pageWidth / 2,
-          legendY + 14,
-          { align: 'center', maxWidth: pageWidth - margin * 2 }
+          'Map data © OpenStreetMap contributors. Distances are straight-line (Haversine) from subject. Coordinates from U.S. Census Bureau geocoder, manual verification, or mother-lot inheritance.',
+          margin,
+          footerY,
+          { maxWidth: mapW }
         );
       } catch (mapErr) {
         // Map capture failure is non-fatal — PDF still saves without it.
@@ -2373,7 +2424,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2938,26 +2989,65 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               </table>
             </div>
 
-            {/* Map preview (also captured by html2canvas for the PDF) */}
+            {/* Map preview (also captured by html2canvas for the PDF).
+                Renders at a fixed 600x420 size so the on-screen preview matches
+                what gets embedded in the PDF, including auto-zoom level. */}
             {includeMap && mapHasSubject && (
               <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <MapIcon size={16} className="text-blue-600" />
-                    Subject &amp; Comps Map
+                    Subject &amp; Comps Map (PDF preview)
                   </div>
                   <span className="text-xs text-gray-500">
                     {mapGeocodedCount} of {mapTotalCount} parcels geocoded ·
                     OpenStreetMap tiles
                   </span>
                 </div>
-                <div ref={mapCaptureRef}>
-                  <AppealMap
-                    subject={mapData.subject}
-                    comps={mapData.comps}
-                    height={320}
-                    id="appeal-map-capture"
-                  />
+                <div className="flex gap-3 items-start">
+                  <div ref={mapCaptureRef} style={{ width: 600, flex: '0 0 600px' }}>
+                    <AppealMap
+                      subject={mapData.subject}
+                      comps={mapData.comps}
+                      height={420}
+                      id="appeal-map-capture"
+                    />
+                  </div>
+                  <div className="flex-1 text-xs">
+                    <div className="font-semibold text-gray-700 mb-1">Legend</div>
+                    <div className="bg-white border border-gray-200 rounded p-2">
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                          style={{ background: '#dc2626', width: 18, height: 18, fontSize: 10, lineHeight: 1 }}>S</span>
+                        <div>
+                          <div className="font-semibold">SUBJECT</div>
+                          <div className="text-gray-600">
+                            {mapData.subject.block}/{mapData.subject.lot}
+                            {mapData.subject.qualifier ? `/${mapData.subject.qualifier}` : ''}
+                          </div>
+                          <div className="text-gray-700">{mapData.subject.address}</div>
+                        </div>
+                      </div>
+                      {compDistances.map((c) => (
+                        <div key={c.rank} className="flex items-start gap-2 mb-1.5">
+                          <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                            style={{ background: '#2563eb', width: 18, height: 18, fontSize: 10, lineHeight: 1 }}>{c.rank}</span>
+                          <div>
+                            <div className="font-semibold">COMP {c.rank}</div>
+                            <div className="text-gray-600">
+                              {c.block}/{c.lot}{c.qualifier ? `/${c.qualifier}` : ''}
+                              {c.miles != null && (
+                                <span className="ml-1 text-blue-700 font-medium">
+                                  · {c.miles.toFixed(1)} mi
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-gray-700">{c.address}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 {mapGeocodedCount < mapTotalCount && (
                   <p className="text-xs text-amber-700 mt-1">
