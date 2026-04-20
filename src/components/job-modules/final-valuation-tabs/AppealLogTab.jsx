@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
+import { parsePowerCompPdf, buildPhotoPacketPdf } from '../../../lib/powercompPdfParser';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -110,6 +111,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [importExportFile, setImportExportFile] = useState(null);
   const [importExportResult, setImportExportResult] = useState(null);
   const [importExportProcessing, setImportExportProcessing] = useState(false);
+
+  // PowerComp PDF (photo packet) import state
+  const [showPwrCompPdfModal, setShowPwrCompPdfModal] = useState(false);
+  const [pwrCompPdfFile, setPwrCompPdfFile] = useState(null);
+  const [pwrCompPdfBytes, setPwrCompPdfBytes] = useState(null);
+  const [pwrCompPdfParsing, setPwrCompPdfParsing] = useState(false);
+  const [pwrCompPdfSaving, setPwrCompPdfSaving] = useState(false);
+  const [pwrCompPdfPreview, setPwrCompPdfPreview] = useState(null); // { totalPages, packets: [{...packet, matchedKey, matchedAddress}] }
+  const [pwrCompPdfSaveResult, setPwrCompPdfSaveResult] = useState(null); // { saved, replaced, failed }
+  const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
 
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
@@ -1312,6 +1323,27 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
   };
 
+  // Load PowerComp photo-packet metadata for chip + per-row export use.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('appeal_powercomp_photos')
+        .select('property_composite_key, storage_path, page_count, source_filename, imported_at')
+        .eq('job_id', jobData.id);
+      if (cancelled) return;
+      if (error) {
+        console.error('load photo packets failed', error);
+        return;
+      }
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setPhotoPacketsByKey(map);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1841,6 +1873,161 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     } finally {
       setPwrCamaProcessing(false);
     }
+  };
+
+  // ==================== POWERCOMP PHOTO PACKET (PDF) IMPORT ====================
+  // Match a parsed packet (block/lot/qual/card) against a property in this job.
+  const matchPacketToProperty = (packet) => {
+    if (!packet || !Array.isArray(properties) || !properties.length) return null;
+    const normBLQ = (v) => String(v ?? '').trim().toUpperCase();
+    const pBlock = normBLQ(packet.block);
+    const pLot = normBLQ(packet.lot);
+    const pQual = normBLQ(packet.qualifier);
+    const pCard = normBLQ(packet.card);
+
+    // Step 1: filter by block/lot/qualifier first
+    const candidates = properties.filter((p) => {
+      if (normBLQ(p.property_block) !== pBlock) return false;
+      if (normBLQ(p.property_lot) !== pLot) return false;
+      const q = normBLQ(p.property_qualifier);
+      // PowerComp prints blank qualifier; treat NULL/'' as equivalent.
+      if ((pQual || '') !== (q || '')) return false;
+      return true;
+    });
+    if (!candidates.length) return null;
+
+    // Step 2: prefer the matching card; if none matches, fall back to the
+    // vendor's "main" card (1 or M) so we always have a target.
+    const byCard = candidates.find((p) => normBLQ(p.property_addl_card) === pCard);
+    if (byCard) return byCard;
+    const mainCard = candidates.find((p) => {
+      const c = normBLQ(p.property_addl_card);
+      return c === '1' || c === 'M' || c === '';
+    });
+    return mainCard || candidates[0];
+  };
+
+  // Step 1 of the modal: parse + match (no writes).
+  const handleParsePwrCompPdf = async () => {
+    if (!pwrCompPdfFile) return;
+    setPwrCompPdfParsing(true);
+    setPwrCompPdfPreview(null);
+    setPwrCompPdfSaveResult(null);
+    try {
+      const buf = new Uint8Array(await pwrCompPdfFile.arrayBuffer());
+      setPwrCompPdfBytes(buf);
+      const parsed = await parsePowerCompPdf(buf);
+      const packets = parsed.packets.map((pkt) => {
+        const match = matchPacketToProperty(pkt);
+        return {
+          ...pkt,
+          matchedKey: match ? match.property_composite_key : null,
+          matchedAddress: match ? match.property_location : null,
+        };
+      });
+      setPwrCompPdfPreview({ totalPages: parsed.totalPages, packets });
+    } catch (err) {
+      console.error('PowerComp PDF parse error:', err);
+      alert(`Could not read that PDF: ${err.message}`);
+    } finally {
+      setPwrCompPdfParsing(false);
+    }
+  };
+
+  // Step 2 of the modal: build per-subject sub-PDFs, upload, upsert metadata.
+  const handleSavePwrCompPackets = async () => {
+    if (!pwrCompPdfPreview || !pwrCompPdfBytes || !jobData?.id) return;
+    const matched = pwrCompPdfPreview.packets.filter(
+      (p) => p.matchedKey && p.photoPageIndices.length > 0,
+    );
+    if (!matched.length) {
+      alert('No matched packets with photo pages to save.');
+      return;
+    }
+    setPwrCompPdfSaving(true);
+    let saved = 0, replaced = 0, failed = 0;
+    try {
+      for (const pkt of matched) {
+        try {
+          const subPdf = await buildPhotoPacketPdf(pwrCompPdfBytes, pkt);
+          if (!subPdf) continue;
+          const path = `${jobData.id}/${pkt.matchedKey}.pdf`;
+          const { error: upErr } = await supabase
+            .storage
+            .from('powercomp-photos')
+            .upload(path, subPdf, {
+              contentType: 'application/pdf',
+              upsert: true,
+            });
+          if (upErr) throw upErr;
+          const wasExisting = !!photoPacketsByKey[pkt.matchedKey];
+          const { error: dbErr } = await supabase
+            .from('appeal_powercomp_photos')
+            .upsert(
+              {
+                job_id: jobData.id,
+                property_composite_key: pkt.matchedKey,
+                storage_path: path,
+                page_count: pkt.photoPageIndices.length,
+                source_filename: pwrCompPdfFile?.name || null,
+                imported_at: new Date().toISOString(),
+              },
+              { onConflict: 'job_id,property_composite_key' },
+            );
+          if (dbErr) throw dbErr;
+          if (wasExisting) replaced++; else saved++;
+        } catch (e) {
+          console.error('packet save failed', pkt, e);
+          failed++;
+        }
+      }
+      await loadPhotoPackets();
+      setPwrCompPdfSaveResult({ saved, replaced, failed });
+    } finally {
+      setPwrCompPdfSaving(false);
+    }
+  };
+
+  const loadPhotoPackets = async () => {
+    if (!jobData?.id) return;
+    const { data, error } = await supabase
+      .from('appeal_powercomp_photos')
+      .select('property_composite_key, storage_path, page_count, source_filename, imported_at')
+      .eq('job_id', jobData.id);
+    if (error) {
+      console.error('load photo packets failed', error);
+      return;
+    }
+    const map = {};
+    for (const row of data || []) map[row.property_composite_key] = row;
+    setPhotoPacketsByKey(map);
+  };
+
+  const handleRemovePhotoPacket = async (compositeKey) => {
+    const row = photoPacketsByKey[compositeKey];
+    if (!row) return;
+    if (!window.confirm('Remove the imported PowerComp photo packet for this subject?')) return;
+    await supabase.storage.from('powercomp-photos').remove([row.storage_path]);
+    await supabase
+      .from('appeal_powercomp_photos')
+      .delete()
+      .eq('job_id', jobData.id)
+      .eq('property_composite_key', compositeKey);
+    await loadPhotoPackets();
+  };
+
+  const handlePreviewPhotoPacket = async (compositeKey) => {
+    const row = photoPacketsByKey[compositeKey];
+    if (!row) return;
+    const { data, error } = await supabase
+      .storage
+      .from('powercomp-photos')
+      .createSignedUrl(row.storage_path, 60 * 5);
+    if (error) {
+      alert(`Could not open packet: ${error.message}`);
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   // ==================== EXPORT HANDLER ====================
@@ -2445,6 +2632,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           >
             <Download className="w-4 h-4" />
             Export CSV (PowerComp)
+          </button>
+          <button
+            onClick={() => {
+              setShowPwrCompPdfModal(true);
+              setPwrCompPdfFile(null);
+              setPwrCompPdfBytes(null);
+              setPwrCompPdfPreview(null);
+              setPwrCompPdfSaveResult(null);
+            }}
+            title="Import a PowerComp Batch Taxpayer Report PDF and attach photo packets to each subject"
+            style={{ backgroundColor: '#0f766e', color: 'white' }}
+            className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Import PowerComp PDF
           </button>
         </div>
         <div className="flex items-center gap-4">
@@ -3810,6 +4012,133 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {importExportProcessing ? 'Importing...' : 'Import'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== POWERCOMP PDF (PHOTO PACKETS) MODAL ==================== */}
+      {showPwrCompPdfModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import PowerComp PDF (Photo Packets)</h2>
+              <button onClick={() => setShowPwrCompPdfModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Upload a BRT PowerComp <strong>Batch Taxpayer Report</strong> PDF. We'll group pages by subject Block / Lot / Qualifier, strip just the photo pages, and attach them to each matching property in this job. The photo pages get a footer crediting <em>BRT Technologies PowerComp</em>.
+            </p>
+
+            <div className="border-2 border-dashed border-teal-300 rounded-lg p-4 text-center mb-3">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                id="pwrcomp-pdf-input"
+                className="hidden"
+                onChange={(e) => {
+                  setPwrCompPdfFile(e.target.files[0] || null);
+                  setPwrCompPdfBytes(null);
+                  setPwrCompPdfPreview(null);
+                  setPwrCompPdfSaveResult(null);
+                }}
+              />
+              <label htmlFor="pwrcomp-pdf-input" className="cursor-pointer">
+                <FileText className="w-8 h-8 text-teal-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-700">
+                  {pwrCompPdfFile ? pwrCompPdfFile.name : 'Click to select PowerComp PDF'}
+                </p>
+              </label>
+            </div>
+
+            <div className="flex-1 overflow-y-auto -mx-1 px-1">
+              {pwrCompPdfPreview && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between text-xs">
+                    <span className="font-semibold text-gray-700">
+                      {pwrCompPdfPreview.packets.length} subject packet{pwrCompPdfPreview.packets.length === 1 ? '' : 's'} found · {pwrCompPdfPreview.totalPages} pages total
+                    </span>
+                    <span className="text-gray-500">
+                      ✓ matched · ⚠ no property match · — no photo pages
+                    </span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-1.5">B-L-Q / Card</th>
+                        <th className="text-left px-3 py-1.5">Address (PDF)</th>
+                        <th className="text-left px-3 py-1.5">Matched Property</th>
+                        <th className="text-right px-3 py-1.5">Pages (data / photo)</th>
+                        <th className="text-center px-3 py-1.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pwrCompPdfPreview.packets.map((p, i) => {
+                        const ok = !!p.matchedKey && p.photoPageIndices.length > 0;
+                        const noPhotos = !!p.matchedKey && p.photoPageIndices.length === 0;
+                        return (
+                          <tr key={i} className={ok ? '' : 'bg-amber-50/40'}>
+                            <td className="px-3 py-1.5 font-mono">
+                              {p.block}-{p.lot}{p.qualifier ? `-${p.qualifier}` : ''} / {p.card || '?'}
+                            </td>
+                            <td className="px-3 py-1.5">{p.address || '—'}</td>
+                            <td className="px-3 py-1.5">
+                              {p.matchedKey
+                                ? <span className="text-gray-700">{p.matchedAddress || p.matchedKey}</span>
+                                : <span className="text-amber-700">no match in this job</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-gray-600">
+                              {p.dataPageIndices.length} / {p.photoPageIndices.length}
+                            </td>
+                            <td className="px-3 py-1.5 text-center">
+                              {ok ? <span className="text-green-700">✓</span>
+                                : noPhotos ? <span className="text-gray-400">—</span>
+                                : <span className="text-amber-700">⚠</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {pwrCompPdfSaveResult && (
+                <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                  <p className="font-semibold text-emerald-800">Saved</p>
+                  <p className="text-emerald-700">✓ {pwrCompPdfSaveResult.saved} new · ↻ {pwrCompPdfSaveResult.replaced} replaced{pwrCompPdfSaveResult.failed > 0 ? ` · ✗ ${pwrCompPdfSaveResult.failed} failed` : ''}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t border-gray-100 mt-3">
+              <button
+                onClick={() => setShowPwrCompPdfModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                {pwrCompPdfSaveResult ? 'Close' : 'Cancel'}
+              </button>
+              {!pwrCompPdfPreview && (
+                <button
+                  onClick={handleParsePwrCompPdf}
+                  disabled={!pwrCompPdfFile || pwrCompPdfParsing}
+                  style={{ backgroundColor: '#0f766e', color: 'white' }}
+                  className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {pwrCompPdfParsing ? 'Reading PDF…' : 'Parse & Match (dry-run)'}
+                </button>
+              )}
+              {pwrCompPdfPreview && !pwrCompPdfSaveResult && (
+                <button
+                  onClick={handleSavePwrCompPackets}
+                  disabled={pwrCompPdfSaving || !pwrCompPdfPreview.packets.some(p => p.matchedKey && p.photoPageIndices.length)}
+                  style={{ backgroundColor: '#15803d', color: 'white' }}
+                  className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {pwrCompPdfSaving ? 'Saving…' : 'Save Photo Packets'}
                 </button>
               )}
             </div>
