@@ -18,6 +18,8 @@ import { supabase } from '../lib/supabaseClient';
  *   4. Admin downloads result CSV(s) from Census
  *   5. Upload result CSV(s) back here
  *   6. Preview match stats, commit to property_records
+ *   7. (NEW) Manual entry pass: for No_Match / suspect rows, paste lat/lng
+ *      copied from Google Maps, etc. Stamped geocode_source = 'manual'.
  *
  * No nav link — accessed only via /geocoding-tool URL by primary owner.
  */
@@ -48,6 +50,19 @@ const dangerButton = {
   border: '1px solid #b91c1c',
 };
 
+const smallButton = {
+  ...buttonBase,
+  padding: '4px 10px',
+  fontSize: 12,
+};
+
+const smallPrimary = {
+  ...smallButton,
+  background: '#2563eb',
+  color: '#ffffff',
+  border: '1px solid #1d4ed8',
+};
+
 function downloadFile(filename, content, mimeType = 'text/csv') {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -62,8 +77,6 @@ function downloadFile(filename, content, mimeType = 'text/csv') {
 
 function sanitizeForCsv(value) {
   if (value === null || value === undefined) return '';
-  // Strip commas, quotes, and newlines that would break Census's parser.
-  // Census batch CSV is positional and very intolerant of escaping.
   return String(value)
     .replace(/[\r\n]+/g, ' ')
     .replace(/"/g, '')
@@ -80,7 +93,7 @@ async function fetchAllJobProperties(jobId) {
     const { data, error } = await supabase
       .from('property_records')
       .select(
-        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_latitude, property_longitude'
+        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_latitude, property_longitude, geocode_source'
       )
       .eq('job_id', jobId)
       .range(from, from + PAGE - 1);
@@ -93,6 +106,22 @@ async function fetchAllJobProperties(jobId) {
   return all;
 }
 
+async function fetchCoverageForJob(jobId) {
+  const total = await supabase
+    .from('property_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', jobId);
+  const geocoded = await supabase
+    .from('property_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', jobId)
+    .not('property_latitude', 'is', null);
+  return {
+    total: total.count || 0,
+    geocoded: geocoded.count || 0,
+  };
+}
+
 const GeocodingTool = () => {
   const [jobs, setJobs] = useState([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -103,9 +132,19 @@ const GeocodingTool = () => {
   const [status, setStatus] = useState(null);
 
   // Result-side state
-  const [parsedResults, setParsedResults] = useState([]); // raw rows from Census result CSVs
+  const [parsedResults, setParsedResults] = useState([]);
   const [committing, setCommitting] = useState(false);
   const [commitSummary, setCommitSummary] = useState(null);
+
+  // Coverage overview
+  const [coverage, setCoverage] = useState({}); // { jobId: { total, geocoded } }
+  const [coverageLoading, setCoverageLoading] = useState(false);
+
+  // Manual entry
+  const [manualSearch, setManualSearch] = useState('');
+  const [manualEdits, setManualEdits] = useState({}); // { compositeKey: { lat, lng } }
+  const [manualSaving, setManualSaving] = useState({}); // { compositeKey: bool }
+  const [manualFilter, setManualFilter] = useState('ungeocoded'); // 'ungeocoded' | 'all'
 
   const selectedJob = useMemo(
     () => jobs.find((j) => j.id === selectedJobId) || null,
@@ -138,6 +177,37 @@ const GeocodingTool = () => {
     };
   }, []);
 
+  // Load coverage for all jobs once jobs are loaded
+  const loadCoverage = useCallback(async (jobsList) => {
+    if (!jobsList || jobsList.length === 0) return;
+    setCoverageLoading(true);
+    try {
+      const CHUNK = 6;
+      const next = {};
+      for (let i = 0; i < jobsList.length; i += CHUNK) {
+        const slice = jobsList.slice(i, i + CHUNK);
+        // eslint-disable-next-line no-await-in-loop
+        const results = await Promise.all(
+          slice.map((j) => fetchCoverageForJob(j.id).then((c) => [j.id, c]))
+        );
+        for (const [id, c] of results) next[id] = c;
+        setCoverage((prev) => ({ ...prev, ...next }));
+      }
+    } catch (e) {
+      // non-fatal — overview can fail silently
+      // eslint-disable-next-line no-console
+      console.warn('Coverage load failed:', e);
+    } finally {
+      setCoverageLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!jobsLoading && jobs.length > 0) {
+      loadCoverage(jobs);
+    }
+  }, [jobsLoading, jobs, loadCoverage]);
+
   // Load properties when job changes
   useEffect(() => {
     if (!selectedJobId) {
@@ -150,6 +220,8 @@ const GeocodingTool = () => {
     setStatus(null);
     setParsedResults([]);
     setCommitSummary(null);
+    setManualEdits({});
+    setManualSearch('');
     (async () => {
       try {
         const data = await fetchAllJobProperties(selectedJobId);
@@ -183,7 +255,6 @@ const GeocodingTool = () => {
   const generateCsvBatches = useCallback(() => {
     if (!selectedJob || properties.length === 0) return;
 
-    // Only geocode properties with an address AND no coords yet
     const candidates = properties.filter(
       (p) => (p.property_location || '').trim() && p.property_latitude == null
     );
@@ -199,15 +270,13 @@ const GeocodingTool = () => {
     const city = sanitizeForCsv(selectedJob.municipality || '');
     const state = 'NJ';
 
-    // Census batch CSV format (no header):
-    //   uniqueId, streetAddress, city, state, zip
     const buildRow = (p) =>
       [
         sanitizeForCsv(p.property_composite_key),
         sanitizeForCsv(p.property_location),
         city,
         state,
-        '', // zip unknown — Census tolerates blank
+        '',
       ].join(',');
 
     const totalChunks = Math.ceil(candidates.length / CENSUS_BATCH_LIMIT);
@@ -251,16 +320,6 @@ const GeocodingTool = () => {
         header: false,
         skipEmptyLines: true,
         complete: (res) => {
-          // Census result CSV columns:
-          //   0: uniqueId
-          //   1: input address
-          //   2: match status (Match | No_Match | Tie)
-          //   3: match type (Exact | Non_Exact)
-          //   4: matched address
-          //   5: lon,lat (comma-separated inside one field — but quoted)
-          //   6: tigerline id
-          //   7: side
-          //   8+ : geographies (state, county, tract, block) when using /geographies/addressbatch
           res.data.forEach((row) => {
             if (!row || row.length < 3) return;
             const compositeKey = row[0];
@@ -302,7 +361,6 @@ const GeocodingTool = () => {
       });
     });
 
-    // reset input so same file can be selected again
     event.target.value = '';
   }, []);
 
@@ -340,7 +398,6 @@ const GeocodingTool = () => {
     const now = new Date().toISOString();
 
     try {
-      // Update in batches of 100 to keep individual statements small.
       const BATCH = 100;
       let updated = 0;
       let failed = 0;
@@ -374,9 +431,11 @@ const GeocodingTool = () => {
         message: `Committed ${updated} of ${matched.length} coordinate updates.`,
       });
 
-      // Refresh property list to reflect new coords
       const refreshed = await fetchAllJobProperties(selectedJobId);
       setProperties(refreshed);
+      // refresh coverage row for this job
+      const c = await fetchCoverageForJob(selectedJobId);
+      setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
     } catch (e) {
       setError(`Commit failed: ${e.message || e}`);
     } finally {
@@ -384,7 +443,132 @@ const GeocodingTool = () => {
     }
   }, [parsedResults, selectedJobId]);
 
+  // ---------- Manual entry helpers ----------
+
+  const manualCandidates = useMemo(() => {
+    let list = properties;
+    if (manualFilter === 'ungeocoded') {
+      list = list.filter((p) => p.property_latitude == null);
+    }
+    const q = manualSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          (p.property_location || '').toLowerCase().includes(q) ||
+          (p.property_composite_key || '').toLowerCase().includes(q) ||
+          (p.property_block || '').toString().toLowerCase().includes(q) ||
+          (p.property_lot || '').toString().toLowerCase().includes(q)
+      );
+    }
+    return list.slice(0, 100); // cap render
+  }, [properties, manualSearch, manualFilter]);
+
+  const manualUngeocodedCount = useMemo(
+    () => properties.filter((p) => p.property_latitude == null).length,
+    [properties]
+  );
+
+  const setManualField = (key, field, value) => {
+    setManualEdits((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), [field]: value },
+    }));
+  };
+
+  const saveManual = useCallback(
+    async (property) => {
+      const key = property.property_composite_key;
+      const edit = manualEdits[key] || {};
+      const lat = parseFloat(edit.lat);
+      const lng = parseFloat(edit.lng);
+      if (isNaN(lat) || isNaN(lng)) {
+        setError(`Invalid lat/lng for ${key}`);
+        return;
+      }
+      setError(null);
+      setManualSaving((prev) => ({ ...prev, [key]: true }));
+      try {
+        const { error: upErr } = await supabase
+          .from('property_records')
+          .update({
+            property_latitude: lat,
+            property_longitude: lng,
+            geocode_source: 'manual',
+            geocode_match_quality: 'manual',
+            geocoded_at: new Date().toISOString(),
+          })
+          .eq('property_composite_key', key)
+          .eq('job_id', selectedJobId);
+        if (upErr) throw upErr;
+
+        // Update local state
+        setProperties((prev) =>
+          prev.map((p) =>
+            p.property_composite_key === key
+              ? {
+                  ...p,
+                  property_latitude: lat,
+                  property_longitude: lng,
+                  geocode_source: 'manual',
+                }
+              : p
+          )
+        );
+        setManualEdits((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        // refresh coverage tally for this job
+        const c = await fetchCoverageForJob(selectedJobId);
+        setCoverage((prev) => ({ ...prev, [selectedJobId]: c }));
+      } catch (e) {
+        setError(`Save failed for ${key}: ${e.message || e}`);
+      } finally {
+        setManualSaving((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    },
+    [manualEdits, selectedJobId]
+  );
+
+  const buildMapsUrl = (p) => {
+    const muni = selectedJob?.municipality || '';
+    const addr = `${p.property_location || ''} ${muni} NJ`.replace(/\s+/g, '+');
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+  };
+
   const previewRows = parsedResults.slice(0, 10);
+
+  // ---------- Coverage overview rendering helpers ----------
+
+  const coverageRows = useMemo(() => {
+    return jobs.map((j) => {
+      const c = coverage[j.id];
+      const total = c?.total ?? null;
+      const geocoded = c?.geocoded ?? null;
+      let pct = null;
+      let bucket = 'unknown';
+      if (total != null && geocoded != null) {
+        pct = total > 0 ? (geocoded / total) * 100 : 0;
+        if (pct === 0) bucket = 'none';
+        else if (pct < 95) bucket = 'partial';
+        else bucket = 'complete';
+      }
+      return { job: j, total, geocoded, pct, bucket };
+    });
+  }, [jobs, coverage]);
+
+  const coverageSummary = useMemo(() => {
+    const counts = { none: 0, partial: 0, complete: 0, unknown: 0 };
+    coverageRows.forEach((r) => {
+      counts[r.bucket] += 1;
+    });
+    return counts;
+  }, [coverageRows]);
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
@@ -395,6 +579,73 @@ const GeocodingTool = () => {
         One-time geocoding of property addresses via the free U.S. Census Bureau batch geocoder.
         Manual upload/download flow — admin only.
       </p>
+
+      {/* Coverage overview */}
+      <section style={section}>
+        <h2 style={h2}>Town coverage overview</h2>
+        <div style={{ ...statsBox, marginBottom: 12 }}>
+          <div>
+            <strong style={{ color: '#16a34a' }}>{coverageSummary.complete}</strong> complete ·{' '}
+            <strong style={{ color: '#d97706' }}>{coverageSummary.partial}</strong> partial ·{' '}
+            <strong style={{ color: '#dc2626' }}>{coverageSummary.none}</strong> none ·{' '}
+            <strong style={{ color: '#6b7280' }}>{coverageSummary.unknown}</strong> unknown
+            {coverageLoading ? ' · loading…' : ''}
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto' }}>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Job</th>
+                <th style={th}>Municipality</th>
+                <th style={th}>County</th>
+                <th style={th}>Status</th>
+                <th style={{ ...th, textAlign: 'right' }}>Geocoded</th>
+                <th style={{ ...th, textAlign: 'right' }}>Total</th>
+                <th style={{ ...th, textAlign: 'right' }}>%</th>
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {coverageRows.map(({ job, total, geocoded, pct, bucket }) => (
+                <tr key={job.id}>
+                  <td style={td}>{job.job_name}</td>
+                  <td style={td}>{job.municipality || '—'}</td>
+                  <td style={td}>{job.county || '—'}</td>
+                  <td style={td}>
+                    <span style={badgeStyle(bucket)}>{bucketLabel(bucket)}</span>
+                  </td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    {geocoded != null ? geocoded.toLocaleString() : '…'}
+                  </td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    {total != null ? total.toLocaleString() : '…'}
+                  </td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    {pct != null ? `${pct.toFixed(1)}%` : '…'}
+                  </td>
+                  <td style={td}>
+                    <button
+                      style={smallButton}
+                      onClick={() => setSelectedJobId(job.id)}
+                      disabled={selectedJobId === job.id}
+                    >
+                      {selectedJobId === job.id ? 'selected' : 'select'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {coverageRows.length === 0 && (
+                <tr>
+                  <td style={td} colSpan={8}>
+                    No jobs found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Step 1: Job picker */}
       <section style={section}>
@@ -604,6 +855,132 @@ const GeocodingTool = () => {
         </section>
       )}
 
+      {/* Step 5: Manual entry (fallback for No_Match / suspect) */}
+      {selectedJobId && (
+        <section style={section}>
+          <h2 style={h2}>Step 5 — Manual entry (No_Match fallback)</h2>
+          <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
+            For properties Census couldn't resolve, find the parcel in Google Maps,
+            right-click the rooftop, and copy the lat/lng. Paste below and save. Stamped
+            <code style={{ margin: '0 4px' }}>geocode_source = 'manual'</code>so we always know
+            which were human-verified.
+          </p>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={manualSearch}
+              onChange={(e) => setManualSearch(e.target.value)}
+              placeholder="Search address, block, lot, or composite key…"
+              style={{ ...buttonBase, flex: '1 1 280px', minWidth: 240 }}
+            />
+            <select
+              value={manualFilter}
+              onChange={(e) => setManualFilter(e.target.value)}
+              style={buttonBase}
+            >
+              <option value="ungeocoded">Show ungeocoded only ({manualUngeocodedCount.toLocaleString()})</option>
+              <option value="all">Show all ({properties.length.toLocaleString()})</option>
+            </select>
+            <span style={{ fontSize: 12, color: '#6b7280' }}>
+              showing {manualCandidates.length} (capped at 100)
+            </span>
+          </div>
+
+          <div style={{ overflowX: 'auto', maxHeight: 480, overflowY: 'auto' }}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Address</th>
+                  <th style={th}>Block / Lot</th>
+                  <th style={th}>Current</th>
+                  <th style={th}>Lat</th>
+                  <th style={th}>Lng</th>
+                  <th style={th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualCandidates.map((p) => {
+                  const key = p.property_composite_key;
+                  const edit = manualEdits[key] || {};
+                  const saving = !!manualSaving[key];
+                  return (
+                    <tr key={key}>
+                      <td style={td}>
+                        <div>{p.property_location || <em style={{ color: '#9ca3af' }}>(no address)</em>}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>
+                          <a
+                            href={buildMapsUrl(p)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            open in Google Maps ↗
+                          </a>
+                        </div>
+                      </td>
+                      <td style={td}>
+                        {p.property_block || '—'} / {p.property_lot || '—'}
+                        {p.property_qualifier ? ` (${p.property_qualifier})` : ''}
+                      </td>
+                      <td style={td}>
+                        {p.property_latitude != null ? (
+                          <span style={{ fontSize: 11 }}>
+                            {Number(p.property_latitude).toFixed(5)},{' '}
+                            {Number(p.property_longitude).toFixed(5)}
+                            <br />
+                            <span style={{ color: '#6b7280' }}>
+                              {p.geocode_source || ''}
+                            </span>
+                          </span>
+                        ) : (
+                          <span style={{ color: '#dc2626', fontSize: 12 }}>none</span>
+                        )}
+                      </td>
+                      <td style={td}>
+                        <input
+                          type="text"
+                          value={edit.lat || ''}
+                          onChange={(e) => setManualField(key, 'lat', e.target.value)}
+                          placeholder="40.00847"
+                          style={{ ...buttonBase, width: 100, padding: '4px 6px', fontSize: 12 }}
+                        />
+                      </td>
+                      <td style={td}>
+                        <input
+                          type="text"
+                          value={edit.lng || ''}
+                          onChange={(e) => setManualField(key, 'lng', e.target.value)}
+                          placeholder="-75.00680"
+                          style={{ ...buttonBase, width: 100, padding: '4px 6px', fontSize: 12 }}
+                        />
+                      </td>
+                      <td style={td}>
+                        <button
+                          style={smallPrimary}
+                          onClick={() => saveManual(p)}
+                          disabled={saving || !edit.lat || !edit.lng}
+                        >
+                          {saving ? 'saving…' : 'save'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {manualCandidates.length === 0 && (
+                  <tr>
+                    <td style={td} colSpan={6}>
+                      {propsLoading
+                        ? 'Loading…'
+                        : 'No matching properties.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {error && (
         <div
           style={{
@@ -673,11 +1050,46 @@ const th = {
   padding: '6px 8px',
   borderBottom: '2px solid #e5e7eb',
   background: '#f9fafb',
+  position: 'sticky',
+  top: 0,
 };
 
 const td = {
   padding: '6px 8px',
   borderBottom: '1px solid #f3f4f6',
 };
+
+function bucketLabel(b) {
+  switch (b) {
+    case 'complete':
+      return 'Complete';
+    case 'partial':
+      return 'Partial';
+    case 'none':
+      return 'Not started';
+    default:
+      return '—';
+  }
+}
+
+function badgeStyle(b) {
+  const base = {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 600,
+  };
+  switch (b) {
+    case 'complete':
+      return { ...base, background: '#dcfce7', color: '#166534' };
+    case 'partial':
+      return { ...base, background: '#fef3c7', color: '#92400e' };
+    case 'none':
+      return { ...base, background: '#fee2e2', color: '#991b1b' };
+    default:
+      return { ...base, background: '#f3f4f6', color: '#6b7280' };
+  }
+}
 
 export default GeocodingTool;
