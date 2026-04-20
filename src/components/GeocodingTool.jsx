@@ -93,7 +93,7 @@ async function fetchAllJobProperties(jobId) {
     const { data, error } = await supabase
       .from('property_records')
       .select(
-        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_latitude, property_longitude, geocode_source'
+        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source'
       )
       .eq('job_id', jobId)
       .range(from, from + PAGE - 1);
@@ -1021,6 +1021,7 @@ const GeocodingTool = () => {
                 <tr>
                   <th style={th}>Address</th>
                   <th style={th}>Block / Lot</th>
+                  <th style={th}>Class</th>
                   <th style={th}>Current</th>
                   <th style={th}>Lat</th>
                   <th style={th}>Lng</th>
@@ -1049,6 +1050,15 @@ const GeocodingTool = () => {
                       <td style={td}>
                         {p.property_block || '—'} / {p.property_lot || '—'}
                         {p.property_qualifier ? ` (${p.property_qualifier})` : ''}
+                      </td>
+                      <td style={td}>
+                        {p.property_m4_class ? (
+                          <span style={classBadge(p.property_m4_class)}>
+                            {p.property_m4_class}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td style={td}>
                         {p.property_latitude != null ? (
@@ -1117,7 +1127,7 @@ const GeocodingTool = () => {
                 })}
                 {manualCandidates.length === 0 && (
                   <tr>
-                    <td style={td} colSpan={6}>
+                    <td style={td} colSpan={7}>
                       {propsLoading
                         ? 'Loading…'
                         : 'No matching properties.'}
@@ -1219,6 +1229,40 @@ function bucketLabel(b) {
     default:
       return '—';
   }
+}
+
+function classBadge(cls) {
+  // Color-code NJ MOD-IV property classes so skip candidates pop visually.
+  const base = {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    fontFamily: 'monospace',
+  };
+  const c = String(cls || '').toUpperCase();
+  // Residential
+  if (c === '2' || c === '3A' || c === '3B') {
+    return { ...base, background: '#dbeafe', color: '#1e40af' };
+  }
+  // Commercial / industrial / apartment
+  if (c === '4A' || c === '4B' || c === '4C') {
+    return { ...base, background: '#fef3c7', color: '#92400e' };
+  }
+  // Vacant land
+  if (c === '1') {
+    return { ...base, background: '#f3f4f6', color: '#374151' };
+  }
+  // Farm
+  if (c === '3A' || c === '3B') {
+    return { ...base, background: '#dcfce7', color: '#166534' };
+  }
+  // Railroad / public utility / exempt — typical SKIP candidates
+  if (c.startsWith('5') || c.startsWith('6') || c.startsWith('15')) {
+    return { ...base, background: '#fee2e2', color: '#991b1b' };
+  }
+  return { ...base, background: '#e5e7eb', color: '#374151' };
 }
 
 function badgeStyle(b) {
