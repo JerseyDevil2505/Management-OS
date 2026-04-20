@@ -1218,15 +1218,27 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Extract open porch area (sum of Op, Bi Op, Bi Op2, Bi Gp, and Porch)
+   * Extract open porch area from Microsystems raw record.
+   *
+   * Standalone columns: 'Op', 'Bi Gp', 'Porch'.
+   * Built-in open porches ship as a single combined column header
+   * 'Bi Op Bi Op2'; falls back to individual 'Bi Op' / 'Bi Op2'
+   * columns for legacy/variant exports.
    */
   extractOpenPorchArea(rawRecord) {
+    const sumNumeric = (keys) =>
+      keys.reduce((acc, k) => acc + (this.parseNumeric(rawRecord[k]) || 0), 0);
+
     let total = 0;
     total += this.parseNumeric(rawRecord['Op']) || 0;
-    total += this.parseNumeric(rawRecord['Bi Op']) || 0;
-    total += this.parseNumeric(rawRecord['Bi Op2']) || 0;
     total += this.parseNumeric(rawRecord['Bi Gp']) || 0;
     total += this.parseNumeric(rawRecord['Porch']) || 0;
+
+    const biOpCombined = this.parseNumeric(rawRecord['Bi Op Bi Op2']);
+    total += biOpCombined != null
+      ? biOpCombined
+      : sumNumeric(['Bi Op', 'Bi Op2']);
+
     return total > 0 ? total : null;
   }
 
