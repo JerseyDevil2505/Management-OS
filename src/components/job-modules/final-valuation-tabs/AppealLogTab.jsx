@@ -135,6 +135,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
 
+  // Saved CME result sets (the appeal report data source).
+  // Loaded once per job; we resolve per-appeal candidates in-memory.
+  const [savedResultSets, setSavedResultSets] = useState([]); // [{ id, name, created_at, updated_at, archived_at, use_for_defense, results }]
+  const [resultSetPickerAppealId, setResultSetPickerAppealId] = useState(null); // open popover for which appeal row
+  const [resultSetPickerShowArchived, setResultSetPickerShowArchived] = useState(false);
+  const [resultSetMutationBusy, setResultSetMutationBusy] = useState(null); // result set id currently being mutated
+
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
   const [bulkHearingDate, setBulkHearingDate] = useState('');
@@ -1357,6 +1364,28 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return () => { cancelled = true; };
   }, [jobData?.id]);
 
+  // Load saved CME result sets — needed for the per-appeal defense resolver.
+  // We pull the full results blob so the resolver can match on subject BLQ
+  // without an extra round-trip per row.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name, created_at, updated_at, archived_at, use_for_defense, results')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        console.error('load saved result sets failed', error);
+        return;
+      }
+      setSavedResultSets(data || []);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -2053,6 +2082,114 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return;
     }
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // ==================== SAVED RESULT SET RESOLVER (for appeal report) ====================
+
+  // Returns candidate saved result sets (and inferred defense pick) for an appeal row.
+  //   { candidates: [{ resultSet, subject }], defense: {...} | null, status: 'no_appeal_number' | 'no_candidates' | 'auto' | 'flagged' | 'needs_pick' }
+  // Strict rules:
+  //   - The appeal MUST have an appeal_number to be considered "in defense" — otherwise no resolution.
+  //   - Only non-archived result sets count as candidates.
+  //   - If exactly one candidate exists, that is the defense automatically.
+  //   - If 2+ candidates exist, one must have use_for_defense=true; otherwise we surface "needs_pick".
+  const resolveDefenseSetForAppeal = (appeal) => {
+    if (!appeal) return { candidates: [], defense: null, status: 'no_candidates' };
+    if (!appeal.appeal_number || !String(appeal.appeal_number).trim()) {
+      return { candidates: [], defense: null, status: 'no_appeal_number' };
+    }
+    const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
+    const wantBlock = norm(appeal.property_block);
+    const wantLot = norm(appeal.property_lot);
+    const wantQual = norm(appeal.property_qualifier);
+    const subjectMatches = (subj) =>
+      subj &&
+      norm(subj.property_block) === wantBlock &&
+      norm(subj.property_lot) === wantLot &&
+      norm(subj.property_qualifier) === wantQual;
+
+    const candidates = [];
+    for (const rs of savedResultSets) {
+      if (rs.archived_at) continue; // archived sets never auto-resolve
+      const results = Array.isArray(rs.results) ? rs.results : [];
+      const matchingResult = results.find((r) => subjectMatches(r?.subject));
+      if (matchingResult) {
+        candidates.push({ resultSet: rs, result: matchingResult });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return { candidates: [], defense: null, status: 'no_candidates' };
+    }
+    const flagged = candidates.find((c) => c.resultSet.use_for_defense === true);
+    if (flagged) {
+      return { candidates, defense: flagged, status: 'flagged' };
+    }
+    if (candidates.length === 1) {
+      return { candidates, defense: candidates[0], status: 'auto' };
+    }
+    return { candidates, defense: null, status: 'needs_pick' };
+  };
+
+  // Mark one saved result set as "use_for_defense" for this subject.
+  // Clears the flag on every other non-archived candidate for the same subject so
+  // the constraint stays "at most one defense per subject".
+  const handleSetDefenseSet = async (appeal, chosen) => {
+    if (!appeal || !chosen) return;
+    setResultSetMutationBusy(chosen.resultSet.id);
+    try {
+      const { candidates } = resolveDefenseSetForAppeal(appeal);
+      const toClear = candidates
+        .filter((c) => c.resultSet.id !== chosen.resultSet.id && c.resultSet.use_for_defense)
+        .map((c) => c.resultSet.id);
+      if (toClear.length) {
+        const { error: clearErr } = await supabase
+          .from('job_cme_result_sets')
+          .update({ use_for_defense: false })
+          .in('id', toClear);
+        if (clearErr) throw clearErr;
+      }
+      const { error: setErr } = await supabase
+        .from('job_cme_result_sets')
+        .update({ use_for_defense: true })
+        .eq('id', chosen.resultSet.id);
+      if (setErr) throw setErr;
+      setSavedResultSets((prev) =>
+        prev.map((rs) => {
+          if (rs.id === chosen.resultSet.id) return { ...rs, use_for_defense: true };
+          if (toClear.includes(rs.id)) return { ...rs, use_for_defense: false };
+          return rs;
+        }),
+      );
+    } catch (e) {
+      console.error('set defense failed', e);
+      alert(`Could not set defense set: ${e.message}`);
+    } finally {
+      setResultSetMutationBusy(null);
+    }
+  };
+
+  const handleArchiveResultSet = async (resultSetId, archive) => {
+    if (!resultSetId) return;
+    setResultSetMutationBusy(resultSetId);
+    try {
+      const archived_at = archive ? new Date().toISOString() : null;
+      // When archiving, also clear the defense flag so it can never auto-resolve.
+      const update = archive ? { archived_at, use_for_defense: false } : { archived_at };
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .update(update)
+        .eq('id', resultSetId);
+      if (error) throw error;
+      setSavedResultSets((prev) =>
+        prev.map((rs) => (rs.id === resultSetId ? { ...rs, ...update } : rs)),
+      );
+    } catch (e) {
+      console.error('archive toggle failed', e);
+      alert(`Could not update result set: ${e.message}`);
+    } finally {
+      setResultSetMutationBusy(null);
+    }
   };
 
   // ==================== APPEAL REPORT (per-row + batch) ====================
@@ -3476,13 +3613,46 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   </td>
 
                   {/* ACTION BUTTONS */}
-                  <td className="px-3 py-2 whitespace-nowrap text-center">
+                  <td className="px-3 py-2 whitespace-nowrap text-center relative">
                     <div className="flex items-center justify-center gap-1">
                       {(() => {
                         const key = compositeKeyForAppeal(appeal);
                         const hasPacket = !!photoPacketsByKey[key];
+                        const resolution = resolveDefenseSetForAppeal(appeal);
+                        const printable = !!resolution.defense;
+                        let chipClass = 'bg-gray-100 text-gray-500 border-gray-200';
+                        let chipLabel = 'No CME';
+                        let chipTitle = 'No saved CME result set matches this appeal\'s subject. Run Sales Comparison → Search & Results and Save Result Set first.';
+                        if (resolution.status === 'no_appeal_number') {
+                          chipClass = 'bg-gray-100 text-gray-400 border-gray-200';
+                          chipLabel = 'No #';
+                          chipTitle = 'Set an appeal number on this row before resolving a defense set.';
+                        } else if (resolution.status === 'auto') {
+                          chipClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          chipLabel = 'CME ✓';
+                          chipTitle = `Defense set: ${resolution.defense.resultSet.name}`;
+                        } else if (resolution.status === 'flagged') {
+                          chipClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          chipLabel = `CME ✓ (${resolution.candidates.length})`;
+                          chipTitle = `Defense set (flagged): ${resolution.defense.resultSet.name}`;
+                        } else if (resolution.status === 'needs_pick') {
+                          chipClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                          chipLabel = `CME ${resolution.candidates.length} — pick`;
+                          chipTitle = `${resolution.candidates.length} saved sets match this subject. Pick one to use for defense.`;
+                        }
+                        const open = resultSetPickerAppealId === appeal.id;
                         return (
                           <>
+                            <button
+                              onClick={() => {
+                                setResultSetPickerAppealId(open ? null : appeal.id);
+                                setResultSetPickerShowArchived(false);
+                              }}
+                              title={chipTitle}
+                              className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${chipClass} hover:opacity-90`}
+                            >
+                              {chipLabel}
+                            </button>
                             {hasPacket && (
                               <button
                                 onClick={() => handlePreviewPhotoPacket(key)}
@@ -3494,9 +3664,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                             )}
                             <button
                               onClick={() => handlePrintAppeal(appeal)}
-                              disabled={printingAppealId === appeal.id}
-                              className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded disabled:opacity-50"
-                              title={hasPacket ? 'Print Appeal Report (with PowerComp photos)' : 'Print Appeal Report'}
+                              disabled={printingAppealId === appeal.id || !printable}
+                              className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={
+                                !printable
+                                  ? (resolution.status === 'no_appeal_number'
+                                      ? 'Set an appeal number first'
+                                      : resolution.status === 'no_candidates'
+                                        ? 'No saved CME for this subject'
+                                        : 'Pick a defense set first')
+                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos)' : 'Print Appeal Report')
+                              }
                             >
                               <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />
                             </button>
@@ -3507,6 +3685,114 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            {open && (
+                              <div
+                                className="absolute z-30 right-2 top-full mt-1 w-96 bg-white border border-gray-200 rounded-lg shadow-xl text-left p-3"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-xs font-semibold text-gray-700">
+                                    Defense set for appeal {appeal.appeal_number || '(no #)'}
+                                  </span>
+                                  <button
+                                    onClick={() => setResultSetPickerAppealId(null)}
+                                    className="text-gray-400 hover:text-gray-700"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                {resolution.candidates.length === 0 && (
+                                  <div className="text-xs text-gray-500">
+                                    No saved CME result sets match this subject's BLQ. Run Sales Comparison → Search & Results and click Save Result Set.
+                                  </div>
+                                )}
+                                {resolution.candidates.length > 0 && (
+                                  <ul className="space-y-1 max-h-56 overflow-y-auto">
+                                    {resolution.candidates.map((c) => {
+                                      const isDefense = c.resultSet.use_for_defense === true ||
+                                        (resolution.candidates.length === 1);
+                                      const busy = resultSetMutationBusy === c.resultSet.id;
+                                      return (
+                                        <li key={c.resultSet.id} className="flex items-center justify-between gap-2 text-xs border border-gray-100 rounded p-2">
+                                          <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                                            <input
+                                              type="radio"
+                                              name={`defense_${appeal.id}`}
+                                              checked={isDefense}
+                                              disabled={busy || resolution.candidates.length === 1}
+                                              onChange={() => handleSetDefenseSet(appeal, c)}
+                                            />
+                                            <span className="truncate">
+                                              <span className="font-medium text-gray-800">{c.resultSet.name || '(unnamed)'}</span>
+                                              <span className="text-gray-500 ml-1">
+                                                · {new Date(c.resultSet.updated_at || c.resultSet.created_at).toLocaleDateString()}
+                                              </span>
+                                            </span>
+                                          </label>
+                                          <button
+                                            onClick={() => handleArchiveResultSet(c.resultSet.id, true)}
+                                            disabled={busy}
+                                            className="text-[10px] text-gray-500 hover:text-red-600 px-1.5 py-0.5 border border-gray-200 rounded hover:bg-red-50 disabled:opacity-50"
+                                            title="Archive this set (hide from active picker, keeps recallable)"
+                                          >
+                                            Archive
+                                          </button>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                )}
+                                {(() => {
+                                  const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
+                                  const wantBlock = norm(appeal.property_block);
+                                  const wantLot = norm(appeal.property_lot);
+                                  const wantQual = norm(appeal.property_qualifier);
+                                  const archived = savedResultSets.filter((rs) => {
+                                    if (!rs.archived_at) return false;
+                                    const results = Array.isArray(rs.results) ? rs.results : [];
+                                    return results.some((r) =>
+                                      r?.subject &&
+                                      norm(r.subject.property_block) === wantBlock &&
+                                      norm(r.subject.property_lot) === wantLot &&
+                                      norm(r.subject.property_qualifier) === wantQual,
+                                    );
+                                  });
+                                  if (!archived.length) return null;
+                                  return (
+                                    <div className="mt-2 pt-2 border-t border-gray-100">
+                                      <button
+                                        onClick={() => setResultSetPickerShowArchived((v) => !v)}
+                                        className="text-[10px] text-gray-500 hover:text-gray-700 underline"
+                                      >
+                                        {resultSetPickerShowArchived ? 'Hide' : 'Show'} archived ({archived.length})
+                                      </button>
+                                      {resultSetPickerShowArchived && (
+                                        <ul className="mt-1 space-y-1">
+                                          {archived.map((rs) => (
+                                            <li key={rs.id} className="flex items-center justify-between gap-2 text-xs border border-gray-100 rounded p-2 bg-gray-50">
+                                              <span className="truncate">
+                                                <span className="text-gray-700">{rs.name || '(unnamed)'}</span>
+                                                <span className="text-gray-500 ml-1">
+                                                  · archived {new Date(rs.archived_at).toLocaleDateString()}
+                                                </span>
+                                              </span>
+                                              <button
+                                                onClick={() => handleArchiveResultSet(rs.id, false)}
+                                                disabled={resultSetMutationBusy === rs.id}
+                                                className="text-[10px] text-blue-600 hover:text-blue-800 px-1.5 py-0.5 border border-blue-200 rounded hover:bg-blue-50 disabled:opacity-50"
+                                                title="Un-archive this set"
+                                              >
+                                                Restore
+                                              </button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
                           </>
                         );
                       })()}
