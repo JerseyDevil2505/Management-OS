@@ -2165,7 +2165,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     //   6. Chapter 123 Test (Director's Ratio)
     // Anything we can't classify gets appended at the end in its original
     // order so we never silently drop a page.
-    const { PDFDocument } = await import('pdf-lib');
+    let PDFDocument;
+    try {
+      ({ PDFDocument } = await import('pdf-lib'));
+    } catch (err) {
+      if (/Loading chunk|Failed to fetch dynamically imported module/i.test(err?.message || '')) {
+        throw new Error('App was updated since this tab loaded. Please refresh the page and try again.');
+      }
+      throw err;
+    }
     const reportDoc = await PDFDocument.load(reportBytes);
 
     // Classify each report page by scanning its text content.
