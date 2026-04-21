@@ -1424,6 +1424,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
     setAppellantCompsState([]);
+    setAppealUploadStatus(null);
     setShowExportModal(true);
 
     // Auto-detect appeal number for subject AND load appellant_comps so the
@@ -2709,7 +2710,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (opts.downloadLocal === true) {
       doc.save(fileName);
     }
-    if (opts.closeModal !== false) {
+    // Keep the modal open after a successful Send-to-Appeal-Log so the
+    // user can see the green "Sent ✓" confirmation. Close on local download
+    // (the file landing in Downloads is its own confirmation) and on
+    // explicit caller request.
+    const shouldClose = opts.uploadToAppealLog
+      ? opts.closeModal === true
+      : opts.closeModal !== false;
+    if (shouldClose) {
       setShowExportModal(false);
     }
   }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
@@ -3434,12 +3442,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     generatePDF({ uploadToAppealLog: true, downloadLocal: false })
                   }
                   disabled={appealUploadStatus?.status === 'uploading'}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 transition-colors text-sm"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm ${
+                    appealUploadStatus?.status === 'done'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300'
+                  }`}
                   title="Upload this report to the Appeal Log (creates the Report ✓ chip) and sync the CME projected value. No local download."
                 >
                   <FileDown size={16} />
                   {appealUploadStatus?.status === 'uploading'
                     ? 'Sending…'
+                    : appealUploadStatus?.status === 'done'
+                    ? 'Sent ✓'
+                    : appealUploadStatus?.status === 'error'
+                    ? 'Retry Send'
                     : 'Send to Appeal Log'}
                 </button>
               </div>
