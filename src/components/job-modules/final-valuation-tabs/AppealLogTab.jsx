@@ -127,6 +127,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [pwrCompPdfSaveResult, setPwrCompPdfSaveResult] = useState(null); // { saved, replaced, failed }
   const [pwrCompPdfSaveProgress, setPwrCompPdfSaveProgress] = useState(null); // { current, total, label, status: 'uploading'|'done'|'failed' }
   const [printingAppealId, setPrintingAppealId] = useState(null);
+
+  // PowerComp CSV export selection modal. Lets the user pick which saved
+  // result sets to ship when a subject has more than one (e.g. assessor
+  // run + appellant run + manager rebuttal). All entries are checked by
+  // default; the user unchecks anything they don't want sent to BRT.
+  const [showExportCsvModal, setShowExportCsvModal] = useState(false);
+  const [exportCsvLoading, setExportCsvLoading] = useState(false);
+  const [exportCsvCandidates, setExportCsvCandidates] = useState([]); // [{id, checked, ...}]
+
   const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
   const [batchPrintScope, setBatchPrintScope] = useState('selected'); // 'selected' | 'filtered'
   const [batchPrintRunning, setBatchPrintRunning] = useState(false);
@@ -2905,14 +2914,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   };
 
   // ==================== EXPORT SAVED COMPS CSV (for BRT PowerComp) ====================
-  // Pulls named CME result sets from job_cme_result_sets (the "Saved Result Sets" the
-  // user creates from Sales Comparison → Search & Results), joins to the in-memory
-  // appeals list by subject block/lot/qualifier to attach an appeal number, and
-  // emits one row per appeal with the subject + each comp's block/lot/qualifier.
-  // If multiple result sets contain the same subject, the most recently saved set wins.
-  // Only appeals that actually have saved comps are included.
-  const handleExportSavedCompsCsv = async () => {
+  // Two-step flow:
+  //   1. handleOpenExportCsvModal() — fetch every saved result set, build a
+  //      flat list of "candidates" (one per subject per result set). All
+  //      candidates start checked. Opens the selection modal so the user can
+  //      uncheck the runs they don't want shipped (e.g. an assessor run when
+  //      they only want the appellant run, or a manager's rebuttal that
+  //      shouldn't go to BRT).
+  //   2. handleConfirmExportCsv() — build the CSV from the checked
+  //      candidates only and trigger the download.
+  // Only candidates with an appeal number are shown; PowerComp keys on the
+  // appeal # so anything without one would be silently dropped anyway.
+  const handleOpenExportCsvModal = async () => {
     if (!jobData?.id) return;
+    setExportCsvLoading(true);
     try {
       const { data: resultSets, error } = await supabase
         .from('job_cme_result_sets')
@@ -2922,7 +2937,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         .order('created_at', { ascending: false });
       if (error) throw error;
 
-      // Build appeal_number lookup: composite "block-lot-qualifier" → appeal
       const norm = (v) => (v == null ? '' : String(v).trim());
       const compositeOf = (block, lot, qualifier) =>
         `${norm(block)}-${norm(lot)}-${norm(qualifier)}`;
@@ -2933,108 +2947,134 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         if (key && !appealByKey.has(key)) appealByKey.set(key, a);
       });
 
-      // Walk result sets newest-first; keep the first (most-recent) occurrence per subject.
-      // Each `result` has full property objects: subject + comparables[].
-      const seenSubjects = new Set();
-      const rows = [];
-      let maxComps = 0;
-
+      const candidates = [];
       (resultSets || []).forEach(rs => {
-        (rs.results || []).forEach(r => {
+        (rs.results || []).forEach((r, idx) => {
           const subj = r?.subject;
           if (!subj) return;
           const subjKey = subj.property_composite_key
             || compositeOf(subj.property_block, subj.property_lot, subj.property_qualifier);
-          if (!subjKey || seenSubjects.has(subjKey)) return;
+          if (!subjKey) return;
+          const appeal = appealByKey.get(subjKey);
+          if (!appeal?.appeal_number) return; // PowerComp needs an appeal #
 
           const comps = (Array.isArray(r.comparables) ? r.comparables : [])
             .filter(c => c && (c.property_block || c.property_lot));
           if (comps.length === 0) return;
 
-          if (comps.length > maxComps) maxComps = comps.length;
-          seenSubjects.add(subjKey);
-
-          rows.push({
-            appeal_number: appealByKey.get(subjKey)?.appeal_number || '',
-            result_set_name: rs.name || '',
+          candidates.push({
+            id: `${rs.id}::${subjKey}::${idx}`,
+            checked: true,
+            subjectKey: subjKey,
             subj_block: norm(subj.property_block),
             subj_lot: norm(subj.property_lot),
             subj_qualifier: norm(subj.property_qualifier),
+            subj_address: subj.property_location || '',
+            appeal_number: appeal.appeal_number,
+            result_set_id: rs.id,
+            result_set_name: rs.name || '(unnamed)',
+            saved_at: rs.updated_at || rs.created_at || null,
             comps: comps.map(c => ({
               block: norm(c.property_block),
               lot: norm(c.property_lot),
-              qualifier: norm(c.property_qualifier)
-            }))
+              qualifier: norm(c.property_qualifier),
+            })),
           });
         });
       });
 
-      // Drop rows without an appeal number — PowerComp needs the appeal# to attach comps
-      const exportable = rows.filter(r => r.appeal_number);
-      if (exportable.length === 0) {
+      if (!candidates.length) {
         alert(
           'No saved result sets matched any appeals.\n\n' +
           'Run an evaluation in Sales Comparison (CME) → Search & Results, click "Save Result Set", ' +
-          'then come back here and export. Only subjects that match an appeal in this log are included.'
+          'then come back here. Only subjects with an appeal number are shown.'
         );
         return;
       }
 
-      // Header — appeal_number first so PowerComp can key on it
-      const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
-      for (let i = 1; i <= maxComps; i++) {
-        header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
-      }
-
-      const escape = (val) => {
-        const s = val == null ? '' : String(val);
-        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-        return s;
-      };
-
-      // Excel-safe wrapper for block/lot/qualifier values. Without this Excel
-      // converts "10.10" -> 10.1 and drops trailing zeros (".100" becomes ".1"),
-      // which breaks BLQ identifiers like "10.100" or "5.10".
-      // Using the ="..." formula syntax forces Excel to import the cell as text
-      // verbatim while still being readable as a normal string by other tools.
-      const textCell = (val) => {
-        const s = val == null ? '' : String(val);
-        if (s === '') return '';
-        const inner = s.replace(/"/g, '""');
-        return `"=""${inner}"""`;
-      };
-
-      const lines = [header.map(escape).join(',')];
-      exportable.forEach(r => {
-        const cells = [
-          escape(r.appeal_number),
-          escape(r.result_set_name),
-          textCell(r.subj_block),
-          textCell(r.subj_lot),
-          textCell(r.subj_qualifier)
-        ];
-        for (let i = 0; i < maxComps; i++) {
-          const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
-          cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+      // Sort by subject (so multiple runs for the same subject appear
+      // adjacent), then by saved date desc within each subject group.
+      candidates.sort((a, b) => {
+        if (a.subjectKey !== b.subjectKey) {
+          return a.subjectKey.localeCompare(b.subjectKey);
         }
-        lines.push(cells.join(','));
+        return (b.saved_at || '').localeCompare(a.saved_at || '');
       });
 
-      const csv = lines.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
-      a.href = url;
-      a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setExportCsvCandidates(candidates);
+      setShowExportCsvModal(true);
     } catch (e) {
-      console.error('Export saved comps CSV failed:', e);
-      alert('Export failed: ' + (e?.message || e));
+      console.error('Export saved comps CSV (open modal) failed:', e);
+      alert('Could not load saved result sets: ' + (e?.message || e));
+    } finally {
+      setExportCsvLoading(false);
     }
+  };
+
+  const handleConfirmExportCsv = () => {
+    const selected = exportCsvCandidates.filter(c => c.checked);
+    if (!selected.length) {
+      alert('Nothing selected — check at least one result set to export.');
+      return;
+    }
+
+    const maxComps = selected.reduce((m, r) => Math.max(m, r.comps.length), 0);
+    const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
+    for (let i = 1; i <= maxComps; i++) {
+      header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
+    }
+
+    const escape = (val) => {
+      const s = val == null ? '' : String(val);
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    // Excel-safe wrapper so block/lot strings like "10.100" don't get
+    // truncated to numbers.
+    const textCell = (val) => {
+      const s = val == null ? '' : String(val);
+      if (s === '') return '';
+      const inner = s.replace(/"/g, '""');
+      return `"=""${inner}"""`;
+    };
+
+    const lines = [header.map(escape).join(',')];
+    selected.forEach(r => {
+      const cells = [
+        escape(r.appeal_number),
+        escape(r.result_set_name),
+        textCell(r.subj_block),
+        textCell(r.subj_lot),
+        textCell(r.subj_qualifier),
+      ];
+      for (let i = 0; i < maxComps; i++) {
+        const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
+        cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+      }
+      lines.push(cells.join(','));
+    });
+
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
+    a.href = url;
+    a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setShowExportCsvModal(false);
+  };
+
+  const toggleExportCsvCandidate = (id) => {
+    setExportCsvCandidates(prev =>
+      prev.map(c => (c.id === id ? { ...c, checked: !c.checked } : c)),
+    );
+  };
+  const setAllExportCsvCandidates = (checked) => {
+    setExportCsvCandidates(prev => prev.map(c => ({ ...c, checked })));
   };
 
   // ==================== RENDER ====================
@@ -3899,13 +3939,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </p>
         </div>
         <button
-          onClick={handleExportSavedCompsCsv}
-          title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
+          onClick={handleOpenExportCsvModal}
+          disabled={exportCsvLoading}
+          title="Pick which saved CME runs to ship to PowerComp (handy when a subject has multiple saved sets — assessor vs. appellant runs, etc.)"
           style={{ backgroundColor: '#ea580c', color: 'white' }}
-          className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
         >
           <Download className="w-4 h-4" />
-          Export CSV (PowerComp)
+          {exportCsvLoading ? 'Loading…' : 'Export CSV (PowerComp)'}
         </button>
         <button
           onClick={() => {
@@ -4753,6 +4794,131 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   {importExportProcessing ? 'Importing...' : 'Import'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== EXPORT CSV (POWERCOMP) SELECTION MODAL ==================== */}
+      {showExportCsvModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold text-gray-900">
+                Select Result Sets for PowerComp Export
+              </h2>
+              <button
+                onClick={() => setShowExportCsvModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Everything is checked by default. Uncheck any saved runs you don't
+              want to send to BRT — useful when a subject has both an assessor
+              run and an appellant run, or a manager rebuttal you don't want
+              shipped.
+            </p>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-500">
+                {exportCsvCandidates.filter(c => c.checked).length} of{' '}
+                {exportCsvCandidates.length} selected
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAllExportCsvCandidates(true)}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Check all
+                </button>
+                <button
+                  onClick={() => setAllExportCsvCandidates(false)}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Uncheck all
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="px-2 py-2 w-8"></th>
+                    <th className="px-2 py-2">Subject</th>
+                    <th className="px-2 py-2">Appeal #</th>
+                    <th className="px-2 py-2">Result Set</th>
+                    <th className="px-2 py-2 text-center">Comps</th>
+                    <th className="px-2 py-2">Saved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exportCsvCandidates.map((c, i) => {
+                    const prev = exportCsvCandidates[i - 1];
+                    const isNewSubject = !prev || prev.subjectKey !== c.subjectKey;
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`border-t ${isNewSubject ? 'border-gray-300' : 'border-gray-100'} hover:bg-gray-50`}
+                      >
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox"
+                            checked={c.checked}
+                            onChange={() => toggleExportCsvCandidate(c.id)}
+                          />
+                        </td>
+                        <td className="px-2 py-2 font-medium text-gray-800">
+                          {isNewSubject ? (
+                            <>
+                              {c.subj_block}/{c.subj_lot}
+                              {c.subj_qualifier ? `/${c.subj_qualifier}` : ''}
+                              {c.subj_address && (
+                                <div className="text-xs text-gray-500 font-normal">
+                                  {c.subj_address}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-gray-700">
+                          {c.appeal_number}
+                        </td>
+                        <td className="px-2 py-2 text-gray-700">
+                          {c.result_set_name}
+                        </td>
+                        <td className="px-2 py-2 text-center text-gray-600">
+                          {c.comps.length}
+                        </td>
+                        <td className="px-2 py-2 text-xs text-gray-500">
+                          {c.saved_at
+                            ? new Date(c.saved_at).toLocaleDateString()
+                            : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowExportCsvModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmExportCsv}
+                disabled={!exportCsvCandidates.some(c => c.checked)}
+                style={{ backgroundColor: '#ea580c', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export {exportCsvCandidates.filter(c => c.checked).length} to CSV
+              </button>
             </div>
           </div>
         </div>
