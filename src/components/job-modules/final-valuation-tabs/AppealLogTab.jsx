@@ -2018,8 +2018,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const label = `${pkt.block}-${pkt.lot}${pkt.qualifier ? '-' + pkt.qualifier : ''}${pkt.card ? ' / ' + pkt.card : ''}`;
         setPwrCompPdfSaveProgress({ current: i + 1, total: matched.length, label, status: 'uploading' });
         try {
+          // Look up the appeal number for this subject so the photo
+          // packet header can show "Appeal #: ..." like the rest of the
+          // report. Falls back to '' if no appeal is on file.
+          const matchingAppeal = appeals.find(
+            (a) =>
+              (a.property_composite_key || '') === pkt.matchedKey,
+          );
+          const appealNumber = matchingAppeal?.appeal_number || '';
           // Give pdf-lib its own copy so nothing downstream can detach our master bytes.
-          const subPdf = await buildPhotoPacketPdf(new Uint8Array(pwrCompPdfBytes), pkt);
+          const subPdf = await buildPhotoPacketPdf(
+            new Uint8Array(pwrCompPdfBytes),
+            pkt,
+            { appealNumber },
+          );
           if (!subPdf) continue;
           const path = `${jobData.id}/${pkt.matchedKey}.pdf`;
           const { error: upErr } = await supabase

@@ -2517,7 +2517,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const mapImg = canvas.toDataURL('image/png');
 
         doc.addPage();
-        addLogoToPage(margin, 30);
+        // Use the same LOJIK header (logo + Appeal # + Block/Lot) as every
+        // other page so batch-printed packets always carry orientation info.
+        addHeader(subjectBlockLot);
         doc.setFontSize(14);
         doc.setTextColor(...lojikBlue);
         doc.setFont('helvetica', 'bold');

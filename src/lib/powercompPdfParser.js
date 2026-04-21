@@ -132,6 +132,40 @@ function extractPhotoSubjectAddress(items) {
 }
 
 /**
+ * Pull per-comp addresses from a photo page. BRT lays comp captions out as
+ * "<ADDRESS>" then "Comp #N" on consecutive text items, so for each Comp
+ * label we walk backwards a few tokens to find the address line.
+ *
+ * Returns an object keyed by comp number: { 1: '8 MAPLEWOOD AVE', 2: ... }
+ */
+function extractPhotoCompAddresses(items) {
+  const out = {};
+  for (let i = 1; i < items.length; i++) {
+    const m = /^Comp\s*#?\s*(\d+)$/i.exec(items[i] || '');
+    if (!m) continue;
+    const compNum = parseInt(m[1], 10);
+    // Walk backwards up to 5 tokens looking for an address-shaped line.
+    for (let j = i - 1; j >= 0 && j >= i - 5; j--) {
+      const t = items[j];
+      if (!t) continue;
+      if (/^Comp\s*#?\s*\d+$/i.test(t)) break; // hit previous comp label
+      if (t === 'Subject') break;
+      if (/^\d+\s/.test(t) && t.length <= 60) {
+        out[compNum] = t.trim().toUpperCase();
+        break;
+      }
+      // Fallback: immediately previous non-empty token if it looks like
+      // text rather than a number-only block.
+      if (j === i - 1 && t.length <= 60 && !/^\d+$/.test(t)) {
+        out[compNum] = t.trim().toUpperCase();
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Main entry: parse a PowerComp PDF (File / Blob / ArrayBuffer / Uint8Array)
  * and return per-subject packets.
  */
@@ -157,7 +191,8 @@ export async function parsePowerCompPdf(input) {
     const kind = classifyPage(joined);
     const subject = kind === 'data' ? extractSubjectBLQ(items) : null;
     const photoAddress = kind === 'photo' ? extractPhotoSubjectAddress(items) : null;
-    pages.push({ index: i, kind, subject, photoAddress });
+    const compAddresses = kind === 'photo' ? extractPhotoCompAddresses(items) : null;
+    pages.push({ index: i, kind, subject, photoAddress, compAddresses });
   }
 
   // Second pass: group pages into packets keyed by subject BLQ.
@@ -181,6 +216,9 @@ export async function parsePowerCompPdf(input) {
           dataPageIndices: [],
           photoPageIndices: [],
           allPageIndices: [],
+          // Per-comp addresses indexed by comp number (1..5), populated as
+          // we walk this packet's photo pages.
+          compAddresses: {},
         };
         packets.push(current);
       }
@@ -204,6 +242,14 @@ export async function parsePowerCompPdf(input) {
           current.photoPageIndices.push(p.index);
           current.allPageIndices.push(p.index);
           current.addressMismatch = true;
+        }
+        // Merge any comp addresses we found into the current packet.
+        if (p.compAddresses) {
+          for (const [n, addr] of Object.entries(p.compAddresses)) {
+            if (addr && !current.compAddresses[n]) {
+              current.compAddresses[n] = addr;
+            }
+          }
         }
       }
     }
@@ -252,10 +298,10 @@ export async function parsePowerCompPdf(input) {
 //   - Three comps stack down the RIGHT side as smaller near-square boxes.
 // Coordinates are fractions of the rendered canvas (0,0 = top-left).
 const BRT_SLOT_RECTS = {
-  subject: { x: 0.038, y: 0.095, w: 0.460, h: 0.785 },
-  comp1:   { x: 0.605, y: 0.085, w: 0.220, h: 0.260 },
-  comp2:   { x: 0.605, y: 0.378, w: 0.220, h: 0.260 },
-  comp3:   { x: 0.605, y: 0.660, w: 0.220, h: 0.260 },
+  subject: { x: 0.030, y: 0.085, w: 0.485, h: 0.810 },
+  comp1:   { x: 0.595, y: 0.075, w: 0.240, h: 0.275 },
+  comp2:   { x: 0.595, y: 0.370, w: 0.240, h: 0.275 },
+  comp3:   { x: 0.595, y: 0.655, w: 0.240, h: 0.275 },
 };
 // Per-page slot order. Page 0: subject + comps 1-3. Page 1+: comps 4, 5
 // (BRT reuses the subject box on subsequent pages but we already captured
@@ -383,38 +429,64 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   const pageW = doc.internal.pageSize.getWidth();   // 792
   const pageH = doc.internal.pageSize.getHeight();  // 612
   const margin = 36;
-  const headerH = 50;
+  const headerH = 56; // room for the LOJIK logo (35pt tall + breathing room)
   const footerH = 22;
   const lojikBlue = [0, 102, 204];
 
   const subjectAddr = packet.address || '';
+  const compAddrs = packet.compAddresses || {};
   const blqLabel =
-    `${packet.block}-${packet.lot}` +
-    (packet.qualifier ? `-${packet.qualifier}` : '');
+    `${packet.block}/${packet.lot}` +
+    (packet.qualifier ? `/${packet.qualifier}` : '');
+  const appealNumber = opts.appealNumber || '';
 
-  const drawHeader = (subtitle) => {
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...lojikBlue);
-    doc.text('Photo Packet', margin, margin + 14);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(60, 60, 60);
-    doc.text(
-      `Block ${packet.block} Lot ${packet.lot}` +
-        (packet.qualifier ? ` Qual ${packet.qualifier}` : '') +
-        (subjectAddr ? `  \u00b7  ${subjectAddr}` : ''),
-      margin,
-      margin + 30,
-    );
-    if (subtitle) {
-      doc.setFontSize(9);
-      doc.setTextColor(120, 120, 120);
-      doc.text(subtitle, pageW - margin, margin + 14, { align: 'right' });
+  // Optionally load the LOJIK logo so the header matches the rest of the
+  // appeal report (logo top-left, Appeal # + Block/Lot top-right). Falls
+  // back to a "LOJIK" wordmark if the image can't be fetched.
+  let logoDataUrl = null;
+  try {
+    const resp = await fetch('/lojik-logo.PNG');
+    if (resp.ok) {
+      const blob = await resp.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
     }
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.5);
-    doc.line(margin, margin + headerH - 6, pageW - margin, margin + headerH - 6);
+  } catch (_) { /* fallback to text */ }
+
+  const drawHeader = () => {
+    // Logo top-left
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'PNG', margin, margin - 5, 80, 35);
+      } catch (_) {
+        doc.setTextColor(...lojikBlue);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOJIK', margin, margin + 14);
+      }
+    } else {
+      doc.setTextColor(...lojikBlue);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin, margin + 14);
+    }
+
+    // Appeal # + Block/Lot top-right (matches the rest of the appeal report)
+    let headerY = margin + 10;
+    if (appealNumber) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Appeal #: ${appealNumber}`, pageW - margin, headerY, { align: 'right' });
+      headerY += 14;
+    }
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(blqLabel, pageW - margin, headerY + 10, { align: 'right' });
   };
 
   const drawFooter = () => {
@@ -512,7 +584,10 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     doc.text(label, x, y + cellH + captionGap + captionH);
   };
 
-  drawHeader(`Block ${packet.block} Lot ${packet.lot}`);
+  drawHeader();
+
+  const compLabel = (n) =>
+    compAddrs[n] ? `Comp #${n}  —  ${compAddrs[n]}` : `Comp #${n}`;
 
   // Subject — top row, centered.
   drawSlot(
@@ -532,7 +607,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
       compsY,
       compPhotoW,
       compPhotoH,
-      `Comp #${i + 1}`,
+      compLabel(i + 1),
       bySlot[slot] || null,
     );
   });
@@ -544,7 +619,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   const hasOverflow = !!(bySlot.comp4 || bySlot.comp5);
   if (hasOverflow) {
     doc.addPage();
-    drawHeader(`Block ${packet.block} Lot ${packet.lot} — Additional Comps`);
+    drawHeader();
     drawSlot(
       subjX,
       subjY,
@@ -563,13 +638,11 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
         compsY,
         compPhotoW,
         compPhotoH,
-        `Comp #${i + 4}`,
+        compLabel(i + 4),
         bySlot[slot] || null,
       );
     });
     drawFooter();
   }
-
-  void opts;
   return new Uint8Array(doc.output('arraybuffer'));
 }
