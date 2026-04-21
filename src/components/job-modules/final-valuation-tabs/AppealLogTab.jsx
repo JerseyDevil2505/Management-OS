@@ -120,6 +120,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [pwrCompPdfSaving, setPwrCompPdfSaving] = useState(false);
   const [pwrCompPdfPreview, setPwrCompPdfPreview] = useState(null); // { totalPages, packets: [{...packet, matchedKey, matchedAddress}] }
   const [pwrCompPdfSaveResult, setPwrCompPdfSaveResult] = useState(null); // { saved, replaced, failed }
+  const [pwrCompPdfSaveProgress, setPwrCompPdfSaveProgress] = useState(null); // { current, total, label, status: 'uploading'|'done'|'failed' }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
 
   // Bulk apply hearing date state
@@ -1951,9 +1952,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return;
     }
     setPwrCompPdfSaving(true);
+    setPwrCompPdfSaveProgress({ current: 0, total: matched.length, label: '', status: 'uploading' });
     let saved = 0, replaced = 0, failed = 0;
     try {
-      for (const pkt of matched) {
+      for (let i = 0; i < matched.length; i++) {
+        const pkt = matched[i];
+        const label = `${pkt.block}-${pkt.lot}${pkt.qualifier ? '-' + pkt.qualifier : ''}${pkt.card ? ' / ' + pkt.card : ''}`;
+        setPwrCompPdfSaveProgress({ current: i + 1, total: matched.length, label, status: 'uploading' });
         try {
           // Give pdf-lib its own copy so nothing downstream can detach our master bytes.
           const subPdf = await buildPhotoPacketPdf(new Uint8Array(pwrCompPdfBytes), pkt);
@@ -1990,6 +1995,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       }
       await loadPhotoPackets();
       setPwrCompPdfSaveResult({ saved, replaced, failed });
+      setPwrCompPdfSaveProgress((prev) => prev ? { ...prev, status: failed > 0 ? 'failed' : 'done' } : null);
     } finally {
       setPwrCompPdfSaving(false);
     }
@@ -3449,6 +3455,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             setPwrCompPdfBytes(null);
             setPwrCompPdfPreview(null);
             setPwrCompPdfSaveResult(null);
+            setPwrCompPdfSaveProgress(null);
           }}
           title="Import a PowerComp Batch Taxpayer Report PDF and attach photo packets to each subject"
           style={{ backgroundColor: '#0f766e', color: 'white' }}
@@ -4061,6 +4068,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   setPwrCompPdfBytes(null);
                   setPwrCompPdfPreview(null);
                   setPwrCompPdfSaveResult(null);
+                  setPwrCompPdfSaveProgress(null);
                 }}
               />
               <label htmlFor="pwrcomp-pdf-input" className="cursor-pointer">
@@ -4123,6 +4131,27 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 </div>
               )}
 
+              {pwrCompPdfSaveProgress && pwrCompPdfSaveProgress.status === 'uploading' && (
+                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="font-semibold text-blue-800">
+                      Uploading packet {pwrCompPdfSaveProgress.current} of {pwrCompPdfSaveProgress.total}
+                    </p>
+                    <p className="text-blue-700 font-mono text-xs">{pwrCompPdfSaveProgress.label}</p>
+                  </div>
+                  <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-2 transition-all duration-200"
+                      style={{
+                        width: `${Math.round(
+                          (pwrCompPdfSaveProgress.current / pwrCompPdfSaveProgress.total) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {pwrCompPdfSaveResult && (
                 <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
                   <p className="font-semibold text-emerald-800">Saved</p>
@@ -4155,7 +4184,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   style={{ backgroundColor: '#15803d', color: 'white' }}
                   className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
                 >
-                  {pwrCompPdfSaving ? 'Saving…' : 'Save Photo Packets'}
+                  {pwrCompPdfSaving
+                    ? (pwrCompPdfSaveProgress
+                        ? `Saving ${pwrCompPdfSaveProgress.current}/${pwrCompPdfSaveProgress.total}…`
+                        : 'Saving…')
+                    : 'Save Photo Packets'}
                 </button>
               )}
             </div>
