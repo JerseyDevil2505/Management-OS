@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
 import { parsePowerCompPdf, buildPhotoPacketPdf } from '../../../lib/powercompPdfParser';
+import {
+  buildAppealReportPdf,
+  downloadPdf,
+  downloadAppealReportsZip,
+  safeFilenamePart,
+} from '../../../lib/appealReportBuilder';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -121,6 +127,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [pwrCompPdfPreview, setPwrCompPdfPreview] = useState(null); // { totalPages, packets: [{...packet, matchedKey, matchedAddress}] }
   const [pwrCompPdfSaveResult, setPwrCompPdfSaveResult] = useState(null); // { saved, replaced, failed }
   const [pwrCompPdfSaveProgress, setPwrCompPdfSaveProgress] = useState(null); // { current, total, label, status: 'uploading'|'done'|'failed' }
+  const [printingAppealId, setPrintingAppealId] = useState(null);
+  const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
+  const [batchPrintScope, setBatchPrintScope] = useState('selected'); // 'selected' | 'filtered'
+  const [batchPrintRunning, setBatchPrintRunning] = useState(false);
+  const [batchPrintProgress, setBatchPrintProgress] = useState(null); // { current, total, label }
+  const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
 
   // Bulk apply hearing date state
@@ -2043,6 +2055,104 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
+  // ==================== APPEAL REPORT (per-row + batch) ====================
+
+  // Build the composite key the same way the matcher / metadata layer does.
+  const compositeKeyForAppeal = (appeal) => {
+    if (!appeal) return '';
+    if (appeal.property_composite_key) return appeal.property_composite_key;
+    const norm = (v) => (v == null ? '' : String(v).trim());
+    return `${norm(appeal.property_block)}-${norm(appeal.property_lot)}-${norm(appeal.property_qualifier)}`;
+  };
+
+  const muniLabel = (jobData?.municipality || jobData?.name || '').toString();
+
+  const fetchPhotoPacketBytes = async (compositeKey) => {
+    const meta = photoPacketsByKey[compositeKey];
+    if (!meta) return null;
+    const { data, error } = await supabase
+      .storage
+      .from('powercomp-photos')
+      .download(meta.storage_path);
+    if (error || !data) {
+      console.warn('photo packet download failed', meta, error);
+      return null;
+    }
+    return new Uint8Array(await data.arrayBuffer());
+  };
+
+  const handlePrintAppeal = async (appeal) => {
+    if (!appeal) return;
+    setPrintingAppealId(appeal.id);
+    try {
+      const key = compositeKeyForAppeal(appeal);
+      const photoBytes = await fetchPhotoPacketBytes(key);
+      const bytes = await buildAppealReportPdf({
+        appeal,
+        photoPacketBytes: photoBytes,
+        muniLabel,
+      });
+      const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || key || 'report')}.pdf`;
+      downloadPdf(bytes, fname);
+    } catch (e) {
+      console.error('Print appeal failed', e);
+      alert(`Could not build appeal report: ${e.message}`);
+    } finally {
+      setPrintingAppealId(null);
+    }
+  };
+
+  const handleRunBatchPrint = async () => {
+    const sourceList =
+      batchPrintScope === 'selected'
+        ? filteredAppeals.filter((a) => selectedAppeals.has(a.id))
+        : filteredAppeals;
+    if (!sourceList.length) {
+      alert('Nothing to print for the selected scope.');
+      return;
+    }
+    setBatchPrintRunning(true);
+    setBatchPrintResult(null);
+    setBatchPrintProgress({ current: 0, total: sourceList.length, label: '' });
+    let built = 0, withPhotos = 0, failed = 0;
+    const reports = [];
+    try {
+      for (let i = 0; i < sourceList.length; i++) {
+        const appeal = sourceList[i];
+        const key = compositeKeyForAppeal(appeal);
+        const label =
+          `${appeal.property_block || '-'}-${appeal.property_lot || '-'}` +
+          (appeal.property_qualifier ? `-${appeal.property_qualifier}` : '');
+        setBatchPrintProgress({ current: i + 1, total: sourceList.length, label });
+        try {
+          const photoBytes = await fetchPhotoPacketBytes(key);
+          const bytes = await buildAppealReportPdf({
+            appeal,
+            photoPacketBytes: photoBytes,
+            muniLabel,
+          });
+          if (photoBytes) withPhotos++;
+          built++;
+          const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || label)}.pdf`;
+          reports.push({ filename: fname, bytes });
+        } catch (e) {
+          console.error('batch report failed', appeal, e);
+          failed++;
+        }
+      }
+      if (reports.length === 1) {
+        downloadPdf(reports[0].bytes, reports[0].filename);
+      } else if (reports.length > 1) {
+        const muni = safeFilenamePart(muniLabel || 'job');
+        const stamp = new Date().toISOString().slice(0, 10);
+        await downloadAppealReportsZip(reports, `${muni}_appeal_reports_${stamp}.zip`);
+      }
+      setBatchPrintResult({ built, withPhotos, failed });
+    } finally {
+      setBatchPrintRunning(false);
+    }
+  };
+
   // ==================== EXPORT HANDLER ====================
 
   const handleExportToExcel = () => {
@@ -3365,15 +3475,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                     {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? formatCurrency(appeal.loss) : '-'}
                   </td>
 
-                  {/* DELETE BUTTON */}
+                  {/* ACTION BUTTONS */}
                   <td className="px-3 py-2 whitespace-nowrap text-center">
-                    <button
-                      onClick={() => handleDeleteAppeal(appeal.id)}
-                      className="text-gray-400 hover:text-red-600 transition-colors p-1 hover:bg-red-50 rounded"
-                      title="Delete appeal"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      {(() => {
+                        const key = compositeKeyForAppeal(appeal);
+                        const hasPacket = !!photoPacketsByKey[key];
+                        return (
+                          <>
+                            {hasPacket && (
+                              <button
+                                onClick={() => handlePreviewPhotoPacket(key)}
+                                className="text-teal-600 hover:text-teal-800 p-1 hover:bg-teal-50 rounded"
+                                title={`PowerComp photo packet on file (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handlePrintAppeal(appeal)}
+                              disabled={printingAppealId === appeal.id}
+                              className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded disabled:opacity-50"
+                              title={hasPacket ? 'Print Appeal Report (with PowerComp photos)' : 'Print Appeal Report'}
+                            >
+                              <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAppeal(appeal.id)}
+                              className="text-gray-400 hover:text-red-600 transition-colors p-1 hover:bg-red-50 rounded"
+                              title="Delete appeal"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </td>
                 </tr>
               );
@@ -3464,7 +3601,129 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <FileText className="w-4 h-4" />
           Import PowerComp PDF
         </button>
+        <button
+          onClick={() => {
+            setShowBatchPrintModal(true);
+            setBatchPrintResult(null);
+            setBatchPrintProgress(null);
+            setBatchPrintScope(selectedAppeals.size > 0 ? 'selected' : 'filtered');
+          }}
+          title="Generate one Appeal Report PDF per subject (with photo packets where available) and download as a zip"
+          style={{ backgroundColor: '#1d4ed8', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <Printer className="w-4 h-4" />
+          Batch Print Appeals
+        </button>
       </div>
+
+      {/* BATCH PRINT MODAL */}
+      {showBatchPrintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-900">Batch Print Appeals</h2>
+              <button onClick={() => setShowBatchPrintModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              Generates one Appeal Report PDF per subject. If two or more reports are produced
+              they are bundled into a zip — no merged mega-PDF.
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batchScope"
+                  checked={batchPrintScope === 'selected'}
+                  onChange={() => setBatchPrintScope('selected')}
+                  disabled={selectedAppeals.size === 0}
+                />
+                <div>
+                  <div className="font-medium text-gray-800">
+                    Selected appeals ({selectedAppeals.size})
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Only the rows you've checked in the table.
+                  </div>
+                </div>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batchScope"
+                  checked={batchPrintScope === 'filtered'}
+                  onChange={() => setBatchPrintScope('filtered')}
+                />
+                <div>
+                  <div className="font-medium text-gray-800">
+                    All currently visible appeals ({filteredAppeals.length})
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Everything in the table given the current year/filter.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {batchPrintProgress && batchPrintRunning && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-semibold text-blue-800">
+                    Building report {batchPrintProgress.current} of {batchPrintProgress.total}
+                  </span>
+                  <span className="text-blue-700 font-mono text-xs">{batchPrintProgress.label}</span>
+                </div>
+                <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-2 transition-all duration-200"
+                    style={{
+                      width: `${Math.round(
+                        (batchPrintProgress.current / batchPrintProgress.total) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {batchPrintResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                <p className="font-semibold text-emerald-800">Done</p>
+                <p className="text-emerald-700">
+                  ✓ {batchPrintResult.built} report{batchPrintResult.built === 1 ? '' : 's'} built
+                  · 📷 {batchPrintResult.withPhotos} with photo packet
+                  {batchPrintResult.failed > 0 ? ` · ✗ ${batchPrintResult.failed} failed` : ''}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setShowBatchPrintModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                {batchPrintResult ? 'Close' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleRunBatchPrint}
+                disabled={batchPrintRunning}
+                style={{ backgroundColor: '#1d4ed8', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {batchPrintRunning
+                  ? (batchPrintProgress
+                      ? `Building ${batchPrintProgress.current}/${batchPrintProgress.total}…`
+                      : 'Building…')
+                  : 'Build Reports'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL */}
       {showModal && (
