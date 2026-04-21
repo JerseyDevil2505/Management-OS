@@ -244,16 +244,18 @@ export async function parsePowerCompPdf(input) {
 // adjust here if BRT changes their template. Each rect is intentionally a
 // little smaller than the visible box outline so we don't capture the
 // border stroke.
-// Each BRT photo cell is laid out as: photo on the LEFT, address + label
-// text on the RIGHT. We crop just the photo portion (the boxed image) and
-// drop the label area entirely — our own layout regenerates the captions.
+// BRT's photo page is LANDSCAPE (792 x 612 pt). Each photo box has a
+// hard outline that we can crop against; the address + label text live
+// OUTSIDE that outline, to the right of each box, so we drop the label
+// area entirely and only keep the photo rectangle.
+//   - Subject occupies the LEFT half (large near-square box).
+//   - Three comps stack down the RIGHT side as smaller near-square boxes.
+// Coordinates are fractions of the rendered canvas (0,0 = top-left).
 const BRT_SLOT_RECTS = {
-  // Subject box on the left side of the page, photo only.
-  subject: { x: 0.035, y: 0.110, w: 0.370, h: 0.680 },
-  // Right column comp boxes — photo only (left ~22% of the page width).
-  comp1:   { x: 0.520, y: 0.110, w: 0.220, h: 0.205 },
-  comp2:   { x: 0.520, y: 0.375, w: 0.220, h: 0.205 },
-  comp3:   { x: 0.520, y: 0.640, w: 0.220, h: 0.205 },
+  subject: { x: 0.038, y: 0.095, w: 0.460, h: 0.785 },
+  comp1:   { x: 0.605, y: 0.085, w: 0.220, h: 0.260 },
+  comp2:   { x: 0.605, y: 0.378, w: 0.220, h: 0.260 },
+  comp3:   { x: 0.605, y: 0.660, w: 0.220, h: 0.260 },
 };
 // Per-page slot order. Page 0: subject + comps 1-3. Page 1+: comps 4, 5
 // (BRT reuses the subject box on subsequent pages but we already captured
@@ -425,80 +427,71 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   };
 
   // ---- Sizing strategy ----------------------------------------------------
-  // Source crops are produced from a US-letter portrait page (612 x 792 pt).
-  // We size cells at BRT's NATIVE pt dimensions so we never upscale a raster
-  // crop and pixelate it. If the natural layout overflows the available
-  // height we apply one uniform scale factor to the whole layout — comps
-  // and subject shrink together so the visual proportion stays the same.
-  const SRC_W = 612;
-  const SRC_H = 792;
-  const subjectNatW = BRT_SLOT_RECTS.subject.w * SRC_W;
-  const subjectNatH = BRT_SLOT_RECTS.subject.h * SRC_H;
-  const compNatW    = BRT_SLOT_RECTS.comp1.w * SRC_W;
-  const compNatH    = BRT_SLOT_RECTS.comp1.h * SRC_H;
+  // Subject sits on top, comps 1-3 sit side-by-side on the bottom. Cells
+  // have FIXED borders so the layout looks the same whether or not BRT
+  // shipped a photo for a given slot. Inside each cell the actual photo is
+  // letterboxed (aspect ratio preserved, centered) — this absorbs minor
+  // resolution / aspect variance from BRT's source crops without distorting
+  // the picture. We also keep cells modest in size relative to the source
+  // raster (~166x157 native for comps, ~364x480 native for subject) so we
+  // never upscale a tiny crop into a huge cell.
+  const captionGap = 4;
+  const captionH   = 12;
+  const cellPad    = 2;
 
-  const captionGap = 4;     // gap between photo and caption
-  const captionH   = 13;    // caption text line
-  const cellPad    = 2;     // border inset
-  const subjectCellH = subjectNatH + captionGap + captionH + cellPad * 2;
-  const compCellH    = compNatH    + captionGap + captionH + cellPad * 2;
-  const compRowGap   = 8;
-  const colGap       = 16;
-  const totalCompsStackH = compCellH * 3 + compRowGap * 2;
-
-  // Target content area (landscape page minus margins / header / footer).
   const contentTop    = margin + headerH;
   const contentBottom = pageH - margin - footerH;
   const contentH      = contentBottom - contentTop;
-  const requiredH     = Math.max(subjectCellH, totalCompsStackH);
-  const fitScale      = Math.min(1, contentH / requiredH);
+  const contentW      = pageW - margin * 2;
 
-  // Scaled dimensions we'll actually draw at.
-  const sSubjectW = subjectNatW * fitScale;
-  const sSubjectH = subjectNatH * fitScale;
-  const sCompW    = compNatW    * fitScale;
-  const sCompH    = compNatH    * fitScale;
-  const sCellPad  = cellPad     * fitScale;
-  const sCapGap   = captionGap  * fitScale;
-  const sCapH     = captionH    * fitScale;
-  const sCompGap  = compRowGap  * fitScale;
-  const subjBlockH = sSubjectH + sCapGap + sCapH + sCellPad * 2;
-  const compBlockH = sCompH    + sCapGap + sCapH + sCellPad * 2;
-  const compsTotalH = compBlockH * 3 + sCompGap * 2;
-  const subjBlockW  = sSubjectW + sCellPad * 2;
-  const compBlockW  = sCompW    + sCellPad * 2;
-  const compsTotalW = compBlockW; // single column
+  // Subject cell: a touch smaller than top-half so it doesn't dominate.
+  // Comp cells: split the bottom row into 3 equal cells, intentionally a
+  // little taller than they used to be so they read clearly.
+  const rowGap     = 14;
+  const subjRowH   = Math.floor((contentH - rowGap) * 0.46);
+  const compRowH   = contentH - rowGap - subjRowH;
+  const subjPhotoH = subjRowH - captionGap - captionH - cellPad * 2;
+  const compPhotoH = compRowH - captionGap - captionH - cellPad * 2;
 
-  // Center the subject + comps pair horizontally on the page.
-  const pairW   = subjBlockW + colGap + compsTotalW;
-  const pairX   = margin + (pageW - margin * 2 - pairW) / 2;
-  const subjectX = pairX;
-  const compsX   = pairX + subjBlockW + colGap;
+  // Subject is centered horizontally with a fixed width that keeps the
+  // photo proportionate (roughly the same aspect as BRT's box ≈ 0.76).
+  const subjPhotoW = Math.min(
+    contentW * 0.55,
+    subjPhotoH / 0.76,
+  );
+  const subjCellW  = subjPhotoW + cellPad * 2;
+  const subjCellH  = subjPhotoH + cellPad * 2;
+  const subjX      = margin + (contentW - subjCellW) / 2;
+  const subjY      = contentTop;
 
-  // Vertical centering inside the content area (per column).
-  const subjectY = contentTop + (contentH - subjBlockH) / 2;
-  const compsY   = contentTop + (contentH - compsTotalH) / 2;
+  const colGap     = 14;
+  const compPhotoW = (contentW - colGap * 2) / 3 - cellPad * 2;
+  const compCellW  = compPhotoW + cellPad * 2;
+  const compCellH  = compPhotoH + cellPad * 2;
+  const compsY     = contentTop + subjRowH + rowGap;
 
-  // Renders a photo (or empty placeholder) at a fixed photo size with a
-  // caption below it. Photo box dimensions are fixed (== source raster size
-  // * fitScale) so the image is rendered at its native resolution.
+  // Cell + image renderer. Letterboxes the image inside the photo area so
+  // any minor aspect-ratio change keeps the picture undistorted.
   const drawSlot = (x, y, photoW, photoH, label, dataUrl, opts2 = {}) => {
-    const cellW = photoW + sCellPad * 2;
-    const cellH = photoH + sCellPad * 2;
-    doc.setDrawColor(200, 200, 200);
-    doc.setFillColor(opts2.subject ? 252 : 248, 250, 252);
-    doc.setLineWidth(0.5);
+    const cellW = photoW + cellPad * 2;
+    const cellH = photoH + cellPad * 2;
+    doc.setDrawColor(150, 150, 150);
+    doc.setFillColor(252, 252, 252);
+    doc.setLineWidth(0.7);
     doc.rect(x, y, cellW, cellH, 'FD');
     if (dataUrl) {
       try {
-        doc.addImage(
-          dataUrl,
-          'JPEG',
-          x + sCellPad,
-          y + sCellPad,
-          photoW,
-          photoH,
-        );
+        const props = doc.getImageProperties(dataUrl);
+        const ratio = props.width / props.height;
+        let drawW = photoW;
+        let drawH = photoW / ratio;
+        if (drawH > photoH) {
+          drawH = photoH;
+          drawW = photoH * ratio;
+        }
+        const dx = x + cellPad + (photoW - drawW) / 2;
+        const dy = y + cellPad + (photoH - drawH) / 2;
+        doc.addImage(dataUrl, 'JPEG', dx, dy, drawW, drawH);
       } catch (e) {
         console.warn('addImage failed for', label, e);
       }
@@ -516,29 +509,29 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     doc.setFontSize(opts2.subject ? 11 : 10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...(opts2.subject ? [185, 28, 28] : lojikBlue));
-    doc.text(label, x, y + cellH + sCapGap + sCapH);
+    doc.text(label, x, y + cellH + captionGap + captionH);
   };
 
   drawHeader(`Block ${packet.block} Lot ${packet.lot}`);
 
-  // Subject — left column at native (or uniformly scaled) size.
+  // Subject — top row, centered.
   drawSlot(
-    subjectX,
-    subjectY,
-    sSubjectW,
-    sSubjectH,
+    subjX,
+    subjY,
+    subjPhotoW,
+    subjPhotoH,
     subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
     bySlot.subject || null,
     { subject: true },
   );
 
-  // Comps 1–3 — stacked on the right at native size.
+  // Comps 1-3 — bottom row, three equal cells side-by-side.
   ['comp1', 'comp2', 'comp3'].forEach((slot, i) => {
     drawSlot(
-      compsX,
-      compsY + i * (compBlockH + sCompGap),
-      sCompW,
-      sCompH,
+      margin + i * (compCellW + colGap),
+      compsY,
+      compPhotoW,
+      compPhotoH,
       `Comp #${i + 1}`,
       bySlot[slot] || null,
     );
@@ -546,30 +539,30 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
 
   drawFooter();
 
-  // ---- Page 2 (only if comp4 or comp5 actually came in): same geometry
-  // but the right column holds comps 4 and 5 only.
+  // ---- Page 2 (only if comp4 or comp5 actually came in): subject on
+  // top again for context, comps 4 + 5 centered on the bottom row.
   const hasOverflow = !!(bySlot.comp4 || bySlot.comp5);
   if (hasOverflow) {
     doc.addPage();
     drawHeader(`Block ${packet.block} Lot ${packet.lot} — Additional Comps`);
     drawSlot(
-      subjectX,
-      subjectY,
-      sSubjectW,
-      sSubjectH,
+      subjX,
+      subjY,
+      subjPhotoW,
+      subjPhotoH,
       subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
       bySlot.subject || null,
       { subject: true },
     );
-    const overflowSlots = ['comp4', 'comp5'];
-    const overflowTotalH = compBlockH * 2 + sCompGap;
-    const overflowY = contentTop + (contentH - overflowTotalH) / 2;
-    overflowSlots.forEach((slot, i) => {
+    const overflowCellW = compCellW;
+    const overflowTotalW = overflowCellW * 2 + colGap;
+    const overflowX = margin + (contentW - overflowTotalW) / 2;
+    ['comp4', 'comp5'].forEach((slot, i) => {
       drawSlot(
-        compsX,
-        overflowY + i * (compBlockH + sCompGap),
-        sCompW,
-        sCompH,
+        overflowX + i * (overflowCellW + colGap),
+        compsY,
+        compPhotoW,
+        compPhotoH,
         `Comp #${i + 4}`,
         bySlot[slot] || null,
       );
