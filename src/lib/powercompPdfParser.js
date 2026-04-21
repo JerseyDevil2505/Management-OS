@@ -113,19 +113,38 @@ function classifyPage(joined) {
  * Try to read the subject ADDRESS from a photo page.
  * Photo pages caption the big left photo with "<ADDRESS>\nSubject".
  */
+// Looks like a real street address: starts with a number, then a space,
+// then at least one alpha character (e.g. "16 FOURTH AVE", "108 S DOLBOW LN").
+// This filters out lone lot numbers like "279".
+const ADDRESS_RE = /^\d+\s+[A-Z]/i;
+
+function joinAddressTokens(tokens) {
+  return tokens
+    .map((t) => String(t || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
 function extractPhotoSubjectAddress(items) {
   const idx = items.findIndex((t) => t === 'Subject');
   if (idx <= 0) return null;
-  // Walk backwards to find the most recent address-looking token.
-  for (let j = idx - 1; j >= 0 && j >= idx - 6; j--) {
+  // Walk backwards looking for a real address. If the address landed in a
+  // single text item we return it; if it was split across consecutive items
+  // we glue them back together (BRT sometimes splits "16 FOURTH AVE" into
+  // "16" / "FOURTH AVE" depending on the source font run).
+  for (let j = idx - 1; j >= 0 && j >= idx - 8; j--) {
     const t = items[j];
-    if (t && /^\d+\s/.test(t) && t.length <= 60) {
+    if (!t) continue;
+    if (t === 'Subject' || /^Comp\s*#?\s*\d+$/i.test(t)) continue;
+    if (ADDRESS_RE.test(t) && t.length <= 80) {
       return t.trim().toUpperCase();
     }
-    // Some captions split address across tokens, so also accept the
-    // immediately previous non-empty token as a fallback.
-    if (j === idx - 1 && t && t.length <= 60 && t !== 'Subject') {
-      return t.trim().toUpperCase();
+    // Try gluing this token with the one immediately after it.
+    if (/^\d+$/.test(t) && items[j + 1] && /[A-Z]/i.test(items[j + 1])) {
+      return joinAddressTokens([t, items[j + 1]]);
     }
   }
   return null;
@@ -144,20 +163,19 @@ function extractPhotoCompAddresses(items) {
     const m = /^Comp\s*#?\s*(\d+)$/i.exec(items[i] || '');
     if (!m) continue;
     const compNum = parseInt(m[1], 10);
-    // Walk backwards up to 5 tokens looking for an address-shaped line.
-    for (let j = i - 1; j >= 0 && j >= i - 5; j--) {
+    // Walk backwards looking for a real address (digit + space + letter).
+    // Stop if we hit another comp/subject label before finding one.
+    for (let j = i - 1; j >= 0 && j >= i - 8; j--) {
       const t = items[j];
       if (!t) continue;
-      if (/^Comp\s*#?\s*\d+$/i.test(t)) break; // hit previous comp label
-      if (t === 'Subject') break;
-      if (/^\d+\s/.test(t) && t.length <= 60) {
+      if (/^Comp\s*#?\s*\d+$/i.test(t) || t === 'Subject') break;
+      if (ADDRESS_RE.test(t) && t.length <= 80) {
         out[compNum] = t.trim().toUpperCase();
         break;
       }
-      // Fallback: immediately previous non-empty token if it looks like
-      // text rather than a number-only block.
-      if (j === i - 1 && t.length <= 60 && !/^\d+$/.test(t)) {
-        out[compNum] = t.trim().toUpperCase();
+      // Address split across two tokens (e.g. "8" + "MAPLEWOOD AVE").
+      if (/^\d+$/.test(t) && items[j + 1] && /[A-Z]/i.test(items[j + 1])) {
+        out[compNum] = joinAddressTokens([t, items[j + 1]]);
         break;
       }
     }
@@ -367,11 +385,132 @@ function cropToDataUrl(srcCanvas, x, y, w, h) {
 }
 
 /**
+ * Walk a page's content stream and return the bounding box of every image
+ * actually drawn on the page, in *page-canvas* pixel coordinates (top-left
+ * origin) relative to a canvas rendered at the given viewport.
+ *
+ * This is the "lock in the coordinates" path — instead of guessing photo
+ * positions with normalized fractions, we ask pdfjs exactly where each
+ * image was placed by the source PDF. Each image draw operator is preceded
+ * by `transform` calls that build a current transformation matrix (CTM);
+ * the image is drawn in the unit square (0..1, 0..1) and projected onto
+ * the page through that CTM. We mirror pdfjs's matrix stack to recover
+ * those rectangles deterministically.
+ */
+async function extractImageRectsFromPage(pdfjsPage, viewport) {
+  const ops = await pdfjsPage.getOperatorList();
+  const OPS = pdfjsLib.OPS;
+
+  // Standard 6-element affine matrix multiply: result = a * b.
+  const mul = (a, b) => [
+    a[0] * b[0] + a[2] * b[1],
+    a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3],
+    a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4],
+    a[1] * b[4] + a[3] * b[5] + a[5],
+  ];
+  const apply = (m, x, y) => [
+    m[0] * x + m[2] * y + m[4],
+    m[1] * x + m[3] * y + m[5],
+  ];
+
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack = [];
+  const rects = [];
+
+  // Image-paint opcodes we care about. Different pdf.js builds expose
+  // different subsets, so we guard each lookup.
+  const IMG_OPS = new Set(
+    [
+      OPS.paintImageXObject,
+      OPS.paintJpegXObject,
+      OPS.paintInlineImageXObject,
+      OPS.paintImageMaskXObject,
+    ].filter((v) => v != null),
+  );
+
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i];
+    const args = ops.argsArray[i];
+    if (fn === OPS.save) {
+      stack.push(ctm.slice());
+    } else if (fn === OPS.restore) {
+      ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
+    } else if (fn === OPS.transform) {
+      ctm = mul(ctm, args);
+    } else if (IMG_OPS.has(fn)) {
+      // Project the unit square (0,0)-(1,1) through the CTM to get the
+      // page-space bounding box of this image.
+      const corners = [
+        apply(ctm, 0, 0),
+        apply(ctm, 1, 0),
+        apply(ctm, 0, 1),
+        apply(ctm, 1, 1),
+      ];
+      const xs = corners.map((p) => p[0]);
+      const ys = corners.map((p) => p[1]);
+      const xMin = Math.min(...xs);
+      const xMax = Math.max(...xs);
+      const yMin = Math.min(...ys);
+      const yMax = Math.max(...ys);
+      const wPdf = xMax - xMin;
+      const hPdf = yMax - yMin;
+      // Skip degenerate rectangles (1D lines, etc.).
+      if (wPdf < 1 || hPdf < 1) continue;
+      // Convert PDF user-space -> rendered canvas (top-left origin).
+      // viewport.height is in canvas pixels; pdfjs's viewport already
+      // bakes in the page rotation + scale, but for the typical
+      // unrotated landscape pages BRT ships, this projection is direct.
+      const scale = viewport.scale;
+      const pageHpt = viewport.height / scale;
+      rects.push({
+        xPx: xMin * scale,
+        yPx: (pageHpt - yMax) * scale,
+        wPx: wPdf * scale,
+        hPx: hPdf * scale,
+        areaPdf: wPdf * hPdf,
+      });
+    }
+  }
+  return rects;
+}
+
+/**
+ * Given the image rectangles from a BRT photo page, classify them into
+ * the fixed slot order BRT uses: largest = subject; remaining sorted top
+ * to bottom = comp1, comp2, comp3.
+ */
+function classifyPhotoRects(rects, slotsForPage) {
+  if (!rects.length) return {};
+  // Sort by area desc; biggest is the subject box on BRT pages.
+  const sortedByArea = [...rects].sort((a, b) => b.areaPdf - a.areaPdf);
+  const out = {};
+  const remaining = [];
+  if (slotsForPage.includes('subject')) {
+    out.subject = sortedByArea[0];
+    remaining.push(...sortedByArea.slice(1));
+  } else {
+    remaining.push(...sortedByArea);
+  }
+  // Sort remaining top->bottom by yPx (smaller y = higher on canvas).
+  remaining.sort((a, b) => a.yPx - b.yPx);
+  const compSlots = slotsForPage.filter((s) => s !== 'subject');
+  for (let i = 0; i < compSlots.length && i < remaining.length; i++) {
+    out[compSlots[i]] = remaining[i];
+  }
+  return out;
+}
+
+/**
  * Walk the photo pages of a packet and pull out per-slot photo data URLs.
- * Returns a map keyed by slot name ("subject", "comp1"..."comp5") so the
- * caller can render a fixed layout and obviously show empty slots when
- * a particular comp's photo wasn't supplied. Slots detected as "No Picture"
- * placeholders are returned as null entries.
+ * Strategy:
+ *   1. Render the page to a canvas (high scale for resolution).
+ *   2. Read the actual image-draw rectangles from the PDF content stream.
+ *   3. Classify those rectangles into subject/comp slots by size + Y.
+ *   4. Crop the canvas at those exact positions.
+ *   5. If the operator-list path returns no rects (rare malformed page),
+ *      fall back to the eyeballed BRT_SLOT_RECTS fractions.
  */
 async function extractPhotosFromPacket(originalPdfBytes, packet) {
   // Independent copy so neither pdfjs nor pdf-lib detaches the master bytes.
@@ -385,20 +524,59 @@ async function extractPhotosFromPacket(originalPdfBytes, packet) {
     const slotsForPage = PHOTO_PAGE_SLOTS[i] || [];
     if (!slotsForPage.length) break; // Safety: stop after page 2.
     const pdfjsPage = await pdf.getPage(pageIdx + 1);
-    const canvas = await renderPageToCanvas(pdfjsPage, 4);
-    for (const slot of slotsForPage) {
-      const rect = rectForSlot(slot);
-      if (!rect) continue;
-      const px = rect.x * canvas.width;
-      const py = rect.y * canvas.height;
-      const pw = rect.w * canvas.width;
-      const ph = rect.h * canvas.height;
-      if (isMostlyWhite(canvas, px, py, pw, ph)) {
-        bySlot[slot] = null;
-        continue;
-      }
-      bySlot[slot] = cropToDataUrl(canvas, px, py, pw, ph);
+    const scale = 4;
+    const viewport = pdfjsPage.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    await pdfjsPage.render({ canvasContext: ctx, viewport }).promise;
+
+    // ---- Option A: real image positions from the content stream --------
+    let imageRects = [];
+    try {
+      imageRects = await extractImageRectsFromPage(pdfjsPage, viewport);
+    } catch (e) {
+      console.warn('operator-list image scan failed; falling back to fixed rects', e);
     }
+
+    if (imageRects.length) {
+      const classified = classifyPhotoRects(imageRects, slotsForPage);
+      for (const slot of slotsForPage) {
+        const r = classified[slot];
+        if (!r) {
+          bySlot[slot] = null;
+          continue;
+        }
+        // Tiny inset so we don't catch the box border.
+        const inset = 1;
+        const x = r.xPx + inset;
+        const y = r.yPx + inset;
+        const w = r.wPx - inset * 2;
+        const h = r.hPx - inset * 2;
+        if (isMostlyWhite(canvas, x, y, w, h)) {
+          bySlot[slot] = null;
+          continue;
+        }
+        bySlot[slot] = cropToDataUrl(canvas, x, y, w, h);
+      }
+    } else {
+      // ---- Fallback: legacy fractional rects (eyeballed) ---------------
+      for (const slot of slotsForPage) {
+        const rect = rectForSlot(slot);
+        if (!rect) continue;
+        const px = rect.x * canvas.width;
+        const py = rect.y * canvas.height;
+        const pw = rect.w * canvas.width;
+        const ph = rect.h * canvas.height;
+        if (isMostlyWhite(canvas, px, py, pw, ph)) {
+          bySlot[slot] = null;
+          continue;
+        }
+        bySlot[slot] = cropToDataUrl(canvas, px, py, pw, ph);
+      }
+    }
+
     try { await pdfjsPage.cleanup?.(); } catch (_) {}
   }
   try { await pdf.destroy(); } catch (_) {}
