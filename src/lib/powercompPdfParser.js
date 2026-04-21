@@ -244,11 +244,16 @@ export async function parsePowerCompPdf(input) {
 // adjust here if BRT changes their template. Each rect is intentionally a
 // little smaller than the visible box outline so we don't capture the
 // border stroke.
+// Each BRT photo cell is laid out as: photo on the LEFT, address + label
+// text on the RIGHT. We crop just the photo portion (the boxed image) and
+// drop the label area entirely — our own layout regenerates the captions.
 const BRT_SLOT_RECTS = {
-  subject: { x: 0.030, y: 0.105, w: 0.460, h: 0.690 },
-  comp1:   { x: 0.620, y: 0.105, w: 0.295, h: 0.205 },
-  comp2:   { x: 0.620, y: 0.370, w: 0.295, h: 0.205 },
-  comp3:   { x: 0.620, y: 0.635, w: 0.295, h: 0.205 },
+  // Subject box on the left side of the page, photo only.
+  subject: { x: 0.035, y: 0.110, w: 0.370, h: 0.680 },
+  // Right column comp boxes — photo only (left ~22% of the page width).
+  comp1:   { x: 0.520, y: 0.110, w: 0.220, h: 0.205 },
+  comp2:   { x: 0.520, y: 0.375, w: 0.220, h: 0.205 },
+  comp3:   { x: 0.520, y: 0.640, w: 0.220, h: 0.205 },
 };
 // Per-page slot order. Page 0: subject + comps 1-3. Page 1+: comps 4, 5
 // (BRT reuses the subject box on subsequent pages but we already captured
@@ -315,8 +320,10 @@ function cropToDataUrl(srcCanvas, x, y, w, h) {
 
 /**
  * Walk the photo pages of a packet and pull out per-slot photo data URLs.
- * Returns an array of { slot, label, dataUrl } in display order. Slots
- * detected as "No Picture" placeholders are dropped silently.
+ * Returns a map keyed by slot name ("subject", "comp1"..."comp5") so the
+ * caller can render a fixed layout and obviously show empty slots when
+ * a particular comp's photo wasn't supplied. Slots detected as "No Picture"
+ * placeholders are returned as null entries.
  */
 async function extractPhotosFromPacket(originalPdfBytes, packet) {
   // Independent copy so neither pdfjs nor pdf-lib detaches the master bytes.
@@ -324,7 +331,7 @@ async function extractPhotosFromPacket(originalPdfBytes, packet) {
   scanCopy.set(originalPdfBytes);
   const pdf = await pdfjsLib.getDocument({ data: scanCopy }).promise;
 
-  const photos = [];
+  const bySlot = {};
   for (let i = 0; i < packet.photoPageIndices.length; i++) {
     const pageIdx = packet.photoPageIndices[i];
     const slotsForPage = PHOTO_PAGE_SLOTS[i] || [];
@@ -338,20 +345,16 @@ async function extractPhotosFromPacket(originalPdfBytes, packet) {
       const py = rect.y * canvas.height;
       const pw = rect.w * canvas.width;
       const ph = rect.h * canvas.height;
-      if (isMostlyWhite(canvas, px, py, pw, ph)) continue;
-      photos.push({
-        slot,
-        label:
-          slot === 'subject'
-            ? 'Subject'
-            : `Comp #${slot.replace('comp', '')}`,
-        dataUrl: cropToDataUrl(canvas, px, py, pw, ph),
-      });
+      if (isMostlyWhite(canvas, px, py, pw, ph)) {
+        bySlot[slot] = null;
+        continue;
+      }
+      bySlot[slot] = cropToDataUrl(canvas, px, py, pw, ph);
     }
     try { await pdfjsPage.cleanup?.(); } catch (_) {}
   }
   try { await pdf.destroy(); } catch (_) {}
-  return photos;
+  return bySlot;
 }
 
 /**
@@ -367,10 +370,11 @@ async function extractPhotosFromPacket(originalPdfBytes, packet) {
 export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   if (!packet.photoPageIndices?.length) return null;
 
-  const photos = await extractPhotosFromPacket(originalPdfBytes, packet);
-  if (!photos.length) return null;
+  const bySlot = await extractPhotosFromPacket(originalPdfBytes, packet);
+  // Bail only if we got literally nothing back from any slot.
+  const anyPhoto = Object.values(bySlot).some((v) => !!v);
+  if (!anyPhoto) return null;
 
-  // Lazy-load jsPDF here so the import sits beside the work that needs it.
   const { jsPDF } = await import('jspdf');
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
@@ -381,28 +385,12 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   const footerH = 22;
   const lojikBlue = [0, 102, 204];
 
-  // 3-column x 2-row grid. Subject + up to 5 comps = 6 cells; perfect fit.
-  const cols = 3;
-  const rows = 2;
-  const cellGapX = 14;
-  const cellGapY = 22; // extra vertical room for caption
-  const captionH = 28;
-
-  const gridLeft = margin;
-  const gridTop = margin + headerH;
-  const gridW = pageW - margin * 2;
-  const gridH = pageH - margin * 2 - headerH - footerH;
-  const cellW = (gridW - cellGapX * (cols - 1)) / cols;
-  const cellH = (gridH - cellGapY * (rows - 1)) / rows;
-  const photoH = cellH - captionH;
-
   const subjectAddr = packet.address || '';
   const blqLabel =
     `${packet.block}-${packet.lot}` +
     (packet.qualifier ? `-${packet.qualifier}` : '');
 
-  const drawHeader = () => {
-    // Left: title
+  const drawHeader = (subtitle) => {
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...lojikBlue);
@@ -417,18 +405,11 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
       margin,
       margin + 30,
     );
-    // Right: appeal context line is filled in later by the merge step
-    // (which already prints subject info atop each report page). Here we
-    // just stamp the slot count so the user can sanity-check.
-    doc.setFontSize(9);
-    doc.setTextColor(120, 120, 120);
-    doc.text(
-      `${photos.length} photo${photos.length === 1 ? '' : 's'}`,
-      pageW - margin,
-      margin + 14,
-      { align: 'right' },
-    );
-    // Thin underline
+    if (subtitle) {
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text(subtitle, pageW - margin, margin + 14, { align: 'right' });
+    }
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
     doc.line(margin, margin + headerH - 6, pageW - margin, margin + headerH - 6);
@@ -443,54 +424,122 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     doc.text(blqLabel, pageW - margin, pageH - margin + 8, { align: 'right' });
   };
 
-  // Cell drawer. Returns true if the cell was rendered.
-  const drawCell = (photo, col, row) => {
-    const x = gridLeft + col * (cellW + cellGapX);
-    const y = gridTop + row * (cellH + cellGapY);
-    // Photo box (with subtle border and white fill)
+  // Renders a photo (or empty placeholder) inside the given rect, with a
+  // caption below it. The image is letterboxed: we keep its aspect ratio
+  // and center it within the box so the layout stays consistent even when
+  // BRT crops vary.
+  const drawSlot = (rect, label, dataUrl, opts2 = {}) => {
+    const captionH = 18;
+    const photoH = rect.h - captionH;
+    // Outer box
     doc.setDrawColor(200, 200, 200);
-    doc.setFillColor(255, 255, 255);
+    doc.setFillColor(opts2.subject ? 252 : 248, 250, 252);
     doc.setLineWidth(0.5);
-    doc.rect(x, y, cellW, photoH, 'FD');
-    // Inset the actual image a hair so we don't clip the border
-    try {
-      doc.addImage(photo.dataUrl, 'JPEG', x + 1, y + 1, cellW - 2, photoH - 2);
-    } catch (e) {
-      console.warn('addImage failed for slot', photo.slot, e);
+    doc.rect(rect.x, rect.y, rect.w, photoH, 'FD');
+    if (dataUrl) {
+      try {
+        // Letterbox into the cell to preserve aspect ratio.
+        const props = doc.getImageProperties(dataUrl);
+        const boxW = rect.w - 4;
+        const boxH = photoH - 4;
+        const ratio = props.width / props.height;
+        let drawW = boxW;
+        let drawH = boxW / ratio;
+        if (drawH > boxH) {
+          drawH = boxH;
+          drawW = boxH * ratio;
+        }
+        const dx = rect.x + 2 + (boxW - drawW) / 2;
+        const dy = rect.y + 2 + (boxH - drawH) / 2;
+        doc.addImage(dataUrl, 'JPEG', dx, dy, drawW, drawH);
+      } catch (e) {
+        console.warn('addImage failed for', label, e);
+      }
+    } else {
+      // Empty-slot placeholder so the user can see what's missing.
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(170, 170, 170);
+      doc.text(
+        'No photo provided',
+        rect.x + rect.w / 2,
+        rect.y + photoH / 2 + 4,
+        { align: 'center' },
+      );
     }
-    // Subject gets a colored badge + bold caption to distinguish it.
-    const isSubject = photo.slot === 'subject';
-    doc.setFontSize(10);
+    // Caption
+    doc.setFontSize(opts2.subject ? 11 : 10);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...(isSubject ? [185, 28, 28] : lojikBlue));
-    doc.text(photo.label, x + 6, y + photoH + 14);
-    if (isSubject && subjectAddr) {
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      doc.text(subjectAddr, x + 6, y + photoH + 26);
-    }
+    doc.setTextColor(...(opts2.subject ? [185, 28, 28] : lojikBlue));
+    doc.text(label, rect.x, rect.y + photoH + 13);
   };
 
-  // Render in pages of 6 cells. With max 5 comps + 1 subject this fits on
-  // a single page, but we keep the loop generic in case BRT ever ships
-  // packets with more comps.
-  const cellsPerPage = cols * rows;
-  for (let pageStart = 0; pageStart < photos.length; pageStart += cellsPerPage) {
-    if (pageStart > 0) doc.addPage();
-    drawHeader();
-    const slice = photos.slice(pageStart, pageStart + cellsPerPage);
-    slice.forEach((photo, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      drawCell(photo, col, row);
+  // ---- Page 1: subject (top half) + comps 1-3 (bottom half, side-by-side)
+  const gridLeft = margin;
+  const gridTop = margin + headerH;
+  const gridW = pageW - margin * 2;
+  const gridH = pageH - margin * 2 - headerH - footerH;
+  const rowGap = 16;
+  const colGap = 14;
+  const rowH = (gridH - rowGap) / 2;
+  const compCellW = (gridW - colGap * 2) / 3;
+
+  drawHeader(`Block ${packet.block} Lot ${packet.lot}`);
+
+  // Subject — full width, top row.
+  drawSlot(
+    { x: gridLeft, y: gridTop, w: gridW, h: rowH },
+    subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
+    bySlot.subject || null,
+    { subject: true },
+  );
+
+  // Comps 1-3 — bottom row, three even columns.
+  ['comp1', 'comp2', 'comp3'].forEach((slot, i) => {
+    drawSlot(
+      {
+        x: gridLeft + i * (compCellW + colGap),
+        y: gridTop + rowH + rowGap,
+        w: compCellW,
+        h: rowH,
+      },
+      `Comp #${i + 1}`,
+      bySlot[slot] || null,
+    );
+  });
+
+  drawFooter();
+
+  // ---- Page 2 (only if comp4 or comp5 actually came in): same layout
+  // but the bottom row holds comps 4 and 5 (centered, two cells wide).
+  const hasOverflow = !!(bySlot.comp4 || bySlot.comp5);
+  if (hasOverflow) {
+    doc.addPage();
+    drawHeader(`Block ${packet.block} Lot ${packet.lot} — Additional Comps`);
+    // Subject re-shown (same big top cell) for context.
+    drawSlot(
+      { x: gridLeft, y: gridTop, w: gridW, h: rowH },
+      subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
+      bySlot.subject || null,
+      { subject: true },
+    );
+    // Two cells centered on the bottom row.
+    const overflowCellW = (gridW - colGap) / 2;
+    ['comp4', 'comp5'].forEach((slot, i) => {
+      drawSlot(
+        {
+          x: gridLeft + i * (overflowCellW + colGap),
+          y: gridTop + rowH + rowGap,
+          w: overflowCellW,
+          h: rowH,
+        },
+        `Comp #${i + 4}`,
+        bySlot[slot] || null,
+      );
     });
     drawFooter();
   }
 
-  // Optional caller override (kept for future use; currently unused since the
-  // rebuilt layout doesn't require BRT attribution).
   void opts;
-
   return new Uint8Array(doc.output('arraybuffer'));
 }

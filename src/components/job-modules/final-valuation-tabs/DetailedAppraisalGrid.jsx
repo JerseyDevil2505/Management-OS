@@ -1485,9 +1485,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   }, [subject, jobData?.id, allProperties]);
 
   // ==================== APPEAL LOG UPLOAD STATE ====================
-  // Lets the user one-click upload the generated PDF to the appeal-reports
-  // bucket so the Appeal Log can print it later (with photos appended).
-  const [saveToAppealLog, setSaveToAppealLog] = useState(true);
+  // Tracks the "Send to Appeal Log" upload progress so the modal can show
+  // a status chip and disable the button while the upload is in flight.
   const [appealUploadStatus, setAppealUploadStatus] = useState(null); // { status: 'idle'|'uploading'|'done'|'error', message? }
 
   // Generate PDF document
@@ -2638,10 +2637,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const qualifier = subject.property_qualifier || '';
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
 
-    // Optionally upload the same PDF bytes to the appeal-reports bucket so the
-    // Appeal Log can print it later (with photos appended). Controlled by the
-    // export modal's "Save to Appeal Log" checkbox.
-    const wantUpload = opts.uploadToAppealLog ?? saveToAppealLog;
+    // "Send to Appeal Log" path: upload the PDF bytes to the appeal-reports
+    // bucket (so Appeal Log can print it later with photos appended) AND
+    // sync the recalculated CME projected value onto the appeal_log row so
+    // the user can see it in the Appeal Log without having to re-run CME.
+    const wantUpload = opts.uploadToAppealLog ?? false;
     if (wantUpload && jobData?.id) {
       try {
         setAppealUploadStatus({ status: 'uploading' });
@@ -2672,22 +2672,47 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             { onConflict: 'job_id,property_composite_key' },
           );
         if (dbErr) throw dbErr;
-        setAppealUploadStatus({ status: 'done', message: 'Saved to Appeal Log' });
+
+        // Mirror Sales Comparison's "Save to Appeal Log" behavior for this
+        // single subject — push the CME projected assessment onto the
+        // matching appeal_log row(s) so the log reflects the latest run.
+        const projected =
+          recalculatedProjectedAssessment ?? result?.projectedAssessment ?? null;
+        if (projected) {
+          try {
+            await supabase
+              .from('appeal_log')
+              .update({
+                cme_projected_value: projected,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('job_id', jobData.id)
+              .eq('property_block', block)
+              .eq('property_lot', lot)
+              .eq('property_qualifier', qualifier || '');
+          } catch (cmeErr) {
+            // Non-fatal: report still saved, CME sync failed.
+            console.warn('appeal_log CME sync failed', cmeErr);
+          }
+        }
+
+        setAppealUploadStatus({ status: 'done', message: 'Sent to Appeal Log' });
       } catch (e) {
         console.error('appeal-reports upload failed', e);
         setAppealUploadStatus({ status: 'error', message: e.message || 'Upload failed' });
       }
     }
 
-    // Always also trigger a local download unless the caller explicitly opts out
-    // (e.g. an "upload only" call path in the future).
-    if (opts.downloadLocal !== false) {
+    // Local download is now opt-in (Download PDF button passes
+    // downloadLocal: true). Send-to-Appeal-Log skips the download to keep
+    // users' Downloads folder clean.
+    if (opts.downloadLocal === true) {
       doc.save(fileName);
     }
     if (opts.closeModal !== false) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, saveToAppealLog]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3029,21 +3054,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
-                <label
-                  className="flex items-center gap-2 cursor-pointer text-white text-sm"
-                  title="Also upload this PDF to the Appeal Log so it can be printed later (with PowerComp photos appended)."
-                >
-                  <input
-                    type="checkbox"
-                    checked={saveToAppealLog}
-                    onChange={(e) => setSaveToAppealLog(e.target.checked)}
-                    className="rounded border-white text-blue-600"
-                  />
-                  <span className="flex items-center gap-1">
-                    <FileDown size={14} />
-                    Save to Appeal Log
-                  </span>
-                </label>
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -3412,11 +3422,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   Recalculate
                 </button>
                 <button
-                  onClick={generatePDF}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  onClick={() => generatePDF({ downloadLocal: true })}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
+                  title="Download a local copy only — does not update the Appeal Log."
                 >
                   <FileDown size={16} />
                   Download PDF
+                </button>
+                <button
+                  onClick={() =>
+                    generatePDF({ uploadToAppealLog: true, downloadLocal: false })
+                  }
+                  disabled={appealUploadStatus?.status === 'uploading'}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 transition-colors text-sm"
+                  title="Upload this report to the Appeal Log (creates the Report ✓ chip) and sync the CME projected value. No local download."
+                >
+                  <FileDown size={16} />
+                  {appealUploadStatus?.status === 'uploading'
+                    ? 'Sending…'
+                    : 'Send to Appeal Log'}
                 </button>
               </div>
             </div>
