@@ -774,17 +774,32 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     doc.rect(x, y, cellW, cellH, 'FD');
     if (dataUrl) {
       try {
-        const props = doc.getImageProperties(dataUrl);
-        const ratio = props.width / props.height;
-        let drawW = photoW;
-        let drawH = photoW / ratio;
-        if (drawH > photoH) {
-          drawH = photoH;
-          drawW = photoH * ratio;
+        if (opts2.stretch) {
+          // Stretch-to-fill: ignore aspect and fill the entire photo box.
+          // Used for the subject cell only — BRT's source image box is
+          // already much larger than ours so distortion is minor.
+          doc.addImage(
+            dataUrl,
+            'JPEG',
+            x + cellPad,
+            y + cellPad,
+            photoW,
+            photoH,
+          );
+        } else {
+          // Letterbox: preserve aspect ratio, center in the cell.
+          const props = doc.getImageProperties(dataUrl);
+          const ratio = props.width / props.height;
+          let drawW = photoW;
+          let drawH = photoW / ratio;
+          if (drawH > photoH) {
+            drawH = photoH;
+            drawW = photoH * ratio;
+          }
+          const dx = x + cellPad + (photoW - drawW) / 2;
+          const dy = y + cellPad + (photoH - drawH) / 2;
+          doc.addImage(dataUrl, 'JPEG', dx, dy, drawW, drawH);
         }
-        const dx = x + cellPad + (photoW - drawW) / 2;
-        const dy = y + cellPad + (photoH - drawH) / 2;
-        doc.addImage(dataUrl, 'JPEG', dx, dy, drawW, drawH);
       } catch (e) {
         console.warn('addImage failed for', label, e);
       }
@@ -807,7 +822,9 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
 
   drawHeader();
 
-  // Subject — top row, centered.
+  // Subject — top row, centered. Stretch-to-fill the cell so the photo
+  // visually reads bigger (per Lojik design preference). Minor distortion
+  // is acceptable; comps stay letterboxed.
   drawSlot(
     subjX,
     subjY,
@@ -815,7 +832,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     subjPhotoH,
     'Subject',
     bySlot.subject || null,
-    { subject: true },
+    { subject: true, stretch: true },
   );
 
   // Comps 1-3 — bottom row, three equal cells side-by-side.
@@ -845,7 +862,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
       subjPhotoH,
       'Subject',
       bySlot.subject || null,
-      { subject: true },
+      { subject: true, stretch: true },
     );
     const overflowCellW = compCellW;
     const overflowTotalW = overflowCellW * 2 + colGap;
