@@ -3921,7 +3921,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
         >
           <FileText className="w-4 h-4" />
-          Import PowerComp PDF
+          Import Batch PwrComp PDF
         </button>
         <button
           onClick={() => {
@@ -4763,7 +4763,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Import PowerComp PDF (Photo Packets)</h2>
+              <h2 className="text-lg font-bold text-gray-900">Import Batch PwrComp PDF (Photo Packets)</h2>
               <button onClick={() => setShowPwrCompPdfModal(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-5 h-5" />
               </button>
@@ -4889,7 +4889,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   style={{ backgroundColor: '#0f766e', color: 'white' }}
                   className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
                 >
-                  {pwrCompPdfParsing ? 'Reading PDF…' : 'Parse & Match (dry-run)'}
+                  {pwrCompPdfParsing ? 'Reading PDF…' : 'Parse & Match'}
                 </button>
               )}
               {pwrCompPdfPreview && !pwrCompPdfSaveResult && (
