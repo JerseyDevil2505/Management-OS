@@ -850,15 +850,30 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     { subject: true, stretch: true },
   );
 
-  // Comps 1-3 — bottom row, three equal cells side-by-side.
-  ['comp1', 'comp2', 'comp3'].forEach((slot, i) => {
+  // Comps 1-3 — bottom row. Match page 2's behavior: only draw cells for
+  // comps that actually exist in this appraisal (signaled by either a real
+  // photo or a captured caption address). Comp #1 is always rendered as a
+  // safety net since every appraisal has at least one comp by definition;
+  // if caption parsing whiffs we don't want a Subject-only page that
+  // visually reads as broken. Layout centers whatever cells are drawn.
+  const page1Slots = [
+    { key: 'comp1', label: 'Comp #1', force: true },
+    { key: 'comp2', label: 'Comp #2', force: false },
+    { key: 'comp3', label: 'Comp #3', force: false },
+  ]
+    .map((s, i) => ({ ...s, num: i + 1 }))
+    .filter((s) => s.force || !!bySlot[s.key] || !!compAddrs[s.num]);
+  const page1TotalW =
+    compCellW * page1Slots.length + colGap * Math.max(0, page1Slots.length - 1);
+  const page1X = margin + (contentW - page1TotalW) / 2;
+  page1Slots.forEach((s, i) => {
     drawSlot(
-      margin + i * (compCellW + colGap),
+      page1X + i * (compCellW + colGap),
       compsY,
       compPhotoW,
       compPhotoH,
-      `Comp #${i + 1}`,
-      bySlot[slot] || null,
+      s.label,
+      bySlot[s.key] || null,
     );
   });
 
