@@ -2155,25 +2155,30 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const key = compositeKeyForAppeal(appeal);
     const photoBytes = await fetchPhotoPacketBytes(key);
 
-    if (!photoBytes) {
-      return { bytes: reportBytes, hasPhotos: false };
-    }
-
-    // Splice photo pages into the saved report. Target spot is *before* the
-    // Chapter 123 Analysis page (so photos sit with the comp grid / dynamic
-    // adjustments, not after Appellant Evidence). If we can't detect Chapter
-    // 123, fall back to inserting after page 2 (typical: comp grid + dynamic
-    // adjustments page), or at the end if the report is shorter than that.
+    // Even with no photos, we still want to enforce the canonical section
+    // order in the saved report:
+    //   1. Static comp grid (Detailed Evaluation)
+    //   2. Dynamic Adjustments
+    //   3. PowerComp photo packet (if present)
+    //   4. Subject & Comps Location Map (if present)
+    //   5. Appellant Evidence Summary (if present)
+    //   6. Chapter 123 Test (Director's Ratio)
+    // Anything we can't classify gets appended at the end in its original
+    // order so we never silently drop a page.
     const { PDFDocument } = await import('pdf-lib');
     const reportDoc = await PDFDocument.load(reportBytes);
-    const photoDoc = await PDFDocument.load(photoBytes);
-    const totalReportPages = reportDoc.getPageCount();
 
-    // Try to locate the Chapter 123 page using pdfjs text extraction.
-    let insertAt = Math.min(2, totalReportPages); // default: after page 2
+    // Classify each report page by scanning its text content.
+    const buckets = {
+      static: [],
+      dynamic: [],
+      map: [],
+      appellant: [],
+      chapter123: [],
+      other: [],
+    };
     try {
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
-      // Pass an independent copy so pdfjs doesn't detach our buffer.
       const scanCopy = new Uint8Array(reportBytes.byteLength);
       scanCopy.set(reportBytes);
       const loadingTask = pdfjs.getDocument({ data: scanCopy });
@@ -2182,27 +2187,75 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const page = await pdfDoc.getPage(i);
         const textContent = await page.getTextContent();
         const text = textContent.items.map((it) => it.str).join(' ').toLowerCase();
+        const idx = i - 1;
         if (text.includes('chapter 123')) {
-          insertAt = i - 1; // pdf-lib indices are 0-based; insert before this page
-          break;
+          buckets.chapter123.push(idx);
+        } else if (text.includes('subject & comps location map') || text.includes('subject &amp; comps location map')) {
+          buckets.map.push(idx);
+        } else if (text.includes('appellant evidence summary') || text.includes('no evidence supplied by appellant')) {
+          buckets.appellant.push(idx);
+        } else if (text.includes('dynamic adjustments')) {
+          buckets.dynamic.push(idx);
+        } else if (text.includes('detailed evaluation') || idx === 0) {
+          // First page (or any page that includes the comp grid header) is
+          // treated as the static section. Defaulting to page 0 keeps things
+          // sane for legacy exports that don't carry the literal header text.
+          buckets.static.push(idx);
+        } else {
+          buckets.other.push(idx);
         }
+        try { await page.cleanup?.(); } catch (_) {}
       }
       try { await pdfDoc.destroy(); } catch (_) {}
     } catch (e) {
-      console.warn('pdfjs scan for Chapter 123 page failed; using default insert position', e);
+      // If the scan fails for any reason, fall back to original order with
+      // photos appended at the end — same as legacy behavior.
+      console.warn('pdfjs section scan failed; falling back to original order', e);
+      buckets.static = reportDoc.getPageIndices();
     }
-    insertAt = Math.max(0, Math.min(insertAt, totalReportPages));
 
     const out = await PDFDocument.create();
     const reportPages = await out.copyPages(reportDoc, reportDoc.getPageIndices());
-    const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
-    // Pages 0..insertAt-1 from report
-    for (let i = 0; i < insertAt; i++) out.addPage(reportPages[i]);
-    // Photo packet
-    for (const p of photoPages) out.addPage(p);
-    // Remaining report pages
-    for (let i = insertAt; i < reportPages.length; i++) out.addPage(reportPages[i]);
-    return { bytes: await out.save(), hasPhotos: true };
+    const addReportRange = (indices) => {
+      for (const i of indices) {
+        if (i >= 0 && i < reportPages.length) out.addPage(reportPages[i]);
+      }
+    };
+
+    // 1. Static comp grid
+    addReportRange(buckets.static);
+    // 2. Dynamic Adjustments
+    addReportRange(buckets.dynamic);
+    // 3. Photo packet
+    let hasPhotos = false;
+    if (photoBytes) {
+      const photoDoc = await PDFDocument.load(photoBytes);
+      const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+      for (const p of photoPages) out.addPage(p);
+      hasPhotos = true;
+    }
+    // 4. Map
+    addReportRange(buckets.map);
+    // 5. Appellant Evidence
+    addReportRange(buckets.appellant);
+    // 6. Chapter 123
+    addReportRange(buckets.chapter123);
+    // Anything we couldn't classify
+    addReportRange(buckets.other);
+
+    // Safety: if classification missed every page (shouldn't happen), make
+    // sure we don't return an empty PDF.
+    if (out.getPageCount() === 0) {
+      for (const p of reportPages) out.addPage(p);
+      if (photoBytes) {
+        const photoDoc = await PDFDocument.load(photoBytes);
+        const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+        for (const p of photoPages) out.addPage(p);
+        hasPhotos = true;
+      }
+    }
+
+    return { bytes: await out.save(), hasPhotos };
   };
 
   const handlePrintAppeal = async (appeal) => {
