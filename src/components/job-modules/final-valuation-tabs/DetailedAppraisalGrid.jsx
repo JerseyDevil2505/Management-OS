@@ -1730,8 +1730,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           if (showAdjustments && adj && adj.amount !== 0) {
             const adjSign = adj.amount > 0 ? '+' : '-';
             const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-            // Store adjustment info for coloring in didParseCell
-            row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
+            // Cell content stays as just the value (single-line, neutral
+            // color). The adjustment is drawn on the right edge of the cell
+            // in green/red by the didDrawCell hook below — that way every
+            // body row is the same height and the adjustment sits inline
+            // with the value rather than wrapping underneath it.
+            row.push({ content: String(compVal), adjAmount: adj.amount, adjStr });
           } else {
             row.push(String(compVal));
           }
@@ -1823,28 +1827,53 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
           data.cell.styles.fillColor = [240, 240, 240];
           data.cell.styles.fontStyle = 'bold';
+          // Net Adjustment is the one row where the cell *itself* is the
+          // adjustment (no separate value to keep neutral) — color the text.
+          const cellData = data.row.raw?.[data.column.index];
+          if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+            if (cellData.adjAmount > 0) data.cell.styles.textColor = [34, 139, 34];
+            else if (cellData.adjAmount < 0) data.cell.styles.textColor = [220, 20, 60];
+          }
         }
         // Style Adjusted Valuation row
         if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
           data.cell.styles.fillColor = [200, 230, 255];
           data.cell.styles.fontStyle = 'bold';
         }
-        // Color adjustment amounts: green for positive, red for negative
-        const cellData = data.row.raw?.[data.column.index];
-        if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
-          if (cellData.adjAmount > 0) {
-            data.cell.styles.textColor = [34, 139, 34]; // Green
-          } else if (cellData.adjAmount < 0) {
-            data.cell.styles.textColor = [220, 20, 60]; // Red
-          }
-        }
       },
       willDrawCell: function(data) {
-        // Convert object cells to string content before drawing
+        // Cell content for value-with-adjustment cells is just the value
+        // string; the adjustment is overlaid in didDrawCell. Net Adjustment
+        // and Adjusted Valuation rows already store their full string in
+        // cellData.content and need it unwrapped here.
         const cellData = data.row.raw?.[data.column.index];
         if (cellData && typeof cellData === 'object' && cellData.content) {
-          data.cell.text = cellData.content.split('\n');
+          data.cell.text = [cellData.content];
         }
+      },
+      didDrawCell: function(data) {
+        // Paint the adjustment to the right of the cell value in green/red.
+        // Skip for the Net Adjustment row (its cell content already IS the
+        // adjustment) and the header row.
+        if (data.section !== 'body') return;
+        const rawRow = data.row.raw;
+        if (!rawRow || rawRow[0] === 'Net Adjustment' || rawRow[0] === 'Adjusted Valuation') return;
+        const cellData = rawRow[data.column.index];
+        if (!cellData || typeof cellData !== 'object' || !cellData.adjStr) return;
+        const color = cellData.adjAmount > 0 ? [34, 139, 34] : [220, 20, 60];
+        const prevSize = doc.getFontSize();
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...color);
+        doc.text(
+          cellData.adjStr,
+          data.cell.x + data.cell.width - 3,
+          data.cell.y + data.cell.height / 2 + 2,
+          { align: 'right' }
+        );
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(prevSize);
       }
     });
 
@@ -1913,7 +1942,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             if (showAdjustments && adj && adj.amount !== 0) {
               const adjSign = adj.amount > 0 ? '+' : '-';
               const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-              row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
+              // Same single-line + right-overlay pattern as the static page.
+              row.push({ content: String(compVal), adjAmount: adj.amount, adjStr });
             } else {
               row.push(String(compVal));
             }
@@ -1995,27 +2025,43 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
               data.cell.styles.fillColor = [240, 240, 240];
               data.cell.styles.fontStyle = 'bold';
+              const cellData = data.row.raw?.[data.column.index];
+              if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+                if (cellData.adjAmount > 0) data.cell.styles.textColor = [34, 139, 34];
+                else if (cellData.adjAmount < 0) data.cell.styles.textColor = [220, 20, 60];
+              }
             }
             if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
               data.cell.styles.fillColor = [200, 230, 255];
               data.cell.styles.fontStyle = 'bold';
             }
-            // Color adjustment amounts: green for positive, red for negative
-            const cellData = data.row.raw?.[data.column.index];
-            if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
-              if (cellData.adjAmount > 0) {
-                data.cell.styles.textColor = [34, 139, 34]; // Green
-              } else if (cellData.adjAmount < 0) {
-                data.cell.styles.textColor = [220, 20, 60]; // Red
-              }
-            }
           },
           willDrawCell: function(data) {
-            // Convert object cells to string content before drawing
             const cellData = data.row.raw?.[data.column.index];
             if (cellData && typeof cellData === 'object' && cellData.content) {
-              data.cell.text = cellData.content.split('\n');
+              data.cell.text = [cellData.content];
             }
+          },
+          didDrawCell: function(data) {
+            if (data.section !== 'body') return;
+            const rawRow = data.row.raw;
+            if (!rawRow || rawRow[0] === 'Net Adjustment' || rawRow[0] === 'Adjusted Valuation') return;
+            const cellData = rawRow[data.column.index];
+            if (!cellData || typeof cellData !== 'object' || !cellData.adjStr) return;
+            const color = cellData.adjAmount > 0 ? [34, 139, 34] : [220, 20, 60];
+            const prevSize = doc.getFontSize();
+            doc.setFontSize(6.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...color);
+            doc.text(
+              cellData.adjStr,
+              data.cell.x + data.cell.width - 3,
+              data.cell.y + data.cell.height / 2 + 2,
+              { align: 'right' }
+            );
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(prevSize);
           }
         });
       }
