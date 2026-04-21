@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
+import { parsePowerCompPdf, buildPhotoPacketPdf } from '../../../lib/powercompPdfParser';
+import {
+  downloadPdf,
+  downloadAppealReportsZip,
+  safeFilenamePart,
+} from '../../../lib/appealReportBuilder';
 
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
@@ -110,6 +116,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [importExportFile, setImportExportFile] = useState(null);
   const [importExportResult, setImportExportResult] = useState(null);
   const [importExportProcessing, setImportExportProcessing] = useState(false);
+
+  // PowerComp PDF (photo packet) import state
+  const [showPwrCompPdfModal, setShowPwrCompPdfModal] = useState(false);
+  const [pwrCompPdfFile, setPwrCompPdfFile] = useState(null);
+  const [pwrCompPdfBytes, setPwrCompPdfBytes] = useState(null);
+  const [pwrCompPdfParsing, setPwrCompPdfParsing] = useState(false);
+  const [pwrCompPdfSaving, setPwrCompPdfSaving] = useState(false);
+  const [pwrCompPdfPreview, setPwrCompPdfPreview] = useState(null); // { totalPages, packets: [{...packet, matchedKey, matchedAddress}] }
+  const [pwrCompPdfSaveResult, setPwrCompPdfSaveResult] = useState(null); // { saved, replaced, failed }
+  const [pwrCompPdfSaveProgress, setPwrCompPdfSaveProgress] = useState(null); // { current, total, label, status: 'uploading'|'done'|'failed' }
+  const [printingAppealId, setPrintingAppealId] = useState(null);
+
+  // PowerComp CSV export selection modal. Lets the user pick which saved
+  // result sets to ship when a subject has more than one (e.g. assessor
+  // run + appellant run + manager rebuttal). All entries are checked by
+  // default; the user unchecks anything they don't want sent to BRT.
+  const [showExportCsvModal, setShowExportCsvModal] = useState(false);
+  const [exportCsvLoading, setExportCsvLoading] = useState(false);
+  const [exportCsvCandidates, setExportCsvCandidates] = useState([]); // [{id, checked, ...}]
+
+  const [showBatchPrintModal, setShowBatchPrintModal] = useState(false);
+  const [batchPrintScope, setBatchPrintScope] = useState('selected'); // 'selected' | 'filtered'
+  const [batchPrintRunning, setBatchPrintRunning] = useState(false);
+  const [batchPrintProgress, setBatchPrintProgress] = useState(null); // { current, total, label }
+  const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
+  const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
+
+  // Appeal reports (uploaded from Detailed tab). Bucket is the source of truth
+  // for what the per-row print + batch print actually output.
+  const [appealReportsByKey, setAppealReportsByKey] = useState({}); // composite_key -> { storage_path, source_filename, page_count, uploaded_at }
+
+  // Bulk-upload state for already-existing local PDFs
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [bulkUploadFiles, setBulkUploadFiles] = useState([]); // [{ file, key, status, message }]
+  const [bulkUploadRunning, setBulkUploadRunning] = useState(false);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState(null); // { current, total, label }
 
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
@@ -1312,6 +1354,64 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
   };
 
+  // Load PowerComp photo-packet metadata for chip + per-row export use.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('appeal_powercomp_photos')
+        .select('property_composite_key, storage_path, page_count, source_filename, imported_at')
+        .eq('job_id', jobData.id);
+      if (cancelled) return;
+      if (error) {
+        console.error('load photo packets failed', error);
+        return;
+      }
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setPhotoPacketsByKey(map);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  // Load uploaded appeal reports for this job. The Appeal Log row chip and
+  // the print pipeline both key off this map.
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('appeal_reports')
+        .select('property_composite_key, storage_path, source_filename, page_count, uploaded_at')
+        .eq('job_id', jobData.id);
+      if (cancelled) return;
+      if (error) {
+        console.error('load appeal reports failed', error);
+        return;
+      }
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setAppealReportsByKey(map);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  const loadAppealReports = async () => {
+    if (!jobData?.id) return;
+    const { data, error } = await supabase
+      .from('appeal_reports')
+      .select('property_composite_key, storage_path, source_filename, page_count, uploaded_at')
+      .eq('job_id', jobData.id);
+    if (error) {
+      console.error('load appeal reports failed', error);
+      return;
+    }
+    const map = {};
+    for (const row of data || []) map[row.property_composite_key] = row;
+    setAppealReportsByKey(map);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1843,6 +1943,528 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
   };
 
+  // ==================== POWERCOMP PHOTO PACKET (PDF) IMPORT ====================
+  // Match a parsed packet (block/lot/qual/card) against a property in this job.
+  const matchPacketToProperty = (packet) => {
+    if (!packet || !Array.isArray(properties) || !properties.length) return null;
+    const normBLQ = (v) => String(v ?? '').trim().toUpperCase();
+    const pBlock = normBLQ(packet.block);
+    const pLot = normBLQ(packet.lot);
+    const pQual = normBLQ(packet.qualifier);
+    const pCard = normBLQ(packet.card);
+
+    // Step 1: filter by block/lot/qualifier first
+    const candidates = properties.filter((p) => {
+      if (normBLQ(p.property_block) !== pBlock) return false;
+      if (normBLQ(p.property_lot) !== pLot) return false;
+      const q = normBLQ(p.property_qualifier);
+      // PowerComp prints blank qualifier; treat NULL/'' as equivalent.
+      if ((pQual || '') !== (q || '')) return false;
+      return true;
+    });
+    if (!candidates.length) return null;
+
+    // Step 2: prefer the matching card; if none matches, fall back to the
+    // vendor's "main" card (1 or M) so we always have a target.
+    const byCard = candidates.find((p) => normBLQ(p.property_addl_card) === pCard);
+    if (byCard) return byCard;
+    const mainCard = candidates.find((p) => {
+      const c = normBLQ(p.property_addl_card);
+      return c === '1' || c === 'M' || c === '';
+    });
+    return mainCard || candidates[0];
+  };
+
+  // Step 1 of the modal: parse + match (no writes).
+  const handleParsePwrCompPdf = async () => {
+    if (!pwrCompPdfFile) return;
+    setPwrCompPdfParsing(true);
+    setPwrCompPdfPreview(null);
+    setPwrCompPdfSaveResult(null);
+    try {
+      // NOTE: pdfjs transfers ownership of the Uint8Array we hand it to its
+      // worker, which detaches the underlying ArrayBuffer. If we later pass
+      // those same bytes to pdf-lib it sees an empty buffer and throws
+      // "No PDF header found". So we keep one pristine copy for pdf-lib and
+      // give pdfjs its own copy to consume.
+      const original = new Uint8Array(await pwrCompPdfFile.arrayBuffer());
+      setPwrCompPdfBytes(original);
+      const forParser = new Uint8Array(original); // independent copy
+      const parsed = await parsePowerCompPdf(forParser);
+      const packets = parsed.packets.map((pkt) => {
+        const match = matchPacketToProperty(pkt);
+        return {
+          ...pkt,
+          matchedKey: match ? match.property_composite_key : null,
+          matchedAddress: match ? match.property_location : null,
+        };
+      });
+      setPwrCompPdfPreview({ totalPages: parsed.totalPages, packets });
+    } catch (err) {
+      console.error('PowerComp PDF parse error:', err);
+      alert(`Could not read that PDF: ${err.message}`);
+    } finally {
+      setPwrCompPdfParsing(false);
+    }
+  };
+
+  // Step 2 of the modal: build per-subject sub-PDFs, upload, upsert metadata.
+  const handleSavePwrCompPackets = async () => {
+    if (!pwrCompPdfPreview || !pwrCompPdfBytes || !jobData?.id) return;
+    const matched = pwrCompPdfPreview.packets.filter(
+      (p) => p.matchedKey && p.photoPageIndices.length > 0,
+    );
+    if (!matched.length) {
+      alert('No matched packets with photo pages to save.');
+      return;
+    }
+    setPwrCompPdfSaving(true);
+    setPwrCompPdfSaveProgress({ current: 0, total: matched.length, label: '', status: 'uploading' });
+    let saved = 0, replaced = 0, failed = 0;
+    try {
+      for (let i = 0; i < matched.length; i++) {
+        const pkt = matched[i];
+        const label = `${pkt.block}-${pkt.lot}${pkt.qualifier ? '-' + pkt.qualifier : ''}${pkt.card ? ' / ' + pkt.card : ''}`;
+        setPwrCompPdfSaveProgress({ current: i + 1, total: matched.length, label, status: 'uploading' });
+        try {
+          // Look up the appeal number for this subject so the photo
+          // packet header can show "Appeal #: ..." like the rest of the
+          // report. Falls back to '' if no appeal is on file.
+          const matchingAppeal = appeals.find(
+            (a) =>
+              (a.property_composite_key || '') === pkt.matchedKey,
+          );
+          const appealNumber = matchingAppeal?.appeal_number || '';
+          // Give pdf-lib its own copy so nothing downstream can detach our master bytes.
+          const subPdf = await buildPhotoPacketPdf(
+            new Uint8Array(pwrCompPdfBytes),
+            pkt,
+            { appealNumber },
+          );
+          if (!subPdf) continue;
+          const path = `${jobData.id}/${pkt.matchedKey}.pdf`;
+          const { error: upErr } = await supabase
+            .storage
+            .from('powercomp-photos')
+            .upload(path, subPdf, {
+              contentType: 'application/pdf',
+              upsert: true,
+            });
+          if (upErr) throw upErr;
+          const wasExisting = !!photoPacketsByKey[pkt.matchedKey];
+          const { error: dbErr } = await supabase
+            .from('appeal_powercomp_photos')
+            .upsert(
+              {
+                job_id: jobData.id,
+                property_composite_key: pkt.matchedKey,
+                storage_path: path,
+                page_count: pkt.photoPageIndices.length,
+                source_filename: pwrCompPdfFile?.name || null,
+                imported_at: new Date().toISOString(),
+              },
+              { onConflict: 'job_id,property_composite_key' },
+            );
+          if (dbErr) throw dbErr;
+          if (wasExisting) replaced++; else saved++;
+        } catch (e) {
+          console.error('packet save failed', pkt, e);
+          failed++;
+        }
+      }
+      await loadPhotoPackets();
+      setPwrCompPdfSaveResult({ saved, replaced, failed });
+      setPwrCompPdfSaveProgress((prev) => prev ? { ...prev, status: failed > 0 ? 'failed' : 'done' } : null);
+    } finally {
+      setPwrCompPdfSaving(false);
+    }
+  };
+
+  const loadPhotoPackets = async () => {
+    if (!jobData?.id) return;
+    const { data, error } = await supabase
+      .from('appeal_powercomp_photos')
+      .select('property_composite_key, storage_path, page_count, source_filename, imported_at')
+      .eq('job_id', jobData.id);
+    if (error) {
+      console.error('load photo packets failed', error);
+      return;
+    }
+    const map = {};
+    for (const row of data || []) map[row.property_composite_key] = row;
+    setPhotoPacketsByKey(map);
+  };
+
+  const handleRemovePhotoPacket = async (compositeKey) => {
+    const row = photoPacketsByKey[compositeKey];
+    if (!row) return;
+    if (!window.confirm('Remove the imported PowerComp photo packet for this subject?')) return;
+    await supabase.storage.from('powercomp-photos').remove([row.storage_path]);
+    await supabase
+      .from('appeal_powercomp_photos')
+      .delete()
+      .eq('job_id', jobData.id)
+      .eq('property_composite_key', compositeKey);
+    await loadPhotoPackets();
+  };
+
+  const handlePreviewPhotoPacket = async (compositeKey) => {
+    const row = photoPacketsByKey[compositeKey];
+    if (!row) return;
+    const { data, error } = await supabase
+      .storage
+      .from('powercomp-photos')
+      .createSignedUrl(row.storage_path, 60 * 5);
+    if (error) {
+      alert(`Could not open packet: ${error.message}`);
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // ==================== APPEAL REPORT (bucket-backed, per-row + batch) ====================
+
+  // Build the composite key the same way the matcher / metadata layer does.
+  const compositeKeyForAppeal = (appeal) => {
+    if (!appeal) return '';
+    if (appeal.property_composite_key) return appeal.property_composite_key;
+    const norm = (v) => (v == null ? '' : String(v).trim());
+    return `${norm(appeal.property_block)}-${norm(appeal.property_lot)}-${norm(appeal.property_qualifier)}`;
+  };
+
+  // Whatever PDF was last uploaded to appeal-reports for this subject *is* the
+  // defense report. No more interpreting saved CME sets — that decision is made
+  // on the Detailed tab when the user clicks "Save to Appeal Log".
+  const getReportForAppeal = (appeal) => {
+    if (!appeal) return null;
+    const key = compositeKeyForAppeal(appeal);
+    return appealReportsByKey[key] || null;
+  };
+
+  const muniLabel = (jobData?.municipality || jobData?.name || '').toString();
+
+  const fetchPhotoPacketBytes = async (compositeKey) => {
+    const meta = photoPacketsByKey[compositeKey];
+    if (!meta) return null;
+    const { data, error } = await supabase
+      .storage
+      .from('powercomp-photos')
+      .download(meta.storage_path);
+    if (error || !data) {
+      console.warn('photo packet download failed', meta, error);
+      return null;
+    }
+    return new Uint8Array(await data.arrayBuffer());
+  };
+
+  // Download the saved appeal report PDF for this subject from the bucket and,
+  // if a PowerComp photo packet exists, append its pages using pdf-lib.
+  // Returns Uint8Array of the merged PDF, or null if no report exists.
+  const buildPrintablePdfForAppeal = async (appeal) => {
+    const reportMeta = getReportForAppeal(appeal);
+    if (!reportMeta) return { bytes: null, hasPhotos: false };
+
+    const { data: rptBlob, error: rptErr } = await supabase
+      .storage
+      .from('appeal-reports')
+      .download(reportMeta.storage_path);
+    if (rptErr || !rptBlob) {
+      throw new Error(`Could not download saved report: ${rptErr?.message || 'unknown error'}`);
+    }
+    const reportBytes = new Uint8Array(await rptBlob.arrayBuffer());
+
+    const key = compositeKeyForAppeal(appeal);
+    const photoBytes = await fetchPhotoPacketBytes(key);
+
+    // Even with no photos, we still want to enforce the canonical section
+    // order in the saved report:
+    //   1. Static comp grid (Detailed Evaluation)
+    //   2. Dynamic Adjustments
+    //   3. PowerComp photo packet (if present)
+    //   4. Subject & Comps Location Map (if present)
+    //   5. Appellant Evidence Summary (if present)
+    //   6. Chapter 123 Test (Director's Ratio)
+    // Anything we can't classify gets appended at the end in its original
+    // order so we never silently drop a page.
+    let PDFDocument;
+    try {
+      ({ PDFDocument } = await import('pdf-lib'));
+    } catch (err) {
+      if (/Loading chunk|Failed to fetch dynamically imported module/i.test(err?.message || '')) {
+        throw new Error('App was updated since this tab loaded. Please refresh the page and try again.');
+      }
+      throw err;
+    }
+    const reportDoc = await PDFDocument.load(reportBytes);
+
+    // Classify each report page by scanning its text content.
+    const buckets = {
+      static: [],
+      dynamic: [],
+      map: [],
+      appellant: [],
+      chapter123: [],
+      other: [],
+    };
+    try {
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+      const scanCopy = new Uint8Array(reportBytes.byteLength);
+      scanCopy.set(reportBytes);
+      const loadingTask = pdfjs.getDocument({ data: scanCopy });
+      const pdfDoc = await loadingTask.promise;
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const textContent = await page.getTextContent();
+        const text = textContent.items.map((it) => it.str).join(' ').toLowerCase();
+        const idx = i - 1;
+        if (text.includes('chapter 123')) {
+          buckets.chapter123.push(idx);
+        } else if (text.includes('subject & comps location map') || text.includes('subject &amp; comps location map')) {
+          buckets.map.push(idx);
+        } else if (text.includes('appellant evidence summary') || text.includes('no evidence supplied by appellant')) {
+          buckets.appellant.push(idx);
+        } else if (text.includes('dynamic adjustments')) {
+          buckets.dynamic.push(idx);
+        } else if (text.includes('detailed evaluation') || idx === 0) {
+          // First page (or any page that includes the comp grid header) is
+          // treated as the static section. Defaulting to page 0 keeps things
+          // sane for legacy exports that don't carry the literal header text.
+          buckets.static.push(idx);
+        } else {
+          buckets.other.push(idx);
+        }
+        try { await page.cleanup?.(); } catch (_) {}
+      }
+      try { await pdfDoc.destroy(); } catch (_) {}
+    } catch (e) {
+      // If the scan fails for any reason, fall back to original order with
+      // photos appended at the end — same as legacy behavior.
+      console.warn('pdfjs section scan failed; falling back to original order', e);
+      buckets.static = reportDoc.getPageIndices();
+    }
+
+    const out = await PDFDocument.create();
+    const reportPages = await out.copyPages(reportDoc, reportDoc.getPageIndices());
+    const addReportRange = (indices) => {
+      for (const i of indices) {
+        if (i >= 0 && i < reportPages.length) out.addPage(reportPages[i]);
+      }
+    };
+
+    // 1. Static comp grid
+    addReportRange(buckets.static);
+    // 2. Dynamic Adjustments
+    addReportRange(buckets.dynamic);
+    // 3. Photo packet
+    let hasPhotos = false;
+    if (photoBytes) {
+      const photoDoc = await PDFDocument.load(photoBytes);
+      const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+      for (const p of photoPages) out.addPage(p);
+      hasPhotos = true;
+    }
+    // 4. Map
+    addReportRange(buckets.map);
+    // 5. Appellant Evidence
+    addReportRange(buckets.appellant);
+    // 6. Chapter 123
+    addReportRange(buckets.chapter123);
+    // Anything we couldn't classify
+    addReportRange(buckets.other);
+
+    // Safety: if classification missed every page (shouldn't happen), make
+    // sure we don't return an empty PDF.
+    if (out.getPageCount() === 0) {
+      for (const p of reportPages) out.addPage(p);
+      if (photoBytes) {
+        const photoDoc = await PDFDocument.load(photoBytes);
+        const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+        for (const p of photoPages) out.addPage(p);
+        hasPhotos = true;
+      }
+    }
+
+    return { bytes: await out.save(), hasPhotos };
+  };
+
+  const handlePrintAppeal = async (appeal) => {
+    if (!appeal) return;
+    const reportMeta = getReportForAppeal(appeal);
+    if (!reportMeta) {
+      alert('No saved report on file for this subject. Run CME → Detailed → check "Save to Appeal Log" → Download PDF first.');
+      return;
+    }
+    setPrintingAppealId(appeal.id);
+    try {
+      const { bytes, hasPhotos } = await buildPrintablePdfForAppeal(appeal);
+      const key = compositeKeyForAppeal(appeal);
+      const base = safeFilenamePart(appeal.appeal_number || key || 'report');
+      const fname = `Appeal_${base}${hasPhotos ? '_with_Photos' : ''}.pdf`;
+      downloadPdf(bytes, fname);
+    } catch (e) {
+      console.error('Print appeal failed', e);
+      alert(`Could not print appeal report: ${e.message}`);
+    } finally {
+      setPrintingAppealId(null);
+    }
+  };
+
+  const handleRunBatchPrint = async () => {
+    const sourceList =
+      batchPrintScope === 'selected'
+        ? filteredAppeals.filter((a) => selectedAppeals.has(a.id))
+        : filteredAppeals;
+    if (!sourceList.length) {
+      alert('Nothing to print for the selected scope.');
+      return;
+    }
+    setBatchPrintRunning(true);
+    setBatchPrintResult(null);
+    setBatchPrintProgress({ current: 0, total: sourceList.length, label: '' });
+    let built = 0, withPhotos = 0, failed = 0, skipped = 0;
+    const reports = [];
+    try {
+      for (let i = 0; i < sourceList.length; i++) {
+        const appeal = sourceList[i];
+        const key = compositeKeyForAppeal(appeal);
+        const label =
+          `${appeal.property_block || '-'}-${appeal.property_lot || '-'}` +
+          (appeal.property_qualifier ? `-${appeal.property_qualifier}` : '');
+        setBatchPrintProgress({ current: i + 1, total: sourceList.length, label });
+        try {
+          const reportMeta = getReportForAppeal(appeal);
+          if (!reportMeta) {
+            skipped++;
+            continue; // No saved report, skip silently.
+          }
+          const { bytes, hasPhotos } = await buildPrintablePdfForAppeal(appeal);
+          if (!bytes) {
+            skipped++;
+            continue;
+          }
+          if (hasPhotos) withPhotos++;
+          built++;
+          const base = safeFilenamePart(appeal.appeal_number || label);
+          const fname = `Appeal_${base}${hasPhotos ? '_with_Photos' : ''}.pdf`;
+          reports.push({ filename: fname, bytes });
+        } catch (e) {
+          console.error('batch report failed', appeal, e);
+          failed++;
+        }
+      }
+      if (reports.length === 1) {
+        downloadPdf(reports[0].bytes, reports[0].filename);
+      } else if (reports.length > 1) {
+        const muni = safeFilenamePart(muniLabel || 'job');
+        const stamp = new Date().toISOString().slice(0, 10);
+        await downloadAppealReportsZip(reports, `${muni}_appeal_reports_${stamp}.zip`);
+      }
+      setBatchPrintResult({ built, withPhotos, failed, skipped });
+    } finally {
+      setBatchPrintRunning(false);
+    }
+  };
+
+  // ==================== BULK UPLOAD EXISTING APPEAL REPORT PDFs ====================
+  // Auto-matches each file by the CME export naming convention:
+  //   CME_<ccdd>_<block>_<lot>[_<qualifier>].pdf
+  // Matched files upsert into the appeal-reports bucket and metadata table.
+  // Unmatched files are listed so the user can decide what to do.
+
+  const parseCmeFilename = (filename) => {
+    if (!filename) return null;
+    const m = String(filename).match(/^CME_[^_]+_([^_]+)_([^_.]+)(?:_([^.]+))?\.pdf$/i);
+    if (!m) return null;
+    const [, block, lot, qualifier] = m;
+    return {
+      block: block || '',
+      lot: lot || '',
+      qualifier: qualifier || '',
+      key: `${block}-${lot}-${qualifier || ''}`,
+    };
+  };
+
+  const matchUploadFileToProperty = (parsed) => {
+    if (!parsed) return null;
+    const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
+    return properties.find((p) =>
+      norm(p.property_block) === norm(parsed.block) &&
+      norm(p.property_lot) === norm(parsed.lot) &&
+      norm(p.property_qualifier) === norm(parsed.qualifier),
+    ) || null;
+  };
+
+  const handleBulkUploadFilesChosen = (fileList) => {
+    const arr = Array.from(fileList || []).filter((f) => /\.pdf$/i.test(f.name));
+    const enriched = arr.map((file) => {
+      const parsed = parseCmeFilename(file.name);
+      const property = parsed ? matchUploadFileToProperty(parsed) : null;
+      const key = property ? property.property_composite_key : (parsed ? parsed.key : null);
+      return {
+        file,
+        parsedKey: key,
+        matchedAddress: property ? property.property_location : null,
+        status: parsed && property ? 'ready' : (parsed ? 'no_property' : 'unparseable'),
+        message: parsed && property
+          ? null
+          : (parsed ? `No property in this job matches ${parsed.key}` : 'Filename does not match CME naming pattern'),
+      };
+    });
+    setBulkUploadFiles(enriched);
+  };
+
+  const handleRunBulkUpload = async () => {
+    if (!jobData?.id) return;
+    const ready = bulkUploadFiles.filter((f) => f.status === 'ready');
+    if (!ready.length) {
+      alert('No files match the CME naming pattern AND a property in this job.');
+      return;
+    }
+    setBulkUploadRunning(true);
+    setBulkUploadProgress({ current: 0, total: ready.length, label: '' });
+    let uploaded = 0, failed = 0;
+    try {
+      for (let i = 0; i < ready.length; i++) {
+        const item = ready[i];
+        setBulkUploadProgress({ current: i + 1, total: ready.length, label: item.file.name });
+        try {
+          const path = `${jobData.id}/${item.parsedKey}.pdf`;
+          const { error: upErr } = await supabase
+            .storage
+            .from('appeal-reports')
+            .upload(path, item.file, {
+              contentType: 'application/pdf',
+              upsert: true,
+            });
+          if (upErr) throw upErr;
+          const { error: dbErr } = await supabase
+            .from('appeal_reports')
+            .upsert(
+              {
+                job_id: jobData.id,
+                property_composite_key: item.parsedKey,
+                storage_path: path,
+                source_filename: item.file.name,
+                uploaded_at: new Date().toISOString(),
+              },
+              { onConflict: 'job_id,property_composite_key' },
+            );
+          if (dbErr) throw dbErr;
+          uploaded++;
+        } catch (e) {
+          console.error('bulk upload row failed', item, e);
+          failed++;
+        }
+      }
+      await loadAppealReports();
+      alert(`Done. ✓ ${uploaded} uploaded${failed ? ` · ✗ ${failed} failed` : ''}.`);
+      setBulkUploadFiles([]);
+    } finally {
+      setBulkUploadRunning(false);
+      setBulkUploadProgress(null);
+    }
+  };
+
   // ==================== EXPORT HANDLER ====================
 
   const handleExportToExcel = () => {
@@ -2292,14 +2914,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   };
 
   // ==================== EXPORT SAVED COMPS CSV (for BRT PowerComp) ====================
-  // Pulls named CME result sets from job_cme_result_sets (the "Saved Result Sets" the
-  // user creates from Sales Comparison → Search & Results), joins to the in-memory
-  // appeals list by subject block/lot/qualifier to attach an appeal number, and
-  // emits one row per appeal with the subject + each comp's block/lot/qualifier.
-  // If multiple result sets contain the same subject, the most recently saved set wins.
-  // Only appeals that actually have saved comps are included.
-  const handleExportSavedCompsCsv = async () => {
+  // Two-step flow:
+  //   1. handleOpenExportCsvModal() — fetch every saved result set, build a
+  //      flat list of "candidates" (one per subject per result set). All
+  //      candidates start checked. Opens the selection modal so the user can
+  //      uncheck the runs they don't want shipped (e.g. an assessor run when
+  //      they only want the appellant run, or a manager's rebuttal that
+  //      shouldn't go to BRT).
+  //   2. handleConfirmExportCsv() — build the CSV from the checked
+  //      candidates only and trigger the download.
+  // Only candidates with an appeal number are shown; PowerComp keys on the
+  // appeal # so anything without one would be silently dropped anyway.
+  const handleOpenExportCsvModal = async () => {
     if (!jobData?.id) return;
+    setExportCsvLoading(true);
     try {
       const { data: resultSets, error } = await supabase
         .from('job_cme_result_sets')
@@ -2309,7 +2937,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         .order('created_at', { ascending: false });
       if (error) throw error;
 
-      // Build appeal_number lookup: composite "block-lot-qualifier" → appeal
       const norm = (v) => (v == null ? '' : String(v).trim());
       const compositeOf = (block, lot, qualifier) =>
         `${norm(block)}-${norm(lot)}-${norm(qualifier)}`;
@@ -2320,108 +2947,134 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         if (key && !appealByKey.has(key)) appealByKey.set(key, a);
       });
 
-      // Walk result sets newest-first; keep the first (most-recent) occurrence per subject.
-      // Each `result` has full property objects: subject + comparables[].
-      const seenSubjects = new Set();
-      const rows = [];
-      let maxComps = 0;
-
+      const candidates = [];
       (resultSets || []).forEach(rs => {
-        (rs.results || []).forEach(r => {
+        (rs.results || []).forEach((r, idx) => {
           const subj = r?.subject;
           if (!subj) return;
           const subjKey = subj.property_composite_key
             || compositeOf(subj.property_block, subj.property_lot, subj.property_qualifier);
-          if (!subjKey || seenSubjects.has(subjKey)) return;
+          if (!subjKey) return;
+          const appeal = appealByKey.get(subjKey);
+          if (!appeal?.appeal_number) return; // PowerComp needs an appeal #
 
           const comps = (Array.isArray(r.comparables) ? r.comparables : [])
             .filter(c => c && (c.property_block || c.property_lot));
           if (comps.length === 0) return;
 
-          if (comps.length > maxComps) maxComps = comps.length;
-          seenSubjects.add(subjKey);
-
-          rows.push({
-            appeal_number: appealByKey.get(subjKey)?.appeal_number || '',
-            result_set_name: rs.name || '',
+          candidates.push({
+            id: `${rs.id}::${subjKey}::${idx}`,
+            checked: true,
+            subjectKey: subjKey,
             subj_block: norm(subj.property_block),
             subj_lot: norm(subj.property_lot),
             subj_qualifier: norm(subj.property_qualifier),
+            subj_address: subj.property_location || '',
+            appeal_number: appeal.appeal_number,
+            result_set_id: rs.id,
+            result_set_name: rs.name || '(unnamed)',
+            saved_at: rs.updated_at || rs.created_at || null,
             comps: comps.map(c => ({
               block: norm(c.property_block),
               lot: norm(c.property_lot),
-              qualifier: norm(c.property_qualifier)
-            }))
+              qualifier: norm(c.property_qualifier),
+            })),
           });
         });
       });
 
-      // Drop rows without an appeal number — PowerComp needs the appeal# to attach comps
-      const exportable = rows.filter(r => r.appeal_number);
-      if (exportable.length === 0) {
+      if (!candidates.length) {
         alert(
           'No saved result sets matched any appeals.\n\n' +
           'Run an evaluation in Sales Comparison (CME) → Search & Results, click "Save Result Set", ' +
-          'then come back here and export. Only subjects that match an appeal in this log are included.'
+          'then come back here. Only subjects with an appeal number are shown.'
         );
         return;
       }
 
-      // Header — appeal_number first so PowerComp can key on it
-      const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
-      for (let i = 1; i <= maxComps; i++) {
-        header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
-      }
-
-      const escape = (val) => {
-        const s = val == null ? '' : String(val);
-        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-        return s;
-      };
-
-      // Excel-safe wrapper for block/lot/qualifier values. Without this Excel
-      // converts "10.10" -> 10.1 and drops trailing zeros (".100" becomes ".1"),
-      // which breaks BLQ identifiers like "10.100" or "5.10".
-      // Using the ="..." formula syntax forces Excel to import the cell as text
-      // verbatim while still being readable as a normal string by other tools.
-      const textCell = (val) => {
-        const s = val == null ? '' : String(val);
-        if (s === '') return '';
-        const inner = s.replace(/"/g, '""');
-        return `"=""${inner}"""`;
-      };
-
-      const lines = [header.map(escape).join(',')];
-      exportable.forEach(r => {
-        const cells = [
-          escape(r.appeal_number),
-          escape(r.result_set_name),
-          textCell(r.subj_block),
-          textCell(r.subj_lot),
-          textCell(r.subj_qualifier)
-        ];
-        for (let i = 0; i < maxComps; i++) {
-          const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
-          cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+      // Sort by subject (so multiple runs for the same subject appear
+      // adjacent), then by saved date desc within each subject group.
+      candidates.sort((a, b) => {
+        if (a.subjectKey !== b.subjectKey) {
+          return a.subjectKey.localeCompare(b.subjectKey);
         }
-        lines.push(cells.join(','));
+        return (b.saved_at || '').localeCompare(a.saved_at || '');
       });
 
-      const csv = lines.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
-      a.href = url;
-      a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setExportCsvCandidates(candidates);
+      setShowExportCsvModal(true);
     } catch (e) {
-      console.error('Export saved comps CSV failed:', e);
-      alert('Export failed: ' + (e?.message || e));
+      console.error('Export saved comps CSV (open modal) failed:', e);
+      alert('Could not load saved result sets: ' + (e?.message || e));
+    } finally {
+      setExportCsvLoading(false);
     }
+  };
+
+  const handleConfirmExportCsv = () => {
+    const selected = exportCsvCandidates.filter(c => c.checked);
+    if (!selected.length) {
+      alert('Nothing selected — check at least one result set to export.');
+      return;
+    }
+
+    const maxComps = selected.reduce((m, r) => Math.max(m, r.comps.length), 0);
+    const header = ['Appeal #', 'Result Set', 'Subject Block', 'Subject Lot', 'Subject Qualifier'];
+    for (let i = 1; i <= maxComps; i++) {
+      header.push(`Comp ${i} Block`, `Comp ${i} Lot`, `Comp ${i} Qualifier`);
+    }
+
+    const escape = (val) => {
+      const s = val == null ? '' : String(val);
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    // Excel-safe wrapper so block/lot strings like "10.100" don't get
+    // truncated to numbers.
+    const textCell = (val) => {
+      const s = val == null ? '' : String(val);
+      if (s === '') return '';
+      const inner = s.replace(/"/g, '""');
+      return `"=""${inner}"""`;
+    };
+
+    const lines = [header.map(escape).join(',')];
+    selected.forEach(r => {
+      const cells = [
+        escape(r.appeal_number),
+        escape(r.result_set_name),
+        textCell(r.subj_block),
+        textCell(r.subj_lot),
+        textCell(r.subj_qualifier),
+      ];
+      for (let i = 0; i < maxComps; i++) {
+        const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
+        cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+      }
+      lines.push(cells.join(','));
+    });
+
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const muni = (jobData?.municipality || jobData?.name || 'job').replace(/[^A-Za-z0-9]+/g, '_');
+    a.href = url;
+    a.download = `${muni}_appeal_comps_${selectedYear}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setShowExportCsvModal(false);
+  };
+
+  const toggleExportCsvCandidate = (id) => {
+    setExportCsvCandidates(prev =>
+      prev.map(c => (c.id === id ? { ...c, checked: !c.checked } : c)),
+    );
+  };
+  const setAllExportCsvCandidates = (checked) => {
+    setExportCsvCandidates(prev => prev.map(c => ({ ...c, checked })));
   };
 
   // ==================== RENDER ====================
@@ -2436,15 +3089,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
           >
             + Add Appeal
-          </button>
-          <button
-            onClick={handleExportSavedCompsCsv}
-            title="Export saved CME comps as a CSV for BRT PowerComp (only appeals with saved comps are included)"
-            style={{ backgroundColor: '#ea580c', color: 'white' }}
-            className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV (PowerComp)
           </button>
         </div>
         <div className="flex items-center gap-4">
@@ -3174,15 +3818,61 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                     {appeal.judgment_value !== null && appeal.judgment_value !== undefined ? formatCurrency(appeal.loss) : '-'}
                   </td>
 
-                  {/* DELETE BUTTON */}
-                  <td className="px-3 py-2 whitespace-nowrap text-center">
-                    <button
-                      onClick={() => handleDeleteAppeal(appeal.id)}
-                      className="text-gray-400 hover:text-red-600 transition-colors p-1 hover:bg-red-50 rounded"
-                      title="Delete appeal"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {/* ACTION BUTTONS */}
+                  <td className="px-3 py-2 whitespace-nowrap text-center relative">
+                    <div className="flex items-center justify-center gap-1">
+                      {(() => {
+                        const key = compositeKeyForAppeal(appeal);
+                        const hasPacket = !!photoPacketsByKey[key];
+                        const reportMeta = appealReportsByKey[key];
+                        const printable = !!reportMeta;
+                        const chipClass = printable
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-gray-100 text-gray-500 border-gray-200';
+                        const chipLabel = printable ? 'Report ✓' : 'No report';
+                        const chipTitle = printable
+                          ? `Report on file: ${reportMeta.source_filename || '(unnamed)'} · uploaded ${new Date(reportMeta.uploaded_at).toLocaleDateString()} · ${reportMeta.page_count || '?'} pages`
+                          : 'No saved report. Run CME → Detailed → check "Save to Appeal Log" → Download PDF.';
+                        return (
+                          <>
+                            <span
+                              title={chipTitle}
+                              className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${chipClass}`}
+                            >
+                              {chipLabel}
+                            </span>
+                            {hasPacket && (
+                              <button
+                                onClick={() => handlePreviewPhotoPacket(key)}
+                                className="text-teal-600 hover:text-teal-800 p-1 hover:bg-teal-50 rounded"
+                                title={`PowerComp photo packet on file (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handlePrintAppeal(appeal)}
+                              disabled={printingAppealId === appeal.id || !printable}
+                              className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={
+                                !printable
+                                  ? 'No saved report — generate one from CME → Detailed first'
+                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report')
+                              }
+                            >
+                              <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAppeal(appeal.id)}
+                              className="text-gray-400 hover:text-red-600 transition-colors p-1 hover:bg-red-50 rounded"
+                              title="Delete appeal"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </td>
                 </tr>
               );
@@ -3238,6 +3928,298 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* POWERCOMP ROUND-TRIP ACTIONS (kept under the table to reduce toolbar crowding) */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[200px]">
+          <p className="text-sm font-semibold text-gray-800">PowerComp Round-Trip</p>
+          <p className="text-xs text-gray-500">
+            Export saved comps to BRT PowerComp, then re-import the returned Batch Taxpayer Report PDF to attach photo packets per subject.
+          </p>
+        </div>
+        <button
+          onClick={handleOpenExportCsvModal}
+          disabled={exportCsvLoading}
+          title="Pick which saved CME runs to ship to PowerComp (handy when a subject has multiple saved sets — assessor vs. appellant runs, etc.)"
+          style={{ backgroundColor: '#ea580c', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+        >
+          <Download className="w-4 h-4" />
+          {exportCsvLoading ? 'Loading…' : 'Export CSV (PowerComp)'}
+        </button>
+        <button
+          onClick={() => {
+            setShowPwrCompPdfModal(true);
+            setPwrCompPdfFile(null);
+            setPwrCompPdfBytes(null);
+            setPwrCompPdfPreview(null);
+            setPwrCompPdfSaveResult(null);
+            setPwrCompPdfSaveProgress(null);
+          }}
+          title="Import a PowerComp Batch Taxpayer Report PDF and attach photo packets to each subject"
+          style={{ backgroundColor: '#0f766e', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <FileText className="w-4 h-4" />
+          Import Batch PwrComp PDF
+        </button>
+        <button
+          onClick={() => {
+            setShowBatchPrintModal(true);
+            setBatchPrintResult(null);
+            setBatchPrintProgress(null);
+            setBatchPrintScope(selectedAppeals.size > 0 ? 'selected' : 'filtered');
+          }}
+          title="Generate one Appeal Report PDF per subject (with photo packets where available) and download as a zip"
+          style={{ backgroundColor: '#1d4ed8', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <Printer className="w-4 h-4" />
+          Batch Print Appeals
+        </button>
+        <button
+          onClick={() => {
+            setShowBulkUploadModal(true);
+            setBulkUploadFiles([]);
+            setBulkUploadProgress(null);
+          }}
+          title="Bulk-upload existing appeal report PDFs (auto-matched by CME filename) into the appeal-reports bucket"
+          style={{ backgroundColor: '#7c3aed', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          Bulk Upload Reports
+        </button>
+      </div>
+
+      {/* BULK UPLOAD MODAL */}
+      {showBulkUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[85vh]">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-900">Bulk Upload Appeal Reports</h2>
+              <button onClick={() => setShowBulkUploadModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              Drop or pick PDFs you've already exported from CME → Detailed. Files are auto-matched by their CME filename (<code>CME_ccdd_block_lot_qualifier.pdf</code>) to a property in this job and uploaded to the appeal-reports bucket. Existing entries are replaced.
+            </div>
+
+            <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center hover:bg-purple-50/40">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                id="bulk-upload-input"
+                className="hidden"
+                onChange={(e) => handleBulkUploadFilesChosen(e.target.files)}
+              />
+              <label htmlFor="bulk-upload-input" className="cursor-pointer">
+                <Upload className="w-8 h-8 text-purple-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-700">
+                  {bulkUploadFiles.length > 0 ? `${bulkUploadFiles.length} file(s) selected — click to choose a different set` : 'Click to choose PDF files (multi-select)'}
+                </p>
+              </label>
+            </div>
+
+            {bulkUploadFiles.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between text-xs">
+                  <span className="font-semibold text-gray-700">
+                    {bulkUploadFiles.filter((f) => f.status === 'ready').length} ready · {bulkUploadFiles.filter((f) => f.status !== 'ready').length} need attention
+                  </span>
+                  <span className="text-gray-500">
+                    ✓ ready · ⚠ no property match · ✗ unparseable
+                  </span>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-1.5">File</th>
+                        <th className="text-left px-3 py-1.5">Subject</th>
+                        <th className="text-center px-3 py-1.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {bulkUploadFiles.map((f, i) => (
+                        <tr key={i} className={f.status === 'ready' ? '' : 'bg-amber-50/40'}>
+                          <td className="px-3 py-1.5 font-mono truncate max-w-[280px]">{f.file.name}</td>
+                          <td className="px-3 py-1.5">
+                            {f.matchedAddress ? (
+                              <span className="text-gray-700">{f.matchedAddress}</span>
+                            ) : f.parsedKey ? (
+                              <span className="text-amber-700">{f.parsedKey}</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            {f.status === 'ready'
+                              ? <span className="text-green-700" title="Ready to upload">✓</span>
+                              : f.status === 'no_property'
+                                ? <span className="text-amber-700" title={f.message}>⚠</span>
+                                : <span className="text-red-700" title={f.message}>✗</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {bulkUploadProgress && bulkUploadRunning && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-semibold text-purple-800">
+                    Uploading {bulkUploadProgress.current} of {bulkUploadProgress.total}
+                  </span>
+                  <span className="text-purple-700 font-mono text-xs truncate max-w-[280px]">{bulkUploadProgress.label}</span>
+                </div>
+                <div className="w-full bg-purple-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-purple-600 h-2 transition-all duration-200"
+                    style={{
+                      width: `${Math.round((bulkUploadProgress.current / bulkUploadProgress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setShowBulkUploadModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleRunBulkUpload}
+                disabled={bulkUploadRunning || !bulkUploadFiles.some((f) => f.status === 'ready')}
+                style={{ backgroundColor: '#7c3aed', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {bulkUploadRunning
+                  ? (bulkUploadProgress ? `Uploading ${bulkUploadProgress.current}/${bulkUploadProgress.total}…` : 'Uploading…')
+                  : 'Upload Selected'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH PRINT MODAL */}
+      {showBatchPrintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-900">Batch Print Appeals</h2>
+              <button onClick={() => setShowBatchPrintModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              Generates one Appeal Report PDF per subject. If two or more reports are produced
+              they are bundled into a zip — no merged mega-PDF.
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batchScope"
+                  checked={batchPrintScope === 'selected'}
+                  onChange={() => setBatchPrintScope('selected')}
+                  disabled={selectedAppeals.size === 0}
+                />
+                <div>
+                  <div className="font-medium text-gray-800">
+                    Selected appeals ({selectedAppeals.size})
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Only the rows you've checked in the table.
+                  </div>
+                </div>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batchScope"
+                  checked={batchPrintScope === 'filtered'}
+                  onChange={() => setBatchPrintScope('filtered')}
+                />
+                <div>
+                  <div className="font-medium text-gray-800">
+                    All currently visible appeals ({filteredAppeals.length})
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Everything in the table given the current year/filter.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {batchPrintProgress && batchPrintRunning && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-semibold text-blue-800">
+                    Building report {batchPrintProgress.current} of {batchPrintProgress.total}
+                  </span>
+                  <span className="text-blue-700 font-mono text-xs">{batchPrintProgress.label}</span>
+                </div>
+                <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-2 transition-all duration-200"
+                    style={{
+                      width: `${Math.round(
+                        (batchPrintProgress.current / batchPrintProgress.total) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {batchPrintResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                <p className="font-semibold text-emerald-800">Done</p>
+                <p className="text-emerald-700">
+                  ✓ {batchPrintResult.built} report{batchPrintResult.built === 1 ? '' : 's'} built
+                  · 📷 {batchPrintResult.withPhotos} with photo packet
+                  {batchPrintResult.skipped > 0 ? ` · ⊘ ${batchPrintResult.skipped} skipped (no saved report)` : ''}
+                  {batchPrintResult.failed > 0 ? ` · ✗ ${batchPrintResult.failed} failed` : ''}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setShowBatchPrintModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                {batchPrintResult ? 'Close' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleRunBatchPrint}
+                disabled={batchPrintRunning}
+                style={{ backgroundColor: '#1d4ed8', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {batchPrintRunning
+                  ? (batchPrintProgress
+                      ? `Building ${batchPrintProgress.current}/${batchPrintProgress.total}…`
+                      : 'Building…')
+                  : 'Build Reports'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL */}
@@ -3810,6 +4792,284 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {importExportProcessing ? 'Importing...' : 'Import'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== EXPORT CSV (POWERCOMP) SELECTION MODAL ==================== */}
+      {showExportCsvModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold text-gray-900">
+                Select Result Sets for PowerComp Export
+              </h2>
+              <button
+                onClick={() => setShowExportCsvModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Everything is checked by default. Uncheck any saved runs you don't
+              want to send to BRT — useful when a subject has both an assessor
+              run and an appellant run, or a manager rebuttal you don't want
+              shipped.
+            </p>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-500">
+                {exportCsvCandidates.filter(c => c.checked).length} of{' '}
+                {exportCsvCandidates.length} selected
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAllExportCsvCandidates(true)}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Check all
+                </button>
+                <button
+                  onClick={() => setAllExportCsvCandidates(false)}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Uncheck all
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="text-left text-xs text-gray-600">
+                    <th className="px-2 py-2 w-8"></th>
+                    <th className="px-2 py-2">Subject</th>
+                    <th className="px-2 py-2">Appeal #</th>
+                    <th className="px-2 py-2">Result Set</th>
+                    <th className="px-2 py-2 text-center">Comps</th>
+                    <th className="px-2 py-2">Saved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exportCsvCandidates.map((c, i) => {
+                    const prev = exportCsvCandidates[i - 1];
+                    const isNewSubject = !prev || prev.subjectKey !== c.subjectKey;
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`border-t ${isNewSubject ? 'border-gray-300' : 'border-gray-100'} hover:bg-gray-50`}
+                      >
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox"
+                            checked={c.checked}
+                            onChange={() => toggleExportCsvCandidate(c.id)}
+                          />
+                        </td>
+                        <td className="px-2 py-2 font-medium text-gray-800">
+                          {isNewSubject ? (
+                            <>
+                              {c.subj_block}/{c.subj_lot}
+                              {c.subj_qualifier ? `/${c.subj_qualifier}` : ''}
+                              {c.subj_address && (
+                                <div className="text-xs text-gray-500 font-normal">
+                                  {c.subj_address}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-gray-700">
+                          {c.appeal_number}
+                        </td>
+                        <td className="px-2 py-2 text-gray-700">
+                          {c.result_set_name}
+                        </td>
+                        <td className="px-2 py-2 text-center text-gray-600">
+                          {c.comps.length}
+                        </td>
+                        <td className="px-2 py-2 text-xs text-gray-500">
+                          {c.saved_at
+                            ? new Date(c.saved_at).toLocaleDateString()
+                            : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowExportCsvModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmExportCsv}
+                disabled={!exportCsvCandidates.some(c => c.checked)}
+                style={{ backgroundColor: '#ea580c', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export {exportCsvCandidates.filter(c => c.checked).length} to CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== POWERCOMP PDF (PHOTO PACKETS) MODAL ==================== */}
+      {showPwrCompPdfModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Import Batch PwrComp PDF (Photo Packets)</h2>
+              <button onClick={() => setShowPwrCompPdfModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Upload a BRT PowerComp <strong>Batch Taxpayer Report</strong> PDF. We'll group pages by subject Block / Lot / Qualifier, strip just the photo pages, and attach them to each matching property in this job. The photo pages get a footer crediting <em>BRT Technologies PowerComp</em>.
+            </p>
+
+            <div className="border-2 border-dashed border-teal-300 rounded-lg p-4 text-center mb-3">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                id="pwrcomp-pdf-input"
+                className="hidden"
+                onChange={(e) => {
+                  setPwrCompPdfFile(e.target.files[0] || null);
+                  setPwrCompPdfBytes(null);
+                  setPwrCompPdfPreview(null);
+                  setPwrCompPdfSaveResult(null);
+                  setPwrCompPdfSaveProgress(null);
+                }}
+              />
+              <label htmlFor="pwrcomp-pdf-input" className="cursor-pointer">
+                <FileText className="w-8 h-8 text-teal-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-700">
+                  {pwrCompPdfFile ? pwrCompPdfFile.name : 'Click to select PowerComp PDF'}
+                </p>
+              </label>
+            </div>
+
+            <div className="flex-1 overflow-y-auto -mx-1 px-1">
+              {pwrCompPdfPreview && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between text-xs">
+                    <span className="font-semibold text-gray-700">
+                      {pwrCompPdfPreview.packets.length} subject packet{pwrCompPdfPreview.packets.length === 1 ? '' : 's'} found · {pwrCompPdfPreview.totalPages} pages total
+                    </span>
+                    <span className="text-gray-500">
+                      ✓ matched · ⚠ no property match · — no photo pages
+                    </span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-1.5">B-L-Q / Card</th>
+                        <th className="text-left px-3 py-1.5">Address (PDF)</th>
+                        <th className="text-left px-3 py-1.5">Matched Property</th>
+                        <th className="text-right px-3 py-1.5">Pages (data / photo)</th>
+                        <th className="text-center px-3 py-1.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pwrCompPdfPreview.packets.map((p, i) => {
+                        const ok = !!p.matchedKey && p.photoPageIndices.length > 0;
+                        const noPhotos = !!p.matchedKey && p.photoPageIndices.length === 0;
+                        return (
+                          <tr key={i} className={ok ? '' : 'bg-amber-50/40'}>
+                            <td className="px-3 py-1.5 font-mono">
+                              {p.block}-{p.lot}{p.qualifier ? `-${p.qualifier}` : ''} / {p.card || '?'}
+                            </td>
+                            <td className="px-3 py-1.5">{p.address || '—'}</td>
+                            <td className="px-3 py-1.5">
+                              {p.matchedKey
+                                ? <span className="text-gray-700">{p.matchedAddress || p.matchedKey}</span>
+                                : <span className="text-amber-700">no match in this job</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-gray-600">
+                              {p.dataPageIndices.length} / {p.photoPageIndices.length}
+                            </td>
+                            <td className="px-3 py-1.5 text-center">
+                              {ok ? <span className="text-green-700">✓</span>
+                                : noPhotos ? <span className="text-gray-400">—</span>
+                                : <span className="text-amber-700">⚠</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {pwrCompPdfSaveProgress && pwrCompPdfSaveProgress.status === 'uploading' && (
+                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="font-semibold text-blue-800">
+                      Uploading packet {pwrCompPdfSaveProgress.current} of {pwrCompPdfSaveProgress.total}
+                    </p>
+                    <p className="text-blue-700 font-mono text-xs">{pwrCompPdfSaveProgress.label}</p>
+                  </div>
+                  <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-2 transition-all duration-200"
+                      style={{
+                        width: `${Math.round(
+                          (pwrCompPdfSaveProgress.current / pwrCompPdfSaveProgress.total) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {pwrCompPdfSaveResult && (
+                <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                  <p className="font-semibold text-emerald-800">Saved</p>
+                  <p className="text-emerald-700">✓ {pwrCompPdfSaveResult.saved} new · ↻ {pwrCompPdfSaveResult.replaced} replaced{pwrCompPdfSaveResult.failed > 0 ? ` · ✗ ${pwrCompPdfSaveResult.failed} failed` : ''}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t border-gray-100 mt-3">
+              <button
+                onClick={() => setShowPwrCompPdfModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                {pwrCompPdfSaveResult ? 'Close' : 'Cancel'}
+              </button>
+              {!pwrCompPdfPreview && (
+                <button
+                  onClick={handleParsePwrCompPdf}
+                  disabled={!pwrCompPdfFile || pwrCompPdfParsing}
+                  style={{ backgroundColor: '#0f766e', color: 'white' }}
+                  className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {pwrCompPdfParsing ? 'Reading PDF…' : 'Parse & Match'}
+                </button>
+              )}
+              {pwrCompPdfPreview && !pwrCompPdfSaveResult && (
+                <button
+                  onClick={handleSavePwrCompPackets}
+                  disabled={pwrCompPdfSaving || !pwrCompPdfPreview.packets.some(p => p.matchedKey && p.photoPageIndices.length)}
+                  style={{ backgroundColor: '#15803d', color: 'white' }}
+                  className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {pwrCompPdfSaving
+                    ? (pwrCompPdfSaveProgress
+                        ? `Saving ${pwrCompPdfSaveProgress.current}/${pwrCompPdfSaveProgress.total}…`
+                        : 'Saving…')
+                    : 'Save Photo Packets'}
                 </button>
               )}
             </div>

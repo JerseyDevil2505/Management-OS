@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
-import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
+import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
+import AppealMap, { distanceMiles } from '../../AppealMap';
+import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
@@ -99,6 +102,125 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
+  const [includeMap, setIncludeMap] = useState(true); // Embed subject+comps map in PDF
+  const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
+  // Appellant-supplied comps (loaded from appeal_log on modal open). Each
+  // entry is the saved slot enriched with the resolved property record so we
+  // can pull lat/lng for the map. Empty array if no appeal exists or no
+  // appellant comps were saved.
+  const [appellantCompsState, setAppellantCompsState] = useState([]);
+
+  // Local in-memory overrides for geocode coordinates set via the inline
+  // GeocodeStatusChip edit modal. Keyed by property_composite_key. Lets the
+  // user fix a missing/wrong geocode and have the map + PDF reflect it
+  // without a full grid reload. Persisted to property_records by the chip.
+  const [geocodePatches, setGeocodePatches] = useState({});
+  const applyGeocodePatch = useCallback(
+    (p) => {
+      if (!p || !p.property_composite_key) return p;
+      const patch = geocodePatches[p.property_composite_key];
+      return patch ? { ...p, ...patch } : p;
+    },
+    [geocodePatches],
+  );
+  const handleGeocodeSaved = useCallback((compositeKey, patch) => {
+    if (!compositeKey) return;
+    setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
+  }, []);
+
+  // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
+  // already-aggregated subject/comps. If the subject is not geocoded, the
+  // map will render a placeholder and the PDF export skips it gracefully.
+  const mapData = useMemo(() => {
+    const subjectPatched = applyGeocodePatch(subject);
+    const sLat = parseFloat(subjectPatched?.property_latitude);
+    const sLng = parseFloat(subjectPatched?.property_longitude);
+    const subjectPayload = (!isNaN(sLat) && !isNaN(sLng))
+      ? {
+          latitude: sLat,
+          longitude: sLng,
+          address: subjectPatched?.property_location || '',
+          block: subjectPatched?.property_block || '',
+          lot: subjectPatched?.property_lot || '',
+          qualifier: subjectPatched?.property_qualifier || '',
+        }
+      : null;
+    const compsPayload = (comps || [])
+      .map((rawC, idx) => {
+        const c = applyGeocodePatch(rawC);
+        const lat = parseFloat(c.property_latitude);
+        const lng = parseFloat(c.property_longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          address: c.property_location || '',
+          block: c.property_block || '',
+          lot: c.property_lot || '',
+          qualifier: c.property_qualifier || '',
+          rank: idx + 1,
+        };
+      })
+      .filter(Boolean);
+    // Appellant comps: each saved slot is resolved to its property record
+    // (block/lot/qualifier/card) in `appellantCompsState`, then we pull
+    // lat/lng off that record. Slots whose property isn't geocoded are
+    // dropped silently (same behavior as appraisal comps above).
+    const appellantPayload = (appellantCompsState || [])
+      .map((entry, idx) => {
+        const p = applyGeocodePatch(entry.property);
+        if (!p) return null;
+        const lat = parseFloat(p.property_latitude);
+        const lng = parseFloat(p.property_longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          address: p.property_location || '',
+          block: p.property_block || entry.slot?.block || '',
+          lot: p.property_lot || entry.slot?.lot || '',
+          qualifier: p.property_qualifier || entry.slot?.qualifier || '',
+          rank: idx + 1,
+        };
+      })
+      .filter(Boolean);
+
+    return { subject: subjectPayload, comps: compsPayload, appellantComps: appellantPayload };
+  }, [subject, comps, appellantCompsState, applyGeocodePatch]);
+
+  const mapHasSubject = !!mapData.subject;
+  const mapGeocodedCount =
+    (mapData.subject ? 1 : 0) + mapData.comps.length + mapData.appellantComps.length;
+  const mapTotalCount =
+    1 + (comps?.length || 0) + (appellantCompsState?.length || 0);
+
+  // Per-comp distance (miles) from subject. Always 1 decimal.
+  const compDistances = useMemo(() => {
+    if (!mapData.subject) return [];
+    const subjLL = [mapData.subject.latitude, mapData.subject.longitude];
+    return mapData.comps.map((c) => ({
+      rank: c.rank,
+      address: c.address,
+      block: c.block,
+      lot: c.lot,
+      qualifier: c.qualifier,
+      miles: distanceMiles(subjLL, [c.latitude, c.longitude]),
+    }));
+  }, [mapData]);
+
+  // Per-appellant-comp distance (miles) from subject.
+  const appellantDistances = useMemo(() => {
+    if (!mapData.subject) return [];
+    const subjLL = [mapData.subject.latitude, mapData.subject.longitude];
+    return mapData.appellantComps.map((c) => ({
+      rank: c.rank,
+      address: c.address,
+      block: c.block,
+      lot: c.lot,
+      qualifier: c.qualifier,
+      miles: distanceMiles(subjLL, [c.latitude, c.longitude]),
+    }));
+  }, [mapData]);
 
   // Editable data for export modal - stores property overrides
   // Structure: { subject: {...propertyOverrides}, comp_0: {...}, comp_1: {...}, etc. }
@@ -1301,39 +1423,109 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setEditedAdjustments({});
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
+    setAppellantCompsState([]);
+    setAppealUploadStatus(null);
     setShowExportModal(true);
 
-    // Auto-detect appeal number for subject
+    // Auto-detect appeal number for subject AND load appellant_comps so the
+    // map preview can paint orange "A#" pins alongside the blue appraisal
+    // comps. Appellant slots are resolved against allProperties to pick up
+    // lat/lng.
     if (subject && jobData?.id) {
       try {
         const { data } = await supabase
           .from('appeal_log')
-          .select('appeal_number, status')
+          .select('appeal_number, status, appellant_comps, property_composite_key')
           .eq('job_id', jobData.id)
           .eq('property_block', subject.property_block)
           .eq('property_lot', subject.property_lot);
 
+        let active = null;
         if (data && data.length > 0) {
-          const active = data.find(a => a.status !== 'C');
+          active = data.find(a => a.status !== 'C') || null;
           if (active && active.appeal_number) {
             setAppealNumber(active.appeal_number);
             setAppealAutoDetected(true);
-            return;
+          } else {
+            setAppealNumber('');
+            setAppealAutoDetected(false);
           }
+        } else {
+          setAppealNumber('');
+          setAppealAutoDetected(false);
         }
-        // No active appeal - clear
-        setAppealNumber('');
-        setAppealAutoDetected(false);
+
+        // Resolve appellant_comps -> property records (for lat/lng + address).
+        const slots = Array.isArray(active?.appellant_comps) ? active.appellant_comps : [];
+        if (slots.length > 0 && Array.isArray(allProperties) && allProperties.length > 0) {
+          const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+          const resolved = slots.map((slot) => {
+            const b = norm(slot.block);
+            const l = norm(slot.lot);
+            const q = norm(slot.qualifier);
+            const c = norm(slot.card);
+            if (!b || !l) return { slot, property: null };
+            const property = allProperties.find((p) => {
+              if (norm(p.property_block) !== b) return false;
+              if (norm(p.property_lot) !== l) return false;
+              if (norm(p.property_qualifier) !== q) return false;
+              if (c && norm(p.property_addl_card || p.property_card) !== c) return false;
+              return true;
+            }) || null;
+            return { slot, property };
+          });
+          setAppellantCompsState(resolved);
+        } else {
+          setAppellantCompsState([]);
+        }
       } catch (err) {
         console.warn('Could not look up appeal:', err.message);
+        setAppellantCompsState([]);
       }
     }
-  }, [subject, jobData?.id]);
+  }, [subject, jobData?.id, allProperties]);
+
+  // ==================== APPEAL LOG UPLOAD STATE ====================
+  // Tracks the "Send to Appeal Log" upload progress so the modal can show
+  // a status chip and disable the button while the upload is in flight.
+  const [appealUploadStatus, setAppealUploadStatus] = useState(null); // { status: 'idle'|'uploading'|'done'|'error', message? }
 
   // Generate PDF document
-  const generatePDF = useCallback(async () => {
+  const generatePDF = useCallback(async (opts = {}) => {
+    // Pre-export geocode gate: warn if subject or any displayed comp is
+    // missing lat/lng. The user can still proceed (some reports don't need
+    // a map), but at least they won't be surprised by a blank map page.
+    const checkList = [
+      { label: 'Subject', p: applyGeocodePatch(aggregatedSubject) },
+      ...(aggregatedComps || [])
+        .map((c, i) => ({ label: `Comparable ${i + 1}`, p: applyGeocodePatch(c) }))
+        .filter((x) => x.p),
+    ];
+    const missing = checkList.filter(({ p }) => {
+      if (!p) return false;
+      const lat = parseFloat(p.property_latitude);
+      const lng = parseFloat(p.property_longitude);
+      return isNaN(lat) || isNaN(lng);
+    });
+    if (missing.length > 0 && includeMap) {
+      const lines = missing
+        .map(({ label, p }) => `  • ${label}: ${p.property_location || '(no address)'}`)
+        .join('\n');
+      const proceed = window.confirm(
+        `${missing.length} propert${missing.length === 1 ? 'y is' : 'ies are'} missing geocode coordinates and won't appear on the map:\n\n${lines}\n\nClose this dialog and click the 📍? chip on the column header to fix them now,\nor click OK to export anyway.`,
+      );
+      if (!proceed) return;
+    }
+
+    // Landscape letter (792 x 612 pt). All tables auto-size between left/right
+    // margins and headers/right-aligned text use pageWidth dynamically, so
+    // most sections adapt automatically. The only spots that needed manual
+    // re-tuning were the map page (capped image height + right column) — see
+    // notes there. Landscape gives the 6-column comp grid (~80pt label +
+    // ~115pt per data col) and the 15-column appellant evidence table room
+    // to breathe, and matches the BRT PowerComp photo packets we merge in.
     const doc = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'pt',
       format: 'letter'
     });
@@ -1538,8 +1730,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           if (showAdjustments && adj && adj.amount !== 0) {
             const adjSign = adj.amount > 0 ? '+' : '-';
             const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-            // Store adjustment info for coloring in didParseCell
-            row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
+            // Cell content stays as just the value (single-line, neutral
+            // color). The adjustment is drawn on the right edge of the cell
+            // in green/red by the didDrawCell hook below — that way every
+            // body row is the same height and the adjustment sits inline
+            // with the value rather than wrapping underneath it.
+            row.push({ content: String(compVal), adjAmount: adj.amount, adjStr });
           } else {
             row.push(String(compVal));
           }
@@ -1597,9 +1793,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       body: staticRows,
       startY: margin + 50,
       margin: { left: margin, right: margin },
+      // fontSize/cellPadding tightened so the full static attribute set
+      // (~30 rows + Net Adjustment + Adjusted Valuation) fits on a single
+      // landscape page. Same values mirrored on the dynamic table below
+      // so the two pages look visually consistent.
       styles: {
-        fontSize: 7,
-        cellPadding: 3,
+        fontSize: 6.5,
+        cellPadding: 2,
         lineColor: [200, 200, 200],
         lineWidth: 0.5,
         valign: 'middle'
@@ -1627,28 +1827,53 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
           data.cell.styles.fillColor = [240, 240, 240];
           data.cell.styles.fontStyle = 'bold';
+          // Net Adjustment is the one row where the cell *itself* is the
+          // adjustment (no separate value to keep neutral) — color the text.
+          const cellData = data.row.raw?.[data.column.index];
+          if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+            if (cellData.adjAmount > 0) data.cell.styles.textColor = [34, 139, 34];
+            else if (cellData.adjAmount < 0) data.cell.styles.textColor = [220, 20, 60];
+          }
         }
         // Style Adjusted Valuation row
         if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
           data.cell.styles.fillColor = [200, 230, 255];
           data.cell.styles.fontStyle = 'bold';
         }
-        // Color adjustment amounts: green for positive, red for negative
-        const cellData = data.row.raw?.[data.column.index];
-        if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
-          if (cellData.adjAmount > 0) {
-            data.cell.styles.textColor = [34, 139, 34]; // Green
-          } else if (cellData.adjAmount < 0) {
-            data.cell.styles.textColor = [220, 20, 60]; // Red
-          }
-        }
       },
       willDrawCell: function(data) {
-        // Convert object cells to string content before drawing
+        // Cell content for value-with-adjustment cells is just the value
+        // string; the adjustment is overlaid in didDrawCell. Net Adjustment
+        // and Adjusted Valuation rows already store their full string in
+        // cellData.content and need it unwrapped here.
         const cellData = data.row.raw?.[data.column.index];
         if (cellData && typeof cellData === 'object' && cellData.content) {
-          data.cell.text = cellData.content.split('\n');
+          data.cell.text = [cellData.content];
         }
+      },
+      didDrawCell: function(data) {
+        // Paint the adjustment to the right of the cell value in green/red.
+        // Skip for the Net Adjustment row (its cell content already IS the
+        // adjustment) and the header row.
+        if (data.section !== 'body') return;
+        const rawRow = data.row.raw;
+        if (!rawRow || rawRow[0] === 'Net Adjustment' || rawRow[0] === 'Adjusted Valuation') return;
+        const cellData = rawRow[data.column.index];
+        if (!cellData || typeof cellData !== 'object' || !cellData.adjStr) return;
+        const color = cellData.adjAmount > 0 ? [34, 139, 34] : [220, 20, 60];
+        const prevSize = doc.getFontSize();
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...color);
+        doc.text(
+          cellData.adjStr,
+          data.cell.x + data.cell.width - 3,
+          data.cell.y + data.cell.height / 2 + 2,
+          { align: 'right' }
+        );
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(prevSize);
       }
     });
 
@@ -1717,7 +1942,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             if (showAdjustments && adj && adj.amount !== 0) {
               const adjSign = adj.amount > 0 ? '+' : '-';
               const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-              row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
+              // Same single-line + right-overlay pattern as the static page.
+              row.push({ content: String(compVal), adjAmount: adj.amount, adjStr });
             } else {
               row.push(String(compVal));
             }
@@ -1771,9 +1997,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           body: dynamicRows,
           startY: margin + 65,
           margin: { left: margin, right: margin },
+          // Mirror the static-grid sizing so the two pages render with the
+          // same row density and visual rhythm.
           styles: {
-            fontSize: 7,
-            cellPadding: 3,
+            fontSize: 6.5,
+            cellPadding: 2,
             lineColor: [200, 200, 200],
             lineWidth: 0.5,
             valign: 'middle'
@@ -1797,27 +2025,43 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
               data.cell.styles.fillColor = [240, 240, 240];
               data.cell.styles.fontStyle = 'bold';
+              const cellData = data.row.raw?.[data.column.index];
+              if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+                if (cellData.adjAmount > 0) data.cell.styles.textColor = [34, 139, 34];
+                else if (cellData.adjAmount < 0) data.cell.styles.textColor = [220, 20, 60];
+              }
             }
             if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
               data.cell.styles.fillColor = [200, 230, 255];
               data.cell.styles.fontStyle = 'bold';
             }
-            // Color adjustment amounts: green for positive, red for negative
-            const cellData = data.row.raw?.[data.column.index];
-            if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
-              if (cellData.adjAmount > 0) {
-                data.cell.styles.textColor = [34, 139, 34]; // Green
-              } else if (cellData.adjAmount < 0) {
-                data.cell.styles.textColor = [220, 20, 60]; // Red
-              }
-            }
           },
           willDrawCell: function(data) {
-            // Convert object cells to string content before drawing
             const cellData = data.row.raw?.[data.column.index];
             if (cellData && typeof cellData === 'object' && cellData.content) {
-              data.cell.text = cellData.content.split('\n');
+              data.cell.text = [cellData.content];
             }
+          },
+          didDrawCell: function(data) {
+            if (data.section !== 'body') return;
+            const rawRow = data.row.raw;
+            if (!rawRow || rawRow[0] === 'Net Adjustment' || rawRow[0] === 'Adjusted Valuation') return;
+            const cellData = rawRow[data.column.index];
+            if (!cellData || typeof cellData !== 'object' || !cellData.adjStr) return;
+            const color = cellData.adjAmount > 0 ? [34, 139, 34] : [220, 20, 60];
+            const prevSize = doc.getFontSize();
+            doc.setFontSize(6.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...color);
+            doc.text(
+              cellData.adjStr,
+              data.cell.x + data.cell.width - 3,
+              data.cell.y + data.cell.height / 2 + 2,
+              { align: 'right' }
+            );
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(prevSize);
           }
         });
       }
@@ -2258,15 +2502,227 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ch123TableEndY + 12
     );
 
+    // ============== Subject + Comps Map page (optional) ==============
+    if (includeMap && mapHasSubject && mapCaptureRef.current) {
+      try {
+        // Wait one tick so any tile loads in the DOM are flushed before capture
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const canvas = await html2canvas(mapCaptureRef.current, {
+          useCORS: true,
+          allowTaint: false,
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const mapImg = canvas.toDataURL('image/png');
+
+        doc.addPage();
+        // Use the same LOJIK header (logo + Appeal # + Block/Lot) as every
+        // other page so batch-printed packets always carry orientation info.
+        addHeader(subjectBlockLot);
+        doc.setFontSize(14);
+        doc.setTextColor(...lojikBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Subject & Comps Location Map', pageWidth / 2, 70, { align: 'center' });
+
+        // Two-column layout: map on the left, info column on the right.
+        // Landscape letter is 792 x 612 pt, so we cap mapH at ~430pt to
+        // leave room for the attribution line below the map (and to keep
+        // the map from looking absurdly tall vs its width). Right column
+        // widened slightly so longer comp addresses don't wrap as often.
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const topY = 95;
+        const colGap = 14;
+        const rightColW = 230;
+        const mapW = pageWidth - margin * 2 - colGap - rightColW;
+        const ratio = canvas.width / canvas.height;
+        const maxMapH = Math.max(280, pageHeight - topY - 60);
+        const mapH = Math.min(mapW / ratio, maxMapH);
+        doc.addImage(mapImg, 'PNG', margin, topY, mapW, mapH);
+
+        // Right column: subject + comp list with distances
+        const rightX = margin + mapW + colGap;
+        let cursorY = topY;
+
+        // Subject card
+        doc.setFillColor(220, 38, 38);
+        doc.circle(rightX + 7, cursorY + 7, 6, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('S', rightX + 7, cursorY + 9, { align: 'center' });
+
+        doc.setTextColor(20, 20, 20);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('SUBJECT', rightX + 18, cursorY + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const subjBlq = `Block ${subject?.property_block || ''}/${subject?.property_lot || ''}${subject?.property_qualifier ? '/' + subject.property_qualifier : ''}`;
+        doc.text(subjBlq, rightX + 18, cursorY + 16);
+        const subjAddrLines = doc.splitTextToSize(subject?.property_location || '', rightColW - 22);
+        doc.text(subjAddrLines, rightX + 18, cursorY + 25);
+        cursorY += 26 + (subjAddrLines.length - 1) * 9 + 8;
+
+        // Helper to draw a comp/appellant card in the right column with a
+        // colored circular badge. Returns the new cursorY (or null if it
+        // wouldn't fit).
+        const drawCard = (c, fillRGB, badgeLabel, titlePrefix) => {
+          const addrLines = doc.splitTextToSize(c.address || '', rightColW - 22);
+          const cardH = 26 + (addrLines.length - 1) * 9;
+          if (cursorY + cardH > topY + mapH + 30) return false;
+
+          doc.setFillColor(...fillRGB);
+          doc.circle(rightX + 7, cursorY + 7, 6, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(badgeLabel.length > 1 ? 7 : 8);
+          doc.setFont('helvetica', 'bold');
+          doc.text(badgeLabel, rightX + 7, cursorY + 9, { align: 'center' });
+
+          doc.setTextColor(20, 20, 20);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          const titleLine = `${titlePrefix}${c.miles != null ? `  ·  ${c.miles.toFixed(1)} mi` : ''}`;
+          doc.text(titleLine, rightX + 18, cursorY + 6);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          const compBlq = `Block ${c.block || ''}/${c.lot || ''}${c.qualifier ? '/' + c.qualifier : ''}`;
+          doc.text(compBlq, rightX + 18, cursorY + 16);
+          doc.text(addrLines, rightX + 18, cursorY + 25);
+          cursorY += cardH + 6;
+          return true;
+        };
+
+        // Comp cards (blue)
+        compDistances.forEach((c) => {
+          drawCard(c, [37, 99, 235], String(c.rank), `COMP ${c.rank}`);
+        });
+
+        // Appellant comp cards (orange) — separated by a thin label
+        if (appellantDistances.length > 0) {
+          if (cursorY + 18 < topY + mapH + 30) {
+            doc.setDrawColor(220, 220, 220);
+            doc.line(rightX, cursorY, rightX + rightColW, cursorY);
+            cursorY += 8;
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(194, 65, 12);
+            doc.text('APPELLANT COMPS', rightX, cursorY);
+            cursorY += 10;
+          }
+          appellantDistances.forEach((c) => {
+            drawCard(c, [234, 88, 12], `A${c.rank}`, `APPELLANT ${c.rank}`);
+          });
+        }
+
+        // Attribution under map
+        const footerY = topY + mapH + 16;
+        doc.setFontSize(7);
+        doc.setTextColor(120, 120, 120);
+        doc.setFont('helvetica', 'normal');
+        doc.text(
+          'Map data © OpenStreetMap contributors. Distances are straight-line (Haversine) from subject. Coordinates from U.S. Census Bureau geocoder, manual verification, or mother-lot inheritance.',
+          margin,
+          footerY,
+          { maxWidth: mapW }
+        );
+      } catch (mapErr) {
+        // Map capture failure is non-fatal — PDF still saves without it.
+        // eslint-disable-next-line no-console
+        console.warn('Map capture failed:', mapErr);
+      }
+    }
+
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const block = subject.property_block || '';
     const lot = subject.property_lot || '';
     const qualifier = subject.property_qualifier || '';
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
-    doc.save(fileName);
-    setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType]);
+
+    // "Send to Appeal Log" path: upload the PDF bytes to the appeal-reports
+    // bucket (so Appeal Log can print it later with photos appended) AND
+    // sync the recalculated CME projected value onto the appeal_log row so
+    // the user can see it in the Appeal Log without having to re-run CME.
+    const wantUpload = opts.uploadToAppealLog ?? false;
+    if (wantUpload && jobData?.id) {
+      try {
+        setAppealUploadStatus({ status: 'uploading' });
+        const pdfBytes = doc.output('arraybuffer');
+        const compositeKey =
+          subject.property_composite_key ||
+          `${block}-${lot}-${qualifier}`;
+        const path = `${jobData.id}/${compositeKey}.pdf`;
+        const { error: upErr } = await supabase
+          .storage
+          .from('appeal-reports')
+          .upload(path, new Uint8Array(pdfBytes), {
+            contentType: 'application/pdf',
+            upsert: true,
+          });
+        if (upErr) throw upErr;
+        const { error: dbErr } = await supabase
+          .from('appeal_reports')
+          .upsert(
+            {
+              job_id: jobData.id,
+              property_composite_key: compositeKey,
+              storage_path: path,
+              source_filename: fileName,
+              page_count: doc.getNumberOfPages(),
+              uploaded_at: new Date().toISOString(),
+            },
+            { onConflict: 'job_id,property_composite_key' },
+          );
+        if (dbErr) throw dbErr;
+
+        // Mirror Sales Comparison's "Save to Appeal Log" behavior for this
+        // single subject — push the CME projected assessment onto the
+        // matching appeal_log row(s) so the log reflects the latest run.
+        const projected =
+          recalculatedProjectedAssessment ?? result?.projectedAssessment ?? null;
+        if (projected) {
+          try {
+            await supabase
+              .from('appeal_log')
+              .update({
+                cme_projected_value: projected,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('job_id', jobData.id)
+              .eq('property_block', block)
+              .eq('property_lot', lot)
+              .eq('property_qualifier', qualifier || '');
+          } catch (cmeErr) {
+            // Non-fatal: report still saved, CME sync failed.
+            console.warn('appeal_log CME sync failed', cmeErr);
+          }
+        }
+
+        setAppealUploadStatus({ status: 'done', message: 'Sent to Appeal Log' });
+      } catch (e) {
+        console.error('appeal-reports upload failed', e);
+        setAppealUploadStatus({ status: 'error', message: e.message || 'Upload failed' });
+      }
+    }
+
+    // Local download is now opt-in (Download PDF button passes
+    // downloadLocal: true). Send-to-Appeal-Log skips the download to keep
+    // users' Downloads folder clean.
+    if (opts.downloadLocal === true) {
+      doc.save(fileName);
+    }
+    // Keep the modal open after a successful Send-to-Appeal-Log so the
+    // user can see the green "Sent ✓" confirmation. Close on local download
+    // (the file landing in Downloads is its own confirmation) and on
+    // explicit caller request.
+    const shouldClose = opts.uploadToAppealLog
+      ? opts.closeModal === true
+      : opts.closeModal !== false;
+    if (shouldClose) {
+      setShowExportModal(false);
+    }
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2297,7 +2753,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 Attribute
               </th>
               <th className="px-3 py-3 text-center font-semibold bg-slate-100">
-                Subject
+                <div className="flex items-center justify-center gap-1">
+                  <span>Subject</span>
+                  <GeocodeStatusChip
+                    property={applyGeocodePatch(aggregatedSubject)}
+                    onSaved={(patch) =>
+                      handleGeocodeSaved(aggregatedSubject?.property_composite_key, patch)
+                    }
+                  />
+                </div>
                 {aggregatedSubject._additionalCardsCount > 0 && (
                   <span className="block text-xs text-purple-700 font-semibold mt-1 bg-purple-100 rounded px-1">
                     (+{aggregatedSubject._additionalCardsCount} cards)
@@ -2309,7 +2773,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
                 return (
                   <th key={compNum} className={`px-3 py-3 text-center font-semibold ${bgColor} border-l border-gray-300`}>
-                    Comparable {compNum}
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Comparable {compNum}</span>
+                      {comp && (
+                        <GeocodeStatusChip
+                          property={applyGeocodePatch(comp)}
+                          onSaved={(patch) =>
+                            handleGeocodeSaved(comp?.property_composite_key, patch)
+                          }
+                        />
+                      )}
+                    </div>
                     {comp?.isSubjectSale && (
                       <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
                     )}
@@ -2576,6 +3050,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     Hide Adjustments
                   </span>
                 </label>
+                {mapHasSubject && (
+                  <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeMap}
+                      onChange={(e) => setIncludeMap(e.target.checked)}
+                      className="rounded border-white text-blue-600"
+                    />
+                    <span className="flex items-center gap-1">
+                      <MapIcon size={14} />
+                      Include Map
+                    </span>
+                  </label>
+                )}
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -2599,6 +3087,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               />
               {appealAutoDetected && <span className="text-xs text-green-600 font-medium">Auto-detected from Appeal Log</span>}
               {!appealAutoDetected && !appealNumber && <span className="text-xs text-gray-400">Optional — will appear above Block/Lot on PDF</span>}
+              {appealUploadStatus?.status === 'uploading' && (
+                <span className="ml-auto text-xs text-blue-700 font-medium">Saving to Appeal Log…</span>
+              )}
+              {appealUploadStatus?.status === 'done' && (
+                <span className="ml-auto text-xs text-emerald-700 font-medium">✓ {appealUploadStatus.message}</span>
+              )}
+              {appealUploadStatus?.status === 'error' && (
+                <span className="ml-auto text-xs text-red-700 font-medium">✗ Save to Appeal Log failed: {appealUploadStatus.message}</span>
+              )}
             </div>
 
             {/* Modal Content - Editable Grid */}
@@ -2817,6 +3314,100 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               </table>
             </div>
 
+            {/* Map preview (also captured by html2canvas for the PDF).
+                Renders at a fixed 600x420 size so the on-screen preview matches
+                what gets embedded in the PDF, including auto-zoom level. */}
+            {includeMap && mapHasSubject && (
+              <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <MapIcon size={16} className="text-blue-600" />
+                    Subject &amp; Comps Map (PDF preview)
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {mapGeocodedCount} of {mapTotalCount} parcels geocoded ·
+                    OpenStreetMap tiles
+                  </span>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <div ref={mapCaptureRef} style={{ width: 600, flex: '0 0 600px' }}>
+                    <AppealMap
+                      subject={mapData.subject}
+                      comps={mapData.comps}
+                      appellantComps={mapData.appellantComps}
+                      height={420}
+                      id="appeal-map-capture"
+                    />
+                  </div>
+                  <div className="flex-1 text-xs">
+                    <div className="font-semibold text-gray-700 mb-1">Legend</div>
+                    <div className="bg-white border border-gray-200 rounded p-2">
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                          style={{ background: '#dc2626', width: 18, height: 18, fontSize: 10, lineHeight: 1 }}>S</span>
+                        <div>
+                          <div className="font-semibold">SUBJECT</div>
+                          <div className="text-gray-600">
+                            {mapData.subject.block}/{mapData.subject.lot}
+                            {mapData.subject.qualifier ? `/${mapData.subject.qualifier}` : ''}
+                          </div>
+                          <div className="text-gray-700">{mapData.subject.address}</div>
+                        </div>
+                      </div>
+                      {compDistances.map((c) => (
+                        <div key={c.rank} className="flex items-start gap-2 mb-1.5">
+                          <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                            style={{ background: '#2563eb', width: 18, height: 18, fontSize: 10, lineHeight: 1 }}>{c.rank}</span>
+                          <div>
+                            <div className="font-semibold">COMP {c.rank}</div>
+                            <div className="text-gray-600">
+                              {c.block}/{c.lot}{c.qualifier ? `/${c.qualifier}` : ''}
+                              {c.miles != null && (
+                                <span className="ml-1 text-blue-700 font-medium">
+                                  · {c.miles.toFixed(1)} mi
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-gray-700">{c.address}</div>
+                          </div>
+                        </div>
+                      ))}
+                      {appellantDistances.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="font-semibold text-orange-700 mb-1">Appellant Comps</div>
+                          {appellantDistances.map((c) => (
+                            <div key={`a-${c.rank}`} className="flex items-start gap-2 mb-1.5">
+                              <span className="inline-block rounded-full text-white font-bold flex items-center justify-center"
+                                style={{ background: '#ea580c', width: 18, height: 18, fontSize: 9, lineHeight: 1 }}>A{c.rank}</span>
+                              <div>
+                                <div className="font-semibold">APPELLANT {c.rank}</div>
+                                <div className="text-gray-600">
+                                  {c.block}/{c.lot}{c.qualifier ? `/${c.qualifier}` : ''}
+                                  {c.miles != null && (
+                                    <span className="ml-1 text-orange-700 font-medium">
+                                      · {c.miles.toFixed(1)} mi
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-gray-700">{c.address}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {mapGeocodedCount < mapTotalCount && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    {mapTotalCount - mapGeocodedCount} parcel(s) missing
+                    coordinates won't appear on the map. Use the Geocoder to
+                    add them.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
               <p className="text-xs text-gray-500">
@@ -2841,11 +3432,33 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   Recalculate
                 </button>
                 <button
-                  onClick={generatePDF}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  onClick={() => generatePDF({ downloadLocal: true })}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
+                  title="Download a local copy only — does not update the Appeal Log."
                 >
                   <FileDown size={16} />
                   Download PDF
+                </button>
+                <button
+                  onClick={() =>
+                    generatePDF({ uploadToAppealLog: true, downloadLocal: false })
+                  }
+                  disabled={appealUploadStatus?.status === 'uploading'}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm ${
+                    appealUploadStatus?.status === 'done'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300'
+                  }`}
+                  title="Upload this report to the Appeal Log (creates the Report ✓ chip) and sync the CME projected value. No local download."
+                >
+                  <FileDown size={16} />
+                  {appealUploadStatus?.status === 'uploading'
+                    ? 'Sending…'
+                    : appealUploadStatus?.status === 'done'
+                    ? 'Sent ✓'
+                    : appealUploadStatus?.status === 'error'
+                    ? 'Retry Send'
+                    : 'Send to Appeal Log'}
                 </button>
               </div>
             </div>
