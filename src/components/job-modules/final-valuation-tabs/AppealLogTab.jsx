@@ -2159,15 +2159,49 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return { bytes: reportBytes, hasPhotos: false };
     }
 
-    // Splice photo pages onto the end of the saved report.
+    // Splice photo pages into the saved report. Target spot is *before* the
+    // Chapter 123 Analysis page (so photos sit with the comp grid / dynamic
+    // adjustments, not after Appellant Evidence). If we can't detect Chapter
+    // 123, fall back to inserting after page 2 (typical: comp grid + dynamic
+    // adjustments page), or at the end if the report is shorter than that.
     const { PDFDocument } = await import('pdf-lib');
-    const out = await PDFDocument.create();
     const reportDoc = await PDFDocument.load(reportBytes);
     const photoDoc = await PDFDocument.load(photoBytes);
+    const totalReportPages = reportDoc.getPageCount();
+
+    // Try to locate the Chapter 123 page using pdfjs text extraction.
+    let insertAt = Math.min(2, totalReportPages); // default: after page 2
+    try {
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+      // Pass an independent copy so pdfjs doesn't detach our buffer.
+      const scanCopy = new Uint8Array(reportBytes.byteLength);
+      scanCopy.set(reportBytes);
+      const loadingTask = pdfjs.getDocument({ data: scanCopy });
+      const pdfDoc = await loadingTask.promise;
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const page = await pdfDoc.getPage(i);
+        const textContent = await page.getTextContent();
+        const text = textContent.items.map((it) => it.str).join(' ').toLowerCase();
+        if (text.includes('chapter 123')) {
+          insertAt = i - 1; // pdf-lib indices are 0-based; insert before this page
+          break;
+        }
+      }
+      try { await pdfDoc.destroy(); } catch (_) {}
+    } catch (e) {
+      console.warn('pdfjs scan for Chapter 123 page failed; using default insert position', e);
+    }
+    insertAt = Math.max(0, Math.min(insertAt, totalReportPages));
+
+    const out = await PDFDocument.create();
     const reportPages = await out.copyPages(reportDoc, reportDoc.getPageIndices());
-    for (const p of reportPages) out.addPage(p);
     const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+    // Pages 0..insertAt-1 from report
+    for (let i = 0; i < insertAt; i++) out.addPage(reportPages[i]);
+    // Photo packet
     for (const p of photoPages) out.addPage(p);
+    // Remaining report pages
+    for (let i = insertAt; i < reportPages.length; i++) out.addPage(reportPages[i]);
     return { bytes: await out.save(), hasPhotos: true };
   };
 
@@ -2180,9 +2214,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
     setPrintingAppealId(appeal.id);
     try {
-      const { bytes } = await buildPrintablePdfForAppeal(appeal);
+      const { bytes, hasPhotos } = await buildPrintablePdfForAppeal(appeal);
       const key = compositeKeyForAppeal(appeal);
-      const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || key || 'report')}.pdf`;
+      const base = safeFilenamePart(appeal.appeal_number || key || 'report');
+      const fname = `Appeal_${base}${hasPhotos ? '_with_Photos' : ''}.pdf`;
       downloadPdf(bytes, fname);
     } catch (e) {
       console.error('Print appeal failed', e);
@@ -2227,7 +2262,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           }
           if (hasPhotos) withPhotos++;
           built++;
-          const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || label)}.pdf`;
+          const base = safeFilenamePart(appeal.appeal_number || label);
+          const fname = `Appeal_${base}${hasPhotos ? '_with_Photos' : ''}.pdf`;
           reports.push({ filename: fname, bytes });
         } catch (e) {
           console.error('batch report failed', appeal, e);
