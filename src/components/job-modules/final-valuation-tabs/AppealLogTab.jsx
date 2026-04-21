@@ -1914,9 +1914,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     setPwrCompPdfPreview(null);
     setPwrCompPdfSaveResult(null);
     try {
-      const buf = new Uint8Array(await pwrCompPdfFile.arrayBuffer());
-      setPwrCompPdfBytes(buf);
-      const parsed = await parsePowerCompPdf(buf);
+      // NOTE: pdfjs transfers ownership of the Uint8Array we hand it to its
+      // worker, which detaches the underlying ArrayBuffer. If we later pass
+      // those same bytes to pdf-lib it sees an empty buffer and throws
+      // "No PDF header found". So we keep one pristine copy for pdf-lib and
+      // give pdfjs its own copy to consume.
+      const original = new Uint8Array(await pwrCompPdfFile.arrayBuffer());
+      setPwrCompPdfBytes(original);
+      const forParser = new Uint8Array(original); // independent copy
+      const parsed = await parsePowerCompPdf(forParser);
       const packets = parsed.packets.map((pkt) => {
         const match = matchPacketToProperty(pkt);
         return {
@@ -1949,7 +1955,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     try {
       for (const pkt of matched) {
         try {
-          const subPdf = await buildPhotoPacketPdf(pwrCompPdfBytes, pkt);
+          // Give pdf-lib its own copy so nothing downstream can detach our master bytes.
+          const subPdf = await buildPhotoPacketPdf(new Uint8Array(pwrCompPdfBytes), pkt);
           if (!subPdf) continue;
           const path = `${jobData.id}/${pkt.matchedKey}.pdf`;
           const { error: upErr } = await supabase
