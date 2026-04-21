@@ -6,7 +6,6 @@ import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
 import { parsePowerCompPdf, buildPhotoPacketPdf } from '../../../lib/powercompPdfParser';
 import {
-  buildAppealReportPdf,
   downloadPdf,
   downloadAppealReportsZip,
   safeFilenamePart,
@@ -135,12 +134,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
 
-  // Saved CME result sets (the appeal report data source).
-  // Loaded once per job; we resolve per-appeal candidates in-memory.
-  const [savedResultSets, setSavedResultSets] = useState([]); // [{ id, name, created_at, updated_at, archived_at, use_for_defense, results }]
-  const [resultSetPickerAppealId, setResultSetPickerAppealId] = useState(null); // open popover for which appeal row
-  const [resultSetPickerShowArchived, setResultSetPickerShowArchived] = useState(false);
-  const [resultSetMutationBusy, setResultSetMutationBusy] = useState(null); // result set id currently being mutated
+  // Appeal reports (uploaded from Detailed tab). Bucket is the source of truth
+  // for what the per-row print + batch print actually output.
+  const [appealReportsByKey, setAppealReportsByKey] = useState({}); // composite_key -> { storage_path, source_filename, page_count, uploaded_at }
+
+  // Bulk-upload state for already-existing local PDFs
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [bulkUploadFiles, setBulkUploadFiles] = useState([]); // [{ file, key, status, message }]
+  const [bulkUploadRunning, setBulkUploadRunning] = useState(false);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState(null); // { current, total, label }
 
   // Bulk apply hearing date state
   const [showBulkDateModal, setShowBulkDateModal] = useState(false);
@@ -1364,27 +1366,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return () => { cancelled = true; };
   }, [jobData?.id]);
 
-  // Load saved CME result sets — needed for the per-appeal defense resolver.
-  // We pull the full results blob so the resolver can match on subject BLQ
-  // without an extra round-trip per row.
+  // Load uploaded appeal reports for this job. The Appeal Log row chip and
+  // the print pipeline both key off this map.
   useEffect(() => {
     if (!jobData?.id) return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
-        .from('job_cme_result_sets')
-        .select('id, name, created_at, updated_at, archived_at, use_for_defense, results')
-        .eq('job_id', jobData.id)
-        .order('created_at', { ascending: false });
+        .from('appeal_reports')
+        .select('property_composite_key, storage_path, source_filename, page_count, uploaded_at')
+        .eq('job_id', jobData.id);
       if (cancelled) return;
       if (error) {
-        console.error('load saved result sets failed', error);
+        console.error('load appeal reports failed', error);
         return;
       }
-      setSavedResultSets(data || []);
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setAppealReportsByKey(map);
     })();
     return () => { cancelled = true; };
   }, [jobData?.id]);
+
+  const loadAppealReports = async () => {
+    if (!jobData?.id) return;
+    const { data, error } = await supabase
+      .from('appeal_reports')
+      .select('property_composite_key, storage_path, source_filename, page_count, uploaded_at')
+      .eq('job_id', jobData.id);
+    if (error) {
+      console.error('load appeal reports failed', error);
+      return;
+    }
+    const map = {};
+    for (const row of data || []) map[row.property_composite_key] = row;
+    setAppealReportsByKey(map);
+  };
 
   if (isLoading) {
     return (
@@ -2084,115 +2101,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // ==================== SAVED RESULT SET RESOLVER (for appeal report) ====================
-
-  // Returns candidate saved result sets (and inferred defense pick) for an appeal row.
-  //   { candidates: [{ resultSet, subject }], defense: {...} | null, status: 'no_appeal_number' | 'no_candidates' | 'auto' | 'flagged' | 'needs_pick' }
-  // Strict rules:
-  //   - The appeal MUST have an appeal_number to be considered "in defense" — otherwise no resolution.
-  //   - Only non-archived result sets count as candidates.
-  //   - If exactly one candidate exists, that is the defense automatically.
-  //   - If 2+ candidates exist, one must have use_for_defense=true; otherwise we surface "needs_pick".
-  const resolveDefenseSetForAppeal = (appeal) => {
-    if (!appeal) return { candidates: [], defense: null, status: 'no_candidates' };
-    if (!appeal.appeal_number || !String(appeal.appeal_number).trim()) {
-      return { candidates: [], defense: null, status: 'no_appeal_number' };
-    }
-    const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
-    const wantBlock = norm(appeal.property_block);
-    const wantLot = norm(appeal.property_lot);
-    const wantQual = norm(appeal.property_qualifier);
-    const subjectMatches = (subj) =>
-      subj &&
-      norm(subj.property_block) === wantBlock &&
-      norm(subj.property_lot) === wantLot &&
-      norm(subj.property_qualifier) === wantQual;
-
-    const candidates = [];
-    for (const rs of savedResultSets) {
-      if (rs.archived_at) continue; // archived sets never auto-resolve
-      const results = Array.isArray(rs.results) ? rs.results : [];
-      const matchingResult = results.find((r) => subjectMatches(r?.subject));
-      if (matchingResult) {
-        candidates.push({ resultSet: rs, result: matchingResult });
-      }
-    }
-
-    if (candidates.length === 0) {
-      return { candidates: [], defense: null, status: 'no_candidates' };
-    }
-    const flagged = candidates.find((c) => c.resultSet.use_for_defense === true);
-    if (flagged) {
-      return { candidates, defense: flagged, status: 'flagged' };
-    }
-    if (candidates.length === 1) {
-      return { candidates, defense: candidates[0], status: 'auto' };
-    }
-    return { candidates, defense: null, status: 'needs_pick' };
-  };
-
-  // Mark one saved result set as "use_for_defense" for this subject.
-  // Clears the flag on every other non-archived candidate for the same subject so
-  // the constraint stays "at most one defense per subject".
-  const handleSetDefenseSet = async (appeal, chosen) => {
-    if (!appeal || !chosen) return;
-    setResultSetMutationBusy(chosen.resultSet.id);
-    try {
-      const { candidates } = resolveDefenseSetForAppeal(appeal);
-      const toClear = candidates
-        .filter((c) => c.resultSet.id !== chosen.resultSet.id && c.resultSet.use_for_defense)
-        .map((c) => c.resultSet.id);
-      if (toClear.length) {
-        const { error: clearErr } = await supabase
-          .from('job_cme_result_sets')
-          .update({ use_for_defense: false })
-          .in('id', toClear);
-        if (clearErr) throw clearErr;
-      }
-      const { error: setErr } = await supabase
-        .from('job_cme_result_sets')
-        .update({ use_for_defense: true })
-        .eq('id', chosen.resultSet.id);
-      if (setErr) throw setErr;
-      setSavedResultSets((prev) =>
-        prev.map((rs) => {
-          if (rs.id === chosen.resultSet.id) return { ...rs, use_for_defense: true };
-          if (toClear.includes(rs.id)) return { ...rs, use_for_defense: false };
-          return rs;
-        }),
-      );
-    } catch (e) {
-      console.error('set defense failed', e);
-      alert(`Could not set defense set: ${e.message}`);
-    } finally {
-      setResultSetMutationBusy(null);
-    }
-  };
-
-  const handleArchiveResultSet = async (resultSetId, archive) => {
-    if (!resultSetId) return;
-    setResultSetMutationBusy(resultSetId);
-    try {
-      const archived_at = archive ? new Date().toISOString() : null;
-      // When archiving, also clear the defense flag so it can never auto-resolve.
-      const update = archive ? { archived_at, use_for_defense: false } : { archived_at };
-      const { error } = await supabase
-        .from('job_cme_result_sets')
-        .update(update)
-        .eq('id', resultSetId);
-      if (error) throw error;
-      setSavedResultSets((prev) =>
-        prev.map((rs) => (rs.id === resultSetId ? { ...rs, ...update } : rs)),
-      );
-    } catch (e) {
-      console.error('archive toggle failed', e);
-      alert(`Could not update result set: ${e.message}`);
-    } finally {
-      setResultSetMutationBusy(null);
-    }
-  };
-
-  // ==================== APPEAL REPORT (per-row + batch) ====================
+  // ==================== APPEAL REPORT (bucket-backed, per-row + batch) ====================
 
   // Build the composite key the same way the matcher / metadata layer does.
   const compositeKeyForAppeal = (appeal) => {
@@ -2200,6 +2109,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     if (appeal.property_composite_key) return appeal.property_composite_key;
     const norm = (v) => (v == null ? '' : String(v).trim());
     return `${norm(appeal.property_block)}-${norm(appeal.property_lot)}-${norm(appeal.property_qualifier)}`;
+  };
+
+  // Whatever PDF was last uploaded to appeal-reports for this subject *is* the
+  // defense report. No more interpreting saved CME sets — that decision is made
+  // on the Detailed tab when the user clicks "Save to Appeal Log".
+  const getReportForAppeal = (appeal) => {
+    if (!appeal) return null;
+    const key = compositeKeyForAppeal(appeal);
+    return appealReportsByKey[key] || null;
   };
 
   const muniLabel = (jobData?.municipality || jobData?.name || '').toString();
@@ -2218,22 +2136,57 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return new Uint8Array(await data.arrayBuffer());
   };
 
+  // Download the saved appeal report PDF for this subject from the bucket and,
+  // if a PowerComp photo packet exists, append its pages using pdf-lib.
+  // Returns Uint8Array of the merged PDF, or null if no report exists.
+  const buildPrintablePdfForAppeal = async (appeal) => {
+    const reportMeta = getReportForAppeal(appeal);
+    if (!reportMeta) return { bytes: null, hasPhotos: false };
+
+    const { data: rptBlob, error: rptErr } = await supabase
+      .storage
+      .from('appeal-reports')
+      .download(reportMeta.storage_path);
+    if (rptErr || !rptBlob) {
+      throw new Error(`Could not download saved report: ${rptErr?.message || 'unknown error'}`);
+    }
+    const reportBytes = new Uint8Array(await rptBlob.arrayBuffer());
+
+    const key = compositeKeyForAppeal(appeal);
+    const photoBytes = await fetchPhotoPacketBytes(key);
+
+    if (!photoBytes) {
+      return { bytes: reportBytes, hasPhotos: false };
+    }
+
+    // Splice photo pages onto the end of the saved report.
+    const { PDFDocument } = await import('pdf-lib');
+    const out = await PDFDocument.create();
+    const reportDoc = await PDFDocument.load(reportBytes);
+    const photoDoc = await PDFDocument.load(photoBytes);
+    const reportPages = await out.copyPages(reportDoc, reportDoc.getPageIndices());
+    for (const p of reportPages) out.addPage(p);
+    const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
+    for (const p of photoPages) out.addPage(p);
+    return { bytes: await out.save(), hasPhotos: true };
+  };
+
   const handlePrintAppeal = async (appeal) => {
     if (!appeal) return;
+    const reportMeta = getReportForAppeal(appeal);
+    if (!reportMeta) {
+      alert('No saved report on file for this subject. Run CME → Detailed → check "Save to Appeal Log" → Download PDF first.');
+      return;
+    }
     setPrintingAppealId(appeal.id);
     try {
+      const { bytes } = await buildPrintablePdfForAppeal(appeal);
       const key = compositeKeyForAppeal(appeal);
-      const photoBytes = await fetchPhotoPacketBytes(key);
-      const bytes = await buildAppealReportPdf({
-        appeal,
-        photoPacketBytes: photoBytes,
-        muniLabel,
-      });
       const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || key || 'report')}.pdf`;
       downloadPdf(bytes, fname);
     } catch (e) {
       console.error('Print appeal failed', e);
-      alert(`Could not build appeal report: ${e.message}`);
+      alert(`Could not print appeal report: ${e.message}`);
     } finally {
       setPrintingAppealId(null);
     }
@@ -2251,7 +2204,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     setBatchPrintRunning(true);
     setBatchPrintResult(null);
     setBatchPrintProgress({ current: 0, total: sourceList.length, label: '' });
-    let built = 0, withPhotos = 0, failed = 0;
+    let built = 0, withPhotos = 0, failed = 0, skipped = 0;
     const reports = [];
     try {
       for (let i = 0; i < sourceList.length; i++) {
@@ -2262,13 +2215,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           (appeal.property_qualifier ? `-${appeal.property_qualifier}` : '');
         setBatchPrintProgress({ current: i + 1, total: sourceList.length, label });
         try {
-          const photoBytes = await fetchPhotoPacketBytes(key);
-          const bytes = await buildAppealReportPdf({
-            appeal,
-            photoPacketBytes: photoBytes,
-            muniLabel,
-          });
-          if (photoBytes) withPhotos++;
+          const reportMeta = getReportForAppeal(appeal);
+          if (!reportMeta) {
+            skipped++;
+            continue; // No saved report, skip silently.
+          }
+          const { bytes, hasPhotos } = await buildPrintablePdfForAppeal(appeal);
+          if (!bytes) {
+            skipped++;
+            continue;
+          }
+          if (hasPhotos) withPhotos++;
           built++;
           const fname = `Appeal_${safeFilenamePart(appeal.appeal_number || label)}.pdf`;
           reports.push({ filename: fname, bytes });
@@ -2284,9 +2241,109 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const stamp = new Date().toISOString().slice(0, 10);
         await downloadAppealReportsZip(reports, `${muni}_appeal_reports_${stamp}.zip`);
       }
-      setBatchPrintResult({ built, withPhotos, failed });
+      setBatchPrintResult({ built, withPhotos, failed, skipped });
     } finally {
       setBatchPrintRunning(false);
+    }
+  };
+
+  // ==================== BULK UPLOAD EXISTING APPEAL REPORT PDFs ====================
+  // Auto-matches each file by the CME export naming convention:
+  //   CME_<ccdd>_<block>_<lot>[_<qualifier>].pdf
+  // Matched files upsert into the appeal-reports bucket and metadata table.
+  // Unmatched files are listed so the user can decide what to do.
+
+  const parseCmeFilename = (filename) => {
+    if (!filename) return null;
+    const m = String(filename).match(/^CME_[^_]+_([^_]+)_([^_.]+)(?:_([^.]+))?\.pdf$/i);
+    if (!m) return null;
+    const [, block, lot, qualifier] = m;
+    return {
+      block: block || '',
+      lot: lot || '',
+      qualifier: qualifier || '',
+      key: `${block}-${lot}-${qualifier || ''}`,
+    };
+  };
+
+  const matchUploadFileToProperty = (parsed) => {
+    if (!parsed) return null;
+    const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
+    return properties.find((p) =>
+      norm(p.property_block) === norm(parsed.block) &&
+      norm(p.property_lot) === norm(parsed.lot) &&
+      norm(p.property_qualifier) === norm(parsed.qualifier),
+    ) || null;
+  };
+
+  const handleBulkUploadFilesChosen = (fileList) => {
+    const arr = Array.from(fileList || []).filter((f) => /\.pdf$/i.test(f.name));
+    const enriched = arr.map((file) => {
+      const parsed = parseCmeFilename(file.name);
+      const property = parsed ? matchUploadFileToProperty(parsed) : null;
+      const key = property ? property.property_composite_key : (parsed ? parsed.key : null);
+      return {
+        file,
+        parsedKey: key,
+        matchedAddress: property ? property.property_location : null,
+        status: parsed && property ? 'ready' : (parsed ? 'no_property' : 'unparseable'),
+        message: parsed && property
+          ? null
+          : (parsed ? `No property in this job matches ${parsed.key}` : 'Filename does not match CME naming pattern'),
+      };
+    });
+    setBulkUploadFiles(enriched);
+  };
+
+  const handleRunBulkUpload = async () => {
+    if (!jobData?.id) return;
+    const ready = bulkUploadFiles.filter((f) => f.status === 'ready');
+    if (!ready.length) {
+      alert('No files match the CME naming pattern AND a property in this job.');
+      return;
+    }
+    setBulkUploadRunning(true);
+    setBulkUploadProgress({ current: 0, total: ready.length, label: '' });
+    let uploaded = 0, failed = 0;
+    try {
+      for (let i = 0; i < ready.length; i++) {
+        const item = ready[i];
+        setBulkUploadProgress({ current: i + 1, total: ready.length, label: item.file.name });
+        try {
+          const path = `${jobData.id}/${item.parsedKey}.pdf`;
+          const { error: upErr } = await supabase
+            .storage
+            .from('appeal-reports')
+            .upload(path, item.file, {
+              contentType: 'application/pdf',
+              upsert: true,
+            });
+          if (upErr) throw upErr;
+          const { error: dbErr } = await supabase
+            .from('appeal_reports')
+            .upsert(
+              {
+                job_id: jobData.id,
+                property_composite_key: item.parsedKey,
+                storage_path: path,
+                source_filename: item.file.name,
+                uploaded_at: new Date().toISOString(),
+              },
+              { onConflict: 'job_id,property_composite_key' },
+            );
+          if (dbErr) throw dbErr;
+          uploaded++;
+        } catch (e) {
+          console.error('bulk upload row failed', item, e);
+          failed++;
+        }
+      }
+      await loadAppealReports();
+      alert(`Done. ✓ ${uploaded} uploaded${failed ? ` · ✗ ${failed} failed` : ''}.`);
+      setBulkUploadFiles([]);
+    } finally {
+      setBulkUploadRunning(false);
+      setBulkUploadProgress(null);
     }
   };
 
@@ -3618,41 +3675,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       {(() => {
                         const key = compositeKeyForAppeal(appeal);
                         const hasPacket = !!photoPacketsByKey[key];
-                        const resolution = resolveDefenseSetForAppeal(appeal);
-                        const printable = !!resolution.defense;
-                        let chipClass = 'bg-gray-100 text-gray-500 border-gray-200';
-                        let chipLabel = 'No CME';
-                        let chipTitle = 'No saved CME result set matches this appeal\'s subject. Run Sales Comparison → Search & Results and Save Result Set first.';
-                        if (resolution.status === 'no_appeal_number') {
-                          chipClass = 'bg-gray-100 text-gray-400 border-gray-200';
-                          chipLabel = 'No #';
-                          chipTitle = 'Set an appeal number on this row before resolving a defense set.';
-                        } else if (resolution.status === 'auto') {
-                          chipClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                          chipLabel = 'CME ✓';
-                          chipTitle = `Defense set: ${resolution.defense.resultSet.name}`;
-                        } else if (resolution.status === 'flagged') {
-                          chipClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                          chipLabel = `CME ✓ (${resolution.candidates.length})`;
-                          chipTitle = `Defense set (flagged): ${resolution.defense.resultSet.name}`;
-                        } else if (resolution.status === 'needs_pick') {
-                          chipClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                          chipLabel = `CME ${resolution.candidates.length} — pick`;
-                          chipTitle = `${resolution.candidates.length} saved sets match this subject. Pick one to use for defense.`;
-                        }
-                        const open = resultSetPickerAppealId === appeal.id;
+                        const reportMeta = appealReportsByKey[key];
+                        const printable = !!reportMeta;
+                        const chipClass = printable
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-gray-100 text-gray-500 border-gray-200';
+                        const chipLabel = printable ? 'Report ✓' : 'No report';
+                        const chipTitle = printable
+                          ? `Report on file: ${reportMeta.source_filename || '(unnamed)'} · uploaded ${new Date(reportMeta.uploaded_at).toLocaleDateString()} · ${reportMeta.page_count || '?'} pages`
+                          : 'No saved report. Run CME → Detailed → check "Save to Appeal Log" → Download PDF.';
                         return (
                           <>
-                            <button
-                              onClick={() => {
-                                setResultSetPickerAppealId(open ? null : appeal.id);
-                                setResultSetPickerShowArchived(false);
-                              }}
+                            <span
                               title={chipTitle}
-                              className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${chipClass} hover:opacity-90`}
+                              className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${chipClass}`}
                             >
                               {chipLabel}
-                            </button>
+                            </span>
                             {hasPacket && (
                               <button
                                 onClick={() => handlePreviewPhotoPacket(key)}
@@ -3668,12 +3707,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                               className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                               title={
                                 !printable
-                                  ? (resolution.status === 'no_appeal_number'
-                                      ? 'Set an appeal number first'
-                                      : resolution.status === 'no_candidates'
-                                        ? 'No saved CME for this subject'
-                                        : 'Pick a defense set first')
-                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos)' : 'Print Appeal Report')
+                                  ? 'No saved report — generate one from CME → Detailed first'
+                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report')
                               }
                             >
                               <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />
@@ -3685,114 +3720,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
-                            {open && (
-                              <div
-                                className="absolute z-30 right-2 top-full mt-1 w-96 bg-white border border-gray-200 rounded-lg shadow-xl text-left p-3"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="flex justify-between items-center mb-2">
-                                  <span className="text-xs font-semibold text-gray-700">
-                                    Defense set for appeal {appeal.appeal_number || '(no #)'}
-                                  </span>
-                                  <button
-                                    onClick={() => setResultSetPickerAppealId(null)}
-                                    className="text-gray-400 hover:text-gray-700"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                                {resolution.candidates.length === 0 && (
-                                  <div className="text-xs text-gray-500">
-                                    No saved CME result sets match this subject's BLQ. Run Sales Comparison → Search & Results and click Save Result Set.
-                                  </div>
-                                )}
-                                {resolution.candidates.length > 0 && (
-                                  <ul className="space-y-1 max-h-56 overflow-y-auto">
-                                    {resolution.candidates.map((c) => {
-                                      const isDefense = c.resultSet.use_for_defense === true ||
-                                        (resolution.candidates.length === 1);
-                                      const busy = resultSetMutationBusy === c.resultSet.id;
-                                      return (
-                                        <li key={c.resultSet.id} className="flex items-center justify-between gap-2 text-xs border border-gray-100 rounded p-2">
-                                          <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                                            <input
-                                              type="radio"
-                                              name={`defense_${appeal.id}`}
-                                              checked={isDefense}
-                                              disabled={busy || resolution.candidates.length === 1}
-                                              onChange={() => handleSetDefenseSet(appeal, c)}
-                                            />
-                                            <span className="truncate">
-                                              <span className="font-medium text-gray-800">{c.resultSet.name || '(unnamed)'}</span>
-                                              <span className="text-gray-500 ml-1">
-                                                · {new Date(c.resultSet.updated_at || c.resultSet.created_at).toLocaleDateString()}
-                                              </span>
-                                            </span>
-                                          </label>
-                                          <button
-                                            onClick={() => handleArchiveResultSet(c.resultSet.id, true)}
-                                            disabled={busy}
-                                            className="text-[10px] text-gray-500 hover:text-red-600 px-1.5 py-0.5 border border-gray-200 rounded hover:bg-red-50 disabled:opacity-50"
-                                            title="Archive this set (hide from active picker, keeps recallable)"
-                                          >
-                                            Archive
-                                          </button>
-                                        </li>
-                                      );
-                                    })}
-                                  </ul>
-                                )}
-                                {(() => {
-                                  const norm = (v) => (v == null ? '' : String(v).trim().toUpperCase());
-                                  const wantBlock = norm(appeal.property_block);
-                                  const wantLot = norm(appeal.property_lot);
-                                  const wantQual = norm(appeal.property_qualifier);
-                                  const archived = savedResultSets.filter((rs) => {
-                                    if (!rs.archived_at) return false;
-                                    const results = Array.isArray(rs.results) ? rs.results : [];
-                                    return results.some((r) =>
-                                      r?.subject &&
-                                      norm(r.subject.property_block) === wantBlock &&
-                                      norm(r.subject.property_lot) === wantLot &&
-                                      norm(r.subject.property_qualifier) === wantQual,
-                                    );
-                                  });
-                                  if (!archived.length) return null;
-                                  return (
-                                    <div className="mt-2 pt-2 border-t border-gray-100">
-                                      <button
-                                        onClick={() => setResultSetPickerShowArchived((v) => !v)}
-                                        className="text-[10px] text-gray-500 hover:text-gray-700 underline"
-                                      >
-                                        {resultSetPickerShowArchived ? 'Hide' : 'Show'} archived ({archived.length})
-                                      </button>
-                                      {resultSetPickerShowArchived && (
-                                        <ul className="mt-1 space-y-1">
-                                          {archived.map((rs) => (
-                                            <li key={rs.id} className="flex items-center justify-between gap-2 text-xs border border-gray-100 rounded p-2 bg-gray-50">
-                                              <span className="truncate">
-                                                <span className="text-gray-700">{rs.name || '(unnamed)'}</span>
-                                                <span className="text-gray-500 ml-1">
-                                                  · archived {new Date(rs.archived_at).toLocaleDateString()}
-                                                </span>
-                                              </span>
-                                              <button
-                                                onClick={() => handleArchiveResultSet(rs.id, false)}
-                                                disabled={resultSetMutationBusy === rs.id}
-                                                className="text-[10px] text-blue-600 hover:text-blue-800 px-1.5 py-0.5 border border-blue-200 rounded hover:bg-blue-50 disabled:opacity-50"
-                                                title="Un-archive this set"
-                                              >
-                                                Restore
-                                              </button>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            )}
                           </>
                         );
                       })()}
@@ -3901,7 +3828,140 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <Printer className="w-4 h-4" />
           Batch Print Appeals
         </button>
+        <button
+          onClick={() => {
+            setShowBulkUploadModal(true);
+            setBulkUploadFiles([]);
+            setBulkUploadProgress(null);
+          }}
+          title="Bulk-upload existing appeal report PDFs (auto-matched by CME filename) into the appeal-reports bucket"
+          style={{ backgroundColor: '#7c3aed', color: 'white' }}
+          className="px-4 py-2 rounded-lg font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          Bulk Upload Reports
+        </button>
       </div>
+
+      {/* BULK UPLOAD MODAL */}
+      {showBulkUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[85vh]">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-900">Bulk Upload Appeal Reports</h2>
+              <button onClick={() => setShowBulkUploadModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              Drop or pick PDFs you've already exported from CME → Detailed. Files are auto-matched by their CME filename (<code>CME_ccdd_block_lot_qualifier.pdf</code>) to a property in this job and uploaded to the appeal-reports bucket. Existing entries are replaced.
+            </div>
+
+            <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center hover:bg-purple-50/40">
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                id="bulk-upload-input"
+                className="hidden"
+                onChange={(e) => handleBulkUploadFilesChosen(e.target.files)}
+              />
+              <label htmlFor="bulk-upload-input" className="cursor-pointer">
+                <Upload className="w-8 h-8 text-purple-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-700">
+                  {bulkUploadFiles.length > 0 ? `${bulkUploadFiles.length} file(s) selected — click to choose a different set` : 'Click to choose PDF files (multi-select)'}
+                </p>
+              </label>
+            </div>
+
+            {bulkUploadFiles.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between text-xs">
+                  <span className="font-semibold text-gray-700">
+                    {bulkUploadFiles.filter((f) => f.status === 'ready').length} ready · {bulkUploadFiles.filter((f) => f.status !== 'ready').length} need attention
+                  </span>
+                  <span className="text-gray-500">
+                    ✓ ready · ⚠ no property match · ✗ unparseable
+                  </span>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-left px-3 py-1.5">File</th>
+                        <th className="text-left px-3 py-1.5">Subject</th>
+                        <th className="text-center px-3 py-1.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {bulkUploadFiles.map((f, i) => (
+                        <tr key={i} className={f.status === 'ready' ? '' : 'bg-amber-50/40'}>
+                          <td className="px-3 py-1.5 font-mono truncate max-w-[280px]">{f.file.name}</td>
+                          <td className="px-3 py-1.5">
+                            {f.matchedAddress ? (
+                              <span className="text-gray-700">{f.matchedAddress}</span>
+                            ) : f.parsedKey ? (
+                              <span className="text-amber-700">{f.parsedKey}</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            {f.status === 'ready'
+                              ? <span className="text-green-700" title="Ready to upload">✓</span>
+                              : f.status === 'no_property'
+                                ? <span className="text-amber-700" title={f.message}>⚠</span>
+                                : <span className="text-red-700" title={f.message}>✗</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {bulkUploadProgress && bulkUploadRunning && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-semibold text-purple-800">
+                    Uploading {bulkUploadProgress.current} of {bulkUploadProgress.total}
+                  </span>
+                  <span className="text-purple-700 font-mono text-xs truncate max-w-[280px]">{bulkUploadProgress.label}</span>
+                </div>
+                <div className="w-full bg-purple-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-purple-600 h-2 transition-all duration-200"
+                    style={{
+                      width: `${Math.round((bulkUploadProgress.current / bulkUploadProgress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setShowBulkUploadModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleRunBulkUpload}
+                disabled={bulkUploadRunning || !bulkUploadFiles.some((f) => f.status === 'ready')}
+                style={{ backgroundColor: '#7c3aed', color: 'white' }}
+                className="px-4 py-2 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {bulkUploadRunning
+                  ? (bulkUploadProgress ? `Uploading ${bulkUploadProgress.current}/${bulkUploadProgress.total}…` : 'Uploading…')
+                  : 'Upload Selected'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* BATCH PRINT MODAL */}
       {showBatchPrintModal && (
@@ -3982,6 +4042,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <p className="text-emerald-700">
                   ✓ {batchPrintResult.built} report{batchPrintResult.built === 1 ? '' : 's'} built
                   · 📷 {batchPrintResult.withPhotos} with photo packet
+                  {batchPrintResult.skipped > 0 ? ` · ⊘ ${batchPrintResult.skipped} skipped (no saved report)` : ''}
                   {batchPrintResult.failed > 0 ? ` · ✗ ${batchPrintResult.failed} failed` : ''}
                 </p>
               </div>

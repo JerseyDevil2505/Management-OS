@@ -1484,8 +1484,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [subject, jobData?.id, allProperties]);
 
+  // ==================== APPEAL LOG UPLOAD STATE ====================
+  // Lets the user one-click upload the generated PDF to the appeal-reports
+  // bucket so the Appeal Log can print it later (with photos appended).
+  const [saveToAppealLog, setSaveToAppealLog] = useState(true);
+  const [appealUploadStatus, setAppealUploadStatus] = useState(null); // { status: 'idle'|'uploading'|'done'|'error', message? }
+
   // Generate PDF document
-  const generatePDF = useCallback(async () => {
+  const generatePDF = useCallback(async (opts = {}) => {
     // Pre-export geocode gate: warn if subject or any displayed comp is
     // missing lat/lng. The user can still proceed (some reports don't need
     // a map), but at least they won't be surprised by a blank map page.
@@ -2567,9 +2573,57 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const lot = subject.property_lot || '';
     const qualifier = subject.property_qualifier || '';
     const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
-    doc.save(fileName);
-    setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+
+    // Optionally upload the same PDF bytes to the appeal-reports bucket so the
+    // Appeal Log can print it later (with photos appended). Controlled by the
+    // export modal's "Save to Appeal Log" checkbox.
+    const wantUpload = opts.uploadToAppealLog ?? saveToAppealLog;
+    if (wantUpload && jobData?.id) {
+      try {
+        setAppealUploadStatus({ status: 'uploading' });
+        const pdfBytes = doc.output('arraybuffer');
+        const compositeKey =
+          subject.property_composite_key ||
+          `${block}-${lot}-${qualifier}`;
+        const path = `${jobData.id}/${compositeKey}.pdf`;
+        const { error: upErr } = await supabase
+          .storage
+          .from('appeal-reports')
+          .upload(path, new Uint8Array(pdfBytes), {
+            contentType: 'application/pdf',
+            upsert: true,
+          });
+        if (upErr) throw upErr;
+        const { error: dbErr } = await supabase
+          .from('appeal_reports')
+          .upsert(
+            {
+              job_id: jobData.id,
+              property_composite_key: compositeKey,
+              storage_path: path,
+              source_filename: fileName,
+              page_count: doc.getNumberOfPages(),
+              uploaded_at: new Date().toISOString(),
+            },
+            { onConflict: 'job_id,property_composite_key' },
+          );
+        if (dbErr) throw dbErr;
+        setAppealUploadStatus({ status: 'done', message: 'Saved to Appeal Log' });
+      } catch (e) {
+        console.error('appeal-reports upload failed', e);
+        setAppealUploadStatus({ status: 'error', message: e.message || 'Upload failed' });
+      }
+    }
+
+    // Always also trigger a local download unless the caller explicitly opts out
+    // (e.g. an "upload only" call path in the future).
+    if (opts.downloadLocal !== false) {
+      doc.save(fileName);
+    }
+    if (opts.closeModal !== false) {
+      setShowExportModal(false);
+    }
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, saveToAppealLog]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -2911,6 +2965,21 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
+                <label
+                  className="flex items-center gap-2 cursor-pointer text-white text-sm"
+                  title="Also upload this PDF to the Appeal Log so it can be printed later (with PowerComp photos appended)."
+                >
+                  <input
+                    type="checkbox"
+                    checked={saveToAppealLog}
+                    onChange={(e) => setSaveToAppealLog(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    <FileDown size={14} />
+                    Save to Appeal Log
+                  </span>
+                </label>
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -2934,6 +3003,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               />
               {appealAutoDetected && <span className="text-xs text-green-600 font-medium">Auto-detected from Appeal Log</span>}
               {!appealAutoDetected && !appealNumber && <span className="text-xs text-gray-400">Optional — will appear above Block/Lot on PDF</span>}
+              {appealUploadStatus?.status === 'uploading' && (
+                <span className="ml-auto text-xs text-blue-700 font-medium">Saving to Appeal Log…</span>
+              )}
+              {appealUploadStatus?.status === 'done' && (
+                <span className="ml-auto text-xs text-emerald-700 font-medium">✓ {appealUploadStatus.message}</span>
+              )}
+              {appealUploadStatus?.status === 'error' && (
+                <span className="ml-auto text-xs text-red-700 font-medium">✗ Save to Appeal Log failed: {appealUploadStatus.message}</span>
+              )}
             </div>
 
             {/* Modal Content - Editable Grid */}
