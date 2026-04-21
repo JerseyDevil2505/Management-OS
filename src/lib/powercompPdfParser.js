@@ -494,13 +494,18 @@ async function extractImageRectsFromPage(pdfjsPage, viewport) {
 function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
   if (!rects.length) return {};
 
-  // Anchor (center x/y in canvas pixels) for each slot valid on this page.
+  // Anchor (center x/y + half-extents in canvas pixels) for each slot valid
+  // on this page. We keep the half-extents so we can verify a candidate
+  // image actually lives inside the slot's box (with a little slop) instead
+  // of just being the closest anchor on the page.
   const anchorFor = (slot) => {
     const r = rectForSlot(slot);
     if (!r) return null;
     return {
       cx: (r.x + r.w / 2) * canvasW,
       cy: (r.y + r.h / 2) * canvasH,
+      hx: (r.w / 2) * canvasW,
+      hy: (r.h / 2) * canvasH,
     };
   };
   const anchors = slotsForPage
@@ -514,6 +519,14 @@ function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
   // gets first pick when two rects are near the same anchor.
   const sorted = [...rects].sort((a, b) => b.areaPdf - a.areaPdf);
 
+  // Slop factor: a candidate's center must lie within ~1.5x the slot's
+  // half-extent of the anchor center to be considered. This rejects
+  // images that clearly belong to a slot NOT on this page (notably the
+  // subject photo BRT redraws on subsequent photo pages — without this
+  // gate, when comp5 is missing the subject would get force-fit into
+  // comp5 because it's the nearest of the right-column anchors).
+  const SLOP = 1.5;
+
   for (const rect of sorted) {
     const cx = rect.xPx + rect.wPx / 2;
     const cy = rect.yPx + rect.hPx / 2;
@@ -523,6 +536,8 @@ function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
       if (used.has(slot)) continue;
       const dx = cx - a.cx;
       const dy = cy - a.cy;
+      // Reject rects whose center is well outside this anchor's box.
+      if (Math.abs(dx) > a.hx * SLOP || Math.abs(dy) > a.hy * SLOP) continue;
       const d = dx * dx + dy * dy;
       if (d < bestDist) {
         bestDist = d;
