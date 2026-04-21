@@ -477,27 +477,62 @@ async function extractImageRectsFromPage(pdfjsPage, viewport) {
 }
 
 /**
- * Given the image rectangles from a BRT photo page, classify them into
- * the fixed slot order BRT uses: largest = subject; remaining sorted top
- * to bottom = comp1, comp2, comp3.
+ * Assign each detected image rectangle to a BRT slot by SPATIAL ANCHOR.
+ *
+ * BRT draws image XObjects only for slots that actually have a photo; empty
+ * "No Picture" cells don't show up in the operator list at all. So we can
+ * NOT rely on "nth image = nth slot" ordering — an image in the comp2
+ * position must stay labeled comp2 even if comp1 is empty.
+ *
+ * We use the eyeballed BRT_SLOT_RECTS as spatial anchors (their centers are
+ * roughly where each photo lives on the page) and assign each detected
+ * image to the closest anchor whose slot is included on this page.
+ *
+ * For page 2 ("comp4", "comp5") we use comp1/comp2 anchors since BRT
+ * reuses the same right-column geometry there.
  */
-function classifyPhotoRects(rects, slotsForPage) {
+function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
   if (!rects.length) return {};
-  // Sort by area desc; biggest is the subject box on BRT pages.
-  const sortedByArea = [...rects].sort((a, b) => b.areaPdf - a.areaPdf);
+
+  // Anchor (center x/y in canvas pixels) for each slot valid on this page.
+  const anchorFor = (slot) => {
+    const r = rectForSlot(slot);
+    if (!r) return null;
+    return {
+      cx: (r.x + r.w / 2) * canvasW,
+      cy: (r.y + r.h / 2) * canvasH,
+    };
+  };
+  const anchors = slotsForPage
+    .map((slot) => ({ slot, a: anchorFor(slot) }))
+    .filter((e) => e.a);
+  if (!anchors.length) return {};
+
   const out = {};
-  const remaining = [];
-  if (slotsForPage.includes('subject')) {
-    out.subject = sortedByArea[0];
-    remaining.push(...sortedByArea.slice(1));
-  } else {
-    remaining.push(...sortedByArea);
-  }
-  // Sort remaining top->bottom by yPx (smaller y = higher on canvas).
-  remaining.sort((a, b) => a.yPx - b.yPx);
-  const compSlots = slotsForPage.filter((s) => s !== 'subject');
-  for (let i = 0; i < compSlots.length && i < remaining.length; i++) {
-    out[compSlots[i]] = remaining[i];
+  const used = new Set();
+  // Sort detected images by area desc so the largest (typically subject)
+  // gets first pick when two rects are near the same anchor.
+  const sorted = [...rects].sort((a, b) => b.areaPdf - a.areaPdf);
+
+  for (const rect of sorted) {
+    const cx = rect.xPx + rect.wPx / 2;
+    const cy = rect.yPx + rect.hPx / 2;
+    let bestSlot = null;
+    let bestDist = Infinity;
+    for (const { slot, a } of anchors) {
+      if (used.has(slot)) continue;
+      const dx = cx - a.cx;
+      const dy = cy - a.cy;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        bestSlot = slot;
+      }
+    }
+    if (bestSlot) {
+      out[bestSlot] = rect;
+      used.add(bestSlot);
+    }
   }
   return out;
 }
@@ -541,7 +576,12 @@ async function extractPhotosFromPacket(originalPdfBytes, packet) {
     }
 
     if (imageRects.length) {
-      const classified = classifyPhotoRects(imageRects, slotsForPage);
+      const classified = classifyPhotoRects(
+        imageRects,
+        slotsForPage,
+        canvas.width,
+        canvas.height,
+      );
       for (const slot of slotsForPage) {
         const r = classified[slot];
         if (!r) {
@@ -764,16 +804,13 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
 
   drawHeader();
 
-  const compLabel = (n) =>
-    compAddrs[n] ? `Comp #${n}  —  ${compAddrs[n]}` : `Comp #${n}`;
-
   // Subject — top row, centered.
   drawSlot(
     subjX,
     subjY,
     subjPhotoW,
     subjPhotoH,
-    subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
+    'Subject',
     bySlot.subject || null,
     { subject: true },
   );
@@ -785,7 +822,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
       compsY,
       compPhotoW,
       compPhotoH,
-      compLabel(i + 1),
+      `Comp #${i + 1}`,
       bySlot[slot] || null,
     );
   });
@@ -803,7 +840,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
       subjY,
       subjPhotoW,
       subjPhotoH,
-      subjectAddr ? `Subject  —  ${subjectAddr}` : 'Subject',
+      'Subject',
       bySlot.subject || null,
       { subject: true },
     );
@@ -816,7 +853,7 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
         compsY,
         compPhotoW,
         compPhotoH,
-        compLabel(i + 4),
+        `Comp #${i + 4}`,
         bySlot[slot] || null,
       );
     });
