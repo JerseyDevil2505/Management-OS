@@ -743,11 +743,14 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   const subjPhotoH = subjRowH - captionGap - captionH - cellPad * 2;
   const compPhotoH = compRowH - captionGap - captionH - cellPad * 2;
 
-  // Subject is centered horizontally with a fixed width that keeps the
-  // photo proportionate (roughly the same aspect as BRT's box ≈ 0.76).
+  // Subject is centered horizontally and sized to a landscape aspect
+  // (typical home photos are landscape), so a 4:3-ish image fills the
+  // cell instead of being letterboxed into a tall portrait box.
+  // We keep the SAME vertical row size as before (so comps below are
+  // unaffected) but allow the subject to use much more horizontal space.
   const subjPhotoW = Math.min(
-    contentW * 0.55,
-    subjPhotoH / 0.76,
+    contentW * 0.75,
+    subjPhotoH * 1.50,
   );
   const subjCellW  = subjPhotoW + cellPad * 2;
   const subjCellH  = subjPhotoH + cellPad * 2;
