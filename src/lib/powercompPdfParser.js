@@ -218,44 +218,279 @@ export async function parsePowerCompPdf(input) {
   };
 }
 
+// =============================================================================
+// PHOTO EXTRACTION + LOJIK-BRANDED PHOTO PACKET
+// =============================================================================
+// Instead of copying BRT's photo pages verbatim (which carries their layout
+// chrome and the BRT copyright footer), we now render each BRT photo page to
+// a canvas via pdfjs, crop the photo regions out of known slot rectangles,
+// and re-lay them out on our own landscape grid. End result:
+//   - Same property photos
+//   - Lojik header, equal-sized photo cells, our captions
+//   - No BRT layout / wordmark / "Copyright (c) BRT Technologies" footer
+//
+// BRT's photo page is consistent across vendors (BRT + Microsystems): one
+// large subject box on the left, three stacked comp boxes on the right.
+// When a subject has more than 3 comps, BRT spills onto a 2nd photo page
+// repeating the subject + the next batch of comps. We treat the subject from
+// the first page as authoritative and just walk the comp slots in order
+// across pages.
+//
+// All slot coordinates are expressed as fractions of the rendered page so
+// they survive page-size differences.
+
+// Slot rectangles (x, y, w, h) are relative to the *rendered canvas* size,
+// where (0,0) is top-left. Tuned against the BRT samples we have on file —
+// adjust here if BRT changes their template. Each rect is intentionally a
+// little smaller than the visible box outline so we don't capture the
+// border stroke.
+const BRT_SLOT_RECTS = {
+  subject: { x: 0.030, y: 0.105, w: 0.460, h: 0.690 },
+  comp1:   { x: 0.620, y: 0.105, w: 0.295, h: 0.205 },
+  comp2:   { x: 0.620, y: 0.370, w: 0.295, h: 0.205 },
+  comp3:   { x: 0.620, y: 0.635, w: 0.295, h: 0.205 },
+};
+// Per-page slot order. Page 0: subject + comps 1-3. Page 1+: comps 4, 5
+// (BRT reuses the subject box on subsequent pages but we already captured
+// it from page 0 so we skip it here).
+const PHOTO_PAGE_SLOTS = [
+  ['subject', 'comp1', 'comp2', 'comp3'],
+  ['comp4', 'comp5'],
+];
+
+// "No Picture" placeholder detection: sample 9 points across the cropped
+// region; if every sample is near-white the slot is empty.
+function isMostlyWhite(canvas, x, y, w, h) {
+  const ctx = canvas.getContext('2d');
+  let whiteHits = 0;
+  let total = 0;
+  for (let ry = 0; ry < 3; ry++) {
+    for (let rx = 0; rx < 3; rx++) {
+      const sx = Math.floor(x + (w * (rx + 0.5)) / 3);
+      const sy = Math.floor(y + (h * (ry + 0.5)) / 3);
+      try {
+        const data = ctx.getImageData(sx, sy, 1, 1).data;
+        if (data[0] > 240 && data[1] > 240 && data[2] > 240) whiteHits++;
+        total++;
+      } catch (_) { /* getImageData can throw on tainted canvases */ }
+    }
+  }
+  return total > 0 && whiteHits / total >= 0.85;
+}
+
+// Helper: returns the comp-2 slot rect (used for comp4/comp5 on page 2).
+// Page 2 layout repeats the same right-column geometry as page 1.
+function rectForSlot(slotName) {
+  if (slotName === 'comp4') return BRT_SLOT_RECTS.comp1;
+  if (slotName === 'comp5') return BRT_SLOT_RECTS.comp2;
+  return BRT_SLOT_RECTS[slotName];
+}
+
 /**
- * Build a small sub-PDF (Uint8Array) containing only the photo pages for one
- * packet, with a credit footer stamped on each page.
+ * Render a PDF page to a canvas via pdfjs and return the canvas.
+ * Caller is responsible for not detaching the underlying buffer.
+ */
+async function renderPageToCanvas(pdfjsPage, scale = 2) {
+  const viewport = pdfjsPage.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  const ctx = canvas.getContext('2d');
+  await pdfjsPage.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+/**
+ * Crop a region from a source canvas to a fresh canvas, returning a
+ * data URL (PNG).
+ */
+function cropToDataUrl(srcCanvas, x, y, w, h) {
+  const dst = document.createElement('canvas');
+  dst.width = Math.max(1, Math.floor(w));
+  dst.height = Math.max(1, Math.floor(h));
+  const dctx = dst.getContext('2d');
+  dctx.drawImage(srcCanvas, x, y, w, h, 0, 0, dst.width, dst.height);
+  return dst.toDataURL('image/jpeg', 0.85);
+}
+
+/**
+ * Walk the photo pages of a packet and pull out per-slot photo data URLs.
+ * Returns an array of { slot, label, dataUrl } in display order. Slots
+ * detected as "No Picture" placeholders are dropped silently.
+ */
+async function extractPhotosFromPacket(originalPdfBytes, packet) {
+  // Independent copy so neither pdfjs nor pdf-lib detaches the master bytes.
+  const scanCopy = new Uint8Array(originalPdfBytes.byteLength);
+  scanCopy.set(originalPdfBytes);
+  const pdf = await pdfjsLib.getDocument({ data: scanCopy }).promise;
+
+  const photos = [];
+  for (let i = 0; i < packet.photoPageIndices.length; i++) {
+    const pageIdx = packet.photoPageIndices[i];
+    const slotsForPage = PHOTO_PAGE_SLOTS[i] || [];
+    if (!slotsForPage.length) break; // Safety: stop after page 2.
+    const pdfjsPage = await pdf.getPage(pageIdx + 1);
+    const canvas = await renderPageToCanvas(pdfjsPage, 2);
+    for (const slot of slotsForPage) {
+      const rect = rectForSlot(slot);
+      if (!rect) continue;
+      const px = rect.x * canvas.width;
+      const py = rect.y * canvas.height;
+      const pw = rect.w * canvas.width;
+      const ph = rect.h * canvas.height;
+      if (isMostlyWhite(canvas, px, py, pw, ph)) continue;
+      photos.push({
+        slot,
+        label:
+          slot === 'subject'
+            ? 'Subject'
+            : `Comp #${slot.replace('comp', '')}`,
+        dataUrl: cropToDataUrl(canvas, px, py, pw, ph),
+      });
+    }
+    try { await pdfjsPage.cleanup?.(); } catch (_) {}
+  }
+  try { await pdf.destroy(); } catch (_) {}
+  return photos;
+}
+
+/**
+ * Build a Lojik-branded landscape photo packet PDF from a parsed packet.
  *
- * Caller passes in the original PDF bytes and a single packet from parsePowerCompPdf.
+ * No BRT chrome (header, footer, copyright wordmark) is preserved — only
+ * the underlying photographs are reused. Subject + comp photos are laid
+ * out in a uniform 3x2 grid so the subject is no longer disproportionately
+ * larger than the comps.
+ *
+ * Returns Uint8Array of the new PDF, or null if no photos were found.
  */
 export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
-  const src = await PDFDocument.load(originalPdfBytes);
-  const out = await PDFDocument.create();
-  const font = await out.embedFont(StandardFonts.Helvetica);
+  if (!packet.photoPageIndices?.length) return null;
 
-  const credit =
-    opts.credit || 'Photos Courtesy of BRT Technologies PowerComp';
+  const photos = await extractPhotosFromPacket(originalPdfBytes, packet);
+  if (!photos.length) return null;
 
-  if (!packet.photoPageIndices.length) return null;
-  const pages = await out.copyPages(src, packet.photoPageIndices);
-  for (const p of pages) {
-    out.addPage(p);
-    const { width } = p.getSize();
-    p.drawText(credit, {
-      x: 24,
-      y: 14,
-      size: 8,
-      font,
-      color: rgb(0.35, 0.35, 0.35),
-    });
-    p.drawText(
-      `${packet.block}-${packet.lot}${packet.qualifier ? '-' + packet.qualifier : ''}` +
-        (packet.address ? `  ·  ${packet.address}` : ''),
-      {
-        x: width - 220,
-        y: 14,
-        size: 8,
-        font,
-        color: rgb(0.35, 0.35, 0.35),
-      },
+  // Lazy-load jsPDF here so the import sits beside the work that needs it.
+  const { jsPDF } = await import('jspdf');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+  const pageW = doc.internal.pageSize.getWidth();   // 792
+  const pageH = doc.internal.pageSize.getHeight();  // 612
+  const margin = 36;
+  const headerH = 50;
+  const footerH = 22;
+  const lojikBlue = [0, 102, 204];
+
+  // 3-column x 2-row grid. Subject + up to 5 comps = 6 cells; perfect fit.
+  const cols = 3;
+  const rows = 2;
+  const cellGapX = 14;
+  const cellGapY = 22; // extra vertical room for caption
+  const captionH = 28;
+
+  const gridLeft = margin;
+  const gridTop = margin + headerH;
+  const gridW = pageW - margin * 2;
+  const gridH = pageH - margin * 2 - headerH - footerH;
+  const cellW = (gridW - cellGapX * (cols - 1)) / cols;
+  const cellH = (gridH - cellGapY * (rows - 1)) / rows;
+  const photoH = cellH - captionH;
+
+  const subjectAddr = packet.address || '';
+  const blqLabel =
+    `${packet.block}-${packet.lot}` +
+    (packet.qualifier ? `-${packet.qualifier}` : '');
+
+  const drawHeader = () => {
+    // Left: title
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...lojikBlue);
+    doc.text('Photo Packet', margin, margin + 14);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.text(
+      `Block ${packet.block} Lot ${packet.lot}` +
+        (packet.qualifier ? ` Qual ${packet.qualifier}` : '') +
+        (subjectAddr ? `  \u00b7  ${subjectAddr}` : ''),
+      margin,
+      margin + 30,
     );
+    // Right: appeal context line is filled in later by the merge step
+    // (which already prints subject info atop each report page). Here we
+    // just stamp the slot count so the user can sanity-check.
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      `${photos.length} photo${photos.length === 1 ? '' : 's'}`,
+      pageW - margin,
+      margin + 14,
+      { align: 'right' },
+    );
+    // Thin underline
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.5);
+    doc.line(margin, margin + headerH - 6, pageW - margin, margin + headerH - 6);
+  };
+
+  const drawFooter = () => {
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Subject and comparable photographs.', margin, pageH - margin + 8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(blqLabel, pageW - margin, pageH - margin + 8, { align: 'right' });
+  };
+
+  // Cell drawer. Returns true if the cell was rendered.
+  const drawCell = (photo, col, row) => {
+    const x = gridLeft + col * (cellW + cellGapX);
+    const y = gridTop + row * (cellH + cellGapY);
+    // Photo box (with subtle border and white fill)
+    doc.setDrawColor(200, 200, 200);
+    doc.setFillColor(255, 255, 255);
+    doc.setLineWidth(0.5);
+    doc.rect(x, y, cellW, photoH, 'FD');
+    // Inset the actual image a hair so we don't clip the border
+    try {
+      doc.addImage(photo.dataUrl, 'JPEG', x + 1, y + 1, cellW - 2, photoH - 2);
+    } catch (e) {
+      console.warn('addImage failed for slot', photo.slot, e);
+    }
+    // Subject gets a colored badge + bold caption to distinguish it.
+    const isSubject = photo.slot === 'subject';
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...(isSubject ? [185, 28, 28] : lojikBlue));
+    doc.text(photo.label, x + 6, y + photoH + 14);
+    if (isSubject && subjectAddr) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(subjectAddr, x + 6, y + photoH + 26);
+    }
+  };
+
+  // Render in pages of 6 cells. With max 5 comps + 1 subject this fits on
+  // a single page, but we keep the loop generic in case BRT ever ships
+  // packets with more comps.
+  const cellsPerPage = cols * rows;
+  for (let pageStart = 0; pageStart < photos.length; pageStart += cellsPerPage) {
+    if (pageStart > 0) doc.addPage();
+    drawHeader();
+    const slice = photos.slice(pageStart, pageStart + cellsPerPage);
+    slice.forEach((photo, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      drawCell(photo, col, row);
+    });
+    drawFooter();
   }
-  return await out.save();
+
+  // Optional caller override (kept for future use; currently unused since the
+  // rebuilt layout doesn't require BRT attribution).
+  void opts;
+
+  return new Uint8Array(doc.output('arraybuffer'));
 }
