@@ -1789,9 +1789,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       body: staticRows,
       startY: margin + 50,
       margin: { left: margin, right: margin },
+      // fontSize/cellPadding tightened so the full static attribute set
+      // (~30 rows + Net Adjustment + Adjusted Valuation) fits on a single
+      // landscape page. Same values mirrored on the dynamic table below
+      // so the two pages look visually consistent.
       styles: {
-        fontSize: 7,
-        cellPadding: 3,
+        fontSize: 6.5,
+        cellPadding: 2,
         lineColor: [200, 200, 200],
         lineWidth: 0.5,
         valign: 'middle'
@@ -1963,9 +1967,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           body: dynamicRows,
           startY: margin + 65,
           margin: { left: margin, right: margin },
+          // Mirror the static-grid sizing so the two pages render with the
+          // same row density and visual rhythm.
           styles: {
-            fontSize: 7,
-            cellPadding: 3,
+            fontSize: 6.5,
+            cellPadding: 2,
             lineColor: [200, 200, 200],
             lineWidth: 0.5,
             valign: 'middle'
