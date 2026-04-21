@@ -864,35 +864,58 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
 
   drawFooter();
 
-  // ---- Page 2 (only if comp4 or comp5 actually came in): subject on
-  // top again for context, comps 4 + 5 centered on the bottom row.
-  const hasOverflow = !!(bySlot.comp4 || bySlot.comp5);
+  // ---- Page 2: render whenever BRT actually has a comp 4 or 5 in scope,
+  // even if the photo itself is missing ("No Picture"). We decide based on
+  // three independent signals so a "No Picture" Comp #4 still gets a cell:
+  //   1. BRT shipped a second photo page in the source (photoPageIndices > 1)
+  //   2. We captured an actual photo for comp4 / comp5
+  //   3. We captured a comp address for slot 4 or 5 from the photo pages
+  // Within page 2 we only draw cells for slots that actually exist in this
+  // appraisal so we don't render a phantom Comp #5 when only 4 comps exist.
+  const compAddrsAll = packet.compAddresses || {};
+  const slot4Exists = !!bySlot.comp4 || !!compAddrsAll[4];
+  const slot5Exists = !!bySlot.comp5 || !!compAddrsAll[5];
+  const hasOverflow =
+    slot4Exists ||
+    slot5Exists ||
+    (packet.photoPageIndices?.length || 0) > 1;
   if (hasOverflow) {
-    doc.addPage();
-    drawHeader();
-    drawSlot(
-      subjX,
-      subjY,
-      subjPhotoW,
-      subjPhotoH,
-      'Subject',
-      bySlot.subject || null,
-      { subject: true, stretch: true },
-    );
-    const overflowCellW = compCellW;
-    const overflowTotalW = overflowCellW * 2 + colGap;
-    const overflowX = margin + (contentW - overflowTotalW) / 2;
-    ['comp4', 'comp5'].forEach((slot, i) => {
+    const overflowSlots = [];
+    if (slot4Exists || (packet.photoPageIndices?.length || 0) > 1) {
+      overflowSlots.push({ key: 'comp4', label: 'Comp #4' });
+    }
+    if (slot5Exists) {
+      overflowSlots.push({ key: 'comp5', label: 'Comp #5' });
+    }
+    if (overflowSlots.length) {
+      doc.addPage();
+      drawHeader();
       drawSlot(
-        overflowX + i * (overflowCellW + colGap),
-        compsY,
-        compPhotoW,
-        compPhotoH,
-        `Comp #${i + 4}`,
-        bySlot[slot] || null,
+        subjX,
+        subjY,
+        subjPhotoW,
+        subjPhotoH,
+        'Subject',
+        bySlot.subject || null,
+        { subject: true, stretch: true },
       );
-    });
-    drawFooter();
+      const overflowCellW = compCellW;
+      const overflowTotalW =
+        overflowCellW * overflowSlots.length +
+        colGap * Math.max(0, overflowSlots.length - 1);
+      const overflowX = margin + (contentW - overflowTotalW) / 2;
+      overflowSlots.forEach((s, i) => {
+        drawSlot(
+          overflowX + i * (overflowCellW + colGap),
+          compsY,
+          compPhotoW,
+          compPhotoH,
+          s.label,
+          bySlot[s.key] || null,
+        );
+      });
+      drawFooter();
+    }
   }
   return new Uint8Array(doc.output('arraybuffer'));
 }
