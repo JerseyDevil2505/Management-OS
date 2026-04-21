@@ -3029,32 +3029,27 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
       return s;
     };
-    // Excel-safe wrapper so block/lot strings like "10.100" don't get
-    // truncated to numbers.
-    const textCell = (val) => {
-      const s = val == null ? '' : String(val);
-      if (s === '') return '';
-      const inner = s.replace(/"/g, '""');
-      return `"=""${inner}"""`;
-    };
-
+    // Strict CSV — block/lot/qualifier values keep their exact string form
+    // (including trailing zeros) inside the CSV structure itself. Excel may
+    // reinterpret them as numbers on open, but PowerComp parses the raw CSV
+    // and was rejecting the previous `="..."` formula-style wrappers.
     const lines = [header.map(escape).join(',')];
     selected.forEach(r => {
       const cells = [
         escape(r.appeal_number),
         escape(r.result_set_name),
-        textCell(r.subj_block),
-        textCell(r.subj_lot),
-        textCell(r.subj_qualifier),
+        escape(r.subj_block),
+        escape(r.subj_lot),
+        escape(r.subj_qualifier),
       ];
       for (let i = 0; i < maxComps; i++) {
         const c = r.comps[i] || { block: '', lot: '', qualifier: '' };
-        cells.push(textCell(c.block), textCell(c.lot), textCell(c.qualifier));
+        cells.push(escape(c.block), escape(c.lot), escape(c.qualifier));
       }
       lines.push(cells.join(','));
     });
 
-    const csv = lines.join('\n');
+    const csv = lines.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
