@@ -1517,8 +1517,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       if (!proceed) return;
     }
 
+    // Landscape letter (792 x 612 pt). All tables auto-size between left/right
+    // margins and headers/right-aligned text use pageWidth dynamically, so
+    // most sections adapt automatically. The only spots that needed manual
+    // re-tuning were the map page (capped image height + right column) — see
+    // notes there. Landscape gives the 6-column comp grid (~80pt label +
+    // ~115pt per data col) and the 15-column appellant evidence table room
+    // to breathe, and matches the BRT PowerComp photo packets we merge in.
     const doc = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'pt',
       format: 'letter'
     });
@@ -2464,14 +2471,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         doc.setFont('helvetica', 'bold');
         doc.text('Subject & Comps Location Map', pageWidth / 2, 70, { align: 'center' });
 
-        // Two-column layout: map on the left (~58% width), info table on
-        // the right (~38% width). Bottom margin reserved for attribution.
+        // Two-column layout: map on the left, info column on the right.
+        // Landscape letter is 792 x 612 pt, so we cap mapH at ~430pt to
+        // leave room for the attribution line below the map (and to keep
+        // the map from looking absurdly tall vs its width). Right column
+        // widened slightly so longer comp addresses don't wrap as often.
+        const pageHeight = doc.internal.pageSize.getHeight();
         const topY = 95;
         const colGap = 14;
-        const rightColW = 200;
+        const rightColW = 230;
         const mapW = pageWidth - margin * 2 - colGap - rightColW;
         const ratio = canvas.width / canvas.height;
-        const mapH = Math.min(mapW / ratio, 480);
+        const maxMapH = Math.max(280, pageHeight - topY - 60);
+        const mapH = Math.min(mapW / ratio, maxMapH);
         doc.addImage(mapImg, 'PNG', margin, topY, mapW, mapH);
 
         // Right column: subject + comp list with distances
