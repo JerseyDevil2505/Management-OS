@@ -933,15 +933,31 @@ const GeocodingTool = () => {
 
     const rows = [];
     for (const p of candidates) {
+      const numericAddr = normalizeAddressForCensus(p.property_location);
+      // TIGER sometimes indexes a numbered street under its word form
+      // (THIRD ST) instead of the numeric form (3RD ST), or vice versa.
+      // Emit both so the geocoder can match whichever one its segment
+      // table actually has. wordAddr is null when no ordinal token is
+      // present, in which case we just emit the numeric row.
+      const wordAddr = ordinalWordVariant(numericAddr);
       variantZips.forEach((zip, zipIdx) => {
         const city = sanitizeForCsv(njCityForZip(zip) || '');
         rows.push([
-          `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}`,
-          sanitizeForCsv(normalizeAddressForCensus(p.property_location)),
+          `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}n`,
+          sanitizeForCsv(numericAddr),
           city,
           'NJ',
           sanitizeForCsv(zip),
         ].join(','));
+        if (wordAddr) {
+          rows.push([
+            `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}w`,
+            sanitizeForCsv(wordAddr),
+            city,
+            'NJ',
+            sanitizeForCsv(zip),
+          ].join(','));
+        }
       });
     }
 
