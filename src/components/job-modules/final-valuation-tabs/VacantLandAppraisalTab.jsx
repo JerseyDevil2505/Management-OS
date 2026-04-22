@@ -1,8 +1,11 @@
-import { Download, X, Save, Filter, FileDown, Printer, Send } from 'lucide-react';
+import { Download, X, Save, Filter, FileDown, Printer, Send, Map as MapIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
+import GeocodeStatusChip from '../../GeocodeStatusChip';
+import AppealMap from '../../AppealMap';
 
 // Canonical category values matching Method 1 dropdown
 const CATEGORY_OPTIONS = [
@@ -72,6 +75,70 @@ const VacantLandAppraisalTab = ({
   const [editableProperties, setEditableProperties] = useState({});
   const [appealNumber, setAppealNumber] = useState('');
   const [appealAutoDetected, setAppealAutoDetected] = useState(false);
+
+  // In-memory geocode patches for the inline GeocodeStatusChip edit modal.
+  // Keyed by property_composite_key. Lets the user fix a missing/wrong
+  // lat/lng on a vacant-land comp (or the subject) and have it reflect in
+  // the export warning + map without having to re-evaluate.
+  const [geocodePatches, setGeocodePatches] = useState({});
+  const applyGeocodePatch = useCallback(
+    (p) => {
+      if (!p || !p.property_composite_key) return p;
+      const patch = geocodePatches[p.property_composite_key];
+      return patch ? { ...p, ...patch } : p;
+    },
+    [geocodePatches],
+  );
+  const handleGeocodeSaved = useCallback((compositeKey, patch) => {
+    if (!compositeKey) return;
+    setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
+  }, []);
+
+  // Map embed state — mirrors DetailedAppraisalGrid's pattern. Hidden
+  // <AppealMap> rendered inside the export modal so html2canvas can snap
+  // it during PDF generation without the user seeing a flash.
+  const [includeMap, setIncludeMap] = useState(true);
+  const mapCaptureRef = useRef(null);
+
+  // Build subject + comp lat/lng payload for AppealMap. Uses applyGeocodePatch
+  // so any inline edits made via the chip are reflected immediately.
+  const mapData = useMemo(() => {
+    const sRaw = loadedProperties?.subject;
+    const s = applyGeocodePatch(sRaw);
+    const sLat = parseFloat(s?.property_latitude);
+    const sLng = parseFloat(s?.property_longitude);
+    const subjectPayload = (s && !isNaN(sLat) && !isNaN(sLng))
+      ? {
+          latitude: sLat,
+          longitude: sLng,
+          address: s?.property_location || '',
+          block: s?.property_block || '',
+          lot: s?.property_lot || '',
+          qualifier: s?.property_qualifier || '',
+        }
+      : null;
+    const compsPayload = [0, 1, 2, 3, 4]
+      .map((i) => {
+        const raw = loadedProperties?.[`comp_${i}`];
+        const c = applyGeocodePatch(raw);
+        if (!c) return null;
+        const lat = parseFloat(c.property_latitude);
+        const lng = parseFloat(c.property_longitude);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          address: c.property_location || '',
+          block: c.property_block || '',
+          lot: c.property_lot || '',
+          qualifier: c.property_qualifier || '',
+          rank: i + 1,
+        };
+      })
+      .filter(Boolean);
+    return { subject: subjectPayload, comps: compsPayload };
+  }, [loadedProperties, applyGeocodePatch]);
+  const mapHasSubject = !!mapData.subject;
 
   // Refs for tab order
   const inputRefs = useRef({});
@@ -604,6 +671,36 @@ const VacantLandAppraisalTab = ({
 
   // Generate PDF
   const generatePDF = useCallback(async () => {
+    // Pre-export geocode gate. Builds a list of (label, property) for the
+    // subject + every populated comp slot, runs them through the chip's
+    // patch layer, and warns the user if anyone is missing lat/lng. The
+    // user can still proceed (some appraisals don't need a map page), but
+    // they won't be surprised by a blank or skipped map.
+    const checkList = [
+      { label: 'Subject', p: applyGeocodePatch(loadedProperties.subject) },
+      ...[0, 1, 2, 3, 4]
+        .map((i) => ({
+          label: `Comp ${i + 1}`,
+          p: applyGeocodePatch(loadedProperties[`comp_${i}`]),
+        }))
+        .filter((x) => x.p),
+    ];
+    const missingGeo = checkList.filter(({ p }) => {
+      if (!p) return false;
+      const lat = parseFloat(p.property_latitude);
+      const lng = parseFloat(p.property_longitude);
+      return isNaN(lat) || isNaN(lng);
+    });
+    if (missingGeo.length > 0 && includeMap) {
+      const lines = missingGeo
+        .map(({ label, p }) => `  • ${label}: ${p.property_location || '(no address)'}`)
+        .join('\n');
+      const proceed = window.confirm(
+        `${missingGeo.length} propert${missingGeo.length === 1 ? 'y is' : 'ies are'} missing geocode coordinates and won't appear on the map page:\n\n${lines}\n\nClose this dialog and click the 📍? chip in the entry table to fix them now,\nor click OK to export anyway.`,
+      );
+      if (!proceed) return;
+    }
+
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 30;
@@ -715,11 +812,56 @@ const VacantLandAppraisalTab = ({
       }
     });
 
+    // ============== Subject + Comps Map page (optional) ==============
+    if (includeMap && mapHasSubject && mapCaptureRef.current) {
+      try {
+        // Wait one tick so any tile loads in the DOM are flushed before capture
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const canvas = await html2canvas(mapCaptureRef.current, {
+          useCORS: true,
+          allowTaint: false,
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const mapImg = canvas.toDataURL('image/png');
+
+        doc.addPage();
+        if (logoDataUrl) {
+          try { doc.addImage(logoDataUrl, 'PNG', margin, margin - 5, 80, 35); } catch (e) { /* ignore */ }
+        }
+        doc.setFontSize(14);
+        doc.setTextColor(...lojikBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Subject & Comps Location Map', pageWidth / 2, 70, { align: 'center' });
+
+        const topY = 95;
+        const mapW = pageWidth - margin * 2;
+        const ratio = canvas.width / canvas.height;
+        const mapH = Math.min(mapW / ratio, 540);
+        doc.addImage(mapImg, 'PNG', margin, topY, mapW, mapH);
+
+        const footerY = topY + mapH + 16;
+        doc.setFontSize(7);
+        doc.setTextColor(120, 120, 120);
+        doc.setFont('helvetica', 'normal');
+        doc.text(
+          'Map data © OpenStreetMap contributors. Coordinates from U.S. Census Bureau geocoder or manual verification.',
+          margin,
+          footerY,
+          { maxWidth: mapW },
+        );
+      } catch (mapErr) {
+        // Map capture failure is non-fatal — PDF still saves without it.
+        console.warn('Vacant land map capture failed:', mapErr);
+      }
+    }
+
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const fileName = `VLA_${ccdd}_${vacantLandSubject.block}_${vacantLandSubject.lot}${vacantLandSubject.qualifier ? '_' + vacantLandSubject.qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [loadedProperties, vacantLandSubject, vacantLandResult, recalculatedValue, valuationMethod, jobData, appealNumber, getExportValue, getUnitLabel]);
+  }, [loadedProperties, vacantLandSubject, vacantLandResult, recalculatedValue, valuationMethod, jobData, appealNumber, getExportValue, getUnitLabel, applyGeocodePatch, includeMap, mapHasSubject]);
 
   const subjectProp = loadedProperties.subject;
 
@@ -1233,6 +1375,39 @@ const VacantLandAppraisalTab = ({
                 ))}
               </tr>
 
+              {/* Geocode status — inline chip lets the user fix missing
+                  coords before export so the map page actually renders. */}
+              <tr className="border-t border-gray-200 bg-gray-50">
+                <td className="px-2 py-1.5 font-medium text-gray-700 text-xs whitespace-nowrap">Geocode</td>
+                <td className="px-2 py-1.5 text-center bg-yellow-50">
+                  {(() => {
+                    const prop = getPropertyData(vacantLandSubject.block, vacantLandSubject.lot, vacantLandSubject.qualifier);
+                    if (!prop) return <span className="text-gray-400 text-xs">-</span>;
+                    return (
+                      <GeocodeStatusChip
+                        property={applyGeocodePatch(prop)}
+                        onSaved={(patch) => handleGeocodeSaved(prop.property_composite_key, patch)}
+                      />
+                    );
+                  })()}
+                </td>
+                {vacantLandComps.map((comp, idx) => {
+                  const prop = getPropertyData(comp.block, comp.lot, comp.qualifier);
+                  return (
+                    <td key={idx} className="px-2 py-1.5 text-center bg-blue-50 border-l border-gray-300">
+                      {prop ? (
+                        <GeocodeStatusChip
+                          property={applyGeocodePatch(prop)}
+                          onSaved={(patch) => handleGeocodeSaved(prop.property_composite_key, patch)}
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+
               {/* Lot Size preview */}
               <tr className="border-t border-gray-200 bg-gray-50">
                 <td className="px-2 py-1.5 font-medium text-gray-700 text-xs whitespace-nowrap">Size ({getSizeLabel()})</td>
@@ -1518,11 +1693,48 @@ const VacantLandAppraisalTab = ({
               </table>
             </div>
 
+            {/* Map preview — rendered at the same 600px width that gets
+                snapshotted into the PDF via html2canvas. Hidden if the
+                subject has no geocode (Include Map toggle still works to
+                opt back in once one is added). */}
+            {includeMap && mapHasSubject && (
+              <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <MapIcon size={16} className="text-blue-600" />
+                    Subject &amp; Comps Map (PDF preview)
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {(mapData.subject ? 1 : 0) + mapData.comps.length} parcels geocoded · OpenStreetMap tiles
+                  </span>
+                </div>
+                <div ref={mapCaptureRef} style={{ width: 600 }}>
+                  <AppealMap
+                    subject={mapData.subject}
+                    comps={mapData.comps}
+                    height={420}
+                    id="vla-appeal-map-capture"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
-              <p className="text-xs text-gray-500">
-                Edit values above — changes auto-recalculate. Then download PDF.
-              </p>
+              <div className="flex items-center gap-4">
+                <p className="text-xs text-gray-500">
+                  Edit values above — changes auto-recalculate. Then download PDF.
+                </p>
+                <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeMap}
+                    onChange={(e) => setIncludeMap(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  Include map page
+                </label>
+              </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowExportModal(false)}

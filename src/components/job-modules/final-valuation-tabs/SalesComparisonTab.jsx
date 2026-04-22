@@ -6,6 +6,7 @@ import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
+import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
@@ -55,6 +56,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     salesDateEnd: cspDateRange.end,
     vcs: [],
     sameVCS: true, // Default checked
+    // Distance filter — Haversine miles from subject. 0 / blank = no filter.
+    // Only applied when the subject (and the comp being tested) both have
+    // lat/lng. Gated in the UI so a non-geocoded subject can't enable it.
+    maxDistanceMiles: '',
     neighborhood: [],
     sameNeighborhood: false,
     // Lot Size filter
@@ -177,6 +182,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
+
+  // Tracks which saved result set (if any) is currently loaded. When set,
+  // "Evaluate and update" in Detailed will write back to this row in
+  // job_cme_result_sets so the user doesn't have to switch tabs and re-save.
+  // Cleared on fresh evaluation runs that don't originate from a saved set.
+  const [activeResultSetId, setActiveResultSetId] = useState(null);
+  const [activeResultSetName, setActiveResultSetName] = useState(null);
 
   // Appellant evidence panel state for the Detailed sub-tab.
   // Fetched fresh from appeal_log whenever the evaluated subject changes,
@@ -642,6 +654,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }));
 
       let error;
+      let savedId = existingId;
       if (shouldOverwrite && existingId) {
         // Update existing result set
         const { error: updateError } = await supabase
@@ -656,7 +669,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         error = updateError;
       } else {
         // Insert new result set
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('job_cme_result_sets')
           .insert({
             job_id: jobData.id,
@@ -664,11 +677,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             adjustment_bracket: compFilters.adjustmentBracket,
             search_criteria: compFilters,
             results: serializedResults,
-          });
+          })
+          .select('id')
+          .single();
         error = insertError;
+        if (inserted?.id) savedId = inserted.id;
       }
 
       if (error) throw error;
+
+      // Mark this set as the active one so subsequent "Evaluate and update"
+      // calls in Detailed write back here automatically.
+      if (savedId) {
+        setActiveResultSetId(savedId);
+        setActiveResultSetName(name.trim());
+      }
 
       alert(`Result set "${name.trim()}" ${shouldOverwrite ? 'updated' : 'saved'} successfully!`);
       await loadSavedResultSets();
@@ -693,6 +716,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       // Restore results
       setEvaluationResults(data.results);
+
+      // Track this as the active set so Detailed → Evaluate and update
+      // writes back to the same row without a tab switch.
+      setActiveResultSetId(data.id);
+      setActiveResultSetName(data.name);
+
       // Pre-select all non-set-aside rows for set-aside checkbox
       const allIds = new Set(
         (data.results || [])
@@ -1648,6 +1677,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         updatedResults[editingResultIndex] = updatedResult;
         setEvaluationResults(updatedResults);
         console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
+
+        // Auto-persist back to the loaded saved set so the user doesn't have
+        // to switch tabs and re-save. Only fires when an active set is loaded
+        // (set in handleLoadResultSet / handleSaveResultSet). The plain
+        // "Evaluate" button passes syncToResults=false and stays a sandbox.
+        if (activeResultSetId) {
+          try {
+            const serialized = updatedResults.map(r => ({
+              subject: { ...r.subject },
+              comparables: (r.comparables || []).map(c => ({
+                ...c,
+                isSubjectSale: c.isSubjectSale || false,
+                weight: c.weight || 0,
+              })),
+              totalFound: r.totalFound,
+              totalValid: r.totalValid,
+              projectedAssessment: r.projectedAssessment,
+              confidenceScore: r.confidenceScore,
+              hasSubjectSale: r.hasSubjectSale,
+            }));
+            const { error: persistError } = await supabase
+              .from('job_cme_result_sets')
+              .update({
+                results: serialized,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', activeResultSetId);
+            if (persistError) throw persistError;
+            console.log(`💾 Auto-saved updates to result set "${activeResultSetName}"`);
+            await loadSavedResultSets();
+          } catch (persistError) {
+            console.error('Error auto-saving to result set:', persistError);
+            alert(`Evaluation succeeded but auto-save to "${activeResultSetName}" failed: ${persistError.message}\n\nUse "Save Result Set" in Search & Results to retry.`);
+          }
+        }
       } else {
         console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
       }
@@ -1930,6 +1994,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
           // Note: Sales codes and date range filtering is handled by the Sales Pool tab.
           // The eligible sales passed to this loop are already curated by the pool.
+
+          // Distance filter (Haversine miles from subject). Only applied when
+          // the user set a positive radius AND the subject has lat/lng. Comps
+          // missing coords are excluded under this rule — they can't be
+          // distance-checked, so including them would silently break the cap.
+          const maxDistance = parseFloat(compFilters.maxDistanceMiles);
+          if (Number.isFinite(maxDistance) && maxDistance > 0) {
+            const sLat = parseFloat(subject.property_latitude);
+            const sLng = parseFloat(subject.property_longitude);
+            if (Number.isFinite(sLat) && Number.isFinite(sLng)) {
+              const cLat = parseFloat(comp.property_latitude);
+              const cLng = parseFloat(comp.property_longitude);
+              if (!Number.isFinite(cLat) || !Number.isFinite(cLng)) {
+                if (isFirstProperty) debugFilters.distance = (debugFilters.distance || 0) + 1;
+                logExclusion('distance', 'comp not geocoded');
+                return false;
+              }
+              const miles = distanceMiles([sLat, sLng], [cLat, cLng]);
+              if (miles == null || miles > maxDistance) {
+                if (isFirstProperty) debugFilters.distance = (debugFilters.distance || 0) + 1;
+                logExclusion('distance', `${miles?.toFixed(2)} mi > ${maxDistance} mi cap`);
+                return false;
+              }
+              // Stash miles on the comp so the results table can show it
+              // without a second Haversine pass.
+              comp._distanceMiles = miles;
+            }
+          }
 
           // VCS filter - always user-controlled via comp filters
           if (compFilters.sameVCS) {
@@ -2436,6 +2528,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       setEvaluationResults(mergedResults);
+      // Fresh evaluation run \u2014 detach from any previously-loaded saved set
+      // so Evaluate and update doesn't silently overwrite an unrelated set.
+      setActiveResultSetId(null);
+      setActiveResultSetName(null);
       // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
       const allIds = new Set(
         mergedResults
@@ -4251,6 +4347,69 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 </div>
               </div>
 
+              {/* Row 1.5: Search Radius (centered, gated on subject geocode).
+                  Sits above the VCS row so the admin sees it as one of the
+                  primary "narrow the pool" knobs. Disabled with an explanation
+                  when no subject is loaded yet or the subject has no lat/lng —
+                  in that case we can't compute Haversine distances, so we
+                  don't pretend we can. */}
+              {(() => {
+                const probe = (Array.isArray(window.__cmeSubjectsForGeo) && window.__cmeSubjectsForGeo[0]) || null;
+                const subjectGeocoded = !!(
+                  probe &&
+                  Number.isFinite(parseFloat(probe.property_latitude)) &&
+                  Number.isFinite(parseFloat(probe.property_longitude))
+                );
+                // Fall back to a simpler check if the probe isn't populated:
+                // `properties` always has lat/lng on geocoded rows, so we
+                // just look at whether ANY property has coords. The actual
+                // per-subject gate happens at filter time inside the loop.
+                const anyGeocoded = subjectGeocoded || (Array.isArray(properties) && properties.some(p =>
+                  Number.isFinite(parseFloat(p?.property_latitude)) &&
+                  Number.isFinite(parseFloat(p?.property_longitude))
+                ));
+                const disabled = !anyGeocoded;
+                return (
+                  <div className="max-w-xl mx-auto mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search Radius (miles from subject)
+                      {disabled && (
+                        <span className="ml-2 text-xs font-normal text-amber-700">
+                          — geocode data required
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        value={compFilters.maxDistanceMiles}
+                        onChange={(e) => setCompFilters(prev => ({ ...prev, maxDistanceMiles: e.target.value }))}
+                        placeholder={disabled ? 'Geocode subject first' : 'e.g. 1.0 — blank for no limit'}
+                        disabled={disabled}
+                        className={`flex-1 px-2 py-1 border border-gray-300 rounded text-sm ${disabled ? 'bg-gray-100 text-gray-400' : ''}`}
+                      />
+                      <span className="text-sm text-gray-500 whitespace-nowrap">miles</span>
+                      {compFilters.maxDistanceMiles && (
+                        <button
+                          type="button"
+                          onClick={() => setCompFilters(prev => ({ ...prev, maxDistanceMiles: '' }))}
+                          className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {disabled
+                        ? 'No properties in this job have lat/lng yet. Run the Geocoder, then come back here.'
+                        : 'Straight-line distance from subject. Comps without coordinates are excluded when set. Blank or 0 = no distance limit.'}
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Row 2: VCS (centered) */}
               <div className="max-w-xl mx-auto mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
@@ -5548,9 +5707,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     onClick={() => handleManualEvaluate(true)}
                     disabled={isManualEvaluating}
                     className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50 font-medium text-sm"
+                    title={activeResultSetId
+                      ? `Recalculates this row, syncs it back to Search & Results, and saves to "${activeResultSetName}".`
+                      : 'Recalculates this row and syncs it back to Search & Results.'}
                   >
                     {isManualEvaluating ? 'Evaluating...' : 'Evaluate and update'}
                   </button>
+                  {activeResultSetId && (
+                    <span
+                      className="text-xs text-gray-600 italic"
+                      title="Updates the saved result set you opened from."
+                    >
+                      Updates saved set: <span className="font-medium text-gray-800 not-italic">{activeResultSetName}</span>
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <button

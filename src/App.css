@@ -5,6 +5,21 @@
 /* Add Tailwind CSS via CDN */
 @import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');
 
+/* Appellant comp address lookup modal — fixed-size box with internal scroll.
+   Tailwind v2 (CDN) does not support arbitrary values like h-[70vh] / z-[60],
+   so these are defined explicitly here. */
+.address-lookup-overlay {
+  z-index: 60;
+}
+.address-lookup-box {
+  height: 70vh;
+  max-height: 70vh;
+}
+.address-lookup-results {
+  overflow-y: scroll;
+  min-height: 0;
+}
+
 /* Management OS Color Variables */
 :root {
   /* Primary Blues from Management OS */

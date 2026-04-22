@@ -14,6 +14,7 @@ import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
 import AssessorDashboard from './components/AssessorDashboard';
 import AppealsSummary from './components/AppealsSummary';
+import GeocodingTool from './components/GeocodingTool';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -65,7 +66,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+    const validViews = ['admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'job-modules', 'users', 'organizations', 'revenue', 'assessor-dashboard', 'geocoding-tool'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -153,7 +154,7 @@ const App = () => {
         window.history.pushState({}, '', `/job/${selectedJob.id}`);
         const viewPath = path.slice(1) || 'admin-jobs';
         pendingExitAction.current = () => {
-          const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+          const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard', 'geocoding-tool'];
           if (validViews.includes(viewPath)) {
             setActiveView(viewPath);
             setSelectedJob(null);
@@ -166,7 +167,7 @@ const App = () => {
 
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard'];
+      const validViews = ['dashboard', 'admin-jobs', 'appeals', 'billing', 'employees', 'payroll', 'users', 'organizations', 'revenue', 'assessor-dashboard', 'geocoding-tool'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -1505,6 +1506,23 @@ const App = () => {
                 💵 Revenue
               </button>
               )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('geocoding-tool')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'geocoding-tool'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'geocoding-tool' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                🗺️ Geocoder
+              </button>
+              )}
             </nav>
           )}
           
@@ -1710,6 +1728,15 @@ const App = () => {
         {activeView === 'revenue' && canManageUsers && (
           <RevenueManagement />
         )}
+
+        {activeView === 'geocoding-tool' && (canManageUsers ? (
+          <GeocodingTool />
+        ) : (
+          <div className="max-w-2xl mx-auto p-6 bg-white rounded shadow">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">This tool is restricted to the primary owner.</p>
+          </div>
+        ))}
 
         {activeView === 'assessor-dashboard' && isAssessorUser && (
           <>

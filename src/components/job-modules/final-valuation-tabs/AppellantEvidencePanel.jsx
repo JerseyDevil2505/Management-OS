@@ -63,8 +63,8 @@ const AddressLookupModal = ({ properties, onSelect, onSelectMulti, maxMulti = 5,
   // on top. Compact width/height so it fits centered without dwarfing the
   // underlying panel; the result list scrolls vertically inside.
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[70vh] flex flex-col">
+    <div className="address-lookup-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="address-lookup-box bg-white rounded-lg shadow-xl w-full max-w-md h-[70vh] flex flex-col">
         <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200">
           <div>
             <h3 className="text-sm font-bold text-gray-900">Lookup by Address</h3>
@@ -84,7 +84,7 @@ const AddressLookupModal = ({ properties, onSelect, onSelectMulti, maxMulti = 5,
             className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="address-lookup-results flex-1 overflow-y-scroll">
           {query.trim().length < 2 ? (
             <div className="p-4 text-[11px] text-gray-500 italic text-center">{'Start typing to search\u2026'}</div>
           ) : matches.length === 0 ? (
