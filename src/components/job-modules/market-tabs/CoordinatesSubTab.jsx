@@ -85,10 +85,11 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   // Multi-select set of property_m4_class values to keep. Empty = no class
   // restriction (show all classes).
   const [classFilter, setClassFilter] = useState(() => new Set());
-  // Sales-period filter so users can prioritize parcels that show up in the
-  // sales review / sales pool windows (CSP / +PSP / +HSP). Anything without a
-  // sale_date is excluded when this filter is active. 'all' = no restriction.
-  const [salesPeriod, setSalesPeriod] = useState('all');
+  // Sales-pool filter — when on, restricts to parcels with a sale in the
+  // sales-pool window (10/1 ay-2 → 10/31 ay-1, with the same Lojik year
+  // adjustment SalesComparisonTab uses). Anything without a sale_date is
+  // excluded while it's on.
+  const [salesInPool, setSalesInPool] = useState(false);
 
   const merged = useMemo(() => {
     if (!Array.isArray(properties)) return [];
@@ -132,38 +133,34 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
     );
   }, [filteredForSkipped, classFilter]);
 
-  // CSP / PSP / HSP windows derived from jobData.end_date, matching the
-  // SalesComparisonTab convention:
-  //   CSP = 10/1 (assessmentYear-1) → 10/31 (assessmentYear)
-  //   PSP = the prior 12 months
-  //   HSP = the 12 months before that
-  // If end_date is missing the filter silently no-ops (defaults stay 'all').
+  // Sales-pool window: 10/1 (assessmentYear-2) → 10/31 (assessmentYear-1).
+  // Lojik tenants (org_type = 'assessor') subtract one from end_date.year
+  // because end_date is the job end, not the assessment date — same
+  // adjustment SalesComparisonTab makes.
   const salesWindow = useMemo(() => {
     if (!jobData?.end_date) return null;
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
-    if (!assessmentYear) return null;
-    const cspStart = new Date(assessmentYear - 1, 9, 1);
-    const cspEnd = new Date(assessmentYear, 9, 31);
-    const pspStart = new Date(assessmentYear - 2, 9, 1);
-    const hspStart = new Date(assessmentYear - 3, 9, 1);
-    return { cspStart, cspEnd, pspStart, hspStart };
-  }, [jobData?.end_date]);
+    const rawYear = new Date(jobData.end_date).getFullYear();
+    if (!rawYear) return null;
+    const isLojik =
+      jobData?.organizations?.org_type === 'assessor' ||
+      jobData?.org_type === 'assessor';
+    const ay = isLojik ? rawYear - 1 : rawYear;
+    return {
+      start: new Date(ay - 2, 9, 1),
+      end: new Date(ay - 1, 9, 31),
+      isLojik,
+    };
+  }, [jobData?.end_date, jobData?.organizations?.org_type, jobData?.org_type]);
 
   const filteredForSales = useMemo(() => {
-    if (salesPeriod === 'all' || !salesWindow) return filteredForClass;
-    const { cspStart, cspEnd, pspStart, hspStart } = salesWindow;
-    let windowStart;
-    if (salesPeriod === 'csp') windowStart = cspStart;
-    else if (salesPeriod === 'csp_psp') windowStart = pspStart;
-    else if (salesPeriod === 'csp_psp_hsp') windowStart = hspStart;
-    else return filteredForClass;
+    if (!salesInPool || !salesWindow) return filteredForClass;
     return filteredForClass.filter((p) => {
       if (!p.sales_date) return false;
       const d = new Date(p.sales_date);
       if (Number.isNaN(d.getTime())) return false;
-      return d >= windowStart && d <= cspEnd;
+      return d >= salesWindow.start && d <= salesWindow.end;
     });
-  }, [filteredForClass, salesPeriod, salesWindow]);
+  }, [filteredForClass, salesInPool, salesWindow]);
 
   const toggleClass = (cls) => {
     setClassFilter((prev) => {
@@ -309,42 +306,44 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
         </div>
       )}
 
-      {/* Sales period filter — useful when prepping pending parcels that
-          will land in the sales review / sales pool windows. Hidden when
-          the job has no end_date to anchor the window. */}
+      {/* Sales-pool filter — when on, only parcels with a sale_date in the
+          sales-pool window survive. Useful for prioritizing pending sales
+          that will hit the search-radius gate. Hidden when the job has no
+          end_date to anchor the window. */}
       {salesWindow && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600 font-medium uppercase">
-            Sales period:
+            Sales pool:
           </span>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'csp', label: 'CSP only' },
-            { id: 'csp_psp', label: 'CSP + PSP' },
-            { id: 'csp_psp_hsp', label: 'CSP + PSP + HSP' },
-          ].map((opt) => {
-            const active = salesPeriod === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setSalesPeriod(opt.id)}
-                className="px-2.5 py-1 rounded-full text-xs border"
-                style={
-                  active
-                    ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
-                    : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
-                }
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-          {salesPeriod !== 'all' && (
-            <span className="text-xs text-gray-500">
-              parcels with a sale in window
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => setSalesInPool(false)}
+            className="px-2.5 py-1 rounded-full text-xs border"
+            style={
+              !salesInPool
+                ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
+                : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
+            }
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setSalesInPool(true)}
+            className="px-2.5 py-1 rounded-full text-xs border"
+            style={
+              salesInPool
+                ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
+                : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
+            }
+            title={`Sales between ${salesWindow.start.toLocaleDateString()} and ${salesWindow.end.toLocaleDateString()}`}
+          >
+            In sales pool window
+          </button>
+          <span className="text-xs text-gray-400">
+            ({salesWindow.start.toLocaleDateString()} – {salesWindow.end.toLocaleDateString()}
+            {salesWindow.isLojik ? ' · Lojik' : ''})
+          </span>
         </div>
       )}
 

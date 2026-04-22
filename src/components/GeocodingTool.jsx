@@ -320,7 +320,7 @@ async function fetchAllJobProperties(jobId) {
     const { data, error } = await supabase
       .from('property_records')
       .select(
-        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source, owner_street, owner_csz'
+        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source, owner_street, owner_csz, sales_date'
       )
       .eq('job_id', jobId)
       .range(from, from + PAGE - 1);
@@ -417,12 +417,11 @@ const GeocodingTool = () => {
   const [manualSaving, setManualSaving] = useState({}); // { compositeKey: bool }
   const [manualFilter, setManualFilter] = useState('ungeocoded'); // 'ungeocoded' | 'all'
 
-  // Step 2 candidate filters — mirror the user-facing CoordinatesSubTab so
-  // I can prep targeted CSV runs (e.g. "only class 2 + 3A parcels with a
-  // sale in CSP") without having to leave the admin geocoder. Empty class
-  // set + 'all' period = original behavior.
+  // Manual cleanup queue filters — mirror the user-facing CoordinatesSubTab
+  // so I can prioritize parcels that landed in the sales pool (so an
+  // ungeocoded sale doesn't slip through search-radius later).
   const [csvClassFilter, setCsvClassFilter] = useState(() => new Set());
-  const [csvSalesPeriod, setCsvSalesPeriod] = useState('all');
+  const [csvSalesInPool, setCsvSalesInPool] = useState(false);
 
   const selectedJob = useMemo(
     () => jobs.find((j) => j.id === selectedJobId) || null,
@@ -623,12 +622,12 @@ const GeocodingTool = () => {
     });
   }, [properties]);
 
-  // Sales-period window math anchored on the selected job's end_date,
-  // matching the SalesComparisonTab CSP convention so the same parcels
-  // line up across tools. For Lojik tenants (org_type = 'assessor') the
-  // assessment year is the prior year — end_date is the *job* end, not
-  // the assessment date — so we subtract one to keep CSP centered on the
-  // correct 10/1–10/31 window.
+  // Sales-pool window: 10/1 (assessmentYear-2) → 10/31 (assessmentYear-1).
+  // Anchored on the selected job's end_date with the same Lojik adjustment
+  // (org_type = 'assessor' → assessmentYear = end_date.year - 1) used by
+  // SalesComparisonTab. One window only — replaces the old CSP/PSP/HSP
+  // chip set since the cleanup queue cares about "is this parcel a sale
+  // we'll need a coordinate for", not which sub-bucket it lives in.
   const csvSalesWindow = useMemo(() => {
     if (!selectedJob?.end_date) return null;
     const rawYear = new Date(selectedJob.end_date).getFullYear();
@@ -636,41 +635,34 @@ const GeocodingTool = () => {
     const isLojik = selectedJob?.organizations?.org_type === 'assessor';
     const ay = isLojik ? rawYear - 1 : rawYear;
     return {
-      cspStart: new Date(ay - 1, 9, 1),
-      cspEnd: new Date(ay, 9, 31),
-      pspStart: new Date(ay - 2, 9, 1),
-      hspStart: new Date(ay - 3, 9, 1),
+      start: new Date(ay - 2, 9, 1),  // 10/1 two years before assessment year
+      end: new Date(ay - 1, 9, 31),   // 10/31 last year (relative to assessment year)
       isLojik,
       assessmentYear: ay,
     };
   }, [selectedJob?.end_date, selectedJob?.organizations?.org_type]);
 
-  // Predicate applied inside every CSV-emitting candidate loop so a filter
-  // tightening (e.g. "class 2 only, CSP only") narrows the main CSV, the
-  // recovery sweep, and the ties-only sweep consistently.
+  // Predicate applied inside the manual cleanup queue. csvSalesInPool = true
+  // restricts to parcels whose sales_date falls inside the sales-pool window
+  // (10/1 ay-2 → 10/31 ay-1). Class filter is unchanged (multi-select set).
   const passesCsvFilters = useCallback(
     (p) => {
       if (csvClassFilter.size > 0) {
         const c = String(p.property_m4_class || '').trim();
         if (!csvClassFilter.has(c)) return false;
       }
-      if (csvSalesPeriod !== 'all' && csvSalesWindow) {
+      if (csvSalesInPool && csvSalesWindow) {
         if (!p.sales_date) return false;
         const d = new Date(p.sales_date);
         if (Number.isNaN(d.getTime())) return false;
-        let start = null;
-        if (csvSalesPeriod === 'csp') start = csvSalesWindow.cspStart;
-        else if (csvSalesPeriod === 'csp_psp') start = csvSalesWindow.pspStart;
-        else if (csvSalesPeriod === 'csp_psp_hsp') start = csvSalesWindow.hspStart;
-        if (start && (d < start || d > csvSalesWindow.cspEnd)) return false;
+        if (d < csvSalesWindow.start || d > csvSalesWindow.end) return false;
       }
       return true;
     },
-    [csvClassFilter, csvSalesPeriod, csvSalesWindow],
+    [csvClassFilter, csvSalesInPool, csvSalesWindow],
   );
 
-  const csvFiltersActive =
-    csvClassFilter.size > 0 || csvSalesPeriod !== 'all';
+  const csvFiltersActive = csvClassFilter.size > 0 || csvSalesInPool;
 
   const stats = useMemo(() => {
     const total = properties.length;
@@ -2382,35 +2374,45 @@ const GeocodingTool = () => {
             {csvSalesWindow && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-                  Sales period:
+                  Sales pool:
                 </span>
-                {[
-                  { id: 'all', label: 'All' },
-                  { id: 'csp', label: 'CSP only' },
-                  { id: 'csp_psp', label: 'CSP + PSP' },
-                  { id: 'csp_psp_hsp', label: 'CSP + PSP + HSP' },
-                ].map((opt) => {
-                  const active = csvSalesPeriod === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setCsvSalesPeriod(opt.id)}
-                      style={{
-                        padding: '3px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        border: '1px solid',
-                        cursor: 'pointer',
-                        ...(active
-                          ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
-                          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+                <button
+                  type="button"
+                  onClick={() => setCsvSalesInPool(false)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    ...(!csvSalesInPool
+                      ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
+                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                  }}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCsvSalesInPool(true)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    ...(csvSalesInPool
+                      ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
+                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                  }}
+                  title={`Sales between ${csvSalesWindow.start.toLocaleDateString()} and ${csvSalesWindow.end.toLocaleDateString()}`}
+                >
+                  In sales pool window
+                </button>
+                <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                  ({csvSalesWindow.start.toLocaleDateString()} – {csvSalesWindow.end.toLocaleDateString()}
+                  {csvSalesWindow.isLojik ? ' · Lojik' : ''})
+                </span>
               </div>
             )}
             {csvFiltersActive && (
