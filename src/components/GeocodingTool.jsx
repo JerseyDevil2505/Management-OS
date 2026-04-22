@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa from 'papaparse';
 import { supabase } from '../lib/supabaseClient';
 import { njCityForZip } from '../data/njZipToCity';
+import { isPpaJob } from '../lib/tenantConfig';
 
 // ---------- Variant CSV (postal-ZIP sweep) helpers ----------
 // Synthetic ID format used by the variant CSV: "{compositeKey}__{zipIdx}".
@@ -428,7 +429,7 @@ const GeocodingTool = () => {
       try {
         const { data, error: jobsError } = await supabase
           .from('jobs')
-          .select('id, job_name, municipality, county, total_properties, vendor_type, status')
+          .select('id, job_name, municipality, county, total_properties, vendor_type, status, organization_id')
           .order('job_name', { ascending: true });
         if (jobsError) throw jobsError;
         if (mounted) {
@@ -1664,6 +1665,7 @@ const GeocodingTool = () => {
             <thead>
               <tr>
                 <th style={th}>Job</th>
+                <th style={th}>Org</th>
                 <th style={th}>Municipality</th>
                 <th style={th}>County</th>
                 <th style={th}>Status</th>
@@ -1677,6 +1679,21 @@ const GeocodingTool = () => {
               {coverageRows.map(({ job, total, geocoded, skipped, pct, bucket }) => (
                 <tr key={job.id}>
                   <td style={td}>{job.job_name}</td>
+                  <td style={td}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: isPpaJob(job) ? '#dcfce7' : '#dbeafe',
+                        color: isPpaJob(job) ? '#166534' : '#1e40af',
+                      }}
+                    >
+                      {isPpaJob(job) ? 'PPA' : 'LOJIK'}
+                    </span>
+                  </td>
                   <td style={td}>{job.municipality || '—'}</td>
                   <td style={td}>{job.county || '—'}</td>
                   <td style={td}>
@@ -1709,7 +1726,7 @@ const GeocodingTool = () => {
               ))}
               {coverageRows.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={8}>
+                  <td style={td} colSpan={9}>
                     No jobs found.
                   </td>
                 </tr>

@@ -183,6 +183,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
+  // Tracks which saved result set (if any) is currently loaded. When set,
+  // "Evaluate and update" in Detailed will write back to this row in
+  // job_cme_result_sets so the user doesn't have to switch tabs and re-save.
+  // Cleared on fresh evaluation runs that don't originate from a saved set.
+  const [activeResultSetId, setActiveResultSetId] = useState(null);
+  const [activeResultSetName, setActiveResultSetName] = useState(null);
+
   // Appellant evidence panel state for the Detailed sub-tab.
   // Fetched fresh from appeal_log whenever the evaluated subject changes,
   // so saves done in AppealLog show up here and vice versa.
@@ -647,6 +654,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }));
 
       let error;
+      let savedId = existingId;
       if (shouldOverwrite && existingId) {
         // Update existing result set
         const { error: updateError } = await supabase
@@ -661,7 +669,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         error = updateError;
       } else {
         // Insert new result set
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('job_cme_result_sets')
           .insert({
             job_id: jobData.id,
@@ -669,11 +677,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             adjustment_bracket: compFilters.adjustmentBracket,
             search_criteria: compFilters,
             results: serializedResults,
-          });
+          })
+          .select('id')
+          .single();
         error = insertError;
+        if (inserted?.id) savedId = inserted.id;
       }
 
       if (error) throw error;
+
+      // Mark this set as the active one so subsequent "Evaluate and update"
+      // calls in Detailed write back here automatically.
+      if (savedId) {
+        setActiveResultSetId(savedId);
+        setActiveResultSetName(name.trim());
+      }
 
       alert(`Result set "${name.trim()}" ${shouldOverwrite ? 'updated' : 'saved'} successfully!`);
       await loadSavedResultSets();
@@ -698,6 +716,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       // Restore results
       setEvaluationResults(data.results);
+
+      // Track this as the active set so Detailed → Evaluate and update
+      // writes back to the same row without a tab switch.
+      setActiveResultSetId(data.id);
+      setActiveResultSetName(data.name);
+
       // Pre-select all non-set-aside rows for set-aside checkbox
       const allIds = new Set(
         (data.results || [])
@@ -1653,6 +1677,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         updatedResults[editingResultIndex] = updatedResult;
         setEvaluationResults(updatedResults);
         console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
+
+        // Auto-persist back to the loaded saved set so the user doesn't have
+        // to switch tabs and re-save. Only fires when an active set is loaded
+        // (set in handleLoadResultSet / handleSaveResultSet). The plain
+        // "Evaluate" button passes syncToResults=false and stays a sandbox.
+        if (activeResultSetId) {
+          try {
+            const serialized = updatedResults.map(r => ({
+              subject: { ...r.subject },
+              comparables: (r.comparables || []).map(c => ({
+                ...c,
+                isSubjectSale: c.isSubjectSale || false,
+                weight: c.weight || 0,
+              })),
+              totalFound: r.totalFound,
+              totalValid: r.totalValid,
+              projectedAssessment: r.projectedAssessment,
+              confidenceScore: r.confidenceScore,
+              hasSubjectSale: r.hasSubjectSale,
+            }));
+            const { error: persistError } = await supabase
+              .from('job_cme_result_sets')
+              .update({
+                results: serialized,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', activeResultSetId);
+            if (persistError) throw persistError;
+            console.log(`💾 Auto-saved updates to result set "${activeResultSetName}"`);
+            await loadSavedResultSets();
+          } catch (persistError) {
+            console.error('Error auto-saving to result set:', persistError);
+            alert(`Evaluation succeeded but auto-save to "${activeResultSetName}" failed: ${persistError.message}\n\nUse "Save Result Set" in Search & Results to retry.`);
+          }
+        }
       } else {
         console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
       }
@@ -2469,6 +2528,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       setEvaluationResults(mergedResults);
+      // Fresh evaluation run \u2014 detach from any previously-loaded saved set
+      // so Evaluate and update doesn't silently overwrite an unrelated set.
+      setActiveResultSetId(null);
+      setActiveResultSetName(null);
       // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
       const allIds = new Set(
         mergedResults
@@ -5644,9 +5707,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     onClick={() => handleManualEvaluate(true)}
                     disabled={isManualEvaluating}
                     className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50 font-medium text-sm"
+                    title={activeResultSetId
+                      ? `Recalculates this row, syncs it back to Search & Results, and saves to "${activeResultSetName}".`
+                      : 'Recalculates this row and syncs it back to Search & Results.'}
                   >
                     {isManualEvaluating ? 'Evaluating...' : 'Evaluate and update'}
                   </button>
+                  {activeResultSetId && (
+                    <span
+                      className="text-xs text-gray-600 italic"
+                      title="Updates the saved result set you opened from."
+                    >
+                      Updates saved set: <span className="font-medium text-gray-800 not-italic">{activeResultSetName}</span>
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <button

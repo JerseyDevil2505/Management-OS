@@ -494,13 +494,18 @@ async function extractImageRectsFromPage(pdfjsPage, viewport) {
 function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
   if (!rects.length) return {};
 
-  // Anchor (center x/y in canvas pixels) for each slot valid on this page.
+  // Anchor (center x/y + half-extents in canvas pixels) for each slot valid
+  // on this page. We keep the half-extents so we can verify a candidate
+  // image actually lives inside the slot's box (with a little slop) instead
+  // of just being the closest anchor on the page.
   const anchorFor = (slot) => {
     const r = rectForSlot(slot);
     if (!r) return null;
     return {
       cx: (r.x + r.w / 2) * canvasW,
       cy: (r.y + r.h / 2) * canvasH,
+      hx: (r.w / 2) * canvasW,
+      hy: (r.h / 2) * canvasH,
     };
   };
   const anchors = slotsForPage
@@ -514,6 +519,14 @@ function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
   // gets first pick when two rects are near the same anchor.
   const sorted = [...rects].sort((a, b) => b.areaPdf - a.areaPdf);
 
+  // Slop factor: a candidate's center must lie within ~1.5x the slot's
+  // half-extent of the anchor center to be considered. This rejects
+  // images that clearly belong to a slot NOT on this page (notably the
+  // subject photo BRT redraws on subsequent photo pages — without this
+  // gate, when comp5 is missing the subject would get force-fit into
+  // comp5 because it's the nearest of the right-column anchors).
+  const SLOP = 1.5;
+
   for (const rect of sorted) {
     const cx = rect.xPx + rect.wPx / 2;
     const cy = rect.yPx + rect.hPx / 2;
@@ -523,6 +536,8 @@ function classifyPhotoRects(rects, slotsForPage, canvasW, canvasH) {
       if (used.has(slot)) continue;
       const dx = cx - a.cx;
       const dy = cy - a.cy;
+      // Reject rects whose center is well outside this anchor's box.
+      if (Math.abs(dx) > a.hx * SLOP || Math.abs(dy) > a.hy * SLOP) continue;
       const d = dx * dx + dy * dy;
       if (d < bestDist) {
         bestDist = d;
@@ -835,49 +850,99 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     { subject: true, stretch: true },
   );
 
-  // Comps 1-3 — bottom row, three equal cells side-by-side.
-  ['comp1', 'comp2', 'comp3'].forEach((slot, i) => {
+  // Determine the highest-numbered comp that exists for this appraisal,
+  // using every signal available: per-slot photos, captured caption
+  // addresses, and BRT shipping a second photo page (which only happens
+  // when comps 4/5 exist). Once we know the max comp count, all
+  // lower-numbered comp slots MUST render — a 4-comp appraisal can never
+  // legitimately skip Comp #2 just because BRT omitted its photo and
+  // caption parsing missed the address line.
+  const slotHasAnything = (n) => {
+    const key = `comp${n}`;
+    return !!bySlot[key] || !!compAddrs[n];
+  };
+  let maxComp = 1; // every appraisal has at least one comp
+  for (let n = 5; n >= 1; n--) {
+    if (slotHasAnything(n)) { maxComp = Math.max(maxComp, n); break; }
+  }
+  // A second photo page in the source means BRT had at least Comp #4.
+  if ((packet.photoPageIndices?.length || 0) > 1 && maxComp < 4) {
+    maxComp = 4;
+  }
+
+  // Comps 1-3 — bottom row. Render every slot up to min(3, maxComp); a
+  // missing photo simply renders as a "No photo provided" cell so the
+  // numbering stays continuous with the comparison grid.
+  const page1Slots = [
+    { key: 'comp1', label: 'Comp #1' },
+    { key: 'comp2', label: 'Comp #2' },
+    { key: 'comp3', label: 'Comp #3' },
+  ]
+    .map((s, i) => ({ ...s, num: i + 1 }))
+    .filter((s) => s.num <= Math.min(3, maxComp));
+  const page1TotalW =
+    compCellW * page1Slots.length + colGap * Math.max(0, page1Slots.length - 1);
+  const page1X = margin + (contentW - page1TotalW) / 2;
+  page1Slots.forEach((s, i) => {
     drawSlot(
-      margin + i * (compCellW + colGap),
+      page1X + i * (compCellW + colGap),
       compsY,
       compPhotoW,
       compPhotoH,
-      `Comp #${i + 1}`,
-      bySlot[slot] || null,
+      s.label,
+      bySlot[s.key] || null,
     );
   });
 
   drawFooter();
 
-  // ---- Page 2 (only if comp4 or comp5 actually came in): subject on
-  // top again for context, comps 4 + 5 centered on the bottom row.
-  const hasOverflow = !!(bySlot.comp4 || bySlot.comp5);
-  if (hasOverflow) {
-    doc.addPage();
-    drawHeader();
-    drawSlot(
-      subjX,
-      subjY,
-      subjPhotoW,
-      subjPhotoH,
-      'Subject',
-      bySlot.subject || null,
-      { subject: true, stretch: true },
-    );
-    const overflowCellW = compCellW;
-    const overflowTotalW = overflowCellW * 2 + colGap;
-    const overflowX = margin + (contentW - overflowTotalW) / 2;
-    ['comp4', 'comp5'].forEach((slot, i) => {
+  // ---- Page 2: render whenever BRT actually has a comp 4 or 5 in scope,
+  // even if the photo itself is missing ("No Picture"). We decide based on
+  // three independent signals so a "No Picture" Comp #4 still gets a cell:
+  //   1. BRT shipped a second photo page in the source (photoPageIndices > 1)
+  //   2. We captured an actual photo for comp4 / comp5
+  //   3. We captured a comp address for slot 4 or 5 from the photo pages
+  // Within page 2 we only draw cells for slots that actually exist in this
+  // appraisal so we don't render a phantom Comp #5 when only 4 comps exist.
+  // Page 2 mirrors the same maxComp logic: render Comp #4 whenever the
+  // appraisal has 4+ comps, render Comp #5 only when comp 5 actually
+  // exists. This keeps Comp #4 visible as a "No photo provided" cell
+  // even if BRT shipped neither a photo nor a parsed caption for it.
+  const slot4Render = maxComp >= 4;
+  const slot5Render = maxComp >= 5;
+  if (slot4Render || slot5Render) {
+    const overflowSlots = [];
+    if (slot4Render) overflowSlots.push({ key: 'comp4', label: 'Comp #4' });
+    if (slot5Render) overflowSlots.push({ key: 'comp5', label: 'Comp #5' });
+    if (overflowSlots.length) {
+      doc.addPage();
+      drawHeader();
       drawSlot(
-        overflowX + i * (overflowCellW + colGap),
-        compsY,
-        compPhotoW,
-        compPhotoH,
-        `Comp #${i + 4}`,
-        bySlot[slot] || null,
+        subjX,
+        subjY,
+        subjPhotoW,
+        subjPhotoH,
+        'Subject',
+        bySlot.subject || null,
+        { subject: true, stretch: true },
       );
-    });
-    drawFooter();
+      const overflowCellW = compCellW;
+      const overflowTotalW =
+        overflowCellW * overflowSlots.length +
+        colGap * Math.max(0, overflowSlots.length - 1);
+      const overflowX = margin + (contentW - overflowTotalW) / 2;
+      overflowSlots.forEach((s, i) => {
+        drawSlot(
+          overflowX + i * (overflowCellW + colGap),
+          compsY,
+          compPhotoW,
+          compPhotoH,
+          s.label,
+          bySlot[s.key] || null,
+        );
+      });
+      drawFooter();
+    }
   }
   return new Uint8Array(doc.output('arraybuffer'));
 }
