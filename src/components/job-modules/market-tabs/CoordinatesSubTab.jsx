@@ -82,6 +82,9 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   const [activeBucket, setActiveBucket] = useState('pending');
   const [search, setSearch] = useState('');
   const [showSkipped, setShowSkipped] = useState(false);
+  // Multi-select set of property_m4_class values to keep. Empty = no class
+  // restriction (show all classes).
+  const [classFilter, setClassFilter] = useState(() => new Set());
 
   const merged = useMemo(() => {
     if (!Array.isArray(properties)) return [];
@@ -100,6 +103,40 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
     return merged.filter((p) => p.geocode_source !== 'skipped');
   }, [merged, showSkipped]);
 
+  // Distinct m4 classes present in the dataset (after skip filter), sorted in
+  // a sensible NJ order so common classes appear first.
+  const availableClasses = useMemo(() => {
+    const set = new Set();
+    filteredForSkipped.forEach((p) => {
+      if (p.property_m4_class) set.add(String(p.property_m4_class).trim());
+    });
+    const ORDER = ['1', '2', '3A', '3B', '4A', '4B', '4C', '5A', '5B', '6A', '6B', '6C'];
+    return Array.from(set).sort((a, b) => {
+      const ai = ORDER.indexOf(a);
+      const bi = ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }, [filteredForSkipped]);
+
+  const filteredForClass = useMemo(() => {
+    if (!classFilter || classFilter.size === 0) return filteredForSkipped;
+    return filteredForSkipped.filter((p) =>
+      classFilter.has(String(p.property_m4_class || '').trim()),
+    );
+  }, [filteredForSkipped, classFilter]);
+
+  const toggleClass = (cls) => {
+    setClassFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(cls)) next.delete(cls);
+      else next.add(cls);
+      return next;
+    });
+  };
+
   const skippedCount = useMemo(
     () => merged.filter((p) => p.geocode_source === 'skipped').length,
     [merged],
@@ -107,11 +144,11 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
 
   const buckets = useMemo(() => {
     const out = { pending: [], review: [], fixed: [] };
-    filteredForSkipped.forEach((p) => {
+    filteredForClass.forEach((p) => {
       out[bucketFor(p)].push(p);
     });
     return out;
-  }, [filteredForSkipped]);
+  }, [filteredForClass]);
 
   const visibleRows = useMemo(() => {
     const rows = buckets[activeBucket] || [];
@@ -125,7 +162,6 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
           p.property_qualifier,
           p.property_location,
           p.property_composite_key,
-          p.property_m4_class,
         ]
           .filter(Boolean)
           .join(' ')
@@ -192,10 +228,54 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
         />
       </div>
 
+      {/* Class chips (multi-select). Empty selection = all classes. */}
+      {availableClasses.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-600 font-medium uppercase">
+            Class:
+          </span>
+          <button
+            type="button"
+            onClick={() => setClassFilter(new Set())}
+            className="px-2.5 py-1 rounded-full text-xs border"
+            style={
+              classFilter.size === 0
+                ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
+                : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
+            }
+          >
+            All
+          </button>
+          {availableClasses.map((cls) => {
+            const active = classFilter.has(cls);
+            return (
+              <button
+                key={cls}
+                type="button"
+                onClick={() => toggleClass(cls)}
+                className="px-2.5 py-1 rounded-full text-xs border"
+                style={
+                  active
+                    ? { background: '#2563eb', color: '#fff', borderColor: '#2563eb' }
+                    : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
+                }
+              >
+                {cls}
+              </button>
+            );
+          })}
+          {classFilter.size > 0 && (
+            <span className="text-xs text-gray-500">
+              ({classFilter.size} selected)
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="mb-3 flex items-center gap-2 flex-wrap">
         <input
           type="text"
-          placeholder="Filter by block / lot / address / class…"
+          placeholder="Search by block, lot, qualifier, or address…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 max-w-md px-3 py-2 border border-gray-300 rounded text-sm"
