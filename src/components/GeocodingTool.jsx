@@ -695,7 +695,6 @@ const GeocodingTool = () => {
       if (!hasStreetNumber(p.property_location)) continue;
       if (p.property_latitude != null) continue;
       if (p.geocode_source === 'skipped') continue;
-      if (!passesCsvFilters(p)) continue;
       const id = parcelIdentity(p);
       if (seen.has(id)) continue;
       seen.add(id);
@@ -783,7 +782,7 @@ const GeocodingTool = () => {
           : `Generated ${totalChunks} CSVs (${candidates.length} addresses total, ${CENSUS_BATCH_LIMIT}-row chunks). Upload each to Census separately.`) +
         ownerNote + ordinalNote,
     });
-  }, [selectedJob, properties, passesCsvFilters]);
+  }, [selectedJob, properties]);
 
   const generateVariantCsvBatches = useCallback(() => {
     if (!selectedJob || properties.length === 0 || variantZips.length === 0) return;
@@ -798,7 +797,6 @@ const GeocodingTool = () => {
       if (!hasStreetNumber(p.property_location)) continue;
       if (p.property_latitude != null) continue;
       if (p.geocode_source === 'skipped') continue;
-      if (!passesCsvFilters(p)) continue;
       const id = parcelIdentity(p);
       if (seen.has(id)) continue;
       seen.add(id);
@@ -850,7 +848,7 @@ const GeocodingTool = () => {
       kind: 'success',
       message: `Generated ${totalChunks} variant CSV(s) — ${candidates.length.toLocaleString()} parcels × ${variantZips.length} ZIP(s) = ${rows.length.toLocaleString()} rows. Upload each to Census.`,
     });
-  }, [selectedJob, properties, variantZips, passesCsvFilters]);
+  }, [selectedJob, properties, variantZips]);
 
   const handleResultUpload = useCallback((event) => {
     const files = Array.from(event.target.files || []);
@@ -990,7 +988,6 @@ const GeocodingTool = () => {
       if (!p) continue;
       if (!(p.property_location || '').trim()) continue;
       if (!hasStreetNumber(p.property_location)) continue;
-      if (!passesCsvFilters(p)) continue;
       candidates.push(p);
     }
     if (candidates.length === 0) {
@@ -1052,7 +1049,7 @@ const GeocodingTool = () => {
       message:
         `Generated ${totalChunks} ties-only variant CSV(s) — ${candidates.length.toLocaleString()} tied parcels × ${variantZips.length} ZIP(s) = ${rows.length.toLocaleString()} rows. Upload to Census, then re-import via Step 4.`,
     });
-  }, [parsedResults, selectedJob, properties, variantZips, passesCsvFilters]);
+  }, [parsedResults, selectedJob, properties, variantZips]);
 
   const commitResults = useCallback(async () => {
     if (parsedResults.length === 0 || !selectedJobId) return;
@@ -1186,8 +1183,10 @@ const GeocodingTool = () => {
       seen.add(id);
       deduped.push(p);
     }
-    return deduped.slice(0, 100); // cap render
-  }, [properties, manualSearch, manualFilter]);
+    // Apply optional class + sales-period chips (Step 5 filter row).
+    const final = deduped.filter(passesCsvFilters);
+    return final.slice(0, 100); // cap render
+  }, [properties, manualSearch, manualFilter, passesCsvFilters]);
 
   const manualUngeocodedCount = useMemo(() => {
     const seen = new Set();
@@ -1950,103 +1949,6 @@ const GeocodingTool = () => {
                 </div>
               </div>
 
-              {/* Optional class + sales-period filters. Empty class set +
-                  'all' period = original full-job behavior. Chips here
-                  narrow every CSV emitter (main, recovery sweep, ties). */}
-              <div style={{ marginTop: 12, marginBottom: 4 }}>
-                {csvAvailableClasses.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-                      Class:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCsvClassFilter(new Set())}
-                      style={{
-                        padding: '3px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        border: '1px solid',
-                        cursor: 'pointer',
-                        ...(csvClassFilter.size === 0
-                          ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
-                          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                      }}
-                    >
-                      All
-                    </button>
-                    {csvAvailableClasses.map((cls) => {
-                      const active = csvClassFilter.has(cls);
-                      return (
-                        <button
-                          key={cls}
-                          type="button"
-                          onClick={() => {
-                            setCsvClassFilter((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(cls)) next.delete(cls);
-                              else next.add(cls);
-                              return next;
-                            });
-                          }}
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            border: '1px solid',
-                            cursor: 'pointer',
-                            ...(active
-                              ? { background: '#2563eb', color: '#fff', borderColor: '#2563eb' }
-                              : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                          }}
-                        >
-                          {cls}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {csvSalesWindow && (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
-                      Sales period:
-                    </span>
-                    {[
-                      { id: 'all', label: 'All' },
-                      { id: 'csp', label: 'CSP only' },
-                      { id: 'csp_psp', label: 'CSP + PSP' },
-                      { id: 'csp_psp_hsp', label: 'CSP + PSP + HSP' },
-                    ].map((opt) => {
-                      const active = csvSalesPeriod === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setCsvSalesPeriod(opt.id)}
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            border: '1px solid',
-                            cursor: 'pointer',
-                            ...(active
-                              ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
-                              : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {csvFiltersActive && (
-                  <div style={{ marginTop: 6, fontSize: 11, color: '#7c3aed' }}>
-                    Filters active — main CSV, recovery sweep, and ties-only sweep will all be narrowed.
-                  </div>
-                )}
-              </div>
-
               {(() => {
                 const seen = new Set();
                 let ungeocoded = 0;
@@ -2057,7 +1959,6 @@ const GeocodingTool = () => {
                   if (!hasStreetNumber(p.property_location)) continue;
                   if (p.property_latitude != null) continue;
                   if (p.geocode_source === 'skipped') continue;
-                  if (!passesCsvFilters(p)) continue;
                   const id = parcelIdentity(p);
                   if (seen.has(id)) continue;
                   seen.add(id);
@@ -2412,6 +2313,104 @@ const GeocodingTool = () => {
             >
               ⬇ address-only CSV
             </button>
+          </div>
+
+          {/* Optional class + sales-period chips for the manual cleanup
+              queue. Empty class set + 'all' period = no restriction. Useful
+              for prioritizing parcels that will land in the sales review /
+              sales pool windows so we don't ship a CSP sale ungeocoded. */}
+          <div style={{ marginBottom: 12 }}>
+            {csvAvailableClasses.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Class:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCsvClassFilter(new Set())}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    ...(csvClassFilter.size === 0
+                      ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
+                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                  }}
+                >
+                  All
+                </button>
+                {csvAvailableClasses.map((cls) => {
+                  const active = csvClassFilter.has(cls);
+                  return (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => {
+                        setCsvClassFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(cls)) next.delete(cls);
+                          else next.add(cls);
+                          return next;
+                        });
+                      }}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        border: '1px solid',
+                        cursor: 'pointer',
+                        ...(active
+                          ? { background: '#2563eb', color: '#fff', borderColor: '#2563eb' }
+                          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                      }}
+                    >
+                      {cls}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {csvSalesWindow && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Sales period:
+                </span>
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'csp', label: 'CSP only' },
+                  { id: 'csp_psp', label: 'CSP + PSP' },
+                  { id: 'csp_psp_hsp', label: 'CSP + PSP + HSP' },
+                ].map((opt) => {
+                  const active = csvSalesPeriod === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCsvSalesPeriod(opt.id)}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        border: '1px solid',
+                        cursor: 'pointer',
+                        ...(active
+                          ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
+                          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {csvFiltersActive && (
+              <div style={{ marginTop: 6, fontSize: 11, color: '#7c3aed' }}>
+                Filters active — manual cleanup list narrowed to matching parcels.
+              </div>
+            )}
           </div>
 
           {condoInheritCandidates.length > 0 && (
