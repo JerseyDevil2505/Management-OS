@@ -219,6 +219,84 @@ function normalizeAddressForCensus(addr) {
   return tokens.join(' ').trim();
 }
 
+// Generate a small set of sanitized address variants designed to break
+// Census `Tie` results. A Tie means Census found 2+ candidates that match
+// equally well; the most common NJ causes are:
+//   * Hyphenated house numbers ("100-1 Main St") — Census tokenizes the
+//     hyphen inconsistently, matching both "100" and "1" ranges.
+//   * Apt / Unit / Suite suffixes confusing the parser.
+//   * "REAR" / "R" prefixes ("R 12 Front St").
+//   * Street suffix abbreviation mismatch — when TIGER has the long form
+//     and we sent the short form (or vice versa).
+//   * Missing or extra leading directional ("Main St" vs "N Main St").
+//
+// We emit up to 6 variants per tie. Duplicates collapse via a Set. The
+// caller stamps each with __t<idx> on the composite key so the existing
+// stripVariantSuffix / commit logic collapses them back to one parcel and
+// keeps the best match.
+function tieResolverVariants(rawAddr) {
+  if (!rawAddr) return [];
+  const base = normalizeAddressForCensus(rawAddr); // already uppercased / suffix-collapsed
+  if (!base) return [];
+  const out = new Set();
+
+  // 0. The straight normalized form (in case the original CSV used a different
+  //    normalization vintage and the parser is now happier).
+  out.add(base);
+
+  // 1. Drop hyphenated house number suffix:  "100 1 MAIN ST" → "100 MAIN ST".
+  //    normalizeAddressForCensus already turned the hyphen into a space, so a
+  //    leading "<num> <num> " is the giveaway.
+  const hyphMatch = base.match(/^(\d+)\s+\d+[A-Z]?\s+(.+)$/);
+  if (hyphMatch) {
+    out.add(`${hyphMatch[1]} ${hyphMatch[2]}`);
+  }
+
+  // 2. Strip unit / apt / suite / floor suffix.
+  const unitStripped = base
+    .replace(/\s+(APT|APARTMENT|UNIT|STE|SUITE|FL|FLOOR|RM|ROOM|#)\s+\S+\s*$/i, '')
+    .trim();
+  if (unitStripped && unitStripped !== base) out.add(unitStripped);
+
+  // 3. Drop leading "REAR" / "R" prefix between the house number and street.
+  const rearStripped = base.replace(/^(\d+[A-Z]?)\s+(REAR|R)\s+/, '$1 ');
+  if (rearStripped !== base) out.add(rearStripped);
+
+  // 4. Try the long form of the trailing suffix (Census/TIGER sometimes only
+  //    indexes the long form on rare segments).
+  const SHORT_TO_LONG = {
+    ST: 'STREET', AVE: 'AVENUE', BLVD: 'BOULEVARD', RD: 'ROAD',
+    DR: 'DRIVE', LN: 'LANE', CT: 'COURT', PL: 'PLACE',
+    CIR: 'CIRCLE', TER: 'TERRACE', WAY: 'WAY', PKWY: 'PARKWAY',
+    HWY: 'HIGHWAY', TRL: 'TRAIL', ALY: 'ALLEY', SQ: 'SQUARE',
+    XING: 'CROSSING',
+  };
+  const tokens = base.split(' ');
+  const last = tokens[tokens.length - 1];
+  if (SHORT_TO_LONG[last]) {
+    const longForm = [...tokens.slice(0, -1), SHORT_TO_LONG[last]].join(' ');
+    out.add(longForm);
+  }
+
+  // 5. If there's a leading directional, try without it. If there isn't one,
+  //    try adding both N and S as variants (covers the "Main St" vs
+  //    "N Main St" case which is a frequent NJ tie cause).
+  // tokens[0] is the house number, tokens[1] is the directional or first
+  // street word.
+  if (tokens.length >= 3 && DIRECTIONALS.has(tokens[1])) {
+    const noDir = [tokens[0], ...tokens.slice(2)].join(' ');
+    out.add(noDir);
+  } else if (tokens.length >= 2) {
+    const head = tokens[0];
+    const rest = tokens.slice(1).join(' ');
+    out.add(`${head} N ${rest}`);
+    out.add(`${head} S ${rest}`);
+  }
+
+  // Cap at 6 to keep CSV size reasonable on large tie counts.
+  return Array.from(out).slice(0, 6);
+}
+
 function sanitizeForCsv(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -894,6 +972,109 @@ const GeocodingTool = () => {
       perZip,
     };
   }, [parsedResults]);
+
+  // ---------- Tie Resolver CSV ----------
+  // Generates a small "round 2" CSV containing only the parcels Census flagged
+  // as Tie in the imported result set, exploding each into a few sanitized
+  // address variants (drop hyphenated suffix, expand street suffix, try with /
+  // without leading directional, etc.). Tagged with __t<idx> on the composite
+  // key so when the user re-uploads the result, the existing parser collapses
+  // back to one parcel and keeps the best winning variant.
+  const generateTieResolverCsv = useCallback(() => {
+    if (!selectedJob || parsedResults.length === 0) return;
+
+    // Collapse to one tie row per parcel (across any earlier variants).
+    const ties = new Map(); // baseCompositeKey -> first tie row
+    for (const r of parsedResults) {
+      if (r.matchStatus !== 'Tie') continue;
+      if (!ties.has(r.compositeKey)) ties.set(r.compositeKey, r);
+    }
+    if (ties.size === 0) {
+      setStatus({ kind: 'info', message: 'No Tie rows in the imported results.' });
+      return;
+    }
+
+    // Look up the original property for each tie so we can use its real
+    // address + owner-postal hint, just like the main CSV builder.
+    const propsByKey = new Map(
+      properties.map((p) => [p.property_composite_key, p]),
+    );
+    const fallbackCity = sanitizeForCsv(selectedJob.municipality || '');
+    const fallbackState = 'NJ';
+
+    const rows = [];
+    let parcelsWithVariants = 0;
+    for (const key of ties.keys()) {
+      const p = propsByKey.get(key);
+      if (!p || !(p.property_location || '').trim()) continue;
+
+      // Same owner-postal preference as Step 2 so we keep good city/zip.
+      let city = fallbackCity;
+      let state = fallbackState;
+      let zip = '';
+      if (ownerMatchesSitus(p.property_location, p.owner_street)) {
+        const parsed = parseCsz(p.owner_csz);
+        if (parsed) {
+          city = sanitizeForCsv(parsed.city);
+          state = sanitizeForCsv(parsed.state);
+          zip = sanitizeForCsv(parsed.zip);
+        }
+      }
+
+      const variants = tieResolverVariants(p.property_location);
+      if (variants.length === 0) continue;
+      parcelsWithVariants += 1;
+      const safeKey = sanitizeForCsv(key);
+      variants.forEach((addr, idx) => {
+        rows.push(
+          [
+            `${safeKey}${VARIANT_DELIM}t${idx}`,
+            sanitizeForCsv(addr),
+            city,
+            state,
+            zip,
+          ].join(','),
+        );
+      });
+    }
+
+    if (rows.length === 0) {
+      setStatus({
+        kind: 'info',
+        message: 'No tie rows had usable addresses to expand into variants.',
+      });
+      return;
+    }
+
+    const totalChunks = Math.ceil(rows.length / CENSUS_BATCH_LIMIT);
+    const safeJobName = (selectedJob.job_name || 'job')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+
+    for (let i = 0; i < totalChunks; i++) {
+      const slice = rows.slice(i * CENSUS_BATCH_LIMIT, (i + 1) * CENSUS_BATCH_LIMIT);
+      const csv = slice.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeJobName}_ties_part-${i + 1}-of-${totalChunks}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    setStatus({
+      kind: 'success',
+      message:
+        `Generated ${totalChunks} tie-resolver CSV(s) with ${rows.length} variant ` +
+        `rows for ${parcelsWithVariants} tied parcels. Upload to Census, then ` +
+        `re-import the result via Step 4 — the parser collapses variants back ` +
+        `to one winner per parcel.`,
+    });
+  }, [parsedResults, selectedJob, properties]);
 
   const commitResults = useCallback(async () => {
     if (parsedResults.length === 0 || !selectedJobId) return;
@@ -2026,7 +2207,7 @@ const GeocodingTool = () => {
                 </table>
               </div>
 
-              <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+              <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <button
                   style={primaryButton}
                   onClick={commitResults}
@@ -2034,6 +2215,21 @@ const GeocodingTool = () => {
                 >
                   {committing ? 'Committing…' : `✓ Commit ${resultStats.matched} coordinates`}
                 </button>
+                {resultStats.tie > 0 && (
+                  <button
+                    style={{
+                      ...buttonBase,
+                      background: '#fb923c',
+                      color: '#fff',
+                      border: '1px solid #f97316',
+                    }}
+                    onClick={generateTieResolverCsv}
+                    disabled={committing}
+                    title="Generate a CSV of variant addresses for the Tie rows. Upload to Census and re-import the result here to break the ties."
+                  >
+                    🎯 Generate Tie Resolver CSV ({resultStats.tie.toLocaleString()})
+                  </button>
+                )}
                 <button
                   style={dangerButton}
                   onClick={() => {
@@ -2046,6 +2242,29 @@ const GeocodingTool = () => {
                   Discard parsed results
                 </button>
               </div>
+              {resultStats.tie > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: '#9a3412',
+                    background: '#fff7ed',
+                    border: '1px solid #fed7aa',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                  }}
+                >
+                  <strong>Ties detected:</strong> Census flagged{' '}
+                  <strong>{resultStats.tie.toLocaleString()}</strong> parcels as
+                  ambiguous (2+ candidate matches). Click <em>Generate Tie
+                  Resolver CSV</em> to download a round-2 input with variant
+                  addresses (drop hyphenated suffix, expand street suffix, try
+                  with/without leading directional, etc.). Upload it to Census
+                  the same way as the main CSV, then re-import the result here
+                  via the file picker above. The parser collapses variants back
+                  to one winner per parcel.
+                </div>
+              )}
 
               {commitSummary && (
                 <div style={{ marginTop: 12, fontSize: 14 }}>
