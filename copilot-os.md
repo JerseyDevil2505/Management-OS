@@ -2,7 +2,7 @@
 
 > Lean reference for the NJ property-assessment management platform.
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.
-> Updated April 2025.
+> Updated April 2025 (rev. — geocoder, appeal map, distance filter, PowerComp PDF round-trip).
 
 ---
 
@@ -11,6 +11,8 @@
 | Layer | Tech |
 |-------|------|
 | Frontend | React 18 (CRA), Tailwind CSS, Lucide icons |
+| Mapping | Leaflet + react-leaflet (subject/comp maps), pdf-lib (PDF merge), pdfjs-dist (PDF parsing) |
+| Geocoding | U.S. Census Bureau Batch Geocoder (free, manual round-trip CSV) + manual lat/lng entry |
 | Backend / DB | Supabase (Postgres), Row-Level Security — **Project ID: `zxvavttfvpsagzluqqwn`** |
 | Auth | Supabase Auth (email/password) |
 | Exports | jsPDF (PDF), xlsx-js-style (Excel) |
@@ -43,10 +45,13 @@ src/
 │
 ├── components/                     Top-level pages (rendered by App.js router)
 │   ├── AdminJobManagement.jsx      (3,280)  Job CRUD, archiving, status lifecycle
+│   ├── AppealMap.jsx                (290)   Leaflet subject+comps map (numbered pins, html2canvas capture)
 │   ├── AppealsSummary.jsx          (376)    Cross-job appeal dashboard
 │   ├── AssessorDashboard.jsx       (1,079)  External assessor client view
 │   ├── BillingManagement.jsx       (4,721)  Contracts, billing events, invoices
 │   ├── EmployeeManagement.jsx      (2,478)  HR, inspector management, analytics
+│   ├── GeocodeStatusChip.jsx        (390)   Inline lat/lng status pin + edit modal for comp grids
+│   ├── GeocodingTool.jsx           (2,674)  Admin-only Census batch geocoder (CSV round-trip + manual)
 │   ├── LandingPage.jsx             (217)    Public landing / login
 │   ├── OrganizationManagement.jsx  (748)    Org CRUD, subscriptions
 │   ├── PayrollManagement.jsx       (1,540)  Payroll periods, processing
@@ -73,20 +78,27 @@ src/
 │       │
 │       ├── FinalValuation.jsx      (182)    Orchestrator → final-valuation-tabs/
 │       └── final-valuation-tabs/
-│           ├── SalesComparisonTab.jsx      (5,684)  CME comparable search + evaluation
-│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + import
-│           ├── DetailedAppraisalGrid.jsx   (2,532)  Manual appraisal + PDF export
+│           ├── SalesComparisonTab.jsx      (5,684)  CME comparable search + evaluation (incl. distance-from-subject filter)
+│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + import + PowerComp PDF merge + CSV export to BRT
+│           ├── DetailedAppraisalGrid.jsx   (2,532)  Manual appraisal + PDF export (uploads to `appeal-reports` bucket)
 │           ├── AdjustmentsTab.jsx          (2,277)  CME grid + bracket mapping
 │           ├── SalesReviewTab.jsx          (1,870)  Sales history review
 │           ├── MarketDataTab.jsx           (1,692)  Effective age / depreciation
 │           ├── VacantLandAppraisalTab.jsx  (1,549)  Vacant land evaluation
 │           ├── RatableComparisonTab.jsx    (1,109)  Tax rate impact analysis
+│           ├── AppellantEvidencePanel.jsx  ( -- )   Appellant-supplied comps panel + BS Meter
 │           └── AnalyticsTab.jsx            (468)    Final recommendations
+│
+├── data/
+│   └── njZipToCity.js              (654)    NJ ZIP → city lookup (Census geocoder ZIP-sweep helper)
 │
 ├── lib/
 │   ├── supabaseClient.js           (5,058)  Supabase client, service layer, interpretCodes
 │   ├── targetNormalization.js      (402)    Time/size normalization math
 │   ├── tenantConfig.js             (142)    Multi-tenant helpers
+│   ├── powercompPdfParser.js       (948)    Parses BRT PowerComp Batch Taxpayer PDFs → per-subject photo packets
+│   ├── appellantCompEvaluator.js   (397)    BS Meter — scores appellant comps (NU codes, date range, similarity)
+│   ├── appealReportBuilder.js       (60)    PDF download / zip-of-PDFs / safe filename helpers
 │   └── data-pipeline/
 │       ├── brt-processor.js        (1,551)  BRT source-file parser → property_records
 │       ├── brt-updater.js          (1,998)  BRT re-upload delta processor
@@ -235,6 +247,10 @@ Master property table. One row per block/lot/qualifier/card per job.
 | vendor_source | text | `BRT` or `Microsystems` |
 | is_new_since_last_upload | bool | |
 | net_condition_pct | numeric | BRT NCOVR field |
+| property_latitude, property_longitude | numeric | Geocoded coordinates (Census, manual, or inherited from mother lot) |
+| geocode_source | text | `census`, `manual`, `inherited_motherlot`, `skipped`, or null |
+| geocode_match_quality | text | Census match type, `Manual`, `inherited_motherlot`, `no_street_number`, etc. |
+| geocoded_at | timestamptz | Last geocode update timestamp |
 
 #### `property_market_analysis` (~230K rows)
 Per-property market analysis data. FK → `property_records` via `property_composite_key`.
@@ -370,6 +386,15 @@ Business development proposals → can convert to organization.
 | `checklist_item_status` | Checklist completion tracking |
 | `checklist_documents` | File attachments on checklist items |
 | `planning_jobs` | Pre-contract pipeline planning |
+| `appeal_powercomp_photos` | Per-property photo-packet metadata imported from BRT PowerComp PDFs (composite key → storage path, page count, source filename) |
+| `nu_code_dictionary` | Source of truth for NJ NU (non-usable) sale code descriptions used by the appellant comp evaluator |
+
+### Storage Buckets (Supabase Storage)
+
+| Bucket | Purpose |
+|--------|---------|
+| `appeal-reports` | Appeal report PDFs generated by `DetailedAppraisalGrid` (one per subject, keyed by `CME_<ccdd>_<block>_<lot>[_<qual>].pdf`). Downloaded on demand by Appeal Log for batch print. |
+| `powercomp-photos` | Photo-only PDF packets sliced out of imported BRT PowerComp Batch Taxpayer Reports. Merged into appeal reports at print time via pdf-lib. |
 
 ---
 
@@ -509,7 +534,90 @@ Both PDF generators support appeal-number auto-detection from `appeal_log` and m
 
 ---
 
-## 9. Ground Rules for New Branches
+## 9. Geocoding & Mapping (Added Post-Initial Guide)
+
+### 9.1 Geocoder Component (`GeocodingTool.jsx`)
+
+Admin-only top-level utility (nav: **🗺️ Geocoder**, route `/geocoding-tool`, gated by `canManageUsers`). Wired in `App.js:1510` and rendered at `App.js:1732`.
+
+**Pipeline (Option B — manual round-trip):**
+
+1. Pick a job → tool reads `property_records` for that job and computes coverage stats.
+2. **Generate input CSV(s)** — one row per *parcel identity* (block/lot/qualifier — the date prefix in `property_composite_key` is stripped so multiple roll-year copies of the same parcel collapse). Chunked at exactly **10,000 rows per file** (Census batch limit) and downloaded as `<job-name>_part-N-of-M.csv`.
+3. Admin uploads each CSV to <https://geocoding.geo.census.gov/geocoder/geographies/addressbatch> (benchmark `Public_AR_Current`, vintage `Current_Current`).
+4. **ZIP-sweep variants** — for stubborn rows the tool can emit synthetic ZIP variants using `src/data/njZipToCity.js`. Variant rows use a `__<zipIdx>` suffix on the composite key; on result import the suffix is stripped via `stripVariantSuffix()` so the matched coords collapse back onto the single parent parcel.
+5. Admin downloads result CSV(s) from Census and uploads them back into the tool.
+6. **Preview match stats → commit to `property_records`** with `geocode_source = 'census'`, `geocode_match_quality = <Census match type>`, `geocoded_at = now`.
+7. **Manual entry pass** — for `No_Match` / suspect rows, paste a `lat, lng` copied from a Google Maps right-click. Stamped `geocode_source = 'manual'` / `geocode_match_quality = 'Manual'`.
+8. **Skipped rows** — addresses with no street number (or otherwise un-geocodable) are stamped `geocode_source = 'skipped'` so they don't keep showing up as outstanding work. They can be un-skipped from the manual list.
+9. **Mother-lot inheritance** — condo children (`property_qualifier` matching `C%`) without coords inherit the mother lot's lat/lng with `geocode_source = 'inherited_motherlot'`. This runs both as part of a manual save (children of the saved parent) and as a one-shot "inherit from mother lot" pass.
+
+### 9.2 Inline Geocode Status Chip (`GeocodeStatusChip.jsx`)
+
+Tiny circular pin chip embedded in every comp grid (Sales Comparison, Vacant Land, Detailed/Appellant). Click → modal with two text inputs that accept either `40.123, -74.567` (Google right-click format) or two whitespace-separated numbers. Save writes directly to `property_records` by `property_composite_key` and stamps `geocode_source = 'manual'`. Calls `onSaved(coords)` so the parent can patch its in-memory copy without a full reload.
+
+### 9.3 Appeal Map (`AppealMap.jsx`)
+
+Leaflet + react-leaflet renderer used in the Detailed Appraisal report.
+
+- Draws a numbered subject pin and numbered comp pins, with optional polylines from subject → each comp.
+- `FitBounds` helper auto-fits the cluster on mount with `padding=20`, `maxZoom=16`, plus a small zoom nudge for tight clusters (Leaflet otherwise picks an overly conservative level).
+- Exports `distanceMiles(a, b)` — Haversine miles between two `[lat, lng]` points. **Re-used by `SalesComparisonTab` for the distance filter** (`import { distanceMiles } from '../../AppealMap'`).
+- Map div carries an `id` for `html2canvas` capture so the Detailed PDF can embed the rendered map as a "Subject & Comps Location Map" page.
+
+### 9.4 CME Distance-from-Subject Filter (`SalesComparisonTab.jsx`)
+
+New `compFilters.maxDistanceMiles` field (default `''` = no filter, see `SalesComparisonTab.jsx:62`). When set:
+
+- Comps without lat/lng are **excluded** under this rule (we can't prove they're in range).
+- Subject without lat/lng → filter is **disabled in the UI** (we don't pretend we can filter when we don't have a reference point).
+- Step `0.25` mile increments. Applied via `distanceMiles([sLat, sLng], [cLat, cLng])` against `maxDistance`.
+
+---
+
+## 10. Appeal PDF Round-Trip with BRT PowerComp (Added Post-Initial Guide)
+
+A two-direction integration with BRT's PowerComp tool, all driven from `AppealLogTab.jsx`.
+
+### 10.1 PowerComp PDF Photo-Packet Import
+
+PPA's appeal reports lack property photos. BRT PowerComp's "Batch Taxpayer Report" PDFs do have them. We import the PowerComp PDF, slice out just the photo pages per subject, and stitch them back into our own appeal reports at print time.
+
+- **Parser** — `src/lib/powercompPdfParser.js` (`parsePowerCompPdf(input)`).
+  - Uses `pdfjs-dist` with the CDN worker (`pdfjsLib.GlobalWorkerOptions.workerSrc`).
+  - Walks every page, classifying as **data page** (contains keywords like `Sales Date`, `SFLA`, `Per Sq Ft Value`, etc.) or **photo page** (everything else).
+  - Reads the subject BLQ off each data page using textual landmarks (`Subject` → `Block Lot Qualifier Card` row), tolerating 3- or 4-cell rows since the qualifier cell is often blank.
+  - Returns per-subject **packets**: `{ block, lot, qualifier, address, dataPageIndices, photoPageIndices, allPageIndices }`.
+- **Import flow** (Appeal Log → "Import Batch PwrComp PDF" modal, `AppealLogTab.jsx:4923`):
+  1. User uploads the PowerComp PDF.
+  2. Parser produces packets; matched against this job's properties by normalized BLQ.
+  3. For each match, the photo pages are extracted with `pdf-lib` into a small per-subject sub-PDF, uploaded to the `powercomp-photos` storage bucket, and a metadata row upserted into `appeal_powercomp_photos` (composite key, storage path, page count, source filename, imported_at).
+  4. The photo packet pages get a footer crediting **BRT Technologies PowerComp** (attribution is mandatory — they generated the photos).
+- **Print/merge flow** — `buildPrintablePdfForAppeal(appeal)` in `AppealLogTab.jsx:2163`:
+  1. Downloads the saved appeal report from `appeal-reports` bucket.
+  2. Downloads the PowerComp photo packet from `powercomp-photos` bucket (if any).
+  3. Uses `pdfjs-dist` to **scan and classify each report page** by keyword (`detailed evaluation`, `dynamic adjustments`, `subject & comps location map`, `appellant evidence summary`, `chapter 123`) into buckets.
+  4. Re-emits the merged PDF in the canonical section order:
+     1. Static comp grid (Detailed Evaluation)
+     2. Dynamic Adjustments
+     3. **PowerComp photo packet** (if present)
+     4. Subject & Comps Location Map (if present)
+     5. Appellant Evidence Summary (if present)
+     6. Chapter 123 Test (Director's Ratio)
+  5. Anything that can't be classified is appended at the end in original order (we never silently drop a page). If the pdfjs scan fails, we fall back to original-order with photos appended at the end.
+
+### 10.2 Selective CME → BRT PowerComp CSV Export
+
+Round-trip companion: lets staff hand the *finalized* CME comps back to BRT PowerComp so PowerComp can pre-fill its own report. Driven by the **"Select Result Sets for PowerComp Export"** modal (`AppealLogTab.jsx:4798`).
+
+- Candidates list = every saved CME result set currently linked to an appeal in this job.
+- All candidates are **checked by default**. The point of the modal is to *un-check* runs you don't want shipped — common when a single subject has both an assessor run and an appellant run, or a manager rebuttal that shouldn't go to BRT.
+- Subjects are visually grouped (block/lot/qualifier + address shown only on the first row of each subject; subsequent rows show `—`).
+- Confirm → emits a CSV in BRT's expected format. Excel-safe value handling — values are written as raw cell content (no `="..."` formula wrappers, which BRT was rejecting in earlier revs).
+
+---
+
+## 11. Ground Rules for New Branches
 
 **READ BEFORE TOUCHING ANYTHING.**
 
@@ -548,6 +656,13 @@ This codebase has been built iteratively over the course of a year. Every patter
 | `property_composite_key` used as FK (not uuid) | Block+lot+qualifier+card is the natural key in NJ tax assessment — it's the identifier that survives across file uploads |
 | Multiple jsonb columns on `market_land_valuation` | One row per job with rich jsonb fields is the correct model — it avoids join complexity for data that's always loaded together |
 | `is_assigned_property` filter vs dedicated join table | Assignment-aware loading was solved at the flag level intentionally — the join table `job_responsibilities` stores the upload, but the flag on `property_records` is what the app queries |
+| Geocoder uses a manual CSV round-trip instead of an API call | The Census Bureau batch geocoder is free but rate-limited and synchronous. Doing it manually (download CSV → upload to Census → upload result back) avoids API keys, billing, and throttling. The tool chunks at exactly 10,000 rows because that's the Census batch ceiling. |
+| `property_composite_key` gets a `__<zipIdx>` suffix on Census variant rows | The ZIP-sweep pass deliberately submits multiple postal-ZIP variants for the same parcel. The synthetic suffix is stripped on result import (`stripVariantSuffix`) so all variant matches collapse back to the same parent property. |
+| `geocode_source = 'skipped'` is a real value, not a null | We need to remember that a parcel was *intentionally* skipped (no street number, etc.) so it stops re-appearing in the outstanding-work list. Treat it as a third state, not as "missing coords". |
+| Condo children inherit the mother lot's lat/lng instead of being geocoded individually | Condo children share a footprint with the mother lot, and Census often can't geocode a `<address> UNIT 4B` cleanly. Inherited coords are stamped `geocode_source = 'inherited_motherlot'` so they're distinguishable from real Census matches. |
+| `AppealLogTab` re-classifies pages of a saved appeal report at print time | The Detailed tab uploads the report once. Photos / map / appellant evidence / Chapter 123 sections may not all exist on every subject, and we want a canonical print order regardless. We use pdfjs to *read* each page's text and bucket it, then re-emit with `pdf-lib` — this is intentional and handles legacy exports that pre-date the section headers. |
+| PowerComp PDF parser keys off textual landmarks, not coordinates | BRT regenerates these PDFs from layout templates that drift slightly between releases. Keying off `Subject` / `Block Lot Qualifier Card` / `Sales Date` text is layout-tolerant; switching to coordinate-based extraction would break on the next BRT update. |
+| PowerComp photo pages carry a "BRT Technologies PowerComp" footer | Attribution is required — they generated the photos, we're just bundling them into our deliverable. Don't strip the footer. |
 
 ### Lessons Learned the Hard Way
 
@@ -566,5 +681,13 @@ This codebase has been built iteratively over the course of a year. Every patter
 7. **Don't add loading states or spinners** to working flows — If a component doesn't show a loading spinner, it's probably because the data loads fast enough that a spinner causes more visual disruption than a brief blank frame.
 
 8. **`comparison_reports` are generated, not user-created** — They're produced automatically when a new source file is uploaded over an existing one. Don't expose CRUD for them.
+
+9. **The geocoder is the *only* source of `property_latitude` / `property_longitude`** — Don't write coords from anywhere else. The four-value contract (`property_latitude`, `property_longitude`, `geocode_source`, `geocode_match_quality`) must be written together so downstream filters (CME distance filter, AppealMap, GeocodeStatusChip) can trust the source provenance. Mother-lot inheritance and manual entry already follow this contract — match it.
+
+10. **Distance filter must short-circuit when subject has no coords** — Don't silently include or exclude comps when the subject is un-geocoded. Disable the filter input and explain why, so the user understands they need to geocode the subject first.
+
+11. **Don't change BRT's PowerComp CSV format without testing it in BRT** — BRT silently rejects rows that don't match its expected column layout. The `="..."` formula-style wrappers were rejected in an earlier rev; we now write raw cell values. If you change the export shape, validate by re-importing the CSV into PowerComp before shipping.
+
+12. **PowerComp photo packets are immutable post-import** — We store sliced sub-PDFs in the `powercomp-photos` bucket. If PowerComp re-issues a different photo set for the same property, re-import; don't try to merge or diff.
 
 😊
