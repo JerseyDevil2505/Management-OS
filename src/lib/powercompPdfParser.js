@@ -850,19 +850,36 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
     { subject: true, stretch: true },
   );
 
-  // Comps 1-3 — bottom row. Match page 2's behavior: only draw cells for
-  // comps that actually exist in this appraisal (signaled by either a real
-  // photo or a captured caption address). Comp #1 is always rendered as a
-  // safety net since every appraisal has at least one comp by definition;
-  // if caption parsing whiffs we don't want a Subject-only page that
-  // visually reads as broken. Layout centers whatever cells are drawn.
+  // Determine the highest-numbered comp that exists for this appraisal,
+  // using every signal available: per-slot photos, captured caption
+  // addresses, and BRT shipping a second photo page (which only happens
+  // when comps 4/5 exist). Once we know the max comp count, all
+  // lower-numbered comp slots MUST render — a 4-comp appraisal can never
+  // legitimately skip Comp #2 just because BRT omitted its photo and
+  // caption parsing missed the address line.
+  const slotHasAnything = (n) => {
+    const key = `comp${n}`;
+    return !!bySlot[key] || !!compAddrs[n];
+  };
+  let maxComp = 1; // every appraisal has at least one comp
+  for (let n = 5; n >= 1; n--) {
+    if (slotHasAnything(n)) { maxComp = Math.max(maxComp, n); break; }
+  }
+  // A second photo page in the source means BRT had at least Comp #4.
+  if ((packet.photoPageIndices?.length || 0) > 1 && maxComp < 4) {
+    maxComp = 4;
+  }
+
+  // Comps 1-3 — bottom row. Render every slot up to min(3, maxComp); a
+  // missing photo simply renders as a "No photo provided" cell so the
+  // numbering stays continuous with the comparison grid.
   const page1Slots = [
-    { key: 'comp1', label: 'Comp #1', force: true },
-    { key: 'comp2', label: 'Comp #2', force: false },
-    { key: 'comp3', label: 'Comp #3', force: false },
+    { key: 'comp1', label: 'Comp #1' },
+    { key: 'comp2', label: 'Comp #2' },
+    { key: 'comp3', label: 'Comp #3' },
   ]
     .map((s, i) => ({ ...s, num: i + 1 }))
-    .filter((s) => s.force || !!bySlot[s.key] || !!compAddrs[s.num]);
+    .filter((s) => s.num <= Math.min(3, maxComp));
   const page1TotalW =
     compCellW * page1Slots.length + colGap * Math.max(0, page1Slots.length - 1);
   const page1X = margin + (contentW - page1TotalW) / 2;
@@ -887,21 +904,16 @@ export async function buildPhotoPacketPdf(originalPdfBytes, packet, opts = {}) {
   //   3. We captured a comp address for slot 4 or 5 from the photo pages
   // Within page 2 we only draw cells for slots that actually exist in this
   // appraisal so we don't render a phantom Comp #5 when only 4 comps exist.
-  const compAddrsAll = packet.compAddresses || {};
-  const slot4Exists = !!bySlot.comp4 || !!compAddrsAll[4];
-  const slot5Exists = !!bySlot.comp5 || !!compAddrsAll[5];
-  const hasOverflow =
-    slot4Exists ||
-    slot5Exists ||
-    (packet.photoPageIndices?.length || 0) > 1;
-  if (hasOverflow) {
+  // Page 2 mirrors the same maxComp logic: render Comp #4 whenever the
+  // appraisal has 4+ comps, render Comp #5 only when comp 5 actually
+  // exists. This keeps Comp #4 visible as a "No photo provided" cell
+  // even if BRT shipped neither a photo nor a parsed caption for it.
+  const slot4Render = maxComp >= 4;
+  const slot5Render = maxComp >= 5;
+  if (slot4Render || slot5Render) {
     const overflowSlots = [];
-    if (slot4Exists || (packet.photoPageIndices?.length || 0) > 1) {
-      overflowSlots.push({ key: 'comp4', label: 'Comp #4' });
-    }
-    if (slot5Exists) {
-      overflowSlots.push({ key: 'comp5', label: 'Comp #5' });
-    }
+    if (slot4Render) overflowSlots.push({ key: 'comp4', label: 'Comp #4' });
+    if (slot5Render) overflowSlots.push({ key: 'comp5', label: 'Comp #5' });
     if (overflowSlots.length) {
       doc.addPage();
       drawHeader();
