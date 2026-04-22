@@ -1687,8 +1687,8 @@ const GeocodingTool = () => {
                         borderRadius: 999,
                         fontSize: 11,
                         fontWeight: 600,
-                        background: isPpaJob(job) ? '#dbeafe' : '#dcfce7',
-                        color: isPpaJob(job) ? '#1e40af' : '#166534',
+                        background: isPpaJob(job) ? '#dcfce7' : '#dbeafe',
+                        color: isPpaJob(job) ? '#166534' : '#1e40af',
                       }}
                     >
                       {isPpaJob(job) ? 'PPA' : 'LOJIK'}

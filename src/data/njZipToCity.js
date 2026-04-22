@@ -75,6 +75,8 @@ const NJ_ZIP_TO_CITY = {
   '08890': 'ZAREPHATH',
 
   // Hunterdon County
+  '07830': 'CALIFON',
+  '07979': 'POTTERSVILLE',
   '08551': 'RINGOES',
   '08553': 'ROCKY HILL',
   '08557': 'SERGEANTSVILLE',
@@ -322,6 +324,7 @@ const NJ_ZIP_TO_CITY = {
   '07851': 'LAYTON',
   '07860': 'NEWTON',
   '07863': 'OXFORD',
+  '07865': 'PORT MURRAY',
   '07871': 'SPARTA',
   '07874': 'STANHOPE',
   '07875': 'SPARTA',
