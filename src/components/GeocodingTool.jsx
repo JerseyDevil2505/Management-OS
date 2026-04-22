@@ -436,7 +436,7 @@ const GeocodingTool = () => {
       try {
         const { data, error: jobsError } = await supabase
           .from('jobs')
-          .select('id, job_name, municipality, county, total_properties, vendor_type, status, organization_id, end_date')
+          .select('id, job_name, municipality, county, total_properties, vendor_type, status, organization_id, end_date, organizations:organization_id(org_type)')
           .order('job_name', { ascending: true });
         if (jobsError) throw jobsError;
         if (mounted) {
@@ -625,18 +625,25 @@ const GeocodingTool = () => {
 
   // Sales-period window math anchored on the selected job's end_date,
   // matching the SalesComparisonTab CSP convention so the same parcels
-  // line up across tools.
+  // line up across tools. For Lojik tenants (org_type = 'assessor') the
+  // assessment year is the prior year — end_date is the *job* end, not
+  // the assessment date — so we subtract one to keep CSP centered on the
+  // correct 10/1–10/31 window.
   const csvSalesWindow = useMemo(() => {
     if (!selectedJob?.end_date) return null;
-    const ay = new Date(selectedJob.end_date).getFullYear();
-    if (!ay) return null;
+    const rawYear = new Date(selectedJob.end_date).getFullYear();
+    if (!rawYear) return null;
+    const isLojik = selectedJob?.organizations?.org_type === 'assessor';
+    const ay = isLojik ? rawYear - 1 : rawYear;
     return {
       cspStart: new Date(ay - 1, 9, 1),
       cspEnd: new Date(ay, 9, 31),
       pspStart: new Date(ay - 2, 9, 1),
       hspStart: new Date(ay - 3, 9, 1),
+      isLojik,
+      assessmentYear: ay,
     };
-  }, [selectedJob?.end_date]);
+  }, [selectedJob?.end_date, selectedJob?.organizations?.org_type]);
 
   // Predicate applied inside every CSV-emitting candidate loop so a filter
   // tightening (e.g. "class 2 only, CSP only") narrows the main CSV, the
