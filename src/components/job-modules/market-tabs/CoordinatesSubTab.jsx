@@ -162,6 +162,31 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
     });
   }, [filteredForClass, salesInPool, salesWindow]);
 
+  // Per-chip live counts. Each chip's count is computed against the base
+  // list (skipped filter applied, but BEFORE the chip filter itself), so
+  // toggling other chips doesn't lie about what a chip would yield.
+  const classChipCounts = useMemo(() => {
+    const m = new Map();
+    for (const p of filteredForSkipped) {
+      const c = String(p.property_m4_class || '').trim();
+      if (!c) continue;
+      m.set(c, (m.get(c) || 0) + 1);
+    }
+    return m;
+  }, [filteredForSkipped]);
+
+  const salesPoolChipCount = useMemo(() => {
+    if (!salesWindow) return 0;
+    let n = 0;
+    for (const p of filteredForClass) {
+      if (!p.sales_date) continue;
+      const d = new Date(p.sales_date);
+      if (Number.isNaN(d.getTime())) continue;
+      if (d >= salesWindow.start && d <= salesWindow.end) n += 1;
+    }
+    return n;
+  }, [filteredForClass, salesWindow]);
+
   const toggleClass = (cls) => {
     setClassFilter((prev) => {
       const next = new Set(prev);
@@ -262,26 +287,17 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
         />
       </div>
 
-      {/* Class chips (multi-select). Empty selection = all classes. */}
+      {/* Class chips (multi-select). Each chip shows its live count from
+          the base list (skipped filter applied) so it's obvious how many
+          parcels each class would yield. Use "clear" to drop the filter. */}
       {availableClasses.length > 0 && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600 font-medium uppercase">
             Class:
           </span>
-          <button
-            type="button"
-            onClick={() => setClassFilter(new Set())}
-            className="px-2.5 py-1 rounded-full text-xs border"
-            style={
-              classFilter.size === 0
-                ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
-                : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
-            }
-          >
-            All
-          </button>
           {availableClasses.map((cls) => {
             const active = classFilter.has(cls);
+            const count = classChipCounts.get(cls) || 0;
             return (
               <button
                 key={cls}
@@ -294,22 +310,25 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
                     : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
                 }
               >
-                {cls}
+                {cls} <span style={{ opacity: 0.75, marginLeft: 4 }}>({count.toLocaleString()})</span>
               </button>
             );
           })}
           {classFilter.size > 0 && (
-            <span className="text-xs text-gray-500">
-              ({classFilter.size} selected)
-            </span>
+            <button
+              type="button"
+              onClick={() => setClassFilter(new Set())}
+              className="px-2 py-0.5 text-[11px] text-gray-500 underline"
+            >
+              clear
+            </button>
           )}
         </div>
       )}
 
-      {/* Sales-pool filter — when on, only parcels with a sale_date in the
-          sales-pool window survive. Useful for prioritizing pending sales
-          that will hit the search-radius gate. Hidden when the job has no
-          end_date to anchor the window. */}
+      {/* Sales-pool filter — single toggle. Live count reflects parcels in
+          the window after the class filter so it adapts as the user chips
+          classes on/off. Hidden when the job has no end_date. */}
       {salesWindow && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-600 font-medium uppercase">
@@ -317,19 +336,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
           </span>
           <button
             type="button"
-            onClick={() => setSalesInPool(false)}
-            className="px-2.5 py-1 rounded-full text-xs border"
-            style={
-              !salesInPool
-                ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
-                : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }
-            }
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => setSalesInPool(true)}
+            onClick={() => setSalesInPool(!salesInPool)}
             className="px-2.5 py-1 rounded-full text-xs border"
             style={
               salesInPool
@@ -338,7 +345,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
             }
             title={`Sales between ${salesWindow.start.toLocaleDateString()} and ${salesWindow.end.toLocaleDateString()}`}
           >
-            In sales pool window
+            In sales pool window <span style={{ opacity: 0.75, marginLeft: 4 }}>({salesPoolChipCount.toLocaleString()})</span>
           </button>
           <span className="text-xs text-gray-400">
             ({salesWindow.start.toLocaleDateString()} – {salesWindow.end.toLocaleDateString()}

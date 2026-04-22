@@ -1150,11 +1150,12 @@ const GeocodingTool = () => {
 
   // ---------- Manual entry helpers ----------
 
-  const manualCandidates = useMemo(() => {
-    // Always restrict to main cards in the manual list. Vendor-aware so
-    // Microsystems jobs (Carneys Point, etc.) actually populate — their
-    // main marker is 'M', not '1', and the old hardcoded filter was hiding
-    // every parcel.
+  const manualBaseList = useMemo(() => {
+    // Manual cleanup base: main cards + manualFilter (ungeocoded/skipped/all)
+    // + search + dedup, *before* the class/sales chips. Used both as the
+    // input to the visible list and as the source for live chip counts.
+    // Vendor-aware so Microsystems jobs (Carneys Point, etc.) actually
+    // populate — their main marker is 'M', not '1'.
     let list = properties.filter(isMainCardRow);
     if (manualFilter === 'ungeocoded') {
       list = list.filter(
@@ -1182,10 +1183,39 @@ const GeocodingTool = () => {
       seen.add(id);
       deduped.push(p);
     }
-    // Apply optional class + sales-period chips (Step 5 filter row).
-    const final = deduped.filter(passesCsvFilters);
-    return final.slice(0, 100); // cap render
-  }, [properties, manualSearch, manualFilter, passesCsvFilters]);
+    return deduped;
+  }, [properties, manualSearch, manualFilter]);
+
+  // Final visible list = base ∩ chip filters, capped at 100. Chips never
+  // affect the base — they just narrow it.
+  const manualCandidates = useMemo(() => {
+    return manualBaseList.filter(passesCsvFilters).slice(0, 100);
+  }, [manualBaseList, passesCsvFilters]);
+
+  // Per-chip live counts derived from manualBaseList so the user can see
+  // exactly how many parcels each chip would survive against the current
+  // base (search + manualFilter), independent of other chip selections.
+  const classChipCounts = useMemo(() => {
+    const m = new Map();
+    for (const p of manualBaseList) {
+      const c = String(p.property_m4_class || '').trim();
+      if (!c) continue;
+      m.set(c, (m.get(c) || 0) + 1);
+    }
+    return m;
+  }, [manualBaseList]);
+
+  const salesPoolChipCount = useMemo(() => {
+    if (!csvSalesWindow) return 0;
+    let n = 0;
+    for (const p of manualBaseList) {
+      if (!p.sales_date) continue;
+      const d = new Date(p.sales_date);
+      if (Number.isNaN(d.getTime())) continue;
+      if (d >= csvSalesWindow.start && d <= csvSalesWindow.end) n += 1;
+    }
+    return n;
+  }, [manualBaseList, csvSalesWindow]);
 
   const manualUngeocodedCount = useMemo(() => {
     const seen = new Set();
@@ -2324,24 +2354,9 @@ const GeocodingTool = () => {
                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
                   Class:
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setCsvClassFilter(new Set())}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    border: '1px solid',
-                    cursor: 'pointer',
-                    ...(csvClassFilter.size === 0
-                      ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
-                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                  }}
-                >
-                  All
-                </button>
                 {csvAvailableClasses.map((cls) => {
                   const active = csvClassFilter.has(cls);
+                  const count = classChipCounts.get(cls) || 0;
                   return (
                     <button
                       key={cls}
@@ -2365,10 +2380,27 @@ const GeocodingTool = () => {
                           : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
                       }}
                     >
-                      {cls}
+                      {cls} <span style={{ opacity: 0.75, marginLeft: 4 }}>({count.toLocaleString()})</span>
                     </button>
                   );
                 })}
+                {csvClassFilter.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCsvClassFilter(new Set())}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: 11,
+                      color: '#6b7280',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    clear
+                  </button>
+                )}
               </div>
             )}
             {csvSalesWindow && (
@@ -2378,23 +2410,7 @@ const GeocodingTool = () => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setCsvSalesInPool(false)}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    border: '1px solid',
-                    cursor: 'pointer',
-                    ...(!csvSalesInPool
-                      ? { background: '#1f2937', color: '#fff', borderColor: '#1f2937' }
-                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
-                  }}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCsvSalesInPool(true)}
+                  onClick={() => setCsvSalesInPool(!csvSalesInPool)}
                   style={{
                     padding: '3px 10px',
                     borderRadius: 999,
@@ -2407,7 +2423,7 @@ const GeocodingTool = () => {
                   }}
                   title={`Sales between ${csvSalesWindow.start.toLocaleDateString()} and ${csvSalesWindow.end.toLocaleDateString()}`}
                 >
-                  In sales pool window
+                  In sales pool window <span style={{ opacity: 0.75, marginLeft: 4 }}>({salesPoolChipCount.toLocaleString()})</span>
                 </button>
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>
                   ({csvSalesWindow.start.toLocaleDateString()} – {csvSalesWindow.end.toLocaleDateString()}
