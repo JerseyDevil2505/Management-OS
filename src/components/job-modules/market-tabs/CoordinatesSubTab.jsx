@@ -49,18 +49,28 @@ const bucketFor = (p) => {
   return 'fixed';
 };
 
-const formatAddress = (p) => {
+const formatAddress = (p, jobData) => {
+  // Prefer property-level city/municipality; fall back to the job's town/county
+  // so BRT records that don't carry a city field still produce a useful query.
+  const town =
+    p.property_city ||
+    p.property_municipality ||
+    jobData?.municipality ||
+    jobData?.name ||
+    null;
+  const county = jobData?.county_name || jobData?.county || null;
   const parts = [
     p.property_location,
-    p.property_city || p.property_municipality,
+    town,
+    county ? `${county} County` : null,
     'NJ',
     p.property_zip,
   ].filter(Boolean);
   return parts.join(', ');
 };
 
-const googleMapsUrl = (p) => {
-  const addr = formatAddress(p);
+const googleMapsUrl = (p, jobData) => {
+  const addr = formatAddress(p, jobData);
   if (!addr) return null;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
 };
@@ -71,6 +81,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   const [patches, setPatches] = useState({});
   const [activeBucket, setActiveBucket] = useState('pending');
   const [search, setSearch] = useState('');
+  const [showSkipped, setShowSkipped] = useState(false);
 
   const merged = useMemo(() => {
     if (!Array.isArray(properties)) return [];
@@ -80,13 +91,27 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
     });
   }, [properties, patches]);
 
+  // Skipped rows are intentionally excluded from a batch geocoding run
+  // (e.g. condos, additional cards inheriting a mother-lot, exempt parcels).
+  // Hide them by default so the cleanup queue isn't padded with non-actionable
+  // rows; let the user opt in to see them.
+  const filteredForSkipped = useMemo(() => {
+    if (showSkipped) return merged;
+    return merged.filter((p) => p.geocode_source !== 'skipped');
+  }, [merged, showSkipped]);
+
+  const skippedCount = useMemo(
+    () => merged.filter((p) => p.geocode_source === 'skipped').length,
+    [merged],
+  );
+
   const buckets = useMemo(() => {
     const out = { pending: [], review: [], fixed: [] };
-    merged.forEach((p) => {
+    filteredForSkipped.forEach((p) => {
       out[bucketFor(p)].push(p);
     });
     return out;
-  }, [merged]);
+  }, [filteredForSkipped]);
 
   const visibleRows = useMemo(() => {
     const rows = buckets[activeBucket] || [];
@@ -167,7 +192,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
         />
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
         <input
           type="text"
           placeholder="Filter by block / lot / address / class…"
@@ -175,6 +200,18 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 max-w-md px-3 py-2 border border-gray-300 rounded text-sm"
         />
+        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showSkipped}
+            onChange={(e) => setShowSkipped(e.target.checked)}
+            className="w-4 h-4"
+          />
+          Show skipped
+          {skippedCount > 0 ? (
+            <span className="text-gray-500">({skippedCount.toLocaleString()})</span>
+          ) : null}
+        </label>
         <span className="text-xs text-gray-500">
           {visibleRows.length.toLocaleString()} of {totalRows.toLocaleString()}
           {totalRows > 500 ? ' (capped at 500 — narrow with filter)' : ''}
@@ -210,7 +247,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
                 visibleRows.map((p) => {
                   const lat = p.property_latitude;
                   const lng = p.property_longitude;
-                  const mapUrl = googleMapsUrl(p);
+                  const mapUrl = googleMapsUrl(p, jobData);
                   return (
                     <tr
                       key={p.property_composite_key}
