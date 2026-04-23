@@ -265,6 +265,19 @@ const AppellantEvidencePanel = ({
 
   const compLotDisplay = (property) => {
     if (!property) return '\u2014';
+    // Farm-package summation — mirrors SalesComparisonTab `lot_size_acre` rule
+    // (SalesComparisonTab.jsx:2757-2777). When farm mode is on and the
+    // property is part of a 3A house + 3B qfarm deed-pair (detected centrally
+    // in JobContainer.enrichPropertiesWithPackageData), display the combined
+    // acreage instead of the single-parcel value so the appellant table
+    // matches what Search & Results uses for filtering/adjustments.
+    if (
+      farmMode &&
+      property._pkg?.is_farm_package &&
+      property._pkg.combined_lot_acres > 0
+    ) {
+      return `${property._pkg.combined_lot_acres.toFixed(2)} ac (combined)`;
+    }
     if (property.asset_lot_acre && parseFloat(property.asset_lot_acre) > 0) {
       return `${parseFloat(property.asset_lot_acre).toFixed(2)} ac`;
     }

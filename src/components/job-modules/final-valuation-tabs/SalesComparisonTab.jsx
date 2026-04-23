@@ -286,11 +286,35 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // Populate manualProperties with all appeal subjects
     setManualProperties(keys);
 
-    // Pre-set adjustment bracket if provided
+    // Pre-set adjustment bracket if provided.
+    // Appeal Log abbreviates bracket labels ("$200K-$299K", "Under $100K",
+    // "$2M+") to fit its narrow column, while CME's CME_BRACKETS uses the
+    // full form ("$200,000-$299,999", "up to $99,999", "Over $2,000,000").
+    // A literal label compare always missed and the bracket never
+    // pre-selected. Both arrays share identical `min` values though, so
+    // we fall back to parsing the abbreviated label's leading dollar
+    // amount and matching by `min` when the label compare misses.
     if (initialBracket) {
-      const bracketIndex = CME_BRACKETS.findIndex(b =>
-        b.label === initialBracket
-      );
+      let bracketIndex = CME_BRACKETS.findIndex(b => b.label === initialBracket);
+      if (bracketIndex === -1 && typeof initialBracket === 'string') {
+        const parseAppealLogBracketMin = (label) => {
+          if (!label) return null;
+          if (/^under/i.test(label)) return 0;            // "Under $100K"
+          if (/\$?2M\+/i.test(label)) return 2000000;     // "$2M+"
+          const m = label.match(/\$?([\d.]+)\s*([KM])/i); // "$1.5M-$1.99M" → 1.5M
+          if (!m) return null;
+          let n = parseFloat(m[1]);
+          if (Number.isNaN(n)) return null;
+          const unit = (m[2] || '').toUpperCase();
+          if (unit === 'K') n *= 1000;
+          else if (unit === 'M') n *= 1000000;
+          return Math.round(n);
+        };
+        const min = parseAppealLogBracketMin(initialBracket);
+        if (min != null) {
+          bracketIndex = CME_BRACKETS.findIndex(b => b.min === min);
+        }
+      }
       const bracketKey = bracketIndex >= 0
         ? `bracket_${bracketIndex}`
         : null;
