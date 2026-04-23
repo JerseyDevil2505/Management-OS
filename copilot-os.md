@@ -2,7 +2,9 @@
 
 > Lean reference for the NJ property-assessment management platform.
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.
-> Updated April 2025 (rev. — geocoder, appeal map, distance filter, PowerComp PDF round-trip).
+> Updated April 2025 (rev. — geocoder, appeal map, distance filter, PowerComp PDF round-trip,
+> user-facing Coordinates cleanup sub-tab, sales-pool chip filter w/ Lojik year adjustment,
+> ties-only ZIP variant CSV, numbered-street ordinal variants, AppealLog→CME bracket label parity).
 
 ---
 
@@ -74,6 +76,7 @@ src/
 │       │   ├── AttributeCardsTab.jsx   (4,624)  Condition items + attribute cards
 │       │   ├── OverallAnalysisTab.jsx  (4,275)  Block mapping, condos, overall analysis
 │       │   ├── DataQualityTab.jsx      (3,279)  Data validation checks
+│       │   ├── CoordinatesSubTab.jsx   ( --- )  User-facing geocode cleanup queue (Pending/Review/Fixed buckets, class + sales-pool chips, inline GeocodeStatusChip edits)
 │       │   └── CostValuationTab.jsx    (1,072)  New construction, CCF
 │       │
 │       ├── FinalValuation.jsx      (182)    Orchestrator → final-valuation-tabs/
@@ -572,7 +575,57 @@ Leaflet + react-leaflet renderer used in the Detailed Appraisal report.
 - Exports `distanceMiles(a, b)` — Haversine miles between two `[lat, lng]` points. **Re-used by `SalesComparisonTab` for the distance filter** (`import { distanceMiles } from '../../AppealMap'`).
 - Map div carries an `id` for `html2canvas` capture so the Detailed PDF can embed the rendered map as a "Subject & Comps Location Map" page.
 
-### 9.4 CME Distance-from-Subject Filter (`SalesComparisonTab.jsx`)
+### 9.4 Step 5 Manual Cleanup Chips (`GeocodingTool.jsx`)
+
+The Step 5 "Manual entry (No_Match fallback)" panel has two filter chip rows that narrow the manual cleanup queue (`manualCandidates`). They do **not** affect the bulk CSV emitters in Step 2 — those still ship the full ungeocoded set.
+
+- **Class chips** (multi-select). Built from distinct `property_m4_class` values present on the loaded job, sorted in canonical NJ order (`1, 2, 3A, 3B, 4A, 4B, 4C, 5A, 5B, 6A, 6B, 6C`, then anything else alphabetical). Each chip shows a live count derived from the *base* manual list (search + `manualFilter` applied, but before chip filters), so the count tells you exactly what that chip would yield if toggled. A `clear` link appears once at least one class is active.
+- **Sales-pool chip** (single toggle). When on, restricts to parcels with `sales_date` inside the sales-pool window (see 9.5). The chip's count is computed against the *class-filtered* base, so it adapts when classes are toggled. The chip is hidden when the selected job has no `end_date` to anchor the window.
+
+Implementation notes:
+
+- `manualBaseList` (memo) does the manual-filter / search / dedupe work without the chip filter. `manualCandidates` = `manualBaseList.filter(passesCsvFilters).slice(0, 100)`. Per-chip counts are derived from `manualBaseList` so they don't lie when other chips are on.
+- `passesCsvFilters` is the predicate: empty class set + `csvSalesInPool=false` = original full base. The same predicate is used by `manualCandidates` only — Step 2's bulk generators (`generateCsvBatches`, `generateVariantCsvBatches`, `generateTiesOnlyVariantCsv`) intentionally do not consult it.
+- The `jobs` query (`GeocodingTool.jsx:432`) was extended to select `end_date` and the joined `organizations(org_type)` so the chips can compute the sales-pool window and apply the Lojik adjustment without a second round-trip.
+- `fetchAllJobProperties` (`GeocodingTool.jsx:323`) was extended to select `sales_date` — without it the chip filter silently matched zero rows.
+
+### 9.5 Sales-Pool Window & Lojik Year Adjustment
+
+Both the Step 5 chip in the admin Geocoder and the user-facing `CoordinatesSubTab` use the same window math, anchored on `jobs.end_date`:
+
+```
+assessmentYear = isLojik ? (end_date.year - 1) : end_date.year
+isLojik        = job.organizations.org_type === 'assessor'
+window.start   = 10/1 (assessmentYear - 2)
+window.end     = 10/31 (assessmentYear - 1)
+```
+
+This matches the convention used by `SalesComparisonTab.getCSPDateRange`, `AppellantEvidencePanel.sampleRange`, and `DetailedAppraisalGrid` (search those for `isLojikTenant ? rawYear - 1 : rawYear`). The Lojik adjustment exists because for assessor-tenant jobs `end_date` is the *job* end (one year after the assessment year), not the assessment date itself — so the raw year would shift every window forward by twelve months and quietly wrong-bucket ~12 months of sales on every Lojik job.
+
+The window deliberately covers a single 13-month span (10/1 to 10/31 the next assessment year forward — the +1 month tail keeps late-October recordings safely inside) instead of the older multi-period CSP/PSP/HSP options. We removed those buttons because the cleanup queue cares about "is this a sale we'll need a coordinate for at search-radius time?", not which sub-bucket it belongs in. If the multi-period concept ever needs to come back, both `csvSalesWindow` (Geocoder) and `salesWindow` (CoordinatesSubTab) are the only places to extend.
+
+### 9.6 Recovery Sweep & Ties-Only ZIP Variant CSV (`GeocodingTool.jsx`)
+
+The Step 2 "Recovery sweep" panel hosts ZIP-variant emitters for long-tail recovery. There are now two:
+
+- **`generateVariantCsvBatches`** — the original ZIP sweep. Takes every still-pending parcel, explodes it into one CSV row per configured ZIP (configured per job via the `variant_postal_zips` `job_settings` row, edited with the ZIP modal). Each row's composite key carries a `__<zipIdx>` suffix so the result import can map matches back to the parent parcel.
+- **`generateTiesOnlyVariantCsv`** — added after the Dunellen tie problem. Uses the same per-ZIP sweep but restricts to parcels Census flagged as `Tie` in the most-recently imported result (`parsedResults.matchStatus === 'Tie'`). Same `__<zipIdx>` suffix scheme and same downstream import path; just a much smaller payload aimed at re-resolving ties by forcing the configured ZIPs/cities for that town instead of letting Census guess between adjacent boroughs.
+
+Address normalization for both flows runs through `normalizeAddressForCensus` (route rewrite, suffix canon, ordinal handling) and the `ordinalWordVariant` helper. The main CSV emits **both** the numeric (`336 3RD ST`) and the word-form (`336 THIRD ST`) variant per parcel via a `__o1` suffix, because TIGER inconsistently indexes numbered streets in either form on a per-segment basis. The ties-only emitter does the same on top of the per-ZIP sweep when ordinals are present (`__<zipIdx>n` for numeric, `__<zipIdx>w` for word).
+
+### 9.7 User-Facing Coordinates Cleanup Sub-Tab (`CoordinatesSubTab.jsx`)
+
+Lives at **Job → Market Analysis → Data Quality → 📍 Coordinates**. Open to all users with access to the job (managers, Lojik clients, admins) — the full admin Geocoder stays admin-only. The sub-tab reads the already-loaded `properties` prop (no extra DB round-trip) and gives users a focused queue for filling/correcting individual coordinates without touching the bulk Census flow.
+
+- **Buckets** — `Pending` (no coords), `Review` (low-confidence Census quality: `Tie`, `Non_Exact`, `ZIP Centroid`, `Approximate`), `Fixed` (`geocode_source = 'manual'` or high-confidence quality `Exact` / `Match` / `Rooftop`). Bucket counts shown as colored chips at the top.
+- **Inline edits** — each row uses `<GeocodeStatusChip />`, which writes lat/lng directly to `property_records` and stamps `geocode_source = 'manual'` / `geocode_match_quality = 'Manual'`. Local patch map keeps the row's bucket up to date without a refetch.
+- **Same chip pair** as the admin Geocoder Step 5 (class multi-select + sales-pool toggle, both with live counts). Same Lojik year adjustment. The class-chip count is derived from the post-skipped base; the sales-pool count is derived from the class-filtered base for the same "tells the truth as you compose" property.
+- **Show skipped** checkbox (default off) — `geocode_source = 'skipped'` rows are intentional non-actionable parcels and should stay out of the everyday queue.
+- **Open in Google Maps** link prefilled with `address, town, county, NJ, zip` so a user can right-click the parcel, copy the `lat, lng`, and paste it into the chip modal.
+
+If `jobData.organizations.org_type` isn't already in the `properties` parent loader, the Lojik adjustment falls back to `jobData.org_type` and finally to "no Lojik adjustment" — the chip just hides itself if no `end_date` is available rather than silently filtering zero rows.
+
+### 9.8 CME Distance-from-Subject Filter (`SalesComparisonTab.jsx`)
 
 New `compFilters.maxDistanceMiles` field (default `''` = no filter, see `SalesComparisonTab.jsx:62`). When set:
 
@@ -670,6 +723,10 @@ This codebase has been built iteratively over the course of a year. Every patter
 | `AppealLogTab` re-classifies pages of a saved appeal report at print time | The Detailed tab uploads the report once. Photos / map / appellant evidence / Chapter 123 sections may not all exist on every subject, and we want a canonical print order regardless. We use pdfjs to *read* each page's text and bucket it, then re-emit with `pdf-lib` — this is intentional and handles legacy exports that pre-date the section headers. |
 | PowerComp PDF parser keys off textual landmarks, not coordinates | BRT regenerates these PDFs from layout templates that drift slightly between releases. Keying off `Subject` / `Block Lot Qualifier Card` / `Sales Date` text is layout-tolerant; switching to coordinate-based extraction would break on the next BRT update. |
 | PowerComp photo pages carry a "BRT Technologies PowerComp" footer | Attribution is required — they generated the photos, we're just bundling them into our deliverable. Don't strip the footer. |
+| `AppealLogTab.CME_BRACKETS` and `SalesComparisonTab.CME_BRACKETS` are two separate arrays with different labels | Appeal Log uses short labels (`$200K-$299K`) so they fit the column; CME uses long labels (`$200,000-$299,999`) for the dropdown. They share identical `min`/`max`/order, and the AppealLog→CME handoff matches by `min` (with a literal-label fast path) so the two label vocabularies don't have to converge. |
+| Sales-pool window subtracts one year from `end_date.year` for Lojik tenants (`org_type = 'assessor'`) | For Lojik jobs, `end_date` is the *job* end (one year past the assessment year). Without the `-1`, every sales-window-based filter (CSP, sales pool, coordinate cleanup queue) shifts forward by 12 months and silently wrong-buckets a year of sales. |
+| Step 5 chip filters in the Geocoder narrow only the manual cleanup list — not the bulk CSV emitters | Bulk Census runs are intentionally always full-job. Chip filters are scoped to the human cleanup queue so a manager can prioritize CSP-class-2 sales without accidentally emitting a partial Census CSV that *looks* like a complete town. |
+| The user-facing `CoordinatesSubTab` reads `properties` from its parent and **does not** refetch | The Data Quality parent already loads everything needed. A second fetch would race with manual saves and confuse the patch-overlay model used to move rows between Pending/Review/Fixed buckets without a reload. |
 
 ### Lessons Learned the Hard Way
 
@@ -696,5 +753,11 @@ This codebase has been built iteratively over the course of a year. Every patter
 11. **Don't change BRT's PowerComp CSV format without testing it in BRT** — BRT silently rejects rows that don't match its expected column layout. The `="..."` formula-style wrappers were rejected in an earlier rev; we now write raw cell values. If you change the export shape, validate by re-importing the CSV into PowerComp before shipping.
 
 12. **PowerComp photo packets are immutable post-import** — We store sliced sub-PDFs in the `powercomp-photos` bucket. If PowerComp re-issues a different photo set for the same property, re-import; don't try to merge or diff.
+
+13. **AppealLog → CME bracket label parity** — `AppealLogTab.jsx` defines its own `CME_BRACKETS` array with **abbreviated** labels (`Under $100K`, `$200K-$299K`, `$1M-$1.49M`, `$2M+`) so the bracket column fits the table. `SalesComparisonTab.jsx` defines its own `CME_BRACKETS` with **full** labels (`up to $99,999`, `$200,000-$299,999`, `Over $2,000,000`). When Appeal Log sends selected subjects to CME via the navigation payload, the `bracket` field carries the abbreviated label. The two arrays share identical `min` values and identical order, so `SalesComparisonTab` matches `initialBracket` first by literal label compare and then falls back to a `parseAppealLogBracketMin` helper that turns the abbreviated label into a number and matches by `min`. Keep both arrays in sync — if you add a price tier to one, add it to the other and preserve the index/min mapping. Don't try to "unify" the labels by editing one side; the abbreviated labels exist for column-width reasons in Appeal Log.
+
+14. **The chip-filter sales window must use `sales_date`, and the loader must select it** — The admin Geocoder's `fetchAllJobProperties` originally didn't select `sales_date`, so the Step 5 sales-pool chip silently matched zero rows on every job. Same trap will apply to any new filter that depends on a column not already in the loader's `select` list. When adding a chip filter that reads a property field, audit the loader query first — the SubTab loader is the parent component (DataQualityTab parent), the admin Geocoder loader is `fetchAllJobProperties` near the top of `GeocodingTool.jsx`.
+
+15. **Sales-pool window math is shared and Lojik-aware** — `SalesComparisonTab.getCSPDateRange`, `AppellantEvidencePanel.sampleRange`, `DetailedAppraisalGrid` (inline in the comps prep), the admin Geocoder's `csvSalesWindow`, and `CoordinatesSubTab.salesWindow` all anchor on `jobs.end_date` and all subtract one from the year when `organizations.org_type === 'assessor'` (Lojik). Don't fork this convention. If the window definition needs to change, change all five usages together — and confirm with the user, because that math is the basis for sales review, sales pool inclusion, comp date ranges, and the coordinate cleanup queue.
 
 😊
