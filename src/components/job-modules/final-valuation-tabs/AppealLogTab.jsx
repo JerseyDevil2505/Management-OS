@@ -4864,8 +4864,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* ==================== EXPORT CSV (POWERCOMP) SELECTION MODAL ==================== */}
       {showExportCsvModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full p-6 max-h-[90vh] h-[90vh] flex flex-col overflow-hidden">
+        <div className="csv-export-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="csv-export-modal-box bg-white rounded-lg shadow-xl p-6">
             <div className="flex justify-between items-center mb-3 flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">
                 Select Result Sets for PowerComp Export
@@ -4903,7 +4903,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded">
+            <div className="csv-export-modal-scroll border border-gray-200 rounded">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-left text-xs text-gray-600">
