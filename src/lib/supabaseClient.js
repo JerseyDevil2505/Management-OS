@@ -1907,12 +1907,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     
     const primary = sortedByClass[0];
     
-    // Calculate combined lot size (sum of sf and acres converted)
+    // Calculate combined lot size
     // Prefer market_manual_* (unit-rate-config calculated values for BRT) over asset_lot_* (Microsystems direct extract)
+    // SF and acres represent the SAME measurement in different units, so use SF if available, otherwise convert acres
     const combinedLotSF = packageProperties.reduce((sum, p) => {
       const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+      if (sf > 0) return sum + sf;
       const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
-      return sum + sf + (acres * 43560); // Convert acres to SF
+      return sum + (acres * 43560); // Convert acres to SF
     }, 0);
     
     // Calculate combined assessed value

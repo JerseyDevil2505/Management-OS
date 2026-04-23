@@ -27,10 +27,12 @@ const enrichPropertiesWithPackageData = (properties) => {
       return propClass === '3B';
     });
     // Prefer market_manual_* (unit-rate-config calculated values for BRT) over asset_lot_* (Microsystems direct extract)
+    // SF and acres represent the SAME measurement in different units, so use SF if available, otherwise convert acres
     const combinedLotSF = group.reduce((sum, p) => {
       const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+      if (sf > 0) return sum + sf;
       const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
-      return sum + sf + (acres * 43560);
+      return sum + (acres * 43560);
     }, 0);
     // Determine additional card vs multi-property package
     const baseKeys = new Set();
