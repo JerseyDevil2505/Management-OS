@@ -100,9 +100,28 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
-  const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
+  // PDF section toggles persisted to localStorage. Each remembers the user's last pick across exports.
+  // Some assessors run the full detailed grid as the deliverable (no need for the inline appellant page),
+  // and others prefer to omit the Director's Ratio / Chapter 123 page when the new value drops sharply
+  // and they're settling somewhere in between.
+  const readToggle = (key, defaultValue) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return defaultValue;
+      return raw === 'true';
+    } catch (e) { return defaultValue; }
+  };
+  const [showAdjustments, setShowAdjustments] = useState(() => readToggle('detailedExport_showAdjustments', true));
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
-  const [includeMap, setIncludeMap] = useState(true); // Embed subject+comps map in PDF
+  const [includeMap, setIncludeMap] = useState(() => readToggle('detailedExport_includeMap', true)); // Embed subject+comps map in PDF
+  const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
+  const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
+
+  // Persist toggle state across sessions
+  useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_includeMap', String(includeMap)); } catch (e) {} }, [includeMap]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_hideAppellantEvidence', String(hideAppellantEvidence)); } catch (e) {} }, [hideAppellantEvidence]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_hideDirectorsRatio', String(hideDirectorsRatio)); } catch (e) {} }, [hideDirectorsRatio]);
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
   // Appellant-supplied comps (loaded from appeal_log on modal open). Each
   // entry is the saved slot enriched with the resolved property record so we
@@ -2072,10 +2091,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // before Chapter 123. Only added if an appeal_log row exists for this subject.
     // If the appeal exists but no appellant_comps are saved, we still render the
     // page with a "No Evidence supplied by Appellant" line so the report shows
-    // that fact explicitly.
+    // that fact explicitly. User can suppress entirely via the export modal toggle.
     try {
       const compositeKey = subject?.property_composite_key;
-      if (compositeKey && jobData?.id) {
+      if (!hideAppellantEvidence && compositeKey && jobData?.id) {
         const { data: appealRow } = await supabase
           .from('appeal_log')
           .select('id, appeal_number, appeal_year, property_block, property_lot, property_qualifier, property_location, appellant_comps, farm_mode')
@@ -2362,7 +2381,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
 
     // ==================== CHAPTER 123 TEST ====================
-    // Add Chapter 123 Analysis on a new page
+    // Add Chapter 123 Analysis on a new page. User can suppress entirely via the
+    // export modal toggle (used when assessor doesn't want the taxpayer to see a
+    // huge ratio swing before settling).
+    if (!hideDirectorsRatio) {
     doc.addPage();
     addHeader(subjectBlockLot, true);
 
@@ -2501,6 +2523,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       margin,
       ch123TableEndY + 12
     );
+    } // end !hideDirectorsRatio
 
     // ============== Subject + Comps Map page (optional) ==============
     if (includeMap && mapHasSubject && mapCaptureRef.current) {
@@ -2722,7 +2745,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3064,6 +3087,32 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
+                {/* Hide Appellant Evidence Toggle - some assessors prefer to package only the detailed grids */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideAppellantEvidence}
+                    onChange={(e) => setHideAppellantEvidence(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {hideAppellantEvidence ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Hide Appellant Evidence
+                  </span>
+                </label>
+                {/* Hide Director's Ratio Study Toggle - omit Chapter 123 page when settling */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideDirectorsRatio}
+                    onChange={(e) => setHideDirectorsRatio(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {hideDirectorsRatio ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Hide Director's Ratio
+                  </span>
+                </label>
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
