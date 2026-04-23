@@ -174,6 +174,7 @@ const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
   // is true, the read-only display cells (VCS/Design/T&U/Cond/Year Built/SFLA/
   // Lot Size) become editable inputs/dropdowns sourced from in-job code usage.
   is_manual: false,
+  manual_address: '',
   manual_vcs: '',
   manual_design: '',
   manual_type_use: '',
@@ -586,7 +587,7 @@ const AppellantEvidencePanel = ({
           s.block || s.lot || s.qualifier || s.card ||
           s.sales_date || s.sales_price || s.sales_nu || s.manual_notes ||
           // Keep manual rows even if BLQ is blank (out-of-town comps)
-          s.is_manual ||
+          s.is_manual || s.manual_address ||
           s.manual_vcs || s.manual_design || s.manual_type_use ||
           s.manual_condition || s.manual_year_built || s.manual_sfla || s.manual_lot_size
         ));
@@ -841,9 +842,23 @@ const AppellantEvidencePanel = ({
                       </button>
                     </div>
                   </td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  {slot.is_manual ? (
+                    <td className="px-2 py-1" colSpan={3}>
+                      <input
+                        type="text"
+                        value={slot.manual_address || ''}
+                        onChange={e => updateSlot(idx, 'manual_address', e.target.value)}
+                        placeholder="Street address (out-of-town)"
+                        className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-amber-50"
+                      />
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                    </>
+                  )}
                   <td className={cellCls('card')} title={cellTitle('card')}>
                     <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
@@ -949,12 +964,15 @@ const AppellantEvidencePanel = ({
             })()}
             {evaluations.map(({ evalResult }, idx) => {
               const slot = draft[idx];
-              const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address;
               if (!hasAny) return null;
+              const oot = slot.is_manual
+                ? `OUT OF TOWN${slot.manual_address ? ` (${slot.manual_address.toUpperCase()})` : ''} \u2014 `
+                : '';
               return (
                 <div key={idx} className="flex items-start gap-2">
                   <div className="flex-1">
-                    <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                    <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {oot}{evalResult.autoNote}
                     {slot.manual_notes && (
                       <span className="text-gray-700"> &mdash; {slot.manual_notes}</span>
                     )}
@@ -971,7 +989,7 @@ const AppellantEvidencePanel = ({
             })}
             {evaluations.every(({ evalResult }, idx) => {
               const slot = draft[idx];
-              return !(slot.block || slot.lot || slot.sales_date || slot.sales_price);
+              return !(slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address);
             }) && (
               <div className="text-gray-500 italic">No comps entered yet.</div>
             )}
