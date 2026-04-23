@@ -2259,23 +2259,55 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               const evalResult = evaluateAppellantComp(subject, compProp, slot, { vendorType, landMethod, sampleRange, farmMode });
               return { slot, compProp, evalResult };
             });
-            const compRows = evaluations.map(({ slot, compProp }, i) => ([
-              `#${i + 1}`,
-              slot.block || (compProp?.property_block || ''),
-              slot.lot || (compProp?.property_lot || ''),
-              slot.qualifier || (compProp?.property_qualifier || ''),
-              slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
-              slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
-              (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
-              slot.sales_nu || compProp?.sales_nu || '\u2014',
-              compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
-              compProp?.asset_year_built || '\u2014',
-              compProp?.asset_sfla || '\u2014',
-              lotDisplay(compProp)
-            ]));
+            // For manual (out-of-town) rows, decode dropdown codes through the
+            // same code-definitions path used for matched properties so the PDF
+            // shows "code-label" instead of just the raw code.
+            const manualCodeWithName = (code, field) => {
+              if (!code) return '\u2014';
+              const synthetic = { [field]: code };
+              const decoded = decodeField(synthetic, field);
+              if (!decoded || String(decoded).trim().toUpperCase() === String(code).trim().toUpperCase()) return String(code);
+              return `${code}-${decoded}`;
+            };
+            const compRows = evaluations.map(({ slot, compProp }, i) => {
+              if (slot.is_manual) {
+                const addr = slot.manual_address ? String(slot.manual_address).toUpperCase() : 'OUT OF TOWN';
+                const lotSize = slot.manual_lot_size || '\u2014';
+                return [
+                  `#${i + 1}`,
+                  // BLQ collapses into a single "OOT — address" cell across cols 1-3
+                  addr, '', '',
+                  slot.card || '\u2014',
+                  slot.sales_date || '\u2014',
+                  slot.sales_price ? `$${Number(slot.sales_price).toLocaleString()}` : '\u2014',
+                  slot.sales_nu || '\u2014',
+                  slot.manual_vcs || '\u2014',
+                  manualCodeWithName(slot.manual_design, 'asset_design_style'),
+                  manualCodeWithName(slot.manual_type_use, 'asset_type_use'),
+                  manualCodeWithName(slot.manual_condition, 'asset_int_cond'),
+                  slot.manual_year_built || '\u2014',
+                  slot.manual_sfla || '\u2014',
+                  lotSize
+                ];
+              }
+              return [
+                `#${i + 1}`,
+                slot.block || (compProp?.property_block || ''),
+                slot.lot || (compProp?.property_lot || ''),
+                slot.qualifier || (compProp?.property_qualifier || ''),
+                slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
+                slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
+                (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
+                slot.sales_nu || compProp?.sales_nu || '\u2014',
+                compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
+                compProp?.asset_year_built || '\u2014',
+                compProp?.asset_sfla || '\u2014',
+                lotDisplay(compProp)
+              ];
+            });
 
             // Map PDF column index → evalResult.flags key. PDF columns now
             // mirror the on-screen modal (including the Card column) so the
@@ -2366,9 +2398,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             }
 
             evaluations.forEach(({ slot, evalResult }, i) => {
-              const has = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              const has = slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address;
               if (!has) return;
-              const note = `APPELLANT COMP#${i + 1} \u2014 ${evalResult.autoNote}${slot.manual_notes ? ` \u2014 ${slot.manual_notes}` : ''}`;
+              const oot = slot.is_manual
+                ? `OUT OF TOWN${slot.manual_address ? ` (${String(slot.manual_address).toUpperCase()})` : ''} \u2014 `
+                : '';
+              const note = `APPELLANT COMP#${i + 1} \u2014 ${oot}${evalResult.autoNote}${slot.manual_notes ? ` \u2014 ${slot.manual_notes}` : ''}`;
               const wrapped = doc.splitTextToSize(note, doc.internal.pageSize.getWidth() - 2 * margin);
               doc.text(wrapped, margin, commentsY);
               commentsY += wrapped.length * 10;
