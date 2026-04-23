@@ -53,17 +53,48 @@ const enrichPropertiesWithPackageData = (properties) => {
     if (baseKeys.size === 1 && cardIds.size > 1) {
       isAdditionalCard = true;
     }
+    // Multi-residence farm detection: only meaningful when this is a farm
+    // package (has a 3B qfarm partner). Within the deed-group we look for
+    // Class 2 or 3A parcels that carry buildings (asset_sfla > 0). When the
+    // count is >= 2, the deed bundles more than one home (e.g. 85/20.01 with
+    // two houses on the same farm sale) — flag the group and stamp each
+    // residence-bearing member so downstream consumers (sales comp / appellant
+    // evidence) can warn or split the bundled price as needed.
+    const residenceMemberKeys = [];
+    if (hasFarm) {
+      for (const p of group) {
+        const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
+        if (cls !== '2' && cls !== '3A') continue;
+        const sfla = parseFloat(p.asset_sfla) || 0;
+        if (sfla > 0 && p.property_composite_key) {
+          residenceMemberKeys.push(p.property_composite_key);
+        }
+      }
+    }
+    const hasMultipleResidences = residenceMemberKeys.length >= 2;
+    const residenceMemberSet = new Set(residenceMemberKeys);
+
     const info = {
       is_package_sale: true,
       is_farm_package: hasFarm,
       is_additional_card: isAdditionalCard,
+      has_multiple_residences: hasMultipleResidences,
+      residence_member_keys: residenceMemberKeys,
+      residence_count: residenceMemberKeys.length,
       package_count: group.length,
       combined_lot_sf: combinedLotSF,
       combined_lot_acres: combinedLotSF / 43560,
       package_id: `${group[0].sales_book}-${group[0].sales_page}-${group[0].sales_date}`,
       package_properties: group.map(p => p.property_composite_key)
     };
-    group.forEach(p => { p._pkg = info; });
+    group.forEach(p => {
+      p._pkg = {
+        ...info,
+        // Per-parcel marker so a row knows it's one of N homes in a multi-
+        // residence farm package without having to re-check the keys array.
+        is_additional_residence: hasMultipleResidences && residenceMemberSet.has(p.property_composite_key)
+      };
+    });
   }
 };
 

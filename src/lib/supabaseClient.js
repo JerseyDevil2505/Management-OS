@@ -2028,10 +2028,31 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         package_discount: p.sales_history.sales_decision.old_price - (p.sales_price / packageProperties.length)
       }));
     
+    // Multi-residence farm detection: only meaningful when this is a farm
+    // package (3B qfarm partner present). Within the deed-group, look for
+    // Class 2 or 3A parcels that carry buildings (asset_sfla > 0). When >= 2,
+    // the deed bundles more than one home (e.g. 85/20.01) — flag the group
+    // and stamp residence-bearing keys for downstream consumers.
+    const residenceMemberKeys = [];
+    if (hasFarmland) {
+      for (const p of packageProperties) {
+        const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
+        if (cls !== '2' && cls !== '3A') continue;
+        const sfla = parseFloat(p.asset_sfla) || 0;
+        if (sfla > 0 && p.property_composite_key) {
+          residenceMemberKeys.push(p.property_composite_key);
+        }
+      }
+    }
+    const hasMultipleResidences = residenceMemberKeys.length >= 2;
+
     return {
       is_package_sale: true,
       is_farm_package: hasFarmland,
       is_additional_card: isAdditionalCard,
+      has_multiple_residences: hasMultipleResidences,
+      residence_member_keys: residenceMemberKeys,
+      residence_count: residenceMemberKeys.length,
       package_count: packageProperties.length,
       package_id: packageId,
       combined_lot_sf: combinedLotSF,
