@@ -2034,6 +2034,10 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     // the deed bundles more than one home (e.g. 85/20.01) — flag the group
     // and stamp residence-bearing keys for downstream consumers.
     const residenceMemberKeys = [];
+    let combinedResidenceSFLA = 0;
+    let combinedResidenceImprovement = 0;
+    let primaryResidenceKey = null;
+    let primaryResidenceSFLA = 0;
     if (hasFarmland) {
       for (const p of packageProperties) {
         const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
@@ -2041,18 +2045,31 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         const sfla = parseFloat(p.asset_sfla) || 0;
         if (sfla > 0 && p.property_composite_key) {
           residenceMemberKeys.push(p.property_composite_key);
+          combinedResidenceSFLA += sfla;
+          combinedResidenceImprovement += parseFloat(p.values_mod_improvement) || parseFloat(p.values_cama_improvement) || 0;
+          if (sfla > primaryResidenceSFLA) {
+            primaryResidenceSFLA = sfla;
+            primaryResidenceKey = p.property_composite_key;
+          }
         }
       }
     }
     const hasMultipleResidences = residenceMemberKeys.length >= 2;
+    // Multi-residence farms get treated as additional cards so downstream
+    // consolidation/merging logic (which already knows how to combine SFLA,
+    // pick a primary, and de-duplicate the parcel list) fires automatically.
+    const treatAsAdditionalCard = isAdditionalCard || hasMultipleResidences;
 
     return {
       is_package_sale: true,
       is_farm_package: hasFarmland,
-      is_additional_card: isAdditionalCard,
+      is_additional_card: treatAsAdditionalCard,
       has_multiple_residences: hasMultipleResidences,
       residence_member_keys: residenceMemberKeys,
       residence_count: residenceMemberKeys.length,
+      combined_residence_sfla: combinedResidenceSFLA,
+      combined_residence_improvement: combinedResidenceImprovement,
+      primary_residence_key: primaryResidenceKey,
       package_count: packageProperties.length,
       package_id: packageId,
       combined_lot_sf: combinedLotSF,

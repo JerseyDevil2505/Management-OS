@@ -61,6 +61,10 @@ const enrichPropertiesWithPackageData = (properties) => {
     // residence-bearing member so downstream consumers (sales comp / appellant
     // evidence) can warn or split the bundled price as needed.
     const residenceMemberKeys = [];
+    let combinedResidenceSFLA = 0;
+    let combinedResidenceImprovement = 0;
+    let primaryResidenceKey = null;
+    let primaryResidenceSFLA = 0;
     if (hasFarm) {
       for (const p of group) {
         const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
@@ -68,19 +72,40 @@ const enrichPropertiesWithPackageData = (properties) => {
         const sfla = parseFloat(p.asset_sfla) || 0;
         if (sfla > 0 && p.property_composite_key) {
           residenceMemberKeys.push(p.property_composite_key);
+          combinedResidenceSFLA += sfla;
+          combinedResidenceImprovement += parseFloat(p.values_mod_improvement) || parseFloat(p.values_cama_improvement) || 0;
+          // Primary = residence with the largest SFLA (mirrors how the main
+          // additional-card holder is the one that absorbs the secondaries).
+          if (sfla > primaryResidenceSFLA) {
+            primaryResidenceSFLA = sfla;
+            primaryResidenceKey = p.property_composite_key;
+          }
         }
       }
     }
     const hasMultipleResidences = residenceMemberKeys.length >= 2;
     const residenceMemberSet = new Set(residenceMemberKeys);
 
+    // Multi-residence farms get treated as additional cards: same deed, same
+    // sale, multiple homes — downstream consolidation paths (MarketDataTab,
+    // RatableComparisonTab, attribute roll-ups, comp grids) already know how
+    // to merge SFLA and pick a primary card when this flag is true. Reusing
+    // it here means we don't have to fork every consumer.
+    const treatAsAdditionalCard = isAdditionalCard || hasMultipleResidences;
+
     const info = {
       is_package_sale: true,
       is_farm_package: hasFarm,
-      is_additional_card: isAdditionalCard,
+      is_additional_card: treatAsAdditionalCard,
       has_multiple_residences: hasMultipleResidences,
       residence_member_keys: residenceMemberKeys,
       residence_count: residenceMemberKeys.length,
+      // SFLA + improvement-value rollups so consumers can treat the bundle
+      // as "one combined improvement" the same way an additional-card stack
+      // already collapses into the main card.
+      combined_residence_sfla: combinedResidenceSFLA,
+      combined_residence_improvement: combinedResidenceImprovement,
+      primary_residence_key: primaryResidenceKey,
       package_count: group.length,
       combined_lot_sf: combinedLotSF,
       combined_lot_acres: combinedLotSF / 43560,
@@ -88,11 +113,19 @@ const enrichPropertiesWithPackageData = (properties) => {
       package_properties: group.map(p => p.property_composite_key)
     };
     group.forEach(p => {
+      const isResidenceMember = hasMultipleResidences && residenceMemberSet.has(p.property_composite_key);
+      const isPrimaryResidence = isResidenceMember && p.property_composite_key === primaryResidenceKey;
       p._pkg = {
         ...info,
-        // Per-parcel marker so a row knows it's one of N homes in a multi-
-        // residence farm package without having to re-check the keys array.
-        is_additional_residence: hasMultipleResidences && residenceMemberSet.has(p.property_composite_key)
+        // Per-parcel markers so a row knows whether it's one of N homes in a
+        // multi-residence farm package and whether it's the primary (largest
+        // SFLA) home that the bundle's combined SFLA / improvement value
+        // should be attached to during consolidation.
+        is_additional_residence: isResidenceMember,
+        is_primary_residence: isPrimaryResidence,
+        // The "secondary residences" in the bundle should be hidden by
+        // consolidation paths the same way additional cards already are.
+        is_secondary_residence: isResidenceMember && !isPrimaryResidence
       };
     });
   }
