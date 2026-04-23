@@ -11,6 +11,7 @@ import {
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import { supabase, interpretCodes, propertyService, checklistService } from '../../../lib/supabaseClient';
+import CoordinatesSubTab from './CoordinatesSubTab';
 
 const DataQualityTab = ({ 
   // Props from parent
@@ -2247,7 +2248,17 @@ const editCustomCheck = (check) => {
         >
           Run History
         </button>
+        <button
+          onClick={() => setDataQualityActiveSubTab('coordinates')}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'coordinates' ? 'mls-subtab-btn--active' : ''}`}
+        >
+          📍 Coordinates
+        </button>
       </div>
+
+      {dataQualityActiveSubTab === 'coordinates' && (
+        <CoordinatesSubTab properties={properties} jobData={jobData} />
+      )}
       
       {/* OVERVIEW TAB CONTENT */}
       {dataQualityActiveSubTab === 'overview' && (

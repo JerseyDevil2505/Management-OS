@@ -320,7 +320,7 @@ async function fetchAllJobProperties(jobId) {
     const { data, error } = await supabase
       .from('property_records')
       .select(
-        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source, owner_street, owner_csz'
+        'property_composite_key, property_location, property_block, property_lot, property_qualifier, property_addl_card, property_m4_class, property_latitude, property_longitude, geocode_source, owner_street, owner_csz, sales_date'
       )
       .eq('job_id', jobId)
       .range(from, from + PAGE - 1);
@@ -417,6 +417,12 @@ const GeocodingTool = () => {
   const [manualSaving, setManualSaving] = useState({}); // { compositeKey: bool }
   const [manualFilter, setManualFilter] = useState('ungeocoded'); // 'ungeocoded' | 'all'
 
+  // Manual cleanup queue filters — mirror the user-facing CoordinatesSubTab
+  // so I can prioritize parcels that landed in the sales pool (so an
+  // ungeocoded sale doesn't slip through search-radius later).
+  const [csvClassFilter, setCsvClassFilter] = useState(() => new Set());
+  const [csvSalesInPool, setCsvSalesInPool] = useState(false);
+
   const selectedJob = useMemo(
     () => jobs.find((j) => j.id === selectedJobId) || null,
     [jobs, selectedJobId]
@@ -429,7 +435,7 @@ const GeocodingTool = () => {
       try {
         const { data, error: jobsError } = await supabase
           .from('jobs')
-          .select('id, job_name, municipality, county, total_properties, vendor_type, status, organization_id')
+          .select('id, job_name, municipality, county, total_properties, vendor_type, status, organization_id, end_date, organizations:organization_id(org_type)')
           .order('job_name', { ascending: true });
         if (jobsError) throw jobsError;
         if (mounted) {
@@ -597,6 +603,66 @@ const GeocodingTool = () => {
       setVariantZipsSaving(false);
     }
   }, [selectedJobId]);
+
+  // Distinct m4 classes present in the loaded properties, sorted in NJ
+  // canonical order so the chip row is predictable.
+  const csvAvailableClasses = useMemo(() => {
+    const set = new Set();
+    properties.forEach((p) => {
+      if (p.property_m4_class) set.add(String(p.property_m4_class).trim());
+    });
+    const ORDER = ['1', '2', '3A', '3B', '4A', '4B', '4C', '5A', '5B', '6A', '6B', '6C'];
+    return Array.from(set).sort((a, b) => {
+      const ai = ORDER.indexOf(a);
+      const bi = ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }, [properties]);
+
+  // Sales-pool window: 10/1 (assessmentYear-2) → 10/31 (assessmentYear-1).
+  // Anchored on the selected job's end_date with the same Lojik adjustment
+  // (org_type = 'assessor' → assessmentYear = end_date.year - 1) used by
+  // SalesComparisonTab. One window only — replaces the old CSP/PSP/HSP
+  // chip set since the cleanup queue cares about "is this parcel a sale
+  // we'll need a coordinate for", not which sub-bucket it lives in.
+  const csvSalesWindow = useMemo(() => {
+    if (!selectedJob?.end_date) return null;
+    const rawYear = new Date(selectedJob.end_date).getFullYear();
+    if (!rawYear) return null;
+    const isLojik = selectedJob?.organizations?.org_type === 'assessor';
+    const ay = isLojik ? rawYear - 1 : rawYear;
+    return {
+      start: new Date(ay - 2, 9, 1),  // 10/1 two years before assessment year
+      end: new Date(ay - 1, 9, 31),   // 10/31 last year (relative to assessment year)
+      isLojik,
+      assessmentYear: ay,
+    };
+  }, [selectedJob?.end_date, selectedJob?.organizations?.org_type]);
+
+  // Predicate applied inside the manual cleanup queue. csvSalesInPool = true
+  // restricts to parcels whose sales_date falls inside the sales-pool window
+  // (10/1 ay-2 → 10/31 ay-1). Class filter is unchanged (multi-select set).
+  const passesCsvFilters = useCallback(
+    (p) => {
+      if (csvClassFilter.size > 0) {
+        const c = String(p.property_m4_class || '').trim();
+        if (!csvClassFilter.has(c)) return false;
+      }
+      if (csvSalesInPool && csvSalesWindow) {
+        if (!p.sales_date) return false;
+        const d = new Date(p.sales_date);
+        if (Number.isNaN(d.getTime())) return false;
+        if (d < csvSalesWindow.start || d > csvSalesWindow.end) return false;
+      }
+      return true;
+    },
+    [csvClassFilter, csvSalesInPool, csvSalesWindow],
+  );
+
+  const csvFiltersActive = csvClassFilter.size > 0 || csvSalesInPool;
 
   const stats = useMemo(() => {
     const total = properties.length;
@@ -895,6 +961,95 @@ const GeocodingTool = () => {
     };
   }, [parsedResults]);
 
+  // ---------- Ties-only variant CSV ----------
+  // Same per-ZIP sweep as the main Recovery Sweep, but restricted to parcels
+  // Census flagged as Tie in the most recent imported result. Forces the
+  // configured city + ZIP for each variant row so Census can distinguish
+  // adjacent boroughs that share the same street name (the actual cause of
+  // most NJ ties — not parser-level confusion).
+  const generateTiesOnlyVariantCsv = useCallback(() => {
+    if (!selectedJob || variantZips.length === 0 || parsedResults.length === 0) return;
+
+    // Tied parcels from the imported result, deduped by underlying composite key.
+    const tiedKeys = new Set();
+    for (const r of parsedResults) {
+      if (r.matchStatus === 'Tie') tiedKeys.add(r.compositeKey);
+    }
+    if (tiedKeys.size === 0) {
+      setStatus({ kind: 'info', message: 'No Tie rows in the imported results.' });
+      return;
+    }
+
+    const propsByKey = new Map(properties.map((p) => [p.property_composite_key, p]));
+    const candidates = [];
+    for (const key of tiedKeys) {
+      const p = propsByKey.get(key);
+      if (!p) continue;
+      if (!(p.property_location || '').trim()) continue;
+      if (!hasStreetNumber(p.property_location)) continue;
+      candidates.push(p);
+    }
+    if (candidates.length === 0) {
+      setStatus({
+        kind: 'info',
+        message: 'Tied parcels had no usable addresses to retry.',
+      });
+      return;
+    }
+
+    const rows = [];
+    for (const p of candidates) {
+      const numericAddr = normalizeAddressForCensus(p.property_location);
+      // TIGER sometimes indexes a numbered street under its word form
+      // (THIRD ST) instead of the numeric form (3RD ST), or vice versa.
+      // Emit both so the geocoder can match whichever one its segment
+      // table actually has. wordAddr is null when no ordinal token is
+      // present, in which case we just emit the numeric row.
+      const wordAddr = ordinalWordVariant(numericAddr);
+      variantZips.forEach((zip, zipIdx) => {
+        const city = sanitizeForCsv(njCityForZip(zip) || '');
+        rows.push([
+          `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}n`,
+          sanitizeForCsv(numericAddr),
+          city,
+          'NJ',
+          sanitizeForCsv(zip),
+        ].join(','));
+        if (wordAddr) {
+          rows.push([
+            `${sanitizeForCsv(p.property_composite_key)}${VARIANT_DELIM}${zipIdx}w`,
+            sanitizeForCsv(wordAddr),
+            city,
+            'NJ',
+            sanitizeForCsv(zip),
+          ].join(','));
+        }
+      });
+    }
+
+    const totalChunks = Math.ceil(rows.length / CENSUS_BATCH_LIMIT);
+    const safeJobName = (selectedJob.job_name || 'job')
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+
+    for (let i = 0; i < totalChunks; i++) {
+      const slice = rows.slice(i * CENSUS_BATCH_LIMIT, (i + 1) * CENSUS_BATCH_LIMIT);
+      const csv = slice.join('\n');
+      const filename =
+        totalChunks === 1
+          ? `${safeJobName}_ties-variants.csv`
+          : `${safeJobName}_ties-variants_part-${i + 1}-of-${totalChunks}.csv`;
+      downloadFile(filename, csv);
+    }
+
+    setStatus({
+      kind: 'success',
+      message:
+        `Generated ${totalChunks} ties-only variant CSV(s) — ${candidates.length.toLocaleString()} tied parcels × ${variantZips.length} ZIP(s) = ${rows.length.toLocaleString()} rows. Upload to Census, then re-import via Step 4.`,
+    });
+  }, [parsedResults, selectedJob, properties, variantZips]);
+
   const commitResults = useCallback(async () => {
     if (parsedResults.length === 0 || !selectedJobId) return;
     // Collapse multi-variant rows to one best row per underlying parcel so
@@ -995,11 +1150,12 @@ const GeocodingTool = () => {
 
   // ---------- Manual entry helpers ----------
 
-  const manualCandidates = useMemo(() => {
-    // Always restrict to main cards in the manual list. Vendor-aware so
-    // Microsystems jobs (Carneys Point, etc.) actually populate — their
-    // main marker is 'M', not '1', and the old hardcoded filter was hiding
-    // every parcel.
+  const manualBaseList = useMemo(() => {
+    // Manual cleanup base: main cards + manualFilter (ungeocoded/skipped/all)
+    // + search + dedup, *before* the class/sales chips. Used both as the
+    // input to the visible list and as the source for live chip counts.
+    // Vendor-aware so Microsystems jobs (Carneys Point, etc.) actually
+    // populate — their main marker is 'M', not '1'.
     let list = properties.filter(isMainCardRow);
     if (manualFilter === 'ungeocoded') {
       list = list.filter(
@@ -1027,8 +1183,39 @@ const GeocodingTool = () => {
       seen.add(id);
       deduped.push(p);
     }
-    return deduped.slice(0, 100); // cap render
+    return deduped;
   }, [properties, manualSearch, manualFilter]);
+
+  // Final visible list = base ∩ chip filters, capped at 100. Chips never
+  // affect the base — they just narrow it.
+  const manualCandidates = useMemo(() => {
+    return manualBaseList.filter(passesCsvFilters).slice(0, 100);
+  }, [manualBaseList, passesCsvFilters]);
+
+  // Per-chip live counts derived from manualBaseList so the user can see
+  // exactly how many parcels each chip would survive against the current
+  // base (search + manualFilter), independent of other chip selections.
+  const classChipCounts = useMemo(() => {
+    const m = new Map();
+    for (const p of manualBaseList) {
+      const c = String(p.property_m4_class || '').trim();
+      if (!c) continue;
+      m.set(c, (m.get(c) || 0) + 1);
+    }
+    return m;
+  }, [manualBaseList]);
+
+  const salesPoolChipCount = useMemo(() => {
+    if (!csvSalesWindow) return 0;
+    let n = 0;
+    for (const p of manualBaseList) {
+      if (!p.sales_date) continue;
+      const d = new Date(p.sales_date);
+      if (Number.isNaN(d.getTime())) continue;
+      if (d >= csvSalesWindow.start && d <= csvSalesWindow.end) n += 1;
+    }
+    return n;
+  }, [manualBaseList, csvSalesWindow]);
 
   const manualUngeocodedCount = useMemo(() => {
     const seen = new Set();
@@ -1896,6 +2083,39 @@ const GeocodingTool = () => {
                   >
                     ⬇ Generate Variant CSV
                   </button>
+                  <button
+                    style={{
+                      ...smallButton,
+                      background: '#fb923c',
+                      color: '#fff',
+                      border: '1px solid #f97316',
+                      opacity:
+                        variantZips.length === 0 ||
+                        !resultStats ||
+                        resultStats.tie === 0
+                          ? 0.5
+                          : 1,
+                    }}
+                    onClick={generateTiesOnlyVariantCsv}
+                    disabled={
+                      propsLoading ||
+                      variantZips.length === 0 ||
+                      !resultStats ||
+                      resultStats.tie === 0
+                    }
+                    title={
+                      variantZips.length === 0
+                        ? 'Add at least one ZIP first'
+                        : !resultStats || resultStats.tie === 0
+                        ? 'Import a Census result with Tie rows first (Step 4)'
+                        : 'Re-emit only the tied parcels as a per-ZIP variant CSV'
+                    }
+                  >
+                    🎯 Variant CSV — ties only
+                    {resultStats && resultStats.tie > 0
+                      ? ` (${resultStats.tie.toLocaleString()})`
+                      : ''}
+                  </button>
                 </div>
               </div>
             </>
@@ -2026,7 +2246,7 @@ const GeocodingTool = () => {
                 </table>
               </div>
 
-              <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+              <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <button
                   style={primaryButton}
                   onClick={commitResults}
@@ -2046,6 +2266,25 @@ const GeocodingTool = () => {
                   Discard parsed results
                 </button>
               </div>
+              {resultStats.tie > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: '#9a3412',
+                    background: '#fff7ed',
+                    border: '1px solid #fed7aa',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                  }}
+                >
+                  <strong>{resultStats.tie.toLocaleString()} ties detected.</strong>{' '}
+                  Scroll up to <em>Step 2 → Recovery sweep</em> and click{' '}
+                  <strong>🎯 Variant CSV — ties only</strong> to re-emit just
+                  the tied parcels with the configured ZIPs forced. Upload to
+                  Census and re-import here.
+                </div>
+              )}
 
               {commitSummary && (
                 <div style={{ marginTop: 12, fontSize: 14 }}>
@@ -2103,6 +2342,100 @@ const GeocodingTool = () => {
             >
               ⬇ address-only CSV
             </button>
+          </div>
+
+          {/* Optional class + sales-period chips for the manual cleanup
+              queue. Empty class set + 'all' period = no restriction. Useful
+              for prioritizing parcels that will land in the sales review /
+              sales pool windows so we don't ship a CSP sale ungeocoded. */}
+          <div style={{ marginBottom: 12 }}>
+            {csvAvailableClasses.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Class:
+                </span>
+                {csvAvailableClasses.map((cls) => {
+                  const active = csvClassFilter.has(cls);
+                  const count = classChipCounts.get(cls) || 0;
+                  return (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => {
+                        setCsvClassFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(cls)) next.delete(cls);
+                          else next.add(cls);
+                          return next;
+                        });
+                      }}
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        border: '1px solid',
+                        cursor: 'pointer',
+                        ...(active
+                          ? { background: '#2563eb', color: '#fff', borderColor: '#2563eb' }
+                          : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                      }}
+                    >
+                      {cls} <span style={{ opacity: 0.75, marginLeft: 4 }}>({count.toLocaleString()})</span>
+                    </button>
+                  );
+                })}
+                {csvClassFilter.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCsvClassFilter(new Set())}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: 11,
+                      color: '#6b7280',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    clear
+                  </button>
+                )}
+              </div>
+            )}
+            {csvSalesWindow && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Sales pool:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCsvSalesInPool(!csvSalesInPool)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    ...(csvSalesInPool
+                      ? { background: '#7c3aed', color: '#fff', borderColor: '#7c3aed' }
+                      : { background: '#fff', color: '#374151', borderColor: '#d1d5db' }),
+                  }}
+                  title={`Sales between ${csvSalesWindow.start.toLocaleDateString()} and ${csvSalesWindow.end.toLocaleDateString()}`}
+                >
+                  In sales pool window <span style={{ opacity: 0.75, marginLeft: 4 }}>({salesPoolChipCount.toLocaleString()})</span>
+                </button>
+                <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                  ({csvSalesWindow.start.toLocaleDateString()} – {csvSalesWindow.end.toLocaleDateString()}
+                  {csvSalesWindow.isLojik ? ' · Lojik' : ''})
+                </span>
+              </div>
+            )}
+            {csvFiltersActive && (
+              <div style={{ marginTop: 6, fontSize: 11, color: '#7c3aed' }}>
+                Filters active — manual cleanup list narrowed to matching parcels.
+              </div>
+            )}
           </div>
 
           {condoInheritCandidates.length > 0 && (
