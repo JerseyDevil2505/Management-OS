@@ -20,6 +20,29 @@
   min-height: 0;
 }
 
+/* PowerComp CSV export modal — Tailwind v2 (CDN) does not support arbitrary
+   values like h-[80vh] / max-h-[80vh] / min-h-0, so size it explicitly here.
+   Mirrors the address-lookup modal pattern: fixed-height shell, scrollable
+   table body, pinned header + footer. */
+.csv-export-modal-overlay {
+  z-index: 55;
+}
+.csv-export-modal-box {
+  width: 100%;
+  max-width: 1024px;
+  height: 80vh;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.csv-export-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
 /* Management OS Color Variables */
 :root {
   /* Primary Blues from Management OS */

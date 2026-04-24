@@ -111,6 +111,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [pwrCamaProcessing, setPwrCamaProcessing] = useState(false);
   const [pwrCamaResult, setPwrCamaResult] = useState(null);
 
+  // Last-import timestamps (job_settings keys: appeal_log_mynjappeal_last_import / appeal_log_pwrcama_last_import)
+  // ISO strings or null. Rendered under each import button; updated after each successful import.
+  const [mynjAppealLastImport, setMynjAppealLastImport] = useState(null);
+  const [pwrCamaLastImport, setPwrCamaLastImport] = useState(null);
+
   // Import from export state
   const [showImportExportModal, setShowImportExportModal] = useState(false);
   const [importExportFile, setImportExportFile] = useState(null);
@@ -215,6 +220,49 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       console.warn('Appeal snapshot save failed:', e);
     }
   }, [jobData?.id]);
+
+  // Load last-import timestamps from job_settings on mount / job change
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('job_settings')
+        .select('setting_key, setting_value')
+        .eq('job_id', jobData.id)
+        .in('setting_key', ['appeal_log_mynjappeal_last_import', 'appeal_log_pwrcama_last_import']);
+      if (cancelled || !data) return;
+      const map = Object.fromEntries(data.map(r => [r.setting_key, r.setting_value]));
+      setMynjAppealLastImport(map.appeal_log_mynjappeal_last_import || null);
+      setPwrCamaLastImport(map.appeal_log_pwrcama_last_import || null);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  // Helper: stamp a "last import" timestamp into job_settings and update local state
+  const stampLastImport = useCallback(async (settingKey, setter) => {
+    if (!jobData?.id) return;
+    const iso = new Date().toISOString();
+    try {
+      await supabase
+        .from('job_settings')
+        .upsert(
+          { job_id: jobData.id, setting_key: settingKey, setting_value: iso, updated_at: iso },
+          { onConflict: 'job_id,setting_key' }
+        );
+      setter(iso);
+    } catch (e) {
+      console.warn(`Failed to stamp ${settingKey}:`, e);
+    }
+  }, [jobData?.id]);
+
+  // Format an ISO timestamp for the "Last imported" labels under the import buttons
+  const formatLastImport = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
 
   // Compute VCS to bracket mapping on mount
   useEffect(() => {
@@ -1701,6 +1749,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setImportResult({ imported, skipped, unmatched, mergedDrafts });
       setImportFile(null);
 
+      // Stamp last-import timestamp for the MyNJAppeal source
+      stampLastImport('appeal_log_mynjappeal_last_import', setMynjAppealLastImport);
+
     } catch (error) {
       console.error('Import error:', error);
       alert(`Import failed: ${error.message}`);
@@ -1935,6 +1986,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       saveSnapshot(enrichedAppeals);
       setPwrCamaResult({ imported, refreshed, unmatched, mergedDrafts });
       setPwrCamaFile(null);
+
+      // Stamp last-import timestamp for the PwrCama source
+      stampLastImport('appeal_log_pwrcama_last_import', setPwrCamaLastImport);
     } catch (error) {
       console.error('PowerCama import error:', error);
       alert(`Import failed: ${error.message}`);
@@ -3099,20 +3153,34 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               ))}
             </select>
           </div>
-          <button
-            onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            Import MyNJAppeal
-          </button>
-          <button
-            onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            Import PwrCama Appeals
-          </button>
+          <div className="flex flex-col items-stretch gap-0.5">
+            <button
+              onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Import MyNJAppeal
+            </button>
+            <span className="text-[10px] text-gray-500 text-center leading-tight">
+              {mynjAppealLastImport
+                ? `Last imported: ${formatLastImport(mynjAppealLastImport)}`
+                : (appeals.some(a => a.appeal_number) ? 'Previously imported' : 'Never imported')}
+            </span>
+          </div>
+          <div className="flex flex-col items-stretch gap-0.5">
+            <button
+              onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Import PwrCama Appeals
+            </button>
+            <span className="text-[10px] text-gray-500 text-center leading-tight">
+              {pwrCamaLastImport
+                ? `Last imported: ${formatLastImport(pwrCamaLastImport)}`
+                : (appeals.some(a => a.appeal_number) ? 'Previously imported' : 'Never imported')}
+            </span>
+          </div>
           <button
             onClick={handleExportToExcel}
             className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
@@ -4796,9 +4864,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* ==================== EXPORT CSV (POWERCOMP) SELECTION MODAL ==================== */}
       {showExportCsvModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-6 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-3">
+        <div className="csv-export-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="csv-export-modal-box bg-white rounded-lg shadow-xl p-6">
+            <div className="flex justify-between items-center mb-3 flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">
                 Select Result Sets for PowerComp Export
               </h2>
@@ -4809,13 +4877,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-gray-600 mb-3 flex-shrink-0">
               Everything is checked by default. Uncheck any saved runs you don't
               want to send to BRT — useful when a subject has both an assessor
               run and an appellant run, or a manager rebuttal you don't want
               shipped.
             </p>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 flex-shrink-0">
               <div className="text-xs text-gray-500">
                 {exportCsvCandidates.filter(c => c.checked).length} of{' '}
                 {exportCsvCandidates.length} selected
@@ -4835,9 +4903,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded">
+            <div className="csv-export-modal-scroll border border-gray-200 rounded">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-left text-xs text-gray-600">
                     <th className="px-2 py-2 w-8"></th>
                     <th className="px-2 py-2">Subject</th>
@@ -4898,7 +4966,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
               <button
                 onClick={() => setShowExportCsvModal(false)}
                 className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"

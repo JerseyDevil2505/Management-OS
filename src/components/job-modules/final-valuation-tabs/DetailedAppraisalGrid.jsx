@@ -10,7 +10,86 @@ import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
-  const comps = result.comparables || [];
+  // Real comps coming from the comparables search. Manual "M" comps (entered
+  // directly in the export modal for out-of-town properties) are layered on
+  // top of these via `manualComps` below to produce the unified `comps` array
+  // that every downstream consumer (cells, recalc, PDF) reads from.
+  const rawComps = result.comparables || [];
+
+  // ==================== MANUAL COMP STATE ====================
+  // Keyed by slot index 0..4. When set, this slot renders as a fully editable
+  // out-of-town manual comp instead of (or in place of) the corresponding
+  // rawComps entry. Manual comps participate in Recalculate exactly like real
+  // comps; the user fills attribute values via the existing editable cells.
+  const [manualComps, setManualComps] = useState({});
+
+  // Build a stable manual-comp record. Property-shaped so the rest of the grid
+  // can read fields off it. All attribute values start blank; the user fills
+  // them via the editable cells, which already overlay onto comps via
+  // editableProperties[`comp_${idx}`].
+  const buildManualComp = (idx) => ({
+    is_manual_comp: true,
+    property_composite_key: `__manual_comp_${idx}__`,
+    property_block: '',
+    property_lot: '',
+    property_qualifier: '',
+    property_card: '',
+    property_location: '',
+    property_class: '',
+    property_m4_class: '',
+    sales_date: '',
+    sales_price: 0,
+    sales_book: '',
+    sales_page: '',
+    sales_nu: '',
+    asset_year_built: '',
+    asset_sfla: 0,
+    asset_lot_acre: 0,
+    asset_lot_sf: 0,
+    asset_design: '',
+    asset_type_use: '',
+    asset_ext_cond: '',
+    asset_int_cond: '',
+    values_mod_total: 0,
+    adjustedPrice: 0,
+  });
+
+  const toggleManualComp = useCallback((idx) => {
+    setManualComps(prev => {
+      const next = { ...prev };
+      if (next[idx]) {
+        delete next[idx];
+      } else {
+        next[idx] = buildManualComp(idx);
+      }
+      return next;
+    });
+    // Clear edits/adjustments for that slot so old comp data does not bleed
+    // into a freshly-toggled manual comp (and vice versa).
+    setEditableProperties(prev => {
+      const next = { ...prev };
+      delete next[`comp_${idx}`];
+      return next;
+    });
+    setEditedAdjustments(prev => {
+      const next = { ...prev };
+      delete next[`comp_${idx}`];
+      return next;
+    });
+    setHasEdits(true);
+  }, []);
+
+  // Unified comps array: manual override wins per slot, otherwise rawComps.
+  // Length always matches max(rawComps.length, 5) so the 5-column grid is
+  // stable regardless of how many real comps came back.
+  const comps = useMemo(() => {
+    const len = Math.max(rawComps.length, 5);
+    const merged = [];
+    for (let i = 0; i < len; i++) {
+      merged.push(manualComps[i] || rawComps[i] || null);
+    }
+    return merged;
+  }, [rawComps, manualComps]);
 
   // ==================== ADDITIONAL CARDS DETECTION ====================
   // Helper to check if a card identifier is a main card
@@ -93,16 +172,38 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Get aggregated subject and comps
   const aggregatedSubject = useMemo(() => getAggregatedPropertyData(subject), [subject, getAggregatedPropertyData]);
-  const aggregatedComps = useMemo(() => comps.map(comp => ({
-    ...comp,
-    ...getAggregatedPropertyData(comp)
-  })), [comps, getAggregatedPropertyData]);
+  const aggregatedComps = useMemo(() => comps.map(comp => {
+    if (!comp) return null;
+    // Manual comps are not in property_records, so skip the additional-cards
+    // aggregation pass entirely - just return them as-is.
+    if (comp.is_manual_comp) return comp;
+    return { ...comp, ...getAggregatedPropertyData(comp) };
+  }), [comps, getAggregatedPropertyData]);
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
-  const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
+  // PDF section toggles persisted to localStorage. Each remembers the user's last pick across exports.
+  // Some assessors run the full detailed grid as the deliverable (no need for the inline appellant page),
+  // and others prefer to omit the Director's Ratio / Chapter 123 page when the new value drops sharply
+  // and they're settling somewhere in between.
+  const readToggle = (key, defaultValue) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return defaultValue;
+      return raw === 'true';
+    } catch (e) { return defaultValue; }
+  };
+  const [showAdjustments, setShowAdjustments] = useState(() => readToggle('detailedExport_showAdjustments', true));
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
-  const [includeMap, setIncludeMap] = useState(true); // Embed subject+comps map in PDF
+  const [includeMap, setIncludeMap] = useState(() => readToggle('detailedExport_includeMap', true)); // Embed subject+comps map in PDF
+  const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
+  const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
+
+  // Persist toggle state across sessions
+  useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_includeMap', String(includeMap)); } catch (e) {} }, [includeMap]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_hideAppellantEvidence', String(hideAppellantEvidence)); } catch (e) {} }, [hideAppellantEvidence]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_hideDirectorsRatio', String(hideDirectorsRatio)); } catch (e) {} }, [hideDirectorsRatio]);
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
   // Appellant-supplied comps (loaded from appeal_log on modal open). Each
   // entry is the saved slot enriched with the resolved property record so we
@@ -147,7 +248,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       : null;
     const compsPayload = (comps || [])
       .map((rawC, idx) => {
+        // Slot may be null (padding) or a manual out-of-town comp without
+        // lat/lng - drop both so the map only paints geocoded real comps.
+        if (!rawC || rawC.is_manual_comp) return null;
         const c = applyGeocodePatch(rawC);
+        if (!c) return null;
         const lat = parseFloat(c.property_latitude);
         const lng = parseFloat(c.property_longitude);
         if (isNaN(lat) || isNaN(lng)) return null;
@@ -191,8 +296,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
     (mapData.subject ? 1 : 0) + mapData.comps.length + mapData.appellantComps.length;
+  // Only count real, non-manual comps toward the "X of Y geocoded" total -
+  // null padding slots and manual out-of-town comps are not expected to have
+  // coordinates and would otherwise inflate the denominator misleadingly.
   const mapTotalCount =
-    1 + (comps?.length || 0) + (appellantCompsState?.length || 0);
+    1 +
+    (comps?.filter(c => c && !c.is_manual_comp).length || 0) +
+    (appellantCompsState?.length || 0);
 
   // Per-comp distance (miles) from subject. Always 1 decimal.
   const compDistances = useMemo(() => {
@@ -262,8 +372,49 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     det_garage_area: { type: 'garage', field: 'det_garage_area' },
     // Condition dropdown
     ext_condition: { type: 'condition', field: 'asset_ext_cond' },
-    int_condition: { type: 'condition', field: 'asset_int_cond' }
+    int_condition: { type: 'condition', field: 'asset_int_cond' },
+    // Code dropdowns - sourced from codes actually used in this job's properties
+    // so the user picks a real code that the rest of the system knows how to
+    // decode/display. Sales code is a free-text input since NU codes are public
+    // record and easily looked up by the assessor.
+    style_code: { type: 'code', field: 'asset_design_style', codeType: 'design' },
+    type_use_code: { type: 'code', field: 'asset_type_use', codeType: 'typeUse' },
+    story_height_code: { type: 'code', field: 'asset_stories', altField: 'asset_story_height', codeType: 'storyHeight' },
+    view_code: { type: 'code', field: 'asset_view', altField: 'asset_view_code', codeType: 'view' },
+    sales_code: { type: 'text', field: 'sales_nu', altField: 'sales_code' }
   };
+
+  // Build dropdown options for code-backed fields by walking allProperties to
+  // find every distinct code in use, then decoding it via interpretCodes so
+  // the user sees the same `CODE (Name)` pairing they're used to seeing in
+  // the cells.
+  const getCodeOptions = useCallback((codeType) => {
+    if (!Array.isArray(allProperties) || allProperties.length === 0) return [];
+    const seen = new Map();
+    for (const p of allProperties) {
+      let code = null;
+      let name = null;
+      if (codeType === 'design') {
+        code = p.asset_design_style;
+        if (code && codeDefinitions) name = interpretCodes.getDesignName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'typeUse') {
+        code = p.asset_type_use;
+        if (code && codeDefinitions) name = interpretCodes.getTypeName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'storyHeight') {
+        code = p.asset_stories || p.asset_story_height;
+        if (code && codeDefinitions) name = interpretCodes.getStoryHeightName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'view') {
+        code = p.asset_view || p.asset_view_code;
+        if (code && codeDefinitions) name = interpretCodes.getViewName(p, codeDefinitions, vendorType);
+      }
+      if (!code) continue;
+      const key = String(code);
+      if (!seen.has(key)) {
+        seen.set(key, { value: key, label: name ? `${key} (${name})` : key });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [allProperties, codeDefinitions, vendorType]);
 
   // Garage options
   const GARAGE_OPTIONS = [
@@ -563,7 +714,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'block_lot_qual',
       label: 'Block/Lot/Qual',
-      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
+      render: (prop) => {
+        // Manual out-of-town comps don't have a Block/Lot - surface that
+        // explicitly so the assessor can see at a glance which column is
+        // a hand-entered comp vs. a real district parcel.
+        if (prop?.is_manual_comp) return 'Out of Town';
+        return `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`;
+      },
       adjustmentName: null,
       bold: true
     },
@@ -1630,6 +1787,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const subjectHeader = subjectAdditionalCards > 0 ? `Subject (+${subjectAdditionalCards})` : 'Subject';
 
     const compHeaders = aggregatedComps.slice(0, 5).map((comp, idx) => {
+      // Manual out-of-town comps render with an OUT OF TOWN label and the
+      // user-entered street address (if provided) so the assessor / county
+      // reviewer can identify the parcel without a Block/Lot.
+      if (comp?.is_manual_comp) {
+        const addr = (editableProperties[`comp_${idx}`]?.property_location || '').trim();
+        return addr ? `OUT OF TOWN ${idx + 1}\n${addr}` : `OUT OF TOWN ${idx + 1}`;
+      }
       const additionalCards = comp?._additionalCardsCount || 0;
       const baseLabel = `Comparable ${idx + 1}`;
       return additionalCards > 0 ? `${baseLabel} (+${additionalCards})` : baseLabel;
@@ -2072,10 +2236,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // before Chapter 123. Only added if an appeal_log row exists for this subject.
     // If the appeal exists but no appellant_comps are saved, we still render the
     // page with a "No Evidence supplied by Appellant" line so the report shows
-    // that fact explicitly.
+    // that fact explicitly. User can suppress entirely via the export modal toggle.
     try {
       const compositeKey = subject?.property_composite_key;
-      if (compositeKey && jobData?.id) {
+      if (!hideAppellantEvidence && compositeKey && jobData?.id) {
         const { data: appealRow } = await supabase
           .from('appeal_log')
           .select('id, appeal_number, appeal_year, property_block, property_lot, property_qualifier, property_location, appellant_comps, farm_mode')
@@ -2240,23 +2404,55 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               const evalResult = evaluateAppellantComp(subject, compProp, slot, { vendorType, landMethod, sampleRange, farmMode });
               return { slot, compProp, evalResult };
             });
-            const compRows = evaluations.map(({ slot, compProp }, i) => ([
-              `#${i + 1}`,
-              slot.block || (compProp?.property_block || ''),
-              slot.lot || (compProp?.property_lot || ''),
-              slot.qualifier || (compProp?.property_qualifier || ''),
-              slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
-              slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
-              (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
-              slot.sales_nu || compProp?.sales_nu || '\u2014',
-              compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
-              compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
-              compProp?.asset_year_built || '\u2014',
-              compProp?.asset_sfla || '\u2014',
-              lotDisplay(compProp)
-            ]));
+            // For manual (out-of-town) rows, decode dropdown codes through the
+            // same code-definitions path used for matched properties so the PDF
+            // shows "code-label" instead of just the raw code.
+            const manualCodeWithName = (code, field) => {
+              if (!code) return '\u2014';
+              const synthetic = { [field]: code };
+              const decoded = decodeField(synthetic, field);
+              if (!decoded || String(decoded).trim().toUpperCase() === String(code).trim().toUpperCase()) return String(code);
+              return `${code}-${decoded}`;
+            };
+            const compRows = evaluations.map(({ slot, compProp }, i) => {
+              if (slot.is_manual) {
+                const addr = slot.manual_address ? String(slot.manual_address).toUpperCase() : 'OUT OF TOWN';
+                const lotSize = slot.manual_lot_size || '\u2014';
+                return [
+                  `#${i + 1}`,
+                  // BLQ collapses into a single "OOT — address" cell across cols 1-3
+                  addr, '', '',
+                  slot.card || '\u2014',
+                  slot.sales_date || '\u2014',
+                  slot.sales_price ? `$${Number(slot.sales_price).toLocaleString()}` : '\u2014',
+                  slot.sales_nu || '\u2014',
+                  slot.manual_vcs || '\u2014',
+                  manualCodeWithName(slot.manual_design, 'asset_design_style'),
+                  manualCodeWithName(slot.manual_type_use, 'asset_type_use'),
+                  manualCodeWithName(slot.manual_condition, 'asset_int_cond'),
+                  slot.manual_year_built || '\u2014',
+                  slot.manual_sfla || '\u2014',
+                  lotSize
+                ];
+              }
+              return [
+                `#${i + 1}`,
+                slot.block || (compProp?.property_block || ''),
+                slot.lot || (compProp?.property_lot || ''),
+                slot.qualifier || (compProp?.property_qualifier || ''),
+                slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
+                slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
+                (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
+                slot.sales_nu || compProp?.sales_nu || '\u2014',
+                compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
+                compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
+                compProp?.asset_year_built || '\u2014',
+                compProp?.asset_sfla || '\u2014',
+                lotDisplay(compProp)
+              ];
+            });
 
             // Map PDF column index → evalResult.flags key. PDF columns now
             // mirror the on-screen modal (including the Card column) so the
@@ -2347,9 +2543,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             }
 
             evaluations.forEach(({ slot, evalResult }, i) => {
-              const has = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              const has = slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address;
               if (!has) return;
-              const note = `APPELLANT COMP#${i + 1} \u2014 ${evalResult.autoNote}${slot.manual_notes ? ` \u2014 ${slot.manual_notes}` : ''}`;
+              const oot = slot.is_manual
+                ? `OUT OF TOWN${slot.manual_address ? ` (${String(slot.manual_address).toUpperCase()})` : ''} \u2014 `
+                : '';
+              const note = `APPELLANT COMP#${i + 1} \u2014 ${oot}${evalResult.autoNote}${slot.manual_notes ? ` \u2014 ${slot.manual_notes}` : ''}`;
               const wrapped = doc.splitTextToSize(note, doc.internal.pageSize.getWidth() - 2 * margin);
               doc.text(wrapped, margin, commentsY);
               commentsY += wrapped.length * 10;
@@ -2362,7 +2561,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
 
     // ==================== CHAPTER 123 TEST ====================
-    // Add Chapter 123 Analysis on a new page
+    // Add Chapter 123 Analysis on a new page. User can suppress entirely via the
+    // export modal toggle (used when assessor doesn't want the taxpayer to see a
+    // huge ratio swing before settling).
+    if (!hideDirectorsRatio) {
     doc.addPage();
     addHeader(subjectBlockLot, true);
 
@@ -2501,6 +2703,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       margin,
       ch123TableEndY + 12
     );
+    } // end !hideDirectorsRatio
 
     // ============== Subject + Comps Map page (optional) ==============
     if (includeMap && mapHasSubject && mapCaptureRef.current) {
@@ -2722,7 +2925,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3064,6 +3267,32 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
+                {/* Hide Appellant Evidence Toggle - some assessors prefer to package only the detailed grids */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideAppellantEvidence}
+                    onChange={(e) => setHideAppellantEvidence(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {hideAppellantEvidence ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Hide Appellant Evidence
+                  </span>
+                </label>
+                {/* Hide Director's Ratio Study Toggle - omit Chapter 123 page when settling */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideDirectorsRatio}
+                    onChange={(e) => setHideDirectorsRatio(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {hideDirectorsRatio ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Hide Director's Ratio
+                  </span>
+                </label>
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -3105,11 +3334,34 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   <tr className="bg-blue-600 text-white">
                     <th className="px-2 py-2 text-left font-semibold border-r border-blue-500 w-40">Attribute</th>
                     <th className="px-2 py-2 text-center font-semibold bg-slate-600 border-r border-slate-500 w-28">Subject</th>
-                    {[0, 1, 2, 3, 4].map(idx => (
-                      <th key={idx} className="px-2 py-2 text-center font-semibold border-r border-blue-500 w-28">
-                        Comp {idx + 1}
-                      </th>
-                    ))}
+                    {[0, 1, 2, 3, 4].map(idx => {
+                      const isManual = !!manualComps[idx];
+                      const manualAddr = isManual ? (editableProperties[`comp_${idx}`]?.property_location || '') : '';
+                      return (
+                        <th key={idx} className={`px-2 py-2 text-center font-semibold border-r border-blue-500 w-28 ${isManual ? 'bg-amber-600' : ''}`}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{isManual ? `OUT OF TOWN ${idx + 1}` : `Comp ${idx + 1}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleManualComp(idx)}
+                              title={isManual ? 'Switch back to real comp' : 'Enter a manual out-of-town comp in this slot'}
+                              className={`ml-1 inline-flex items-center justify-center rounded text-[10px] font-bold border px-1.5 py-0.5 ${isManual ? 'bg-white text-amber-700 border-white' : 'bg-blue-700 text-white border-blue-300 hover:bg-blue-800'}`}
+                            >
+                              M
+                            </button>
+                          </div>
+                          {isManual && (
+                            <input
+                              type="text"
+                              value={manualAddr}
+                              onChange={(e) => updateEditedValue(`comp_${idx}`, 'property_location', e.target.value)}
+                              placeholder="Street address"
+                              className="mt-1 w-full px-1 py-0.5 text-xs text-gray-900 rounded border border-amber-300 bg-amber-50"
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -3243,6 +3495,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
                             </select>
+                          )}
+                          {cfg.type === 'code' && (
+                            <select
+                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '')}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">-</option>
+                              {getCodeOptions(cfg.codeType).map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {cfg.type === 'text' && (
+                            <input
+                              type="text"
+                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                            />
                           )}
                           {compAdj && compAdj.amount !== 0 && (
                             <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
