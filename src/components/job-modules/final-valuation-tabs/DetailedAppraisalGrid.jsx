@@ -372,8 +372,49 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     det_garage_area: { type: 'garage', field: 'det_garage_area' },
     // Condition dropdown
     ext_condition: { type: 'condition', field: 'asset_ext_cond' },
-    int_condition: { type: 'condition', field: 'asset_int_cond' }
+    int_condition: { type: 'condition', field: 'asset_int_cond' },
+    // Code dropdowns - sourced from codes actually used in this job's properties
+    // so the user picks a real code that the rest of the system knows how to
+    // decode/display. Sales code is a free-text input since NU codes are public
+    // record and easily looked up by the assessor.
+    style_code: { type: 'code', field: 'asset_design_style', codeType: 'design' },
+    type_use_code: { type: 'code', field: 'asset_type_use', codeType: 'typeUse' },
+    story_height_code: { type: 'code', field: 'asset_stories', altField: 'asset_story_height', codeType: 'storyHeight' },
+    view_code: { type: 'code', field: 'asset_view', altField: 'asset_view_code', codeType: 'view' },
+    sales_code: { type: 'text', field: 'sales_nu', altField: 'sales_code' }
   };
+
+  // Build dropdown options for code-backed fields by walking allProperties to
+  // find every distinct code in use, then decoding it via interpretCodes so
+  // the user sees the same `CODE (Name)` pairing they're used to seeing in
+  // the cells.
+  const getCodeOptions = useCallback((codeType) => {
+    if (!Array.isArray(allProperties) || allProperties.length === 0) return [];
+    const seen = new Map();
+    for (const p of allProperties) {
+      let code = null;
+      let name = null;
+      if (codeType === 'design') {
+        code = p.asset_design_style;
+        if (code && codeDefinitions) name = interpretCodes.getDesignName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'typeUse') {
+        code = p.asset_type_use;
+        if (code && codeDefinitions) name = interpretCodes.getTypeName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'storyHeight') {
+        code = p.asset_stories || p.asset_story_height;
+        if (code && codeDefinitions) name = interpretCodes.getStoryHeightName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'view') {
+        code = p.asset_view || p.asset_view_code;
+        if (code && codeDefinitions) name = interpretCodes.getViewName(p, codeDefinitions, vendorType);
+      }
+      if (!code) continue;
+      const key = String(code);
+      if (!seen.has(key)) {
+        seen.set(key, { value: key, label: name ? `${key} (${name})` : key });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [allProperties, codeDefinitions, vendorType]);
 
   // Garage options
   const GARAGE_OPTIONS = [
@@ -673,7 +714,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'block_lot_qual',
       label: 'Block/Lot/Qual',
-      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
+      render: (prop) => {
+        // Manual out-of-town comps don't have a Block/Lot - surface that
+        // explicitly so the assessor can see at a glance which column is
+        // a hand-entered comp vs. a real district parcel.
+        if (prop?.is_manual_comp) return 'Out of Town';
+        return `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`;
+      },
       adjustmentName: null,
       bold: true
     },
@@ -3448,6 +3495,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
                             </select>
+                          )}
+                          {cfg.type === 'code' && (
+                            <select
+                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '')}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">-</option>
+                              {getCodeOptions(cfg.codeType).map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {cfg.type === 'text' && (
+                            <input
+                              type="text"
+                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                            />
                           )}
                           {compAdj && compAdj.amount !== 0 && (
                             <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
