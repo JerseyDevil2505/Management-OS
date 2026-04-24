@@ -168,7 +168,20 @@ const buildEmptyDraft = () => Array.from({ length: 5 }, (_, i) => ({
   sales_date: '',
   sales_price: '',
   sales_nu: '',
-  manual_notes: ''
+  manual_notes: '',
+  // Manual entry fields — used when the comp is out-of-district (no matching
+  // property_records row). Toggled per-row via the "M" button. When is_manual
+  // is true, the read-only display cells (VCS/Design/T&U/Cond/Year Built/SFLA/
+  // Lot Size) become editable inputs/dropdowns sourced from in-job code usage.
+  is_manual: false,
+  manual_address: '',
+  manual_vcs: '',
+  manual_design: '',
+  manual_type_use: '',
+  manual_condition: '',
+  manual_year_built: '',
+  manual_sfla: '',
+  manual_lot_size: ''
 }));
 
 const fmtCompDate = (d) => {
@@ -254,6 +267,33 @@ const AppellantEvidencePanel = ({
       return property[field] || null;
     }
   }, [codeDefinitions, vendorType]);
+
+  // ----- Manual entry dropdown options -----
+  // Build code-with-label option lists for the manual-entry dropdowns by
+  // walking the loaded properties and collecting unique values per field.
+  // We use the existing decodeField() helper so labels match what the
+  // read-only cells show for matched properties (consistent vocab).
+  const buildCodeOptions = useCallback((field) => {
+    const seen = new Map(); // code -> label
+    for (const p of properties) {
+      const code = p?.[field];
+      if (code == null || code === '') continue;
+      const key = String(code).trim();
+      if (!key || seen.has(key)) continue;
+      const decoded = decodeField(p, field);
+      const label = decoded && String(decoded).trim().toUpperCase() !== key.toUpperCase()
+        ? `${key} \u00b7 ${decoded}`
+        : key;
+      seen.set(key, label);
+    }
+    return Array.from(seen.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+      .map(([code, label]) => ({ code, label }));
+  }, [properties, decodeField]);
+
+  const designOptions = useMemo(() => buildCodeOptions('asset_design_style'), [buildCodeOptions]);
+  const typeUseOptions = useMemo(() => buildCodeOptions('asset_type_use'), [buildCodeOptions]);
+  const conditionOptions = useMemo(() => buildCodeOptions('asset_int_cond'), [buildCodeOptions]);
 
   const codeWithName = (property, field) => {
     const code = property?.[field];
@@ -543,7 +583,14 @@ const AppellantEvidencePanel = ({
     try {
       const cleaned = draft
         .map((s, i) => ({ ...s, slot: i + 1 }))
-        .filter(s => s.block || s.lot || s.qualifier || s.card || s.sales_date || s.sales_price || s.sales_nu || s.manual_notes);
+        .filter(s => (
+          s.block || s.lot || s.qualifier || s.card ||
+          s.sales_date || s.sales_price || s.sales_nu || s.manual_notes ||
+          // Keep manual rows even if BLQ is blank (out-of-town comps)
+          s.is_manual || s.manual_address ||
+          s.manual_vcs || s.manual_design || s.manual_type_use ||
+          s.manual_condition || s.manual_year_built || s.manual_sfla || s.manual_lot_size
+        ));
 
       const evidencePayload = {
         appellant_comps: cleaned.length > 0 ? cleaned : null,
@@ -785,11 +832,33 @@ const AppellantEvidencePanel = ({
                       >
                         <Search className="w-3.5 h-3.5" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSlot(idx, 'is_manual', !slot.is_manual)}
+                        className={`px-1 py-0.5 text-[10px] font-bold rounded border ${slot.is_manual ? 'bg-amber-200 text-amber-900 border-amber-400' : 'text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+                        title={slot.is_manual ? 'Manual entry on \u2014 click to revert to property lookup' : 'Out-of-district comp \u2014 enable manual entry'}
+                      >
+                        M
+                      </button>
                     </div>
                   </td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
-                  <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                  {slot.is_manual ? (
+                    <td className="px-2 py-1" colSpan={3}>
+                      <input
+                        type="text"
+                        value={slot.manual_address || ''}
+                        onChange={e => updateSlot(idx, 'manual_address', e.target.value)}
+                        placeholder="Street address (out-of-town)"
+                        className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs bg-amber-50"
+                      />
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'block')} onChange={e => setBlqPending(idx, 'block', e.target.value)} onBlur={() => commitBlq(idx, 'block')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'block'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'lot')} onChange={e => setBlqPending(idx, 'lot', e.target.value)} onBlur={() => commitBlq(idx, 'lot')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'lot'); }} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                      <td className="px-2 py-1"><input type="text" value={blqValue(idx, 'qualifier')} onChange={e => setBlqPending(idx, 'qualifier', e.target.value)} onBlur={() => commitBlq(idx, 'qualifier')} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') commitBlq(idx, 'qualifier'); }} className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs" /></td>
+                    </>
+                  )}
                   <td className={cellCls('card')} title={cellTitle('card')}>
                     <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
@@ -802,13 +871,50 @@ const AppellantEvidencePanel = ({
                   <td className={cellCls('sale_nu')} title={cellTitle('sale_nu')}>
                     <input type="text" value={slot.sales_nu || (compProp?.sales_nu || '')} onChange={e => updateSlot(idx, 'sales_nu', e.target.value)} placeholder={compProp?.sales_nu || ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
-                  <td className={cellCls('vcs')} title={cellTitle('vcs')}>{compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014'}</td>
-                  <td className={cellCls('design')} title={cellTitle('design')}>{compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014'}</td>
-                  <td className={cellCls('type_use')} title={cellTitle('type_use')}>{compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014'}</td>
-                  <td className={cellCls('condition')} title={cellTitle('condition')}>{compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014'}</td>
-                  <td className={cellCls('year_built')} title={cellTitle('year_built')}>{compProp?.asset_year_built || '\u2014'}</td>
-                  <td className={cellCls('sfla')} title={cellTitle('sfla')}>{compProp?.asset_sfla || '\u2014'}</td>
-                  <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>{compLotDisplay(compProp)}</td>
+                  <td className={cellCls('vcs')} title={cellTitle('vcs')}>
+                    {slot.is_manual
+                      ? <input type="text" value={slot.manual_vcs || ''} onChange={e => updateSlot(idx, 'manual_vcs', e.target.value)} placeholder="VCS" className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                      : (compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014')}
+                  </td>
+                  <td className={cellCls('design')} title={cellTitle('design')}>
+                    {slot.is_manual ? (
+                      <select value={slot.manual_design || ''} onChange={e => updateSlot(idx, 'manual_design', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white max-w-[160px]">
+                        <option value="">{'\u2014'}</option>
+                        {designOptions.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                      </select>
+                    ) : (compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014')}
+                  </td>
+                  <td className={cellCls('type_use')} title={cellTitle('type_use')}>
+                    {slot.is_manual ? (
+                      <select value={slot.manual_type_use || ''} onChange={e => updateSlot(idx, 'manual_type_use', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white max-w-[160px]">
+                        <option value="">{'\u2014'}</option>
+                        {typeUseOptions.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                      </select>
+                    ) : (compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014')}
+                  </td>
+                  <td className={cellCls('condition')} title={cellTitle('condition')}>
+                    {slot.is_manual ? (
+                      <select value={slot.manual_condition || ''} onChange={e => updateSlot(idx, 'manual_condition', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white max-w-[160px]">
+                        <option value="">{'\u2014'}</option>
+                        {conditionOptions.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                      </select>
+                    ) : (compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014')}
+                  </td>
+                  <td className={cellCls('year_built')} title={cellTitle('year_built')}>
+                    {slot.is_manual
+                      ? <input type="number" value={slot.manual_year_built || ''} onChange={e => updateSlot(idx, 'manual_year_built', e.target.value)} placeholder="YYYY" className="w-16 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                      : (compProp?.asset_year_built || '\u2014')}
+                  </td>
+                  <td className={cellCls('sfla')} title={cellTitle('sfla')}>
+                    {slot.is_manual
+                      ? <input type="number" value={slot.manual_sfla || ''} onChange={e => updateSlot(idx, 'manual_sfla', e.target.value)} placeholder="sf" className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                      : (compProp?.asset_sfla || '\u2014')}
+                  </td>
+                  <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>
+                    {slot.is_manual
+                      ? <input type="text" value={slot.manual_lot_size || ''} onChange={e => updateSlot(idx, 'manual_lot_size', e.target.value)} placeholder="0.5 ac" className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
+                      : compLotDisplay(compProp)}
+                  </td>
                   {onPromoteComp && (
                     <td className="px-2 py-1">
                       {compProp ? (
@@ -858,12 +964,15 @@ const AppellantEvidencePanel = ({
             })()}
             {evaluations.map(({ evalResult }, idx) => {
               const slot = draft[idx];
-              const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price;
+              const hasAny = slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address;
               if (!hasAny) return null;
+              const oot = slot.is_manual
+                ? `OUT OF TOWN${slot.manual_address ? ` (${slot.manual_address.toUpperCase()})` : ''} \u2014 `
+                : '';
               return (
                 <div key={idx} className="flex items-start gap-2">
                   <div className="flex-1">
-                    <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {evalResult.autoNote}
+                    <span className="font-semibold">APPELLANT COMP#{idx + 1}</span> &mdash; {oot}{evalResult.autoNote}
                     {slot.manual_notes && (
                       <span className="text-gray-700"> &mdash; {slot.manual_notes}</span>
                     )}
@@ -880,7 +989,7 @@ const AppellantEvidencePanel = ({
             })}
             {evaluations.every(({ evalResult }, idx) => {
               const slot = draft[idx];
-              return !(slot.block || slot.lot || slot.sales_date || slot.sales_price);
+              return !(slot.block || slot.lot || slot.sales_date || slot.sales_price || slot.is_manual || slot.manual_address);
             }) && (
               <div className="text-gray-500 italic">No comps entered yet.</div>
             )}

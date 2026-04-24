@@ -4600,6 +4600,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameZone} onChange={(e) => setCompFilters(prev => ({ ...prev, sameZone: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameZone && compFilters.zone?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.zone.map(z => (
+                        <span key={z} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
+                          {z}<button onClick={() => toggleCompFilterChip('zone')(z)} className="text-purple-600 hover:text-purple-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Building Class */}
                 <div>
@@ -4619,6 +4628,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameBuildingClass} onChange={(e) => setCompFilters(prev => ({ ...prev, sameBuildingClass: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameBuildingClass && compFilters.buildingClass?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.buildingClass.map(c => (
+                        <span key={c} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">
+                          {c}<button onClick={() => toggleCompFilterChip('buildingClass')(c)} className="text-amber-600 hover:text-amber-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Type/Use */}
                 <div>
@@ -4638,6 +4656,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameTypeUse} onChange={(e) => setCompFilters(prev => ({ ...prev, sameTypeUse: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameTypeUse && compFilters.typeUse?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.typeUse.map(t => (
+                        <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs">
+                          {getCodeLabel('typeUse', t)}<button onClick={() => toggleCompFilterChip('typeUse')(t)} className="text-indigo-600 hover:text-indigo-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Style */}
                 <div>
@@ -4657,6 +4684,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameStyle} onChange={(e) => setCompFilters(prev => ({ ...prev, sameStyle: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameStyle && compFilters.style?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.style.map(s => (
+                        <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 bg-pink-100 text-pink-800 rounded text-xs">
+                          {getCodeLabel('style', s)}<button onClick={() => toggleCompFilterChip('style')(s)} className="text-pink-600 hover:text-pink-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Story Height */}
                 <div>
@@ -4676,6 +4712,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameStoryHeight} onChange={(e) => setCompFilters(prev => ({ ...prev, sameStoryHeight: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameStoryHeight && compFilters.storyHeight?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.storyHeight.map(h => (
+                        <span key={h} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-100 text-teal-800 rounded text-xs">
+                          {getCodeLabel('storyHeight', h)}<button onClick={() => toggleCompFilterChip('storyHeight')(h)} className="text-teal-600 hover:text-teal-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* View */}
                 <div>
@@ -4695,6 +4740,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       <input type="checkbox" checked={compFilters.sameView} onChange={(e) => setCompFilters(prev => ({ ...prev, sameView: e.target.checked }))} className="rounded" />
                     </label>
                   </div>
+                  {!compFilters.sameView && compFilters.view?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.view.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded text-xs">
+                          {getCodeLabel('view', v)}<button onClick={() => toggleCompFilterChip('view')(v)} className="text-cyan-600 hover:text-cyan-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

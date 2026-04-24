@@ -26,10 +26,13 @@ const enrichPropertiesWithPackageData = (properties) => {
       const propClass = p.property_m4_class || p.property_class;
       return propClass === '3B';
     });
+    // Prefer market_manual_* (unit-rate-config calculated values for BRT) over asset_lot_* (Microsystems direct extract)
+    // SF and acres represent the SAME measurement in different units, so use SF if available, otherwise convert acres
     const combinedLotSF = group.reduce((sum, p) => {
-      const sf = parseFloat(p.asset_lot_sf) || 0;
-      const acres = parseFloat(p.asset_lot_acre) || 0;
-      return sum + sf + (acres * 43560);
+      const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+      if (sf > 0) return sum + sf;
+      const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
+      return sum + (acres * 43560);
     }, 0);
     // Determine additional card vs multi-property package
     const baseKeys = new Set();
@@ -50,17 +53,81 @@ const enrichPropertiesWithPackageData = (properties) => {
     if (baseKeys.size === 1 && cardIds.size > 1) {
       isAdditionalCard = true;
     }
+    // Multi-residence farm detection: only meaningful when this is a farm
+    // package (has a 3B qfarm partner). Within the deed-group we look for
+    // Class 2 or 3A parcels that carry buildings (asset_sfla > 0). When the
+    // count is >= 2, the deed bundles more than one home (e.g. 85/20.01 with
+    // two houses on the same farm sale) — flag the group and stamp each
+    // residence-bearing member so downstream consumers (sales comp / appellant
+    // evidence) can warn or split the bundled price as needed.
+    const residenceMemberKeys = [];
+    let combinedResidenceSFLA = 0;
+    let combinedResidenceImprovement = 0;
+    let primaryResidenceKey = null;
+    let primaryResidenceSFLA = 0;
+    if (hasFarm) {
+      for (const p of group) {
+        const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
+        if (cls !== '2' && cls !== '3A') continue;
+        const sfla = parseFloat(p.asset_sfla) || 0;
+        if (sfla > 0 && p.property_composite_key) {
+          residenceMemberKeys.push(p.property_composite_key);
+          combinedResidenceSFLA += sfla;
+          combinedResidenceImprovement += parseFloat(p.values_mod_improvement) || parseFloat(p.values_cama_improvement) || 0;
+          // Primary = residence with the largest SFLA (mirrors how the main
+          // additional-card holder is the one that absorbs the secondaries).
+          if (sfla > primaryResidenceSFLA) {
+            primaryResidenceSFLA = sfla;
+            primaryResidenceKey = p.property_composite_key;
+          }
+        }
+      }
+    }
+    const hasMultipleResidences = residenceMemberKeys.length >= 2;
+    const residenceMemberSet = new Set(residenceMemberKeys);
+
+    // Multi-residence farms get treated as additional cards: same deed, same
+    // sale, multiple homes — downstream consolidation paths (MarketDataTab,
+    // RatableComparisonTab, attribute roll-ups, comp grids) already know how
+    // to merge SFLA and pick a primary card when this flag is true. Reusing
+    // it here means we don't have to fork every consumer.
+    const treatAsAdditionalCard = isAdditionalCard || hasMultipleResidences;
+
     const info = {
       is_package_sale: true,
       is_farm_package: hasFarm,
-      is_additional_card: isAdditionalCard,
+      is_additional_card: treatAsAdditionalCard,
+      has_multiple_residences: hasMultipleResidences,
+      residence_member_keys: residenceMemberKeys,
+      residence_count: residenceMemberKeys.length,
+      // SFLA + improvement-value rollups so consumers can treat the bundle
+      // as "one combined improvement" the same way an additional-card stack
+      // already collapses into the main card.
+      combined_residence_sfla: combinedResidenceSFLA,
+      combined_residence_improvement: combinedResidenceImprovement,
+      primary_residence_key: primaryResidenceKey,
       package_count: group.length,
       combined_lot_sf: combinedLotSF,
       combined_lot_acres: combinedLotSF / 43560,
       package_id: `${group[0].sales_book}-${group[0].sales_page}-${group[0].sales_date}`,
       package_properties: group.map(p => p.property_composite_key)
     };
-    group.forEach(p => { p._pkg = info; });
+    group.forEach(p => {
+      const isResidenceMember = hasMultipleResidences && residenceMemberSet.has(p.property_composite_key);
+      const isPrimaryResidence = isResidenceMember && p.property_composite_key === primaryResidenceKey;
+      p._pkg = {
+        ...info,
+        // Per-parcel markers so a row knows whether it's one of N homes in a
+        // multi-residence farm package and whether it's the primary (largest
+        // SFLA) home that the bundle's combined SFLA / improvement value
+        // should be attached to during consolidation.
+        is_additional_residence: isResidenceMember,
+        is_primary_residence: isPrimaryResidence,
+        // The "secondary residences" in the bundle should be hidden by
+        // consolidation paths the same way additional cards already are.
+        is_secondary_residence: isResidenceMember && !isPrimaryResidence
+      };
+    });
   }
 };
 

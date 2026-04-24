@@ -1907,11 +1907,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     
     const primary = sortedByClass[0];
     
-    // Calculate combined lot size (sum of sf and acres converted)
+    // Calculate combined lot size
+    // Prefer market_manual_* (unit-rate-config calculated values for BRT) over asset_lot_* (Microsystems direct extract)
+    // SF and acres represent the SAME measurement in different units, so use SF if available, otherwise convert acres
     const combinedLotSF = packageProperties.reduce((sum, p) => {
-      const sf = parseFloat(p.asset_lot_sf) || 0;
-      const acres = parseFloat(p.asset_lot_acre) || 0;
-      return sum + sf + (acres * 43560); // Convert acres to SF
+      const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+      if (sf > 0) return sum + sf;
+      const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
+      return sum + (acres * 43560); // Convert acres to SF
     }, 0);
     
     // Calculate combined assessed value
@@ -2025,10 +2028,48 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         package_discount: p.sales_history.sales_decision.old_price - (p.sales_price / packageProperties.length)
       }));
     
+    // Multi-residence farm detection: only meaningful when this is a farm
+    // package (3B qfarm partner present). Within the deed-group, look for
+    // Class 2 or 3A parcels that carry buildings (asset_sfla > 0). When >= 2,
+    // the deed bundles more than one home (e.g. 85/20.01) — flag the group
+    // and stamp residence-bearing keys for downstream consumers.
+    const residenceMemberKeys = [];
+    let combinedResidenceSFLA = 0;
+    let combinedResidenceImprovement = 0;
+    let primaryResidenceKey = null;
+    let primaryResidenceSFLA = 0;
+    if (hasFarmland) {
+      for (const p of packageProperties) {
+        const cls = (p.property_m4_class || p.property_class || '').toString().trim().toUpperCase();
+        if (cls !== '2' && cls !== '3A') continue;
+        const sfla = parseFloat(p.asset_sfla) || 0;
+        if (sfla > 0 && p.property_composite_key) {
+          residenceMemberKeys.push(p.property_composite_key);
+          combinedResidenceSFLA += sfla;
+          combinedResidenceImprovement += parseFloat(p.values_mod_improvement) || parseFloat(p.values_cama_improvement) || 0;
+          if (sfla > primaryResidenceSFLA) {
+            primaryResidenceSFLA = sfla;
+            primaryResidenceKey = p.property_composite_key;
+          }
+        }
+      }
+    }
+    const hasMultipleResidences = residenceMemberKeys.length >= 2;
+    // Multi-residence farms get treated as additional cards so downstream
+    // consolidation/merging logic (which already knows how to combine SFLA,
+    // pick a primary, and de-duplicate the parcel list) fires automatically.
+    const treatAsAdditionalCard = isAdditionalCard || hasMultipleResidences;
+
     return {
       is_package_sale: true,
       is_farm_package: hasFarmland,
-      is_additional_card: isAdditionalCard,
+      is_additional_card: treatAsAdditionalCard,
+      has_multiple_residences: hasMultipleResidences,
+      residence_member_keys: residenceMemberKeys,
+      residence_count: residenceMemberKeys.length,
+      combined_residence_sfla: combinedResidenceSFLA,
+      combined_residence_improvement: combinedResidenceImprovement,
+      primary_residence_key: primaryResidenceKey,
       package_count: packageProperties.length,
       package_id: packageId,
       combined_lot_sf: combinedLotSF,
