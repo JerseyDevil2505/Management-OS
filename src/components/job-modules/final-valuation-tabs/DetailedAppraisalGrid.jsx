@@ -248,7 +248,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       : null;
     const compsPayload = (comps || [])
       .map((rawC, idx) => {
+        // Slot may be null (padding) or a manual out-of-town comp without
+        // lat/lng - drop both so the map only paints geocoded real comps.
+        if (!rawC || rawC.is_manual_comp) return null;
         const c = applyGeocodePatch(rawC);
+        if (!c) return null;
         const lat = parseFloat(c.property_latitude);
         const lng = parseFloat(c.property_longitude);
         if (isNaN(lat) || isNaN(lng)) return null;
@@ -292,8 +296,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
     (mapData.subject ? 1 : 0) + mapData.comps.length + mapData.appellantComps.length;
+  // Only count real, non-manual comps toward the "X of Y geocoded" total -
+  // null padding slots and manual out-of-town comps are not expected to have
+  // coordinates and would otherwise inflate the denominator misleadingly.
   const mapTotalCount =
-    1 + (comps?.length || 0) + (appellantCompsState?.length || 0);
+    1 +
+    (comps?.filter(c => c && !c.is_manual_comp).length || 0) +
+    (appellantCompsState?.length || 0);
 
   // Per-comp distance (miles) from subject. Always 1 decimal.
   const compDistances = useMemo(() => {
