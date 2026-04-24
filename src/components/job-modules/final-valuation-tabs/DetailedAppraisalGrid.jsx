@@ -10,7 +10,86 @@ import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
-  const comps = result.comparables || [];
+  // Real comps coming from the comparables search. Manual "M" comps (entered
+  // directly in the export modal for out-of-town properties) are layered on
+  // top of these via `manualComps` below to produce the unified `comps` array
+  // that every downstream consumer (cells, recalc, PDF) reads from.
+  const rawComps = result.comparables || [];
+
+  // ==================== MANUAL COMP STATE ====================
+  // Keyed by slot index 0..4. When set, this slot renders as a fully editable
+  // out-of-town manual comp instead of (or in place of) the corresponding
+  // rawComps entry. Manual comps participate in Recalculate exactly like real
+  // comps; the user fills attribute values via the existing editable cells.
+  const [manualComps, setManualComps] = useState({});
+
+  // Build a stable manual-comp record. Property-shaped so the rest of the grid
+  // can read fields off it. All attribute values start blank; the user fills
+  // them via the editable cells, which already overlay onto comps via
+  // editableProperties[`comp_${idx}`].
+  const buildManualComp = (idx) => ({
+    is_manual_comp: true,
+    property_composite_key: `__manual_comp_${idx}__`,
+    property_block: '',
+    property_lot: '',
+    property_qualifier: '',
+    property_card: '',
+    property_location: '',
+    property_class: '',
+    property_m4_class: '',
+    sales_date: '',
+    sales_price: 0,
+    sales_book: '',
+    sales_page: '',
+    sales_nu: '',
+    asset_year_built: '',
+    asset_sfla: 0,
+    asset_lot_acre: 0,
+    asset_lot_sf: 0,
+    asset_design: '',
+    asset_type_use: '',
+    asset_ext_cond: '',
+    asset_int_cond: '',
+    values_mod_total: 0,
+    adjustedPrice: 0,
+  });
+
+  const toggleManualComp = useCallback((idx) => {
+    setManualComps(prev => {
+      const next = { ...prev };
+      if (next[idx]) {
+        delete next[idx];
+      } else {
+        next[idx] = buildManualComp(idx);
+      }
+      return next;
+    });
+    // Clear edits/adjustments for that slot so old comp data does not bleed
+    // into a freshly-toggled manual comp (and vice versa).
+    setEditableProperties(prev => {
+      const next = { ...prev };
+      delete next[`comp_${idx}`];
+      return next;
+    });
+    setEditedAdjustments(prev => {
+      const next = { ...prev };
+      delete next[`comp_${idx}`];
+      return next;
+    });
+    setHasEdits(true);
+  }, []);
+
+  // Unified comps array: manual override wins per slot, otherwise rawComps.
+  // Length always matches max(rawComps.length, 5) so the 5-column grid is
+  // stable regardless of how many real comps came back.
+  const comps = useMemo(() => {
+    const len = Math.max(rawComps.length, 5);
+    const merged = [];
+    for (let i = 0; i < len; i++) {
+      merged.push(manualComps[i] || rawComps[i] || null);
+    }
+    return merged;
+  }, [rawComps, manualComps]);
 
   // ==================== ADDITIONAL CARDS DETECTION ====================
   // Helper to check if a card identifier is a main card
@@ -93,10 +172,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Get aggregated subject and comps
   const aggregatedSubject = useMemo(() => getAggregatedPropertyData(subject), [subject, getAggregatedPropertyData]);
-  const aggregatedComps = useMemo(() => comps.map(comp => ({
-    ...comp,
-    ...getAggregatedPropertyData(comp)
-  })), [comps, getAggregatedPropertyData]);
+  const aggregatedComps = useMemo(() => comps.map(comp => {
+    if (!comp) return null;
+    // Manual comps are not in property_records, so skip the additional-cards
+    // aggregation pass entirely - just return them as-is.
+    if (comp.is_manual_comp) return comp;
+    return { ...comp, ...getAggregatedPropertyData(comp) };
+  }), [comps, getAggregatedPropertyData]);
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
@@ -1649,6 +1731,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const subjectHeader = subjectAdditionalCards > 0 ? `Subject (+${subjectAdditionalCards})` : 'Subject';
 
     const compHeaders = aggregatedComps.slice(0, 5).map((comp, idx) => {
+      // Manual out-of-town comps render with an OUT OF TOWN label and the
+      // user-entered street address (if provided) so the assessor / county
+      // reviewer can identify the parcel without a Block/Lot.
+      if (comp?.is_manual_comp) {
+        const addr = (editableProperties[`comp_${idx}`]?.property_location || '').trim();
+        return addr ? `OUT OF TOWN ${idx + 1}\n${addr}` : `OUT OF TOWN ${idx + 1}`;
+      }
       const additionalCards = comp?._additionalCardsCount || 0;
       const baseLabel = `Comparable ${idx + 1}`;
       return additionalCards > 0 ? `${baseLabel} (+${additionalCards})` : baseLabel;
@@ -3189,11 +3278,34 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   <tr className="bg-blue-600 text-white">
                     <th className="px-2 py-2 text-left font-semibold border-r border-blue-500 w-40">Attribute</th>
                     <th className="px-2 py-2 text-center font-semibold bg-slate-600 border-r border-slate-500 w-28">Subject</th>
-                    {[0, 1, 2, 3, 4].map(idx => (
-                      <th key={idx} className="px-2 py-2 text-center font-semibold border-r border-blue-500 w-28">
-                        Comp {idx + 1}
-                      </th>
-                    ))}
+                    {[0, 1, 2, 3, 4].map(idx => {
+                      const isManual = !!manualComps[idx];
+                      const manualAddr = isManual ? (editableProperties[`comp_${idx}`]?.property_location || '') : '';
+                      return (
+                        <th key={idx} className={`px-2 py-2 text-center font-semibold border-r border-blue-500 w-28 ${isManual ? 'bg-amber-600' : ''}`}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{isManual ? `OUT OF TOWN ${idx + 1}` : `Comp ${idx + 1}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleManualComp(idx)}
+                              title={isManual ? 'Switch back to real comp' : 'Enter a manual out-of-town comp in this slot'}
+                              className={`ml-1 inline-flex items-center justify-center rounded text-[10px] font-bold border px-1.5 py-0.5 ${isManual ? 'bg-white text-amber-700 border-white' : 'bg-blue-700 text-white border-blue-300 hover:bg-blue-800'}`}
+                            >
+                              M
+                            </button>
+                          </div>
+                          {isManual && (
+                            <input
+                              type="text"
+                              value={manualAddr}
+                              onChange={(e) => updateEditedValue(`comp_${idx}`, 'property_location', e.target.value)}
+                              placeholder="Street address"
+                              className="mt-1 w-full px-1 py-0.5 text-xs text-gray-900 rounded border border-amber-300 bg-amber-50"
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
