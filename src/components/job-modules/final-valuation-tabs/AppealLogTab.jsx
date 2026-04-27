@@ -4907,7 +4907,30 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-left text-xs text-gray-600">
-                    <th className="px-2 py-2 w-8"></th>
+                    <th className="px-2 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        title={
+                          exportCsvCandidates.length > 0 &&
+                          exportCsvCandidates.every(c => c.checked)
+                            ? 'Deselect all'
+                            : 'Select all'
+                        }
+                        checked={
+                          exportCsvCandidates.length > 0 &&
+                          exportCsvCandidates.every(c => c.checked)
+                        }
+                        ref={el => {
+                          if (el) {
+                            const checkedCount = exportCsvCandidates.filter(c => c.checked).length;
+                            el.indeterminate =
+                              checkedCount > 0 &&
+                              checkedCount < exportCsvCandidates.length;
+                          }
+                        }}
+                        onChange={(e) => setAllExportCsvCandidates(e.target.checked)}
+                      />
+                    </th>
                     <th className="px-2 py-2">Subject</th>
                     <th className="px-2 py-2">Appeal #</th>
                     <th className="px-2 py-2">Result Set</th>
