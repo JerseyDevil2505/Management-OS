@@ -1,4 +1,4 @@
-# Copilot OS — Internal Architecture Reference
+# Copilot OS — Internal Architecture Reference 🚀
 
 > Lean reference for the NJ property-assessment management platform.
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.

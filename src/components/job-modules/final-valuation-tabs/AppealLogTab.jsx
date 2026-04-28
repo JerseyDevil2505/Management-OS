@@ -4907,7 +4907,30 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-left text-xs text-gray-600">
-                    <th className="px-2 py-2 w-8"></th>
+                    <th className="px-2 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        title={
+                          exportCsvCandidates.length > 0 &&
+                          exportCsvCandidates.every(c => c.checked)
+                            ? 'Deselect all'
+                            : 'Select all'
+                        }
+                        checked={
+                          exportCsvCandidates.length > 0 &&
+                          exportCsvCandidates.every(c => c.checked)
+                        }
+                        ref={el => {
+                          if (el) {
+                            const checkedCount = exportCsvCandidates.filter(c => c.checked).length;
+                            el.indeterminate =
+                              checkedCount > 0 &&
+                              checkedCount < exportCsvCandidates.length;
+                          }
+                        }}
+                        onChange={(e) => setAllExportCsvCandidates(e.target.checked)}
+                      />
+                    </th>
                     <th className="px-2 py-2">Subject</th>
                     <th className="px-2 py-2">Appeal #</th>
                     <th className="px-2 py-2">Result Set</th>
@@ -4989,19 +5012,19 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* ==================== POWERCOMP PDF (PHOTO PACKETS) MODAL ==================== */}
       {showPwrCompPdfModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-4">
+        <div className="csv-export-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="csv-export-modal-box bg-white rounded-lg shadow-xl p-6">
+            <div className="flex justify-between items-center mb-4 flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Import Batch PwrComp PDF (Photo Packets)</h2>
               <button onClick={() => setShowPwrCompPdfModal(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-gray-600 mb-3 flex-shrink-0">
               Upload a BRT PowerComp <strong>Batch Taxpayer Report</strong> PDF. We'll group pages by subject Block / Lot / Qualifier, strip just the photo pages, and attach them to each matching property in this job. The photo pages get a footer crediting <em>BRT Technologies PowerComp</em>.
             </p>
 
-            <div className="border-2 border-dashed border-teal-300 rounded-lg p-4 text-center mb-3">
+            <div className="border-2 border-dashed border-teal-300 rounded-lg p-4 text-center mb-3 flex-shrink-0">
               <input
                 type="file"
                 accept=".pdf,application/pdf"
@@ -5023,7 +5046,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               </label>
             </div>
 
-            <div className="flex-1 overflow-y-auto -mx-1 px-1">
+            <div className="csv-export-modal-scroll -mx-1 px-1">
               {pwrCompPdfPreview && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between text-xs">
@@ -5104,7 +5127,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               )}
             </div>
 
-            <div className="flex gap-3 justify-end pt-3 border-t border-gray-100 mt-3">
+            <div className="flex gap-3 justify-end pt-3 border-t border-gray-100 mt-3 flex-shrink-0">
               <button
                 onClick={() => setShowPwrCompPdfModal(false)}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
