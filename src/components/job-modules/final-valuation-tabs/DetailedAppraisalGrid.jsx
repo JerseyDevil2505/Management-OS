@@ -8,6 +8,37 @@ import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCom
 import AppealMap, { distanceMiles } from '../../AppealMap';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 
+// Locally-controlled input for the export-modal cells. Holding the typed value
+// in component-local state means each keystroke only re-renders this one cell
+// instead of the entire 6-column x ~50-row grid (which would otherwise re-run
+// every attr.render(...) on every key, causing visible lag in sales_nu /
+// sales_date / sales_price). The committed value is pushed to the parent on
+// blur or when the user presses Enter. The modal is conditionally mounted, so
+// remounting on each open is enough to reset state — no external sync needed.
+const EditableInput = React.memo(function EditableInput({
+  initialValue,
+  onCommit,
+  type = 'text',
+  inputMode,
+  className,
+}) {
+  const [value, setValue] = useState(initialValue ?? '');
+  const commit = useCallback(() => {
+    onCommit(value);
+  }, [value, onCommit]);
+  return (
+    <input
+      type={type}
+      inputMode={inputMode}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+      className={className}
+    />
+  );
+});
+
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
@@ -1368,17 +1399,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return prop[config.field];
   }, []);
 
-  // Get edited value or fall back to original
-  const getEditedValue = useCallback((propKey, attrId) => {
-    const edited = editableProperties[propKey];
-    if (edited && edited[attrId] !== undefined) {
-      return edited[attrId];
-    }
-    // Get original value
-    const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
-    return getRawValue(prop, attrId);
-  }, [editableProperties, subject, comps, getRawValue]);
-
   // Update a single cell value
   const updateEditedValue = useCallback((propKey, attrId, value) => {
     setEditableProperties(prev => ({
@@ -1473,19 +1493,101 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [getBracketIndex]);
 
-  // Recalculate all adjustments based on edited values
+  // Recalculate all adjustments based on edited values.
+  //
+  // Two correctness rules baked in here (see history of bugs around NCOVR
+  // condition + missing amenity flags causing spurious adjustments on Recalc):
+  //
+  // 1. We read each attribute's value the SAME way the cell displays it,
+  //    not from the raw DB column. This matters for:
+  //      - yes/no amenity rows (deck/patio/porches/pool/basement/AC), where
+  //        the raw `asset_*` flag may be null even though the area field is
+  //        populated. The cell uses `attr.render(prop)` to decide Yes vs No;
+  //        recalc must use the same source or amenities flip from Yes->No
+  //        and adjustments invert.
+  //      - condition rows on jobs using NCOVR overrides, where the displayed
+  //        condition is mapped from `net_condition_pct`. Reading raw
+  //        `asset_ext_cond` ranks against a different value than what is
+  //        on screen and produces phantom condition adjustments.
+  //
+  // 2. We only recompute adjustments for comps that the user actually edited
+  //    (or all comps if the subject was edited, since that affects every
+  //    comp's diff). Untouched comps keep their original adjustments from
+  //    the canonical pipeline, so re-deriving them through the editable
+  //    shadow data can't introduce drift.
   const recalculateAdjustments = useCallback(() => {
-    const newAdjustments = {};
+    // Render-aware value reader. Uses the same logic the cell uses for
+    // display when no edit exists, so recalc and display can never disagree.
+    const getRecalcValue = (propKey, attrId, attrObj, config) => {
+      const edited = editableProperties[propKey];
+      if (edited && edited[attrId] !== undefined) return edited[attrId];
+
+      const prop = propKey === 'subject'
+        ? subject
+        : comps[parseInt(propKey.replace('comp_', ''))];
+      if (!prop) return null;
+
+      // Yes/No rows: derive from rendered value, mirroring getDefaultYesNo
+      // in the cell renderer. An empty / 'No' / 'None' / 'N/A' render means
+      // No; anything else (including a formatted area like "240 SF") is Yes.
+      if (config?.type === 'yesno') {
+        const rendered = attrObj?.render ? attrObj.render(prop) : null;
+        if (!rendered) return 'No';
+        const renderedStr = String(rendered).toLowerCase();
+        if (renderedStr === 'no' || renderedStr === 'none' || renderedStr === 'n/a') return 'No';
+        return 'Yes';
+      }
+
+      // Condition rows: use the rendered condition name so NCOVR-mapped
+      // values flow through. getConditionRank already accepts names.
+      if (config?.type === 'condition' && attrObj?.render) {
+        const rendered = attrObj.render(prop);
+        if (rendered && rendered !== 'N/A') return rendered;
+      }
+
+      return getRawValue(prop, attrId);
+    };
+
+    // Did the user edit anything on the subject row? If so every comp's
+    // diff is potentially affected and we have to recalc all of them.
+    const subjectEdits = editableProperties['subject'];
+    const subjectWasEdited = !!subjectEdits && Object.keys(subjectEdits).length > 0;
+
+    // Start from any previously-recalculated state so repeated Recalcs
+    // don't lose work, then layer fresh entries on top.
+    const newAdjustments = { ...editedAdjustments };
 
     comps.forEach((comp, idx) => {
       if (!comp) return;
 
       const compKey = `comp_${idx}`;
+      const compEdits = editableProperties[compKey];
+      const compWasEdited = !!compEdits && Object.keys(compEdits).length > 0;
+
+      // Untouched comp + untouched subject => leave its original adjustments
+      // alone. If we already have a recalculated entry from a prior pass,
+      // keep that (the user may have edited and reverted edits since).
+      if (!compWasEdited && !subjectWasEdited) {
+        if (!newAdjustments[compKey]) {
+          // Mirror canonical pipeline values into our local map so the
+          // projected-assessment loop below can treat all slots uniformly.
+          newAdjustments[compKey] = {
+            adjustments: comp.adjustments || [],
+            totalAdjustment: comp.totalAdjustment || 0,
+            adjustedPrice: comp.adjustedPrice || (comp.sales_price || 0),
+            adjustmentPercent: comp.adjustmentPercent || 0
+          };
+        }
+        return;
+      }
+
       const compAdjustments = [];
       let totalAdjustment = 0;
 
       // Get comp's sales price (edited or original), parsed as number
-      const compSalesPrice = parseFloat(getEditedValue(compKey, 'sales_price')) || parseFloat(comp.sales_price) || 0;
+      const compSalesPrice = parseFloat(getRecalcValue(compKey, 'sales_price', null, EDITABLE_CONFIG.sales_price))
+        || parseFloat(comp.sales_price)
+        || 0;
 
       // Calculate adjustments for each adjustable attribute
       Object.keys(EDITABLE_CONFIG).forEach(attrId => {
@@ -1501,9 +1603,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         );
         if (!adjustmentDef) return;
 
-        // Get subject and comp values (edited or original)
-        let subjectVal = getEditedValue('subject', attrId);
-        let compVal = getEditedValue(compKey, attrId);
+        // Get subject and comp values (edited or render-equivalent)
+        let subjectVal = getRecalcValue('subject', attrId, attrObj, config);
+        let compVal = getRecalcValue(compKey, attrId, attrObj, config);
 
         // Convert Yes/No to 1/0 for flat adjustments
         if (config.type === 'yesno') {
@@ -1573,7 +1675,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
@@ -3447,19 +3549,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       return (
                         <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
                           {cfg.type === 'number' && (
-                            <input
+                            <EditableInput
                               type="text"
                               inputMode="decimal"
-                              value={editedVal ?? (prop ? (prop[cfg.altField] || prop[cfg.field]) : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={editedVal ?? (prop ? (prop[cfg.altField] || prop[cfg.field]) : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
                           {cfg.type === 'date' && (
-                            <input
+                            <EditableInput
                               type="date"
-                              value={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
@@ -3509,10 +3611,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             </select>
                           )}
                           {cfg.type === 'text' && (
-                            <input
+                            <EditableInput
                               type="text"
-                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
