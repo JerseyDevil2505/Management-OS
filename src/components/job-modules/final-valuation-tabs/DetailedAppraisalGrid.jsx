@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
-import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon } from 'lucide-react';
+import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon, History, Flag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -259,6 +259,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (!compositeKey) return;
     setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
   }, []);
+
+  // ==================== SALES HISTORY (Hidden / Cover Sale Swap) ====================
+  // When a property's current sale is a cover ($1, family transfer, estate, etc.)
+  // and `prev_sales` from the BRT file contains a real arm's-length sale, the
+  // user can swap that prior sale into the current slot via this modal. The
+  // selection is persisted to property_records with sales_override=true so the
+  // file updater (see DB trigger respect_sales_override) won't clobber it on
+  // re-upload — unless a strictly newer usable sale arrives later.
+  const [salesHistoryModal, setSalesHistoryModal] = useState(null); // { propKey, property }
+  const [salesHistoryPatches, setSalesHistoryPatches] = useState({}); // composite_key -> { sales_date, sales_price, sales_nu, sales_book, sales_page, sales_override }
+  const applySalesHistoryPatch = useCallback((p) => {
+    if (!p || !p.property_composite_key) return p;
+    const patch = salesHistoryPatches[p.property_composite_key];
+    return patch ? { ...p, ...patch } : p;
+  }, [salesHistoryPatches]);
+  const openSalesHistoryModal = useCallback((propKey, property) => {
+    if (!property?.property_composite_key) return;
+    setSalesHistoryModal({ propKey, property: applySalesHistoryPatch(property) });
+  }, [applySalesHistoryPatch]);
+  const closeSalesHistoryModal = useCallback(() => setSalesHistoryModal(null), []);
 
   // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
   // already-aggregated subject/comps. If the subject is not geocoded, the
@@ -3558,12 +3578,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             />
                           )}
                           {cfg.type === 'date' && (
-                            <EditableInput
-                              type="date"
-                              initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
-                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
-                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
-                            />
+                            <div className="flex items-center gap-1">
+                              <EditableInput
+                                type="date"
+                                initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
+                                onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
+                                className="flex-1 min-w-0 px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                              />
+                              {attr.id === 'sales_date' && prop?.property_composite_key && (
+                                <button
+                                  type="button"
+                                  onClick={() => openSalesHistoryModal(propKey, prop)}
+                                  title={prop.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
+                                  className={`shrink-0 p-0.5 rounded hover:bg-blue-100 ${prop.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
+                                >
+                                  {prop.sales_override
+                                    ? <Flag size={12} />
+                                    : <History size={12} />}
+                                </button>
+                              )}
+                            </div>
                           )}
                           {cfg.type === 'yesno' && (
                             <select
@@ -3839,6 +3873,216 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           </div>
         </div>
       )}
+
+      {/* Sales History (Hidden Sale Swap) Modal */}
+      {salesHistoryModal && (
+        <SalesHistoryModal
+          propKey={salesHistoryModal.propKey}
+          property={salesHistoryModal.property}
+          onClose={closeSalesHistoryModal}
+          onApply={(patch) => {
+            // Local UI patch so the cell shows the new sale immediately
+            setSalesHistoryPatches((prev) => ({
+              ...prev,
+              [salesHistoryModal.property.property_composite_key]: patch
+            }));
+            // Also push the new sale into the editable export-modal overlay so
+            // recalc and PDF export see the swapped values without retyping.
+            const pk = salesHistoryModal.propKey;
+            if (patch.sales_date !== undefined) updateEditedValue(pk, 'sales_date', patch.sales_date || '');
+            if (patch.sales_price !== undefined) updateEditedValue(pk, 'sales_price', patch.sales_price ?? '');
+            if (patch.sales_nu !== undefined) updateEditedValue(pk, 'sales_code', patch.sales_nu || '');
+            closeSalesHistoryModal();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// SalesHistoryModal
+// Lists the property's prev_sales (vendor-supplied prior arm's-length sales)
+// plus the current sale. User can promote a prior sale to "current" — this
+// writes to property_records with sales_override=true so the file updater
+// won't overwrite it on re-upload (see DB trigger respect_sales_override).
+// "Revert to file sale" clears the override so the next file upload restores
+// vendor data.
+// ---------------------------------------------------------------------------
+const SalesHistoryModal = ({ propKey, property, onClose, onApply }) => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const prevSales = Array.isArray(property?.prev_sales) ? property.prev_sales : [];
+  // Filter obvious BRT garbage: 1901-01-01 placeholder dates and absurd prices.
+  const cleanPrev = prevSales.filter(s => {
+    if (!s) return false;
+    if (s.date === '1901-01-01') return false;
+    const yr = s.date ? parseInt(String(s.date).slice(0, 4), 10) : 0;
+    if (yr && yr < 1950) return false;
+    return true;
+  });
+
+  const promote = async (entry) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const patch = {
+        sales_date: entry.date || null,
+        sales_price: entry.price ?? null,
+        sales_nu: entry.nu || null,
+        sales_book: entry.book || null,
+        sales_page: entry.page || null,
+        sales_override: true,
+        sales_override_meta: {
+          promoted_from: entry.source || 'prev_sales',
+          source_entry: entry,
+          original_sale: {
+            date: property.sales_date || null,
+            price: property.sales_price ?? null,
+            nu: property.sales_nu || null,
+            book: property.sales_book || null,
+            page: property.sales_page || null
+          },
+          decided_at: new Date().toISOString(),
+          decided_by: 'user'
+        }
+      };
+      const { error: upErr } = await supabase
+        .from('property_records')
+        .update(patch)
+        .eq('property_composite_key', property.property_composite_key);
+      if (upErr) throw upErr;
+      onApply(patch);
+    } catch (e) {
+      console.error('Promote sale failed:', e);
+      setError(e.message || 'Failed to save');
+      setSaving(false);
+    }
+  };
+
+  const revert = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      // Restore the original sale (from sales_override_meta) and clear the flag
+      const meta = property.sales_override_meta || {};
+      const orig = meta.original_sale || {};
+      const patch = {
+        sales_date: orig.date || null,
+        sales_price: orig.price ?? null,
+        sales_nu: orig.nu || null,
+        sales_book: orig.book || null,
+        sales_page: orig.page || null,
+        sales_override: false,
+        sales_override_meta: null
+      };
+      const { error: upErr } = await supabase
+        .from('property_records')
+        .update(patch)
+        .eq('property_composite_key', property.property_composite_key);
+      if (upErr) throw upErr;
+      onApply(patch);
+    } catch (e) {
+      console.error('Revert sale failed:', e);
+      setError(e.message || 'Failed to save');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Sales History</h3>
+            <p className="text-xs text-gray-500">
+              Block {property.property_block} Lot {property.property_lot}
+              {property.property_qualifier ? ` Qual ${property.property_qualifier}` : ''}
+              {property.property_location ? ` — ${property.property_location}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* Current sale */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">Current Sale</div>
+            <div className={`flex items-center justify-between border rounded p-2 ${property.sales_override ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="text-sm">
+                <span className="font-medium">{property.sales_date || '—'}</span>
+                <span className="ml-3">${property.sales_price ? Number(property.sales_price).toLocaleString() : '—'}</span>
+                <span className="ml-3 text-gray-600">NU {property.sales_nu || '—'}</span>
+                {property.sales_override && (
+                  <span className="ml-3 inline-flex items-center gap-1 text-xs text-amber-700">
+                    <Flag size={12} /> manually selected
+                  </span>
+                )}
+              </div>
+              {property.sales_override && (
+                <button
+                  onClick={revert}
+                  disabled={saving}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-white disabled:opacity-50"
+                >
+                  Revert to file sale
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Prior sales from prev_sales */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">
+              Prior Sales {cleanPrev.length > 0 && <span className="text-gray-500 font-normal">({cleanPrev.length})</span>}
+            </div>
+            {cleanPrev.length === 0 ? (
+              <div className="text-sm text-gray-500 italic border border-dashed border-gray-200 rounded p-3 text-center">
+                No prior sales available for this property.
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {cleanPrev.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between border border-gray-200 rounded p-2 hover:bg-blue-50">
+                    <div className="text-sm">
+                      <span className="font-medium">{s.date || '—'}</span>
+                      <span className="ml-3">${s.price ? Number(s.price).toLocaleString() : '—'}</span>
+                      {s.nu && <span className="ml-3 text-gray-600">NU {s.nu}</span>}
+                      <span className="ml-3 text-xs text-gray-400">{s.source}</span>
+                    </div>
+                    <button
+                      onClick={() => promote(s)}
+                      disabled={saving}
+                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Use this sale
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</div>
+          )}
+
+          <div className="text-xs text-gray-500 italic">
+            Promoted sales persist across file uploads. They are only auto-replaced if a strictly newer, usable arm's-length sale arrives in a future file.
+          </div>
+        </div>
+
+        <div className="px-4 py-2 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
