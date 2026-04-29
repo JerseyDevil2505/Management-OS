@@ -40,7 +40,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
 
   const getHearingDates = (snapshot) => {
     if (!snapshot || !Array.isArray(snapshot)) {
-      return { earliest: null, hasMultiple: false };
+      return { latest: null, hasMultiple: false };
     }
 
     const hearingDates = [...new Set(
@@ -51,19 +51,20 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     )];
 
     if (hearingDates.length === 0) {
-      return { earliest: null, hasMultiple: false };
+      return { latest: null, hasMultiple: false };
     }
 
+    // Use the last (final) hearing date — billing event occurs after final hearing
     // Parse date locally to avoid timezone drift (same as AppealLogTab)
-    const [year, month, day] = hearingDates[0].split('-').map(Number);
+    const [year, month, day] = hearingDates[hearingDates.length - 1].split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    const earliest = date.toLocaleDateString('en-US', {
+    const latest = date.toLocaleDateString('en-US', {
       month: 'numeric',
       day: 'numeric',
       year: '2-digit'
     });
 
-    return { earliest, hasMultiple: hearingDates.length > 1 };
+    return { latest, hasMultiple: hearingDates.length > 1 };
   };
 
   const loadAppealsByJob = async () => {
@@ -174,7 +175,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             residential: classBreakdown.residential,
             commercial: classBreakdown.commercial,
             vacant: classBreakdown.vacant,
-            hearingDate: hearingInfo.earliest,
+            hearingDate: hearingInfo.latest,
             hasMultipleHearings: hearingInfo.hasMultiple,
             snapshotAvailable: !!job.appeal_summary_snapshot
           });
@@ -366,7 +367,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
 
             {/* Legend */}
             <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-xs text-gray-600">
-              <p>* Multiple hearing dates on file</p>
+              <p>* Multiple hearing dates on file (showing final/last hearing date)</p>
             </div>
           </>
         )}
