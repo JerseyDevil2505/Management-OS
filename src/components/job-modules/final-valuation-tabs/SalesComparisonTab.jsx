@@ -1618,10 +1618,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           if (!compRaw) {
             // Property not found in database
             notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
-          } else if (!compRaw.sales_price) {
-            // Property found but no sales data
-            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
           } else {
+            // Property found - if no sales data, still load it as a soft warning
+            // so the user can fill in sales_date / sales_price / sales_nu manually
+            // in the export modal (e.g. when the most recent sale is a "cover"
+            // and the real sampling-period sale needs to be entered by hand).
+            if (!compRaw.sales_price) {
+              noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
+            }
+
             // Aggregate comp data across all cards (main + additional)
             const comp = aggregatePropertyData(compRaw);
 
