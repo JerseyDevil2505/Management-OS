@@ -1308,6 +1308,21 @@ const ProductionTracker = ({
               if (isCommercialProperty) {
                 inspectorStats[inspector].commercialInspected++;
                 inspectorStats[inspector].commercialWorkDays.add(workDayString);
+
+                // Commercial overrides also count as PRICED — the override is the user's stamp
+                // that this property is fully complete. Audit trail lives in override_reason.
+                inspectorStats[inspector].priced++;
+                inspectorStats[inspector].pricingWorkDays.add(workDayString);
+                if (classBreakdown[propertyClass]) {
+                  classBreakdown[propertyClass].priced++;
+                }
+              }
+            } else if (['4A', '4B', '4C'].includes(propertyClass)) {
+              // Override on commercial with no measure date — still credit pricing,
+              // but skip the work-day add since we don't have a date to attribute it to.
+              inspectorStats[inspector].priced++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
               }
             }
           }
