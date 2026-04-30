@@ -1762,6 +1762,7 @@ const ProductionTracker = ({
               block: record.property_block,
               lot: record.property_lot,
               qualifier: record.property_qualifier || '',
+              card: record.property_addl_card,
               property_location: record.property_location || '',
               property_class: propertyClass,
               reason: reasonNotAdded,
