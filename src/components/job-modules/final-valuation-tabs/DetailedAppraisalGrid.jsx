@@ -1659,6 +1659,27 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         }
       });
 
+      // Preserve dynamic adjustment rows (detached items, miscellaneous,
+      // positive/negative land) that aren't in EDITABLE_CONFIG. These come
+      // from SalesComparisonTab.calculateAdjustment and aren't user-editable
+      // in the export modal, so they should pass through unchanged when a
+      // comp is recalculated due to edits on other fields.
+      const dynamicPrefixes = ['barn_', 'pole_barn_', 'stable_', 'miscellaneous_', 'land_positive_', 'land_negative_'];
+      const dynamicAdjustmentNames = new Set(
+        (adjustmentGrid || [])
+          .filter(adj => adj?.adjustment_id && dynamicPrefixes.some(p => adj.adjustment_id.startsWith(p)))
+          .map(adj => (adj.adjustment_name || '').toLowerCase())
+          .filter(Boolean)
+      );
+      const originalAdjustments = comp.adjustments || [];
+      originalAdjustments.forEach(orig => {
+        if (!orig?.name) return;
+        if (dynamicAdjustmentNames.has(String(orig.name).toLowerCase())) {
+          compAdjustments.push({ name: orig.name, amount: orig.amount || 0 });
+          totalAdjustment += (orig.amount || 0);
+        }
+      });
+
       const adjustedPrice = compSalesPrice + totalAdjustment;
       const adjustmentPercent = compSalesPrice > 0 ? (totalAdjustment / compSalesPrice) * 100 : 0;
 
