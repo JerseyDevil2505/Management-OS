@@ -5839,13 +5839,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     if (target) {
                       Object.assign(target, patch);
                     }
-                    // Re-run the same evaluation with the patched data so the
-                    // adjustments, time corrections, and brackets recompute
-                    // automatically. Pass syncToResults=true so the swap also
-                    // propagates back to the Search & Results row (if the user
-                    // loaded a saved result set or is editing one) and is
-                    // auto-persisted to job_cme_result_sets.
-                    handleManualEvaluate(true);
+                    // Re-run the evaluation as a sandbox preview only. If the
+                    // user is happy with the result, they can use Evaluate &
+                    // Update to push it back to Search & Results and any
+                    // active saved set. We don't want a swap to silently
+                    // mutate persisted data.
+                    handleManualEvaluate(false);
                   }}
                 />
               </div>
