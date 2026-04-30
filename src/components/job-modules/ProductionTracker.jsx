@@ -1572,8 +1572,10 @@ const ProductionTracker = ({
           addValidationIssue(`Residential inspector on commercial property`);
         }
 
-        // Zero improvement validation
-        if (record.values_mod_improvement === 0 && !hasListingData) {
+        // Zero improvement validation - only check primary cards
+        // (additional cards always store $0 in values_mod_improvement by vendor design;
+        //  the real improvement value lives on the M card for Microsystems / card 1 for BRT)
+        if (isPrimary && record.values_mod_improvement === 0 && !hasListingData) {
           addValidationIssue('Zero improvement property missing listing data');
         }
         
