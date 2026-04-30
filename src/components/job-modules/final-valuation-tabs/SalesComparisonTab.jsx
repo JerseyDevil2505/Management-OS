@@ -5839,12 +5839,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     if (target) {
                       Object.assign(target, patch);
                     }
-                    // Re-run the evaluation as a sandbox preview only. If the
-                    // user is happy with the result, they can use Evaluate &
-                    // Update to push it back to Search & Results and any
-                    // active saved set. We don't want a swap to silently
-                    // mutate persisted data.
-                    handleManualEvaluate(false);
+                    // Re-run the evaluation. Pass syncToResults=true so the
+                    // swap propagates everywhere it logically should:
+                    //   - Sandbox (no editingResultIndex): just updates the
+                    //     in-grid preview — nothing to sync, no-op for the
+                    //     persistence branch.
+                    //   - Editing a Search & Results row: that row updates.
+                    //   - Active saved set loaded: also auto-persists to
+                    //     job_cme_result_sets.
+                    handleManualEvaluate(true);
                   }}
                 />
               </div>
