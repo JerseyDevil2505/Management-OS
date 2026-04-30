@@ -2153,16 +2153,44 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     })}
                     <td className="sticky right-0 z-10 bg-white px-2 py-2 text-center border-l border-gray-200">
                       <div className="flex items-center justify-center gap-2">
-                        <select
-                          value={adj.adjustment_type}
-                          onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
-                          className="text-xs border rounded px-2 py-1"
-                        >
-                          <option value="flat">Flat ($)</option>
-                          <option value="per_sqft">Per SF ($/SF)</option>
-                          <option value="count">Count (#)</option>
-                          <option value="percent">Percent (%)</option>
-                        </select>
+                        {/* Lot-size adjustments have an implicit unit baked into
+                            the row (FF / SF / Acre), so the type selector
+                            doesn't apply. Gray it out to remove the
+                            confusion — the math always uses per-unit. */}
+                        {(() => {
+                          const isLotSize =
+                            adj.adjustment_id === 'lot_size_ff' ||
+                            adj.adjustment_id === 'lot_size_sf' ||
+                            adj.adjustment_id === 'lot_size_acre';
+                          if (isLotSize) {
+                            const unitLabel =
+                              adj.adjustment_id === 'lot_size_ff' ? 'Per FF ($/FF)' :
+                              adj.adjustment_id === 'lot_size_sf' ? 'Per SF ($/SF)' :
+                              'Per Acre ($/Ac)';
+                            return (
+                              <select
+                                disabled
+                                value={adj.adjustment_type}
+                                className="text-xs border rounded px-2 py-1 bg-gray-100 text-gray-500 cursor-not-allowed"
+                                title="Lot-size adjustments are always applied per unit (FF / SF / Acre)."
+                              >
+                                <option value={adj.adjustment_type}>{unitLabel}</option>
+                              </select>
+                            );
+                          }
+                          return (
+                            <select
+                              value={adj.adjustment_type}
+                              onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
+                              className="text-xs border rounded px-2 py-1"
+                            >
+                              <option value="flat">Flat ($)</option>
+                              <option value="per_sqft">Per SF ($/SF)</option>
+                              <option value="count">Count (#)</option>
+                              <option value="percent">Percent (%)</option>
+                            </select>
+                          );
+                        })()}
                         {!adj.is_default && (
                           <button
                             onClick={() => handleDeleteAdjustment(adj.adjustment_id)}

@@ -713,6 +713,11 @@ export class BRTUpdater {
       sales_book: rawRecord.CURRENTSALE_DEEDBOOK,
       sales_page: rawRecord.CURRENTSALE_DEEDPAGE,
       sales_nu: rawRecord.CURRENTSALE_NUC,
+      // Vendor-supplied historical sales (BRT PREV_SALE{1..5}DATE/AMT).
+      // See processor for full rationale; updater overwrites this on every
+      // re-upload so the array always reflects what the latest source file
+      // says about the property's prior sales.
+      prev_sales: this.extractPrevSales(rawRecord),
       
       // Values fields
       values_mod_land: this.parseNumeric(rawRecord.VALUES_LANDTAXABLEVALUE),
@@ -1516,6 +1521,23 @@ export class BRTUpdater {
     if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+  }
+
+  // Build the prev_sales jsonb array from BRT's PREV_SALE{1..5}DATE/AMT pairs.
+  // Returns null when no prior sales exist so we don't write empty arrays.
+  // See brt-processor.extractPrevSales for full rationale; this is a duplicate
+  // because the processor and updater intentionally do not share code (per
+  // copilot-os ground rules — first-upload vs re-upload paths differ).
+  extractPrevSales(rawRecord) {
+    const arr = [];
+    for (let i = 1; i <= 5; i++) {
+      const date = this.parseDate(rawRecord[`PREV_SALE${i}DATE`]);
+      const price = this.parseNumeric(rawRecord[`PREV_SALE${i}AMT`]);
+      if (date || price) {
+        arr.push({ date, price, source: `brt_prev_sale_${i}` });
+      }
+    }
+    return arr.length > 0 ? arr : null;
   }
 
   parseNumeric(value, decimals = null) {

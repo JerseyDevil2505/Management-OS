@@ -602,6 +602,12 @@ export class BRTProcessor {
       sales_book: rawRecord.CURRENTSALE_DEEDBOOK,
       sales_page: rawRecord.CURRENTSALE_DEEDPAGE,
       sales_nu: rawRecord.CURRENTSALE_NUC,
+      // Vendor-supplied historical sales (BRT exposes up to 5 prior sales as
+      // PREV_SALE{1..5}DATE / PREV_SALE{1..5}AMT). NU codes are NOT exported
+      // by BRT for prior sales; consumers should treat missing nu as
+      // "unverified" rather than usable. Used by the cover-sale review flow
+      // to detect masked arm's-length sales hiding under a recent $1 deed.
+      prev_sales: this.extractPrevSales(rawRecord),
       
       // Values fields
       values_mod_land: this.parseNumeric(rawRecord.VALUES_LANDTAXABLEVALUE),
@@ -1283,6 +1289,22 @@ export class BRTProcessor {
     if (!dateString || dateString.trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+  }
+
+  // Build the prev_sales jsonb array from BRT's PREV_SALE{1..5}DATE/AMT pairs.
+  // Returns null when no prior sales exist so we don't write empty arrays.
+  // Each entry carries a `source` tag identifying the original BRT slot so
+  // downstream auditing knows exactly where the value came from.
+  extractPrevSales(rawRecord) {
+    const arr = [];
+    for (let i = 1; i <= 5; i++) {
+      const date = this.parseDate(rawRecord[`PREV_SALE${i}DATE`]);
+      const price = this.parseNumeric(rawRecord[`PREV_SALE${i}AMT`]);
+      if (date || price) {
+        arr.push({ date, price, source: `brt_prev_sale_${i}` });
+      }
+    }
+    return arr.length > 0 ? arr : null;
   }
 
   parseNumeric(value, decimals = null) {

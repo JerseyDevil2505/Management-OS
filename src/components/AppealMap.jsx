@@ -187,8 +187,11 @@ const AppealMap = ({
         zoom={14}
         style={{ height: '100%', width: '100%' }}
         scrollWheelZoom={false}
-        // preferCanvas helps html2canvas capture cleanly
-        preferCanvas={false}
+        // Render vector layers (Polylines) on a Canvas overlay instead of
+        // SVG. html2canvas reliably captures <canvas> elements but mishandles
+        // Leaflet's SVG transform, which caused the dashed connector lines
+        // to drift away from the comp markers in the exported PDF.
+        preferCanvas={true}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
