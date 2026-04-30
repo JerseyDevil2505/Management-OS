@@ -2474,6 +2474,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             };
             const lotDisplay = (p) => {
               if (!p) return '\u2014';
+              // Farm-mode: use combined 3A+3B acreage so PDF matches Detailed.
+              // Mirrors the lot_size_acre attribute render and SalesComparisonTab's
+              // farm-package logic; see Bug 1 (Bethlehem) for context.
+              if (compFilters?.farmSalesMode && p._pkg?.is_farm_package && p._pkg?.combined_lot_acres > 0) {
+                return `${parseFloat(p._pkg.combined_lot_acres).toFixed(2)} ac (Farm)`;
+              }
               if (p.asset_lot_acre && parseFloat(p.asset_lot_acre) > 0) return `${parseFloat(p.asset_lot_acre).toFixed(2)} ac`;
               if (p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0) return `${parseFloat(p.market_manual_lot_acre).toFixed(2)} ac`;
               if (p.asset_lot_sf && parseFloat(p.asset_lot_sf) > 0) return `${parseInt(p.asset_lot_sf, 10).toLocaleString()} sf`;
@@ -3588,13 +3594,30 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         return 'Yes';
                       };
 
+                      // Farm-mode: source lot_size_acre from the combined
+                      // 3A+3B package value when available, mirroring the
+                      // Detailed view's lot_size_acre render. Without this
+                      // the export modal would seed only the 3A acreage.
+                      const numberInitial = (() => {
+                        if (editedVal !== undefined) return editedVal;
+                        if (!prop) return '';
+                        if (
+                          attr.id === 'lot_size_acre' &&
+                          compFilters?.farmSalesMode &&
+                          prop._pkg?.is_farm_package &&
+                          prop._pkg.combined_lot_acres > 0
+                        ) {
+                          return prop._pkg.combined_lot_acres;
+                        }
+                        return (prop[cfg.altField] || prop[cfg.field]) ?? '';
+                      })();
                       return (
                         <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
                           {cfg.type === 'number' && (
                             <EditableInput
                               type="text"
                               inputMode="decimal"
-                              initialValue={editedVal ?? (prop ? (prop[cfg.altField] || prop[cfg.field]) : '') ?? ''}
+                              initialValue={numberInitial}
                               onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />

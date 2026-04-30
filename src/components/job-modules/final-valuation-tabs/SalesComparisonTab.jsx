@@ -2768,9 +2768,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'pole_barn':
-        // Use pole_barn_area column
-        subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
-        compValue = comp.pole_barn_area > 0 ? 1 : 0;
+        // For per_sqft / count, use real area so the rate is multiplied by the
+        // actual square footage. Otherwise binary presence. See Bug 2 (Bethlehem).
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.pole_barn_area || 0;
+          compValue = comp.pole_barn_area || 0;
+        } else {
+          subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
+          compValue = comp.pole_barn_area > 0 ? 1 : 0;
+        }
         break;
 
       case 'lot_size_ff':
@@ -2883,13 +2889,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'barn':
-        subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
-        compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        // For per_sqft / count, use real area so the rate is multiplied by the
+        // actual square footage. Otherwise binary presence (matches legacy flat
+        // adjustment behavior). See Bug 2 (Bethlehem pole barn $15 issue).
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.barn_area || 0;
+          compValue = comp.barn_area || 0;
+        } else {
+          subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
+          compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        }
         break;
 
       case 'stable':
-        subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
-        compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.stable_area || 0;
+          compValue = comp.stable_area || 0;
+        } else {
+          subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
+          compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        }
         break;
 
       default:
