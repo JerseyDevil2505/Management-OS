@@ -5841,8 +5841,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     }
                     // Re-run the same evaluation with the patched data so the
                     // adjustments, time corrections, and brackets recompute
-                    // automatically. No modal-on-modal needed.
-                    handleManualEvaluate(false);
+                    // automatically. Pass syncToResults=true so the swap also
+                    // propagates back to the Search & Results row (if the user
+                    // loaded a saved result set or is editing one) and is
+                    // auto-persisted to job_cme_result_sets.
+                    handleManualEvaluate(true);
                   }}
                 />
               </div>
