@@ -68,7 +68,7 @@ export const NU_CODE_DICTIONARY = {
   '07': 'added assessment',
   '08': 'undivided interest',
   '09': 'tax cert / gov lien',
-  '10': 'fiduciary sale',
+  '10': 'estate/fiduciary sale',
   '11': 'judicial / partition',
   '12': "sheriff's sale",
   '13': 'bankruptcy / short sale',

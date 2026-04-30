@@ -1618,10 +1618,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           if (!compRaw) {
             // Property not found in database
             notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
-          } else if (!compRaw.sales_price) {
-            // Property found but no sales data
-            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
           } else {
+            // Property found - if no sales data, still load it as a soft warning
+            // so the user can fill in sales_date / sales_price / sales_nu manually
+            // in the export modal (e.g. when the most recent sale is a "cover"
+            // and the real sampling-period sale needs to be entered by hand).
+            if (!compRaw.sales_price) {
+              noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
+            }
+
             // Aggregate comp data across all cards (main + additional)
             const comp = aggregatePropertyData(compRaw);
 
@@ -2763,9 +2768,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'pole_barn':
-        // Use pole_barn_area column
-        subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
-        compValue = comp.pole_barn_area > 0 ? 1 : 0;
+        // For per_sqft / count, use real area so the rate is multiplied by the
+        // actual square footage. Otherwise binary presence. See Bug 2 (Bethlehem).
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.pole_barn_area || 0;
+          compValue = comp.pole_barn_area || 0;
+        } else {
+          subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
+          compValue = comp.pole_barn_area > 0 ? 1 : 0;
+        }
         break;
 
       case 'lot_size_ff':
@@ -2878,13 +2889,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'barn':
-        subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
-        compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        // For per_sqft / count, use real area so the rate is multiplied by the
+        // actual square footage. Otherwise binary presence (matches legacy flat
+        // adjustment behavior). See Bug 2 (Bethlehem pole barn $15 issue).
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.barn_area || 0;
+          compValue = comp.barn_area || 0;
+        } else {
+          subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
+          compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        }
         break;
 
       case 'stable':
-        subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
-        compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        if (adjustmentType === 'per_sqft' || adjustmentType === 'count') {
+          subjectValue = subject.stable_area || 0;
+          compValue = comp.stable_area || 0;
+        } else {
+          subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
+          compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        }
         break;
 
       default:
@@ -5826,6 +5850,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   allProperties={properties}
                   marketLandData={marketLandData}
                   tenantConfig={tenantConfig}
+                  onSalesSwapped={(compositeKey, patch) => {
+                    // Patch the in-memory properties array so the next
+                    // handleManualEvaluate run sees the swapped sale fields.
+                    // (The DB has already been updated by the swap modal.)
+                    const target = properties.find(p => p.property_composite_key === compositeKey);
+                    if (target) {
+                      Object.assign(target, patch);
+                    }
+                    // Re-run the evaluation. Pass syncToResults=true so the
+                    // swap propagates everywhere it logically should:
+                    //   - Sandbox (no editingResultIndex): just updates the
+                    //     in-grid preview — nothing to sync, no-op for the
+                    //     persistence branch.
+                    //   - Editing a Search & Results row: that row updates.
+                    //   - Active saved set loaded: also auto-persists to
+                    //     job_cme_result_sets.
+                    handleManualEvaluate(true);
+                  }}
                 />
               </div>
             )}

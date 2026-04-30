@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
-import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon } from 'lucide-react';
+import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon, History, Flag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -8,7 +8,38 @@ import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCom
 import AppealMap, { distanceMiles } from '../../AppealMap';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
+// Locally-controlled input for the export-modal cells. Holding the typed value
+// in component-local state means each keystroke only re-renders this one cell
+// instead of the entire 6-column x ~50-row grid (which would otherwise re-run
+// every attr.render(...) on every key, causing visible lag in sales_nu /
+// sales_date / sales_price). The committed value is pushed to the parent on
+// blur or when the user presses Enter. The modal is conditionally mounted, so
+// remounting on each open is enough to reset state — no external sync needed.
+const EditableInput = React.memo(function EditableInput({
+  initialValue,
+  onCommit,
+  type = 'text',
+  inputMode,
+  className,
+}) {
+  const [value, setValue] = useState(initialValue ?? '');
+  const commit = useCallback(() => {
+    onCommit(value);
+  }, [value, onCommit]);
+  return (
+    <input
+      type={type}
+      inputMode={inputMode}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+      className={className}
+    />
+  );
+});
+
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -228,6 +259,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (!compositeKey) return;
     setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
   }, []);
+
+  // ==================== SALES HISTORY (Hidden / Cover Sale Swap) ====================
+  // When a property's current sale is a cover ($1, family transfer, estate, etc.)
+  // and `prev_sales` from the BRT file contains a real arm's-length sale, the
+  // user can swap that prior sale into the current slot via this modal. The
+  // selection is persisted to property_records with sales_override=true so the
+  // file updater (see DB trigger respect_sales_override) won't clobber it on
+  // re-upload — unless a strictly newer usable sale arrives later.
+  const [salesHistoryModal, setSalesHistoryModal] = useState(null); // { propKey, property }
+  const [salesHistoryPatches, setSalesHistoryPatches] = useState({}); // composite_key -> { sales_date, sales_price, sales_nu, sales_book, sales_page, sales_override }
+  const applySalesHistoryPatch = useCallback((p) => {
+    if (!p || !p.property_composite_key) return p;
+    const patch = salesHistoryPatches[p.property_composite_key];
+    return patch ? { ...p, ...patch } : p;
+  }, [salesHistoryPatches]);
+  const openSalesHistoryModal = useCallback((propKey, property) => {
+    if (!property?.property_composite_key) return;
+    setSalesHistoryModal({ propKey, property: applySalesHistoryPatch(property) });
+  }, [applySalesHistoryPatch]);
+  const closeSalesHistoryModal = useCallback(() => setSalesHistoryModal(null), []);
 
   // Build the subject + comps payload for AppealMap. Pulls lat/lng off the
   // already-aggregated subject/comps. If the subject is not geocoded, the
@@ -1368,17 +1419,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return prop[config.field];
   }, []);
 
-  // Get edited value or fall back to original
-  const getEditedValue = useCallback((propKey, attrId) => {
-    const edited = editableProperties[propKey];
-    if (edited && edited[attrId] !== undefined) {
-      return edited[attrId];
-    }
-    // Get original value
-    const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
-    return getRawValue(prop, attrId);
-  }, [editableProperties, subject, comps, getRawValue]);
-
   // Update a single cell value
   const updateEditedValue = useCallback((propKey, attrId, value) => {
     setEditableProperties(prev => ({
@@ -1473,19 +1513,101 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [getBracketIndex]);
 
-  // Recalculate all adjustments based on edited values
+  // Recalculate all adjustments based on edited values.
+  //
+  // Two correctness rules baked in here (see history of bugs around NCOVR
+  // condition + missing amenity flags causing spurious adjustments on Recalc):
+  //
+  // 1. We read each attribute's value the SAME way the cell displays it,
+  //    not from the raw DB column. This matters for:
+  //      - yes/no amenity rows (deck/patio/porches/pool/basement/AC), where
+  //        the raw `asset_*` flag may be null even though the area field is
+  //        populated. The cell uses `attr.render(prop)` to decide Yes vs No;
+  //        recalc must use the same source or amenities flip from Yes->No
+  //        and adjustments invert.
+  //      - condition rows on jobs using NCOVR overrides, where the displayed
+  //        condition is mapped from `net_condition_pct`. Reading raw
+  //        `asset_ext_cond` ranks against a different value than what is
+  //        on screen and produces phantom condition adjustments.
+  //
+  // 2. We only recompute adjustments for comps that the user actually edited
+  //    (or all comps if the subject was edited, since that affects every
+  //    comp's diff). Untouched comps keep their original adjustments from
+  //    the canonical pipeline, so re-deriving them through the editable
+  //    shadow data can't introduce drift.
   const recalculateAdjustments = useCallback(() => {
-    const newAdjustments = {};
+    // Render-aware value reader. Uses the same logic the cell uses for
+    // display when no edit exists, so recalc and display can never disagree.
+    const getRecalcValue = (propKey, attrId, attrObj, config) => {
+      const edited = editableProperties[propKey];
+      if (edited && edited[attrId] !== undefined) return edited[attrId];
+
+      const prop = propKey === 'subject'
+        ? subject
+        : comps[parseInt(propKey.replace('comp_', ''))];
+      if (!prop) return null;
+
+      // Yes/No rows: derive from rendered value, mirroring getDefaultYesNo
+      // in the cell renderer. An empty / 'No' / 'None' / 'N/A' render means
+      // No; anything else (including a formatted area like "240 SF") is Yes.
+      if (config?.type === 'yesno') {
+        const rendered = attrObj?.render ? attrObj.render(prop) : null;
+        if (!rendered) return 'No';
+        const renderedStr = String(rendered).toLowerCase();
+        if (renderedStr === 'no' || renderedStr === 'none' || renderedStr === 'n/a') return 'No';
+        return 'Yes';
+      }
+
+      // Condition rows: use the rendered condition name so NCOVR-mapped
+      // values flow through. getConditionRank already accepts names.
+      if (config?.type === 'condition' && attrObj?.render) {
+        const rendered = attrObj.render(prop);
+        if (rendered && rendered !== 'N/A') return rendered;
+      }
+
+      return getRawValue(prop, attrId);
+    };
+
+    // Did the user edit anything on the subject row? If so every comp's
+    // diff is potentially affected and we have to recalc all of them.
+    const subjectEdits = editableProperties['subject'];
+    const subjectWasEdited = !!subjectEdits && Object.keys(subjectEdits).length > 0;
+
+    // Start from any previously-recalculated state so repeated Recalcs
+    // don't lose work, then layer fresh entries on top.
+    const newAdjustments = { ...editedAdjustments };
 
     comps.forEach((comp, idx) => {
       if (!comp) return;
 
       const compKey = `comp_${idx}`;
+      const compEdits = editableProperties[compKey];
+      const compWasEdited = !!compEdits && Object.keys(compEdits).length > 0;
+
+      // Untouched comp + untouched subject => leave its original adjustments
+      // alone. If we already have a recalculated entry from a prior pass,
+      // keep that (the user may have edited and reverted edits since).
+      if (!compWasEdited && !subjectWasEdited) {
+        if (!newAdjustments[compKey]) {
+          // Mirror canonical pipeline values into our local map so the
+          // projected-assessment loop below can treat all slots uniformly.
+          newAdjustments[compKey] = {
+            adjustments: comp.adjustments || [],
+            totalAdjustment: comp.totalAdjustment || 0,
+            adjustedPrice: comp.adjustedPrice || (comp.sales_price || 0),
+            adjustmentPercent: comp.adjustmentPercent || 0
+          };
+        }
+        return;
+      }
+
       const compAdjustments = [];
       let totalAdjustment = 0;
 
       // Get comp's sales price (edited or original), parsed as number
-      const compSalesPrice = parseFloat(getEditedValue(compKey, 'sales_price')) || parseFloat(comp.sales_price) || 0;
+      const compSalesPrice = parseFloat(getRecalcValue(compKey, 'sales_price', null, EDITABLE_CONFIG.sales_price))
+        || parseFloat(comp.sales_price)
+        || 0;
 
       // Calculate adjustments for each adjustable attribute
       Object.keys(EDITABLE_CONFIG).forEach(attrId => {
@@ -1501,9 +1623,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         );
         if (!adjustmentDef) return;
 
-        // Get subject and comp values (edited or original)
-        let subjectVal = getEditedValue('subject', attrId);
-        let compVal = getEditedValue(compKey, attrId);
+        // Get subject and comp values (edited or render-equivalent)
+        let subjectVal = getRecalcValue('subject', attrId, attrObj, config);
+        let compVal = getRecalcValue(compKey, attrId, attrObj, config);
 
         // Convert Yes/No to 1/0 for flat adjustments
         if (config.type === 'yesno') {
@@ -1534,6 +1656,27 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             amount: adjustment
           });
           totalAdjustment += adjustment;
+        }
+      });
+
+      // Preserve dynamic adjustment rows (detached items, miscellaneous,
+      // positive/negative land) that aren't in EDITABLE_CONFIG. These come
+      // from SalesComparisonTab.calculateAdjustment and aren't user-editable
+      // in the export modal, so they should pass through unchanged when a
+      // comp is recalculated due to edits on other fields.
+      const dynamicPrefixes = ['barn_', 'pole_barn_', 'stable_', 'miscellaneous_', 'land_positive_', 'land_negative_'];
+      const dynamicAdjustmentNames = new Set(
+        (adjustmentGrid || [])
+          .filter(adj => adj?.adjustment_id && dynamicPrefixes.some(p => adj.adjustment_id.startsWith(p)))
+          .map(adj => (adj.adjustment_name || '').toLowerCase())
+          .filter(Boolean)
+      );
+      const originalAdjustments = comp.adjustments || [];
+      originalAdjustments.forEach(orig => {
+        if (!orig?.name) return;
+        if (dynamicAdjustmentNames.has(String(orig.name).toLowerCase())) {
+          compAdjustments.push({ name: orig.name, amount: orig.amount || 0 });
+          totalAdjustment += (orig.amount || 0);
         }
       });
 
@@ -1573,7 +1716,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
@@ -2352,6 +2495,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             };
             const lotDisplay = (p) => {
               if (!p) return '\u2014';
+              // Farm-mode: use combined 3A+3B acreage so PDF matches Detailed.
+              // Mirrors the lot_size_acre attribute render and SalesComparisonTab's
+              // farm-package logic; see Bug 1 (Bethlehem) for context.
+              if (compFilters?.farmSalesMode && p._pkg?.is_farm_package && p._pkg?.combined_lot_acres > 0) {
+                return `${parseFloat(p._pkg.combined_lot_acres).toFixed(2)} ac (Farm)`;
+              }
               if (p.asset_lot_acre && parseFloat(p.asset_lot_acre) > 0) return `${parseFloat(p.asset_lot_acre).toFixed(2)} ac`;
               if (p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0) return `${parseFloat(p.market_manual_lot_acre).toFixed(2)} ac`;
               if (p.asset_lot_sf && parseFloat(p.asset_lot_sf) > 0) return `${parseInt(p.asset_lot_sf, 10).toLocaleString()} sf`;
@@ -3037,6 +3186,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   )}
                 </td>
                 <td className={`px-3 py-2 text-center bg-slate-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                  {attr.id === 'sales_date' && aggregatedSubject?.property_composite_key && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openSalesHistoryModal('subject', applySalesHistoryPatch(aggregatedSubject)); }}
+                      title={aggregatedSubject.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
+                      className={`float-right p-0.5 rounded hover:bg-blue-100 ${aggregatedSubject.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
+                    >
+                      {aggregatedSubject.sales_override ? <Flag size={12} /> : <History size={12} />}
+                    </button>
+                  )}
                   {(() => {
                     // Use aggregated subject data for properties with additional cards
                     let value = attr.render(aggregatedSubject);
@@ -3138,7 +3297,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                   return (
                     <div>
-                      <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
+                      <div className={`flex items-center justify-center gap-1 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                        <span>{value}</span>
+                        {attr.id === 'sales_date' && comp?.property_composite_key && !comp.is_manual_comp && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openSalesHistoryModal(`comp_${idx}`, applySalesHistoryPatch(comp)); }}
+                            title={comp.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
+                            className={`shrink-0 p-0.5 rounded hover:bg-blue-100 ${comp.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
+                          >
+                            {comp.sales_override ? <Flag size={12} /> : <History size={12} />}
+                          </button>
+                        )}
+                      </div>
                       {adj && adj.amount !== 0 && (
                         <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
                           {adj.amount > 0 ? '+' : ''}${Math.round(adj.amount).toLocaleString()}
@@ -3444,22 +3615,39 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         return 'Yes';
                       };
 
+                      // Farm-mode: source lot_size_acre from the combined
+                      // 3A+3B package value when available, mirroring the
+                      // Detailed view's lot_size_acre render. Without this
+                      // the export modal would seed only the 3A acreage.
+                      const numberInitial = (() => {
+                        if (editedVal !== undefined) return editedVal;
+                        if (!prop) return '';
+                        if (
+                          attr.id === 'lot_size_acre' &&
+                          compFilters?.farmSalesMode &&
+                          prop._pkg?.is_farm_package &&
+                          prop._pkg.combined_lot_acres > 0
+                        ) {
+                          return prop._pkg.combined_lot_acres;
+                        }
+                        return (prop[cfg.altField] || prop[cfg.field]) ?? '';
+                      })();
                       return (
                         <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
                           {cfg.type === 'number' && (
-                            <input
+                            <EditableInput
                               type="text"
                               inputMode="decimal"
-                              value={editedVal ?? (prop ? (prop[cfg.altField] || prop[cfg.field]) : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={numberInitial}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
                           {cfg.type === 'date' && (
-                            <input
+                            <EditableInput
                               type="date"
-                              value={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
@@ -3509,10 +3697,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             </select>
                           )}
                           {cfg.type === 'text' && (
-                            <input
+                            <EditableInput
                               type="text"
-                              value={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
-                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              initialValue={editedVal ?? (prop ? (prop[cfg.field] || prop[cfg.altField] || '') : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
@@ -3737,6 +3925,231 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           </div>
         </div>
       )}
+
+      {/* Sales History (Hidden Sale Swap) Modal */}
+      {salesHistoryModal && (
+        <SalesHistoryModal
+          propKey={salesHistoryModal.propKey}
+          property={salesHistoryModal.property}
+          onClose={closeSalesHistoryModal}
+          onApply={(patch) => {
+            const compositeKey = salesHistoryModal.property.property_composite_key;
+            // Local UI patch so the cell shows the new sale immediately
+            setSalesHistoryPatches((prev) => ({
+              ...prev,
+              [compositeKey]: patch
+            }));
+            // Also push the new sale into the editable export-modal overlay so
+            // recalc and PDF export see the swapped values without retyping.
+            const pk = salesHistoryModal.propKey;
+            if (patch.sales_date !== undefined) updateEditedValue(pk, 'sales_date', patch.sales_date || '');
+            if (patch.sales_price !== undefined) updateEditedValue(pk, 'sales_price', patch.sales_price ?? '');
+            if (patch.sales_nu !== undefined) updateEditedValue(pk, 'sales_code', patch.sales_nu || '');
+            closeSalesHistoryModal();
+            // Auto-trigger recalc inside the export modal (covers the case
+            // where the swap was initiated from inside the export modal).
+            setTimeout(() => {
+              try { recalculateAdjustments(); } catch (e) { /* ignore — export modal not open */ }
+            }, 0);
+            // Notify parent so it can refresh the in-memory property and
+            // re-run the comp evaluation. This is what makes the main
+            // Detailed grid update its adjustments without a manual rerun.
+            if (typeof onSalesSwapped === 'function') {
+              try { onSalesSwapped(compositeKey, patch); } catch (e) { console.warn('onSalesSwapped failed:', e); }
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// SalesHistoryModal
+// Lists the property's prev_sales (vendor-supplied prior arm's-length sales)
+// plus the current sale. User can promote a prior sale to "current" — this
+// writes to property_records with sales_override=true so the file updater
+// won't overwrite it on re-upload (see DB trigger respect_sales_override).
+// "Revert to file sale" clears the override so the next file upload restores
+// vendor data.
+// ---------------------------------------------------------------------------
+const SalesHistoryModal = ({ propKey, property, onClose, onApply }) => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const prevSales = Array.isArray(property?.prev_sales) ? property.prev_sales : [];
+  // Filter obvious BRT garbage: 1901-01-01 placeholder dates and absurd prices.
+  const cleanPrev = prevSales.filter(s => {
+    if (!s) return false;
+    if (s.date === '1901-01-01') return false;
+    const yr = s.date ? parseInt(String(s.date).slice(0, 4), 10) : 0;
+    if (yr && yr < 1950) return false;
+    return true;
+  });
+
+  const promote = async (entry) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const patch = {
+        sales_date: entry.date || null,
+        sales_price: entry.price ?? null,
+        sales_nu: entry.nu || null,
+        sales_book: entry.book || null,
+        sales_page: entry.page || null,
+        sales_override: true,
+        sales_override_meta: {
+          promoted_from: entry.source || 'prev_sales',
+          source_entry: entry,
+          original_sale: {
+            date: property.sales_date || null,
+            price: property.sales_price ?? null,
+            nu: property.sales_nu || null,
+            book: property.sales_book || null,
+            page: property.sales_page || null
+          },
+          decided_at: new Date().toISOString(),
+          decided_by: 'user'
+        }
+      };
+      const { error: upErr } = await supabase
+        .from('property_records')
+        .update(patch)
+        .eq('property_composite_key', property.property_composite_key);
+      if (upErr) throw upErr;
+      onApply(patch);
+    } catch (e) {
+      console.error('Promote sale failed:', e);
+      setError(e.message || 'Failed to save');
+      setSaving(false);
+    }
+  };
+
+  const revert = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      // Restore the original sale (from sales_override_meta) and clear the flag
+      const meta = property.sales_override_meta || {};
+      const orig = meta.original_sale || {};
+      const patch = {
+        sales_date: orig.date || null,
+        sales_price: orig.price ?? null,
+        sales_nu: orig.nu || null,
+        sales_book: orig.book || null,
+        sales_page: orig.page || null,
+        sales_override: false,
+        sales_override_meta: null
+      };
+      const { error: upErr } = await supabase
+        .from('property_records')
+        .update(patch)
+        .eq('property_composite_key', property.property_composite_key);
+      if (upErr) throw upErr;
+      onApply(patch);
+    } catch (e) {
+      console.error('Revert sale failed:', e);
+      setError(e.message || 'Failed to save');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+      style={{ zIndex: 9999 }}
+    >
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Sales History</h3>
+            <p className="text-xs text-gray-500">
+              Block {property.property_block} Lot {property.property_lot}
+              {property.property_qualifier ? ` Qual ${property.property_qualifier}` : ''}
+              {property.property_location ? ` — ${property.property_location}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* Current sale */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">Current Sale</div>
+            <div className={`flex items-center justify-between border rounded p-2 ${property.sales_override ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="text-sm">
+                <span className="font-medium">{property.sales_date || '—'}</span>
+                <span className="ml-3">${property.sales_price ? Number(property.sales_price).toLocaleString() : '—'}</span>
+                <span className="ml-3 text-gray-600">NU {property.sales_nu || '—'}</span>
+                {property.sales_override && (
+                  <span className="ml-3 inline-flex items-center gap-1 text-xs text-amber-700">
+                    <Flag size={12} /> manually selected
+                  </span>
+                )}
+              </div>
+              {property.sales_override && (
+                <button
+                  onClick={revert}
+                  disabled={saving}
+                  className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-white disabled:opacity-50"
+                >
+                  Revert to file sale
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Prior sales from prev_sales */}
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">
+              Prior Sales {cleanPrev.length > 0 && <span className="text-gray-500 font-normal">({cleanPrev.length})</span>}
+            </div>
+            {cleanPrev.length === 0 ? (
+              <div className="text-sm text-gray-500 italic border border-dashed border-gray-200 rounded p-3 text-center">
+                No prior sales available for this property.
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {cleanPrev.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between border border-gray-200 rounded p-2 hover:bg-blue-50">
+                    <div className="text-sm">
+                      <span className="font-medium">{s.date || '—'}</span>
+                      <span className="ml-3">${s.price ? Number(s.price).toLocaleString() : '—'}</span>
+                      {s.nu && <span className="ml-3 text-gray-600">NU {s.nu}</span>}
+                      <span className="ml-3 text-xs text-gray-400">{s.source}</span>
+                    </div>
+                    <button
+                      onClick={() => promote(s)}
+                      disabled={saving}
+                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Use this sale
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</div>
+          )}
+
+          <div className="text-xs text-gray-500 italic">
+            Promoted sales persist across file uploads. They are only auto-replaced if a strictly newer, usable arm's-length sale arrives in a future file.
+          </div>
+        </div>
+
+        <div className="px-4 py-2 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
