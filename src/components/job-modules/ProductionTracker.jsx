@@ -25,6 +25,7 @@ const ProductionTracker = ({
   const [validationReport, setValidationReport] = useState(null);
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
   const [missingPricedReport, setMissingPricedReport] = useState(null);
+  const [pricingOverrideUpdating, setPricingOverrideUpdating] = useState({});
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const notificationCounterRef = useRef(0);
@@ -117,6 +118,61 @@ const ProductionTracker = ({
   // Check if analytics need reprocessing - uses database flag set by file uploads
   const isAnalyticsStale = jobData?.needs_reprocessing === true;
 
+  // Toggle the per-property pricing override (option 2: explicit "N/A" exemption)
+  const setPricingOverride = async (compositeKey, value) => {
+    if (!compositeKey) return;
+    setPricingOverrideUpdating(prev => ({ ...prev, [compositeKey]: true }));
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ pricing_required_override: value })
+        .eq('property_composite_key', compositeKey);
+
+      if (error) throw error;
+
+      // Patch local state without a full reload
+      setMissingPricedReport(prev => {
+        if (!prev) return prev;
+        // If marking as N/A (false), drop the row from the list and bump the counters
+        if (value === false) {
+          const remaining = prev.detailed_missing.filter(p => p.composite_key !== compositeKey);
+          const removed = prev.detailed_missing.length - remaining.length;
+          return {
+            ...prev,
+            detailed_missing: remaining,
+            summary: {
+              ...prev.summary,
+              total_missing: Math.max((prev.summary.total_missing || 0) - removed, 0),
+              total_commercial: Math.max((prev.summary.total_commercial || 0) - removed, 0),
+              total_pricing_exempt: (prev.summary.total_pricing_exempt || 0) + removed
+            }
+          };
+        }
+        return prev;
+      });
+
+      // Update header tile counts
+      setCommercialCounts(prev => ({
+        ...prev,
+        total: value === false ? Math.max((prev.total || 0) - 1, 0) : (prev.total || 0) + 1
+      }));
+
+      addNotification(
+        value === false ? 'Marked as not requiring pricing' : 'Pricing requirement restored',
+        'success'
+      );
+    } catch (err) {
+      console.error('Failed to update pricing override:', err);
+      addNotification(`Failed to update: ${err.message || err}`, 'error');
+    } finally {
+      setPricingOverrideUpdating(prev => {
+        const next = { ...prev };
+        delete next[compositeKey];
+        return next;
+      });
+    }
+  };
+
   const addNotification = (message, type = 'info') => {
     const id = `${Date.now()}-${notificationCounterRef.current++}`;
     const notification = { id, message, type, timestamp: new Date() };
@@ -138,8 +194,14 @@ const ProductionTracker = ({
       return;
     }
 
+    const exemptKeys = new Set(
+      (properties || [])
+        .filter(p => p.pricing_required_override === false)
+        .map(p => p.property_composite_key)
+    );
+
     const commercialProps = inspectionData.filter(d =>
-      ['4A', '4B', '4C'].includes(d.property_class)
+      ['4A', '4B', '4C'].includes(d.property_class) && !exemptKeys.has(d.property_composite_key)
     );
 
     const inspected = commercialProps.filter(d =>
@@ -632,7 +694,7 @@ const ProductionTracker = ({
         // Restore commercial counts from saved analytics
         if (loadedAnalytics.totalCommercialProperties) {
           setCommercialCounts({
-            total: loadedAnalytics.totalCommercialProperties,
+            total: loadedAnalytics.commercialPricingDenominator ?? loadedAnalytics.totalCommercialProperties,
             inspected: loadedAnalytics.commercialInspections || 0,
             priced: loadedAnalytics.commercialPricing || 0
           });
@@ -1668,6 +1730,7 @@ const ProductionTracker = ({
           // Pricing logic with vendor detection
           if (isCommercialProperty) {
             const currentVendor = actualVendor || jobData.vendor_type;
+            const pricingExempt = record.pricing_required_override === false;
 
             if (currentVendor === 'BRT' &&
                 record.inspection_price_by &&
@@ -1685,6 +1748,11 @@ const ProductionTracker = ({
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+            } else if (pricingExempt) {
+              // Explicitly marked N/A — exclude from both denominator and missing list
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].pricingExempt = (classBreakdown[propertyClass].pricingExempt || 0) + 1;
               }
             } else {
               // Track commercial properties not yet priced
@@ -1998,6 +2066,8 @@ const ProductionTracker = ({
       // FIX: Use classBreakdown for commercial pricing (fresh data from processing loop)
       // NOT commercialCounts.priced which uses stale inspectionData prop
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+      const totalPricingExempt = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.pricingExempt || 0), 0);
+      const pricingDenominator = Math.max(totalCommercialProperties - totalPricingExempt, 0);
 
       const validationReportData = {
         summary: {
@@ -2050,8 +2120,9 @@ const ProductionTracker = ({
             acc[insp] = (acc[insp] || 0) + 1;
             return acc;
           }, {}),
-          total_commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0),
-          total_priced: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
+          total_commercial: pricingDenominator,
+          total_priced: totalCommercialPriced,
+          total_pricing_exempt: totalPricingExempt
         },
         detailed_missing: missingPricedProperties
       };
@@ -2073,8 +2144,10 @@ const ProductionTracker = ({
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
+        commercialPricingDenominator: pricingDenominator,
+        commercialPricingExempt: totalPricingExempt,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
+        pricingCompletePercent: pricingDenominator > 0 ? Math.round((totalCommercialPriced / pricingDenominator) * 100) : 0,
 
         // Track overrides applied during processing
         overridesAppliedCount: decisionsToApply.length
@@ -2342,7 +2415,7 @@ const ProductionTracker = ({
 
       // Update commercial counts to match analytics
       setCommercialCounts({
-        total: analyticsResult.totalCommercialProperties,
+        total: analyticsResult.commercialPricingDenominator ?? analyticsResult.totalCommercialProperties,
         inspected: analyticsResult.commercialInspections,
         priced: analyticsResult.commercialPricing
       });
@@ -4427,7 +4500,7 @@ const exportMissingPropertiesReport = () => {
                 ) : (
                   <>
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
@@ -4469,6 +4542,17 @@ const exportMissingPropertiesReport = () => {
                             </p>
                           </div>
                           <TrendingUp className="w-8 h-8 text-yellow-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Marked N/A</p>
+                            <p className="text-2xl font-bold text-gray-800">{missingPricedReport.summary.total_pricing_exempt || 0}</p>
+                            <p className="text-xs text-gray-500">Excluded from denominator</p>
+                          </div>
+                          <Lock className="w-8 h-8 text-gray-400" />
                         </div>
                       </div>
                     </div>
@@ -4516,6 +4600,7 @@ const exportMissingPropertiesReport = () => {
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Measure Date</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Price By</th>
                               <th className="px-3 py-2 text-left font-medium text-gray-700">Price Date</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4535,6 +4620,16 @@ const exportMissingPropertiesReport = () => {
                                 <td className="px-3 py-2">{property.measure_date ? new Date(property.measure_date).toLocaleDateString() : '-'}</td>
                                 <td className="px-3 py-2">{property.price_by || '-'}</td>
                                 <td className="px-3 py-2">{property.price_date ? new Date(property.price_date).toLocaleDateString() : '-'}</td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    onClick={() => setPricingOverride(property.composite_key, false)}
+                                    disabled={!!pricingOverrideUpdating[property.composite_key]}
+                                    className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 rounded disabled:opacity-50"
+                                    title="Mark as not requiring pricing (e.g. converting to non-commercial class)"
+                                  >
+                                    {pricingOverrideUpdating[property.composite_key] ? '...' : 'Mark N/A'}
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
