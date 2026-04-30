@@ -39,7 +39,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -3159,6 +3159,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   )}
                 </td>
                 <td className={`px-3 py-2 text-center bg-slate-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                  {attr.id === 'sales_date' && aggregatedSubject?.property_composite_key && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openSalesHistoryModal('subject', applySalesHistoryPatch(aggregatedSubject)); }}
+                      title={aggregatedSubject.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
+                      className={`float-right p-0.5 rounded hover:bg-blue-100 ${aggregatedSubject.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
+                    >
+                      {aggregatedSubject.sales_override ? <Flag size={12} /> : <History size={12} />}
+                    </button>
+                  )}
                   {(() => {
                     // Use aggregated subject data for properties with additional cards
                     let value = attr.render(aggregatedSubject);
@@ -3260,7 +3270,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                   return (
                     <div>
-                      <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
+                      <div className={`flex items-center justify-center gap-1 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                        <span>{value}</span>
+                        {attr.id === 'sales_date' && comp?.property_composite_key && !comp.is_manual_comp && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openSalesHistoryModal(`comp_${idx}`, applySalesHistoryPatch(comp)); }}
+                            title={comp.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
+                            className={`shrink-0 p-0.5 rounded hover:bg-blue-100 ${comp.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
+                          >
+                            {comp.sales_override ? <Flag size={12} /> : <History size={12} />}
+                          </button>
+                        )}
+                      </div>
                       {adj && adj.amount !== 0 && (
                         <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
                           {adj.amount > 0 ? '+' : ''}${Math.round(adj.amount).toLocaleString()}
@@ -3578,26 +3600,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             />
                           )}
                           {cfg.type === 'date' && (
-                            <div className="flex items-center gap-1">
-                              <EditableInput
-                                type="date"
-                                initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
-                                onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
-                                className="flex-1 min-w-0 px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
-                              />
-                              {attr.id === 'sales_date' && prop?.property_composite_key && (
-                                <button
-                                  type="button"
-                                  onClick={() => openSalesHistoryModal(propKey, prop)}
-                                  title={prop.sales_override ? 'Manually selected sale — view/change history' : 'Sales history (swap hidden sale)'}
-                                  className={`shrink-0 p-0.5 rounded hover:bg-blue-100 ${prop.sales_override ? 'text-amber-600' : 'text-gray-400 hover:text-blue-600'}`}
-                                >
-                                  {prop.sales_override
-                                    ? <Flag size={12} />
-                                    : <History size={12} />}
-                                </button>
-                              )}
-                            </div>
+                            <EditableInput
+                              type="date"
+                              initialValue={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
+                              onCommit={(v) => updateEditedValue(propKey, attr.id, v)}
+                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                            />
                           )}
                           {cfg.type === 'yesno' && (
                             <select
@@ -3881,10 +3889,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           property={salesHistoryModal.property}
           onClose={closeSalesHistoryModal}
           onApply={(patch) => {
+            const compositeKey = salesHistoryModal.property.property_composite_key;
             // Local UI patch so the cell shows the new sale immediately
             setSalesHistoryPatches((prev) => ({
               ...prev,
-              [salesHistoryModal.property.property_composite_key]: patch
+              [compositeKey]: patch
             }));
             // Also push the new sale into the editable export-modal overlay so
             // recalc and PDF export see the swapped values without retyping.
@@ -3893,11 +3902,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             if (patch.sales_price !== undefined) updateEditedValue(pk, 'sales_price', patch.sales_price ?? '');
             if (patch.sales_nu !== undefined) updateEditedValue(pk, 'sales_code', patch.sales_nu || '');
             closeSalesHistoryModal();
-            // Auto-trigger recalc so the swapped sale's adjustments propagate
-            // immediately — saves the user a manual click.
+            // Auto-trigger recalc inside the export modal (covers the case
+            // where the swap was initiated from inside the export modal).
             setTimeout(() => {
-              try { recalculateAdjustments(); } catch (e) { console.warn('Auto-recalc after sale swap failed:', e); }
+              try { recalculateAdjustments(); } catch (e) { /* ignore — export modal not open */ }
             }, 0);
+            // Notify parent so it can refresh the in-memory property and
+            // re-run the comp evaluation. This is what makes the main
+            // Detailed grid update its adjustments without a manual rerun.
+            if (typeof onSalesSwapped === 'function') {
+              try { onSalesSwapped(compositeKey, patch); } catch (e) { console.warn('onSalesSwapped failed:', e); }
+            }
           }}
         />
       )}

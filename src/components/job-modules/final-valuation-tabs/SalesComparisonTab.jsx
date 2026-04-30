@@ -5831,6 +5831,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   allProperties={properties}
                   marketLandData={marketLandData}
                   tenantConfig={tenantConfig}
+                  onSalesSwapped={(compositeKey, patch) => {
+                    // Patch the in-memory properties array so the next
+                    // handleManualEvaluate run sees the swapped sale fields.
+                    // (The DB has already been updated by the swap modal.)
+                    const target = properties.find(p => p.property_composite_key === compositeKey);
+                    if (target) {
+                      Object.assign(target, patch);
+                    }
+                    // Re-run the same evaluation with the patched data so the
+                    // adjustments, time corrections, and brackets recompute
+                    // automatically. No modal-on-modal needed.
+                    handleManualEvaluate(false);
+                  }}
                 />
               </div>
             )}
