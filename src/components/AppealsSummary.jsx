@@ -251,39 +251,42 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     if (logoDataUrl) {
       try { doc.addImage(logoDataUrl, 'PNG', margin, margin, 90, 40); }
       catch {
-        doc.setTextColor(...lojikBlue);
+        doc.setTextColor(0, 102, 204);
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
         doc.text('LOJIK', margin, margin + 26);
       }
     } else {
-      doc.setTextColor(...lojikBlue);
+      doc.setTextColor(0, 102, 204);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.text('LOJIK', margin, margin + 26);
     }
 
-    // Title block (right)
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(20);
+    // Title block (right) — force dark gray-900 explicitly each line
+    // (jsPDF can drop text color state after addImage of a PNG with alpha)
+    doc.setFillColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(17, 24, 39); // gray-900
     doc.text('Appeals Summary by Job', pageWidth - margin, margin + 18, { align: 'right' });
 
-    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81); // gray-700
     doc.text(`Year: ${selectedYear}`, pageWidth - margin, margin + 34, { align: 'right' });
+    doc.setTextColor(55, 65, 81);
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - margin, margin + 48, { align: 'right' });
 
     // Divider
-    doc.setDrawColor(...lojikBlue);
+    doc.setDrawColor(0, 102, 204);
     doc.setLineWidth(1.5);
     doc.line(margin, margin + 60, pageWidth - margin, margin + 60);
 
     // Subtitle
-    doc.setFontSize(9);
     doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99); // gray-600
     doc.text(
       'Overview of all PPA appeals (active, archived, draft) with class and representation breakdown',
       margin,
