@@ -1308,6 +1308,21 @@ const ProductionTracker = ({
               if (isCommercialProperty) {
                 inspectorStats[inspector].commercialInspected++;
                 inspectorStats[inspector].commercialWorkDays.add(workDayString);
+
+                // Commercial overrides also count as PRICED — the override is the user's stamp
+                // that this property is fully complete. Audit trail lives in override_reason.
+                inspectorStats[inspector].priced++;
+                inspectorStats[inspector].pricingWorkDays.add(workDayString);
+                if (classBreakdown[propertyClass]) {
+                  classBreakdown[propertyClass].priced++;
+                }
+              }
+            } else if (['4A', '4B', '4C'].includes(propertyClass)) {
+              // Override on commercial with no measure date — still credit pricing,
+              // but skip the work-day add since we don't have a date to attribute it to.
+              inspectorStats[inspector].priced++;
+              if (classBreakdown[propertyClass]) {
+                classBreakdown[propertyClass].priced++;
               }
             }
           }
@@ -1572,8 +1587,11 @@ const ProductionTracker = ({
           addValidationIssue(`Residential inspector on commercial property`);
         }
 
-        // Zero improvement validation
-        if (record.values_mod_improvement === 0 && !hasListingData) {
+        // Zero improvement validation - only check primary cards, and skip Special codes
+        // (additional cards always store $0 in values_mod_improvement by vendor design;
+        //  the real improvement value lives on the M card for Microsystems / card 1 for BRT;
+        //  Special codes bypass all business-rule validation by design)
+        if (isPrimary && !isSpecialCode && record.values_mod_improvement === 0 && !hasListingData) {
           addValidationIssue('Zero improvement property missing listing data');
         }
         
@@ -1759,6 +1777,7 @@ const ProductionTracker = ({
               block: record.property_block,
               lot: record.property_lot,
               qualifier: record.property_qualifier || '',
+              card: record.property_addl_card,
               property_location: record.property_location || '',
               property_class: propertyClass,
               reason: reasonNotAdded,

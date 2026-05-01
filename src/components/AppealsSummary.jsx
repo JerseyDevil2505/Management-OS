@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { AlertCircle, Calendar, FileText, TrendingUp } from 'lucide-react';
+import { AlertCircle, Calendar, FileText, TrendingUp, FileDown } from 'lucide-react';
 
 const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
@@ -221,6 +221,216 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     }
   };
 
+  // PDF export — matches the Lojik invoice / proposal styling used elsewhere
+  const exportPDF = async () => {
+    if (jobAppealsSummary.length === 0) return;
+
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 30;
+    const lojikBlue = [0, 102, 204];
+
+    // Load logo (best-effort)
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // IMPORTANT: draw all header TEXT first, then the logo image LAST.
+    // PNG addImage with an alpha channel corrupts the text rendering state
+    // for whatever is drawn next, so we draw text up front to guarantee it
+    // renders dark.
+
+    // Title block (right)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(17, 24, 39); // gray-900
+    doc.text('Appeals Summary by Job', pageWidth - margin, margin + 18, { align: 'right' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81); // gray-700
+    doc.text(`Year: ${selectedYear}`, pageWidth - margin, margin + 34, { align: 'right' });
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - margin, margin + 48, { align: 'right' });
+
+    // Divider
+    doc.setDrawColor(0, 102, 204);
+    doc.setLineWidth(1.5);
+    doc.line(margin, margin + 60, pageWidth - margin, margin + 60);
+
+    // Subtitle
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99); // gray-600
+    doc.text(
+      'Overview of all PPA appeals (active, archived, draft) with class and representation breakdown',
+      margin,
+      margin + 75
+    );
+
+    // Logo / brand mark — draw LAST so any state leak doesn't affect text above.
+    // Convert PNG → JPEG via canvas to strip the alpha channel that causes
+    // jsPDF to leak a transparent GState into subsequent operations.
+    let logoRendered = false;
+    if (logoDataUrl) {
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = logoDataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 360;
+        canvas.height = img.naturalHeight || 160;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        doc.addImage(jpegDataUrl, 'JPEG', margin, margin, 90, 40);
+        logoRendered = true;
+      } catch (err) {
+        console.warn('Logo render failed, falling back to text:', err);
+      }
+    }
+    if (!logoRendered) {
+      doc.setTextColor(0, 102, 204);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin, margin + 26);
+    }
+
+    // Build rows. Track which rows are "all-CME" so we can tint them green to match the UI.
+    const head = [[
+      'Job Name', 'Total', 'Residential', 'Commercial', 'Vacant Land',
+      'Defend', 'Stipulated', 'Heard', 'Withdrawn', 'Assessor', 'Affirmed',
+      'Has CME', 'Pro Se', 'Attorney', 'Hearing'
+    ]];
+
+    const body = jobAppealsSummary.map((row) => ([
+      row.jobName,
+      row.totalAppeals,
+      row.residential !== null ? row.residential : '—',
+      row.commercial !== null ? row.commercial : '—',
+      row.vacant !== null ? row.vacant : '—',
+      row.statusBreakdown.defend,
+      row.statusBreakdown.stipulated,
+      row.statusBreakdown.heard,
+      row.statusBreakdown.withdrawn,
+      row.statusBreakdown.assessor,
+      row.statusBreakdown.affirmed,
+      row.statusBreakdown.hasCME,
+      row.proSeCount,
+      row.attorneyCount,
+      row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'
+    ]));
+
+    // Totals row
+    body.push([
+      'TOTALS',
+      totals.totalAppeals,
+      totals.residential, totals.commercial, totals.vacant,
+      totals.defend, totals.stipulated, totals.heard, totals.withdrawn,
+      totals.assessor, totals.affirmed, totals.hasCME,
+      totals.proSe, totals.attorney, '—'
+    ]);
+
+    autoTable(doc, {
+      head,
+      body,
+      startY: margin + 90,
+      margin: { left: margin, right: margin },
+      styles: {
+        fontSize: 8,
+        cellPadding: 4,
+        lineColor: [220, 220, 220],
+        lineWidth: 0.5,
+        overflow: 'linebreak'
+      },
+      headStyles: {
+        fillColor: lojikBlue,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { halign: 'left', fontStyle: 'bold', cellWidth: 110 },
+        1: { halign: 'center', fontStyle: 'bold' },
+        2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' },
+        5: { halign: 'center' }, 6: { halign: 'center' }, 7: { halign: 'center' },
+        8: { halign: 'center' }, 9: { halign: 'center' }, 10: { halign: 'center' },
+        11: { halign: 'center' }, 12: { halign: 'center' }, 13: { halign: 'center' },
+        14: { halign: 'center', cellWidth: 60 }
+      },
+      didParseCell: (data) => {
+        // Only apply body-row tinting to body cells. Without this guard,
+        // didParseCell also runs for the header row (data.row.index === 0)
+        // and was painting the column-header row with the green-50 tint
+        // from the first matching summary row, hiding the white header text.
+        if (data.section !== 'body') return;
+
+        const rowIndex = data.row.index;
+        const isTotalsRow = rowIndex === jobAppealsSummary.length;
+
+        if (isTotalsRow) {
+          // Blue tint + bold for totals row (matches UI)
+          data.cell.styles.fillColor = [219, 234, 254]; // bg-blue-50
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [17, 24, 39]; // gray-900
+          return;
+        }
+
+        // Per-row green tint when Has CME equals Total Appeals (matches UI bg-green-50)
+        const summaryRow = jobAppealsSummary[rowIndex];
+        if (summaryRow && summaryRow.totalAppeals > 0
+            && summaryRow.statusBreakdown.hasCME === summaryRow.totalAppeals) {
+          data.cell.styles.fillColor = [240, 253, 244]; // bg-green-50
+          if (data.column.index === 11) {
+            data.cell.styles.textColor = [22, 101, 52]; // text-green-800
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    });
+
+    // Footer / legend
+    const finalY = doc.lastAutoTable.finalY + 14;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    doc.text('* Multiple hearing dates on file (showing final/last hearing date)', margin, finalY);
+
+    // Page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth - margin,
+        doc.internal.pageSize.getHeight() - 16,
+        { align: 'right' }
+      );
+    }
+
+    const filename = `Appeals_Summary_${selectedYear}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.pdf`;
+    doc.save(filename);
+  };
+
   // Calculate totals
   const totals = jobAppealsSummary.reduce(
     (acc, row) => ({
@@ -280,6 +490,15 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 </option>
               ))}
             </select>
+            <button
+              onClick={exportPDF}
+              disabled={jobAppealsSummary.length === 0}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Export this Appeals Summary snapshot as PDF"
+            >
+              <FileDown className="w-4 h-4" />
+              Export PDF
+            </button>
           </div>
         </div>
       </div>
