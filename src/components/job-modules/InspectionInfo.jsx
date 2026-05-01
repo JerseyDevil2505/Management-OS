@@ -1,7 +1,33 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
+  // Year filter — gates everything on inspection_measure_date year so a measure
+  // done in a prior year doesn't count toward this year's entry rate (matches
+  // how the state audits annual reassessment compliance).
+  const [selectedYear, setSelectedYear] = useState('all');
+
+  // Build the list of years that actually appear in the data (by measure_date)
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    (properties || []).forEach(p => {
+      if (p.inspection_measure_date) {
+        const y = new Date(p.inspection_measure_date).getFullYear();
+        if (!Number.isNaN(y)) years.add(y);
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [properties]);
+
+  // Apply the year gate before any metric is computed.
+  const yearFilteredProperties = useMemo(() => {
+    if (selectedYear === 'all' || !selectedYear) return properties;
+    const target = parseInt(selectedYear, 10);
+    return (properties || []).filter(p => {
+      if (!p.inspection_measure_date) return false;
+      return new Date(p.inspection_measure_date).getFullYear() === target;
+    });
+  }, [properties, selectedYear]);
   // Extract refusal codes from parsed code definitions
   const getRefusalCodesFromCodeFile = () => {
     const vendor = jobData?.vendor_type || 'BRT';
@@ -56,7 +82,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   const vendor = jobData?.vendor_type || 'BRT';
 
   const metrics = useMemo(() => {
-    if (!properties || properties.length === 0) {
+    if (!yearFilteredProperties || yearFilteredProperties.length === 0) {
       return {
         totalProperties: 0,
         inspected: 0,
@@ -66,6 +92,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         improvedInspected: 0,
         improvedNotInspected: 0,
         improvedEntryRate: 0,
+        interiorEntries: 0,
+        improvedInteriorEntries: 0,
+        improvedInteriorRate: 0,
         byClass: {},
         byVCS: {},
         missingInspections: [],
@@ -78,6 +107,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     let improvedTotal = 0;
     let improvedInspected = 0;
     let improvedNotInspected = 0;
+    let interiorEntries = 0;          // entries whose info_by_code is in the configured "entry" category
+    let improvedInteriorEntries = 0;  // same, restricted to improved properties
     const residentialEntryDates = [];
     let mostRecentInteriorEntry = null;
     const entryCodes = jobData?.infoby_category_config?.entry || [];
@@ -86,7 +117,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     const missingInspections = [];
     const inspectorBreakdown = {};
 
-    properties.forEach(prop => {
+    yearFilteredProperties.forEach(prop => {
       const propertyClass = prop.property_m4_class || 'Unknown';
       if (!byClass[propertyClass]) {
         byClass[propertyClass] = { total: 0, inspected: 0, improvedTotal: 0, improvedInspected: 0 };
@@ -177,6 +208,16 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         inspected++;
         byClass[propertyClass].inspected++;
 
+        // Interior-entry tally: only when info_by_code is in the configured entry category.
+        // If no entry codes are configured, treat any non-refusal listing as interior.
+        const infoByForInterior = vendor === 'Microsystems' ? prop.info_by_code : prop.inspection_info_by;
+        const isInteriorEntry = entryCodes.length > 0
+          ? (infoByForInterior && entryCodes.includes(infoByForInterior))
+          : true;
+        if (isInteriorEntry) {
+          interiorEntries++;
+        }
+
         if (isResidential) {
           const vcsLabel = vcsCode || 'Unknown';
           byVCS[vcsLabel].inspected++;
@@ -185,6 +226,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         if (isImproved) {
           improvedInspected++;
           byClass[propertyClass].improvedInspected++;
+          if (isInteriorEntry) {
+            improvedInteriorEntries++;
+          }
         }
 
         // Track residential (2/3A) dates for average measured + most recent interior entry
@@ -254,8 +298,12 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       avgInspectionDate = new Date(totalMs / residentialEntryDates.length);
     }
 
+    const improvedInteriorRate = improvedTotal > 0
+      ? ((improvedInteriorEntries / improvedTotal) * 100).toFixed(1)
+      : 0;
+
     return {
-      totalProperties: properties.length,
+      totalProperties: yearFilteredProperties.length,
       inspected,
       notInspected,
       entryRate: parseFloat(entryRate),
@@ -263,6 +311,9 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       improvedInspected,
       improvedNotInspected,
       improvedEntryRate: parseFloat(improvedEntryRate),
+      interiorEntries,
+      improvedInteriorEntries,
+      improvedInteriorRate: parseFloat(improvedInteriorRate),
       byClass,
       byVCS,
       missingInspections,
@@ -270,7 +321,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
       avgInspectionDate,
       mostRecentInteriorEntry
     };
-  }, [properties, refusalCodes, vendor]);
+  }, [yearFilteredProperties, refusalCodes, vendor, jobData]);
 
   const sortedClasses = Object.entries(metrics.byClass)
     .sort(([a], [b]) => a.localeCompare(b));
@@ -298,12 +349,41 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     );
   }
 
+  const yearLabel = selectedYear === 'all' ? 'All Years' : selectedYear;
+
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-        <Database className="w-5 h-5 text-blue-600" />
-        Inspection Info
-      </h2>
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <Database className="w-5 h-5 text-blue-600" />
+            Inspection Info
+            <span className="text-sm font-normal text-gray-500">— {yearLabel}</span>
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Year filter gates on <span className="font-medium">measure date</span> — a property measured in a prior year doesn't count toward this year's entry rate, even if a later listing exists.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700">Year:</label>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Years</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {yearFilteredProperties.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-800">
+          No properties have a measure date in <span className="font-semibold">{yearLabel}</span>. Pick a different year to see metrics.
+        </div>
+      )}
 
       {/* Summary Cards - Improved Properties (entry rate only matters for improved) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -378,6 +458,28 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               </p>
             </div>
             <Home className="w-8 h-8 text-purple-400" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-lg border-2 border-rose-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Improved Interior Entries</p>
+              <p className="text-3xl font-bold text-rose-600">
+                {metrics.improvedInteriorEntries.toLocaleString()}
+                <span className="text-base font-medium text-gray-400 ml-2">/ {metrics.improvedTotal.toLocaleString()}</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {metrics.improvedInteriorRate}% interior entry rate
+              </p>
+            </div>
+            <CheckCircle className="w-8 h-8 text-rose-400" />
+          </div>
+          <div className="mt-2 bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-rose-500 h-2 rounded-full transition-all"
+              style={{ width: `${Math.min(metrics.improvedInteriorRate, 100)}%` }}
+            />
           </div>
         </div>
       </div>
