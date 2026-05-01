@@ -248,8 +248,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     }
 
     // Header
+    // Wrap addImage in save/restoreGraphicsState — PNG alpha can leak a
+    // transparent fill state into subsequent text, making it render invisibly.
     if (logoDataUrl) {
-      try { doc.addImage(logoDataUrl, 'PNG', margin, margin, 90, 40); }
+      try {
+        if (typeof doc.saveGraphicsState === 'function') doc.saveGraphicsState();
+        doc.addImage(logoDataUrl, 'PNG', margin, margin, 90, 40);
+        if (typeof doc.restoreGraphicsState === 'function') doc.restoreGraphicsState();
+      }
       catch {
         doc.setTextColor(0, 102, 204);
         doc.setFontSize(18);
@@ -261,6 +267,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.text('LOJIK', margin, margin + 26);
+    }
+
+    // Belt-and-suspenders: explicitly reset alpha via a fresh GState if available
+    if (typeof doc.setGState === 'function' && typeof doc.GState === 'function') {
+      try {
+        doc.setGState(new doc.GState({ opacity: 1, 'stroke-opacity': 1 }));
+      } catch (e) { /* ignore */ }
     }
 
     // Title block (right) — force dark gray-900 explicitly each line
