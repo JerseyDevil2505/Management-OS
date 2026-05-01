@@ -2527,6 +2527,30 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return;
     }
 
+    // Format a Postgres date (YYYY-MM-DD or YYYY-MM-DDT...) without any
+    // timezone shift. `new Date('2026-05-14')` parses as UTC midnight and
+    // toLocaleDateString() then shifts it back to local time, which in any
+    // tz west of UTC drops a day (5/14 -> 5/13). Matches the UI helper at
+    // line ~847.
+    const formatDateLocal = (dateVal) => {
+      if (!dateVal) return '-';
+      const str = String(dateVal);
+      const datePart = str.split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const d = parseInt(parts[2], 10);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          const local = new Date(y, m - 1, d);
+          return local.toLocaleDateString();
+        }
+      }
+      // Fallback for non-ISO strings (e.g. already formatted)
+      const fallback = new Date(dateVal);
+      return isNaN(fallback.getTime()) ? '-' : fallback.toLocaleDateString();
+    };
+
     // Prepare data for export with all available fields
     const exportData = filteredAppeals.map(appeal => {
       // Get property for bracket and inspection data
@@ -2543,14 +2567,22 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         }
       }
 
-      // Get inspection info from property
+      // Get inspection info from property — parse YYYY-MM-DD locally
+      // (no timezone shift) so the date matches what's shown in the UI.
       let inspectionDate = null;
       if (property && property.inspection_list_by && property.inspection_list_date) {
-        const date = new Date(property.inspection_list_date);
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const year = date.getFullYear();
-        inspectionDate = `${month}/${day}/${year}`;
+        const str = String(property.inspection_list_date).split('T')[0];
+        const parts = str.split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const mo = parseInt(parts[1], 10);
+          const d = parseInt(parts[2], 10);
+          if (!isNaN(y) && !isNaN(mo) && !isNaN(d)) {
+            const month = String(mo).padStart(2, '0');
+            const day = String(d).padStart(2, '0');
+            inspectionDate = `${month}/${day}/${y}`;
+          }
+        }
       }
 
       return {
@@ -2576,8 +2608,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         'Atty City/State': appeal.attorney_city_state || '-',
         'Atty Phone': appeal.attorney_phone || '-',
         'Atty Email': appeal.attorney_email || '-',
-        'Evidence Due': appeal.evidence_due_date ? new Date(appeal.evidence_due_date).toLocaleDateString() : '-',
-        'Hearing Date': appeal.hearing_date ? new Date(appeal.hearing_date).toLocaleDateString() : '-',
+        'Evidence Due': formatDateLocal(appeal.evidence_due_date),
+        'Hearing Date': formatDateLocal(appeal.hearing_date),
         'Evidence Status': appeal.evidence_status || '-',
         'Submission Type': appeal.submission_type || '-',
         'Stip Status': appeal.stip_status || '-',
