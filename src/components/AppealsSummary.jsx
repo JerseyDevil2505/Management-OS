@@ -247,38 +247,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       console.warn('Could not load logo:', err);
     }
 
-    // Header
-    // Wrap addImage in save/restoreGraphicsState — PNG alpha can leak a
-    // transparent fill state into subsequent text, making it render invisibly.
-    if (logoDataUrl) {
-      try {
-        if (typeof doc.saveGraphicsState === 'function') doc.saveGraphicsState();
-        doc.addImage(logoDataUrl, 'PNG', margin, margin, 90, 40);
-        if (typeof doc.restoreGraphicsState === 'function') doc.restoreGraphicsState();
-      }
-      catch {
-        doc.setTextColor(0, 102, 204);
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.text('LOJIK', margin, margin + 26);
-      }
-    } else {
-      doc.setTextColor(0, 102, 204);
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      doc.text('LOJIK', margin, margin + 26);
-    }
+    // IMPORTANT: draw all header TEXT first, then the logo image LAST.
+    // PNG addImage with an alpha channel corrupts the text rendering state
+    // for whatever is drawn next, so we draw text up front to guarantee it
+    // renders dark.
 
-    // Belt-and-suspenders: explicitly reset alpha via a fresh GState if available
-    if (typeof doc.setGState === 'function' && typeof doc.GState === 'function') {
-      try {
-        doc.setGState(new doc.GState({ opacity: 1, 'stroke-opacity': 1 }));
-      } catch (e) { /* ignore */ }
-    }
-
-    // Title block (right) — force dark gray-900 explicitly each line
-    // (jsPDF can drop text color state after addImage of a PNG with alpha)
-    doc.setFillColor(255, 255, 255);
+    // Title block (right)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
     doc.setTextColor(17, 24, 39); // gray-900
@@ -288,7 +262,6 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     doc.setFontSize(10);
     doc.setTextColor(55, 65, 81); // gray-700
     doc.text(`Year: ${selectedYear}`, pageWidth - margin, margin + 34, { align: 'right' });
-    doc.setTextColor(55, 65, 81);
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - margin, margin + 48, { align: 'right' });
 
     // Divider
@@ -305,6 +278,39 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       margin,
       margin + 75
     );
+
+    // Logo / brand mark — draw LAST so any state leak doesn't affect text above.
+    // Convert PNG → JPEG via canvas to strip the alpha channel that causes
+    // jsPDF to leak a transparent GState into subsequent operations.
+    let logoRendered = false;
+    if (logoDataUrl) {
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = logoDataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 360;
+        canvas.height = img.naturalHeight || 160;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        doc.addImage(jpegDataUrl, 'JPEG', margin, margin, 90, 40);
+        logoRendered = true;
+      } catch (err) {
+        console.warn('Logo render failed, falling back to text:', err);
+      }
+    }
+    if (!logoRendered) {
+      doc.setTextColor(0, 102, 204);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin, margin + 26);
+    }
 
     // Build rows. Track which rows are "all-CME" so we can tint them green to match the UI.
     const head = [[
