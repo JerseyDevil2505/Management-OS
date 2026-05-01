@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar, FileDown } from 'lucide-react';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   // Year filter — gates everything on inspection_measure_date year so a measure
@@ -337,6 +337,223 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   const sortedInspectors = Object.entries(metrics.inspectorBreakdown)
     .sort(([, a], [, b]) => b - a);
 
+  // PDF export — annual reassessment audit snapshot for LOJIK clients to
+  // submit to the state. Mirrors the styling used in AppealsSummary.
+  const exportPDF = async () => {
+    if (!yearFilteredProperties || yearFilteredProperties.length === 0) return;
+
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 36;
+    const lojikBlue = [0, 102, 204];
+
+    const yearLbl = selectedYear === 'all' ? 'All Years' : String(selectedYear);
+    const jobName = jobData?.job_name || jobData?.name || 'Job';
+    const ccdd = jobData?.ccdd_code ? ` (${jobData.ccdd_code})` : '';
+
+    // Try to load logo
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo:', err);
+    }
+
+    // Draw all header TEXT first (so PNG state corruption can't affect it).
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(17, 24, 39); // gray-900
+    doc.text('Inspection Info Report', pageWidth - margin, margin + 18, { align: 'right' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81);
+    doc.text(`${jobName}${ccdd}`, pageWidth - margin, margin + 34, { align: 'right' });
+    doc.text(`Year: ${yearLbl}`, pageWidth - margin, margin + 48, { align: 'right' });
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth - margin, margin + 62, { align: 'right' });
+
+    // Divider
+    doc.setDrawColor(0, 102, 204);
+    doc.setLineWidth(1.5);
+    doc.line(margin, margin + 74, pageWidth - margin, margin + 74);
+
+    // Subtitle
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99);
+    doc.text(
+      'Annual reassessment inspection summary — gated on measure date',
+      margin,
+      margin + 88
+    );
+
+    // Logo LAST (PNG → JPEG via canvas to strip alpha and avoid GState leak)
+    let logoRendered = false;
+    if (logoDataUrl) {
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = logoDataUrl;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 360;
+        canvas.height = img.naturalHeight || 160;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        doc.addImage(jpegDataUrl, 'JPEG', margin, margin, 90, 40);
+        logoRendered = true;
+      } catch (err) {
+        console.warn('Logo render failed, falling back to text:', err);
+      }
+    }
+    if (!logoRendered) {
+      doc.setTextColor(0, 102, 204);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin, margin + 26);
+    }
+
+    // Summary metrics table
+    const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const summaryRows = [
+      ['Total Properties (filtered)', metrics.totalProperties.toLocaleString()],
+      ['Improved Properties', metrics.improvedTotal.toLocaleString()],
+      ['Improved Entries', metrics.improvedInspected.toLocaleString()],
+      ['Improved No Entry', metrics.improvedNotInspected.toLocaleString()],
+      ['Improved Entry Rate', `${metrics.improvedEntryRate}%`],
+      ['Improved Interior Entries', `${metrics.improvedInteriorEntries.toLocaleString()} / ${metrics.improvedTotal.toLocaleString()} (${metrics.improvedInteriorRate}%)`],
+      ['Avg Measured Date (2/3A)', fmtDate(metrics.avgInspectionDate)],
+      ['Latest Interior Entry (2/3A)', fmtDate(metrics.mostRecentInteriorEntry)]
+    ];
+
+    autoTable(doc, {
+      head: [['Metric', 'Value']],
+      body: summaryRows,
+      startY: margin + 100,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9, cellPadding: 5, lineColor: [220, 220, 220], lineWidth: 0.5 },
+      headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold' },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 220 },
+        1: { halign: 'right' }
+      },
+      didParseCell: (data) => { if (data.section !== 'body') return; }
+    });
+
+    // Property class breakdown
+    const classBody = sortedClasses.map(([cls, data]) => {
+      const rate = data.total > 0 ? ((data.inspected / data.total) * 100).toFixed(1) : '0.0';
+      const imprRate = data.improvedTotal > 0
+        ? ((data.improvedInspected / data.improvedTotal) * 100).toFixed(1)
+        : '—';
+      return [
+        cls,
+        data.total.toLocaleString(),
+        data.inspected.toLocaleString(),
+        `${rate}%`,
+        data.improvedTotal.toLocaleString(),
+        data.improvedTotal > 0 ? `${imprRate}%` : '—'
+      ];
+    });
+
+    autoTable(doc, {
+      head: [['Class', 'Total', 'Entries', 'Rate', 'Improved', 'Impr Rate']],
+      body: classBody,
+      startY: doc.lastAutoTable.finalY + 18,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9, cellPadding: 5, lineColor: [220, 220, 220], lineWidth: 0.5 },
+      headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' },
+        4: { halign: 'right' }, 5: { halign: 'right' }
+      }
+    });
+
+    // VCS breakdown (residential)
+    if (sortedVCS.length > 0) {
+      const vcsBody = sortedVCS.map(([vcs, data]) => {
+        const rate = data.total > 0 ? ((data.inspected / data.total) * 100).toFixed(1) : '0.0';
+        return [
+          vcs,
+          data.total.toLocaleString(),
+          data.inspected.toLocaleString(),
+          `${rate}%`,
+          data.refusals.toLocaleString()
+        ];
+      });
+
+      autoTable(doc, {
+        head: [['VCS Code', 'Total', 'Entries', 'Rate', 'Refusals']],
+        body: vcsBody,
+        startY: doc.lastAutoTable.finalY + 18,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9, cellPadding: 5, lineColor: [220, 220, 220], lineWidth: 0.5 },
+        headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' },
+          4: { halign: 'right' }
+        }
+      });
+    }
+
+    // Inspector breakdown
+    if (sortedInspectors.length > 0) {
+      const inspectorBody = sortedInspectors.map(([name, count]) => [
+        name,
+        count.toLocaleString(),
+        metrics.inspected > 0 ? `${((count / metrics.inspected) * 100).toFixed(1)}%` : '0.0%'
+      ]);
+
+      autoTable(doc, {
+        head: [['Inspector', 'Entries', '% of Total']],
+        body: inspectorBody,
+        startY: doc.lastAutoTable.finalY + 18,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9, cellPadding: 5, lineColor: [220, 220, 220], lineWidth: 0.5 },
+        headStyles: { fillColor: lojikBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right' }, 2: { halign: 'right' }
+        }
+      });
+    }
+
+    // Page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth - margin,
+        doc.internal.pageSize.getHeight() - 18,
+        { align: 'right' }
+      );
+    }
+
+    const safeJob = jobName.replace(/[^a-z0-9]+/gi, '_');
+    const filename = `Inspection_Info_${safeJob}_${yearLbl}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.pdf`;
+    doc.save(filename);
+  };
+
   if (!properties || properties.length === 0) {
     return (
       <div className="max-w-6xl mx-auto p-6">
@@ -376,6 +593,15 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
+          <button
+            onClick={exportPDF}
+            disabled={yearFilteredProperties.length === 0}
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            title="Export this Inspection Info snapshot as PDF (state audit ready)"
+          >
+            <FileDown className="w-4 h-4" />
+            Export PDF
+          </button>
         </div>
       </div>
 
