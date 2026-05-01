@@ -375,6 +375,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         14: { halign: 'center', cellWidth: 60 }
       },
       didParseCell: (data) => {
+        // Only apply body-row tinting to body cells. Without this guard,
+        // didParseCell also runs for the header row (data.row.index === 0)
+        // and was painting the column-header row with the green-50 tint
+        // from the first matching summary row, hiding the white header text.
+        if (data.section !== 'body') return;
+
         const rowIndex = data.row.index;
         const isTotalsRow = rowIndex === jobAppealsSummary.length;
 
