@@ -1849,12 +1849,20 @@ const App = () => {
           {
             id: 'importing-appeal-logs',
             label: 'Importing Appeal Logs',
-            intro: 'Bringing appeals into the Appeal Log from XLS, CSV, PDF, or manual entry.',
+            intro:
+              "The Appeal Log is your workflow tool for defending appeal valuations — it is NOT meant to replace MyNJAppeal or PowerCama appeal tracking. Think of it as the place where you organize what you owe a defense for and what is already settled.\n\n" +
+              "You can re-import your appeal file as many times as you need. We check for already-imported appeals and just update hearing dates and judgments instead of creating duplicates.\n\n" +
+              "Microsystems users: at this time appeals on the Microsystems side have to be added manually with the \"+ Add Appeal\" button. Skip the vendor sections below — those are for the BRT family of tools.",
+            links: [
+              { label: 'MyNJAppeal (online) →', target: 'mynj' },
+              { label: 'BRT PowerCama →', target: 'brt-appeals' },
+            ],
             steps: [
-              { text: 'Open the job → Final Valuation → Appeal Log tab.', img: 'help/importing-appeals/01-open.png' },
-              { text: 'Click Import and choose the file type (XLS / CSV / PDF).', img: 'help/importing-appeals/02-import.png' },
-              { text: 'Map any unrecognized columns if prompted (county exports vary).', img: 'help/importing-appeals/03-map.png' },
-              { text: 'Review the import preview, then confirm to write to the appeal log.', img: 'help/importing-appeals/04-confirm.png' },
+              { id: 'mynj', heading: 'MyNJAppeal — for online appeal users', text: 'In MyNJAppeal, go to Appeal Management. At the bottom of the grid there is a "Click to export data" button — click it. That download is the file you will import into the Copilot.', img: '23-mynjappeal.png' },
+              { text: 'Back in the Copilot: open the Job → Appeal Log tab → click "Import MyNJAppeal" (the green button at the top of the log). Pick the file you just downloaded and it will populate your appeals automatically. Re-running the import later just refreshes hearing dates / judgments — no duplicates.', img: '24-mynjappeal-import.png' },
+              { id: 'brt-appeals', heading: 'BRT PowerCama — for appeals tracked in PowerCama', text: 'In BRT Power Cama, open the top-level Appeals menu and choose "View County Current Appeals" (or "Add/Edit Appeals" if you are still building the list).', img: '25-BRTappeals.png' },
+              { text: 'The appeals modal opens. At the bottom, click "Export to Excel". That XLSX is your import file.', img: '26-BRTappealmodal.png' },
+              { text: 'Back in the Copilot: Appeal Log tab → click "Import PwrCama Appeals" and pick the Excel file you just exported. Same rules — re-importing just updates hearing dates and judgments on appeals already in the log.', img: '27-importbrtappeals.png' },
             ],
           },
           {
