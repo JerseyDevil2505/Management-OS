@@ -56,16 +56,24 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
 
   if (!ccdd) return null; // no CCDD → no point
 
+  const openInNewTab = () => {
+    try { window.open(window.location.href, '_blank', 'noopener'); } catch (_e) {}
+  };
+
   const handleConnect = async (allowMismatch = false) => {
     setError('');
     setWarning('');
+    if (!supported) {
+      setError('IFRAME_BLOCKED');
+      return;
+    }
     setBusy(true);
     try {
       const res = await pickJobSource(jobId, ccdd, { allowMismatch });
       if (!res.ok) {
         if (res.reason === 'cancelled') { setBusy(false); return; }
         if (res.reason === 'unsupported') {
-          setError('Persistent folder access is blocked here. Open the app in a full browser tab (Chrome/Edge) to connect a photo folder.');
+          setError('IFRAME_BLOCKED');
           setBusy(false);
           return;
         }
@@ -154,9 +162,9 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
           ) : (
             <button
               onClick={() => handleConnect(false)}
-              disabled={busy || !supported}
+              disabled={busy}
               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              title={supported ? `Pick a folder for CCDD ${ccdd} (e.g. C:\\Powerpad\\Pictures\\${ccdd})` : 'Open this app in a full browser tab to connect a photo folder.'}
+              title={`Pick a folder for CCDD ${ccdd} (e.g. C:\\Powerpad\\Pictures\\${ccdd})`}
             >
               + Connect Photo Folder for CCDD {ccdd}
             </button>
@@ -164,7 +172,21 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
         </div>
       </div>
 
-      {error && (
+      {error === 'IFRAME_BLOCKED' && (
+        <div className="mt-2 px-3 py-2 bg-amber-50 text-amber-900 rounded text-xs flex items-center justify-between gap-2">
+          <span>
+            The folder picker is blocked inside the editor preview iframe (Chromium security rule).
+            Open the app in its own browser tab to connect a folder. Your choice will persist on this machine afterward.
+          </span>
+          <button
+            onClick={openInNewTab}
+            className="px-2 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 whitespace-nowrap"
+          >
+            Open in New Tab ↗
+          </button>
+        </div>
+      )}
+      {error && error !== 'IFRAME_BLOCKED' && (
         <div className="mt-2 px-2 py-1 bg-red-50 text-red-800 rounded text-xs">{error}</div>
       )}
       {warning && (
@@ -180,9 +202,9 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
           )}
         </div>
       )}
-      {!supported && !connected && (
+      {!supported && !connected && error !== 'IFRAME_BLOCKED' && (
         <div className="mt-2 text-xs text-gray-500">
-          Tip: persistent folder access requires Chrome / Edge / Brave / Opera in a full browser tab. Inside the editor preview iframe this is blocked.
+          Tip: persistent folder access requires Chrome / Edge / Brave / Opera in a full browser tab.
         </div>
       )}
     </div>
