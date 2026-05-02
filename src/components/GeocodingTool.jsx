@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa from 'papaparse';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, parseDateLocal } from '../lib/supabaseClient';
 import { njCityForZip } from '../data/njZipToCity';
 import { isPpaJob } from '../lib/tenantConfig';
 
@@ -630,7 +630,8 @@ const GeocodingTool = () => {
   // we'll need a coordinate for", not which sub-bucket it lives in.
   const csvSalesWindow = useMemo(() => {
     if (!selectedJob?.end_date) return null;
-    const rawYear = new Date(selectedJob.end_date).getFullYear();
+    const endLocal = parseDateLocal(selectedJob.end_date);
+    const rawYear = endLocal ? endLocal.getFullYear() : null;
     if (!rawYear) return null;
     const isLojik = selectedJob?.organizations?.org_type === 'assessor';
     const ay = isLojik ? rawYear - 1 : rawYear;
@@ -653,8 +654,8 @@ const GeocodingTool = () => {
       }
       if (csvSalesInPool && csvSalesWindow) {
         if (!p.sales_date) return false;
-        const d = new Date(p.sales_date);
-        if (Number.isNaN(d.getTime())) return false;
+        const d = parseDateLocal(p.sales_date);
+        if (!d) return false;
         if (d < csvSalesWindow.start || d > csvSalesWindow.end) return false;
       }
       return true;
@@ -1210,8 +1211,8 @@ const GeocodingTool = () => {
     let n = 0;
     for (const p of manualBaseList) {
       if (!p.sales_date) continue;
-      const d = new Date(p.sales_date);
-      if (Number.isNaN(d.getTime())) continue;
+      const d = parseDateLocal(p.sales_date);
+      if (!d) continue;
       if (d >= csvSalesWindow.start && d <= csvSalesWindow.end) n += 1;
     }
     return n;

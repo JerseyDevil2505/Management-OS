@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save, Building } from 'lucide-react';
-import { supabase, jobService } from '../../lib/supabaseClient';
+import { supabase, jobService, parseDateLocal } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const ProductionTracker = ({ 
@@ -1197,7 +1197,7 @@ const ProductionTracker = ({
         addNotification(`Processing ${rawData.length.toLocaleString()} properties...`, 'info');
       }
 
-      const startDate = new Date(projectStartDate);
+      const startDate = parseDateLocal(projectStartDate) || new Date(projectStartDate);
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
@@ -1231,9 +1231,9 @@ const ProductionTracker = ({
         // inspection_data is just a validated snapshot - property_records has the latest vendor data
         const infoByCode = record.inspection_info_by;
 
-        const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
-        const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
-        const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
+        const measuredDate = record.inspection_measure_date ? parseDateLocal(record.inspection_measure_date) : null;
+        const listDate = record.inspection_list_date ? parseDateLocal(record.inspection_list_date) : null;
+        const priceDate = record.inspection_price_date ? parseDateLocal(record.inspection_price_date) : null;
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
@@ -1539,7 +1539,7 @@ const ProductionTracker = ({
         // NEW: List_by/List_date integrity validation
         const listByValue = record.inspection_list_by;
         const listDateValue = record.inspection_list_date;
-        const parsedListDate = listDateValue ? new Date(listDateValue) : null;
+        const parsedListDate = listDateValue ? parseDateLocal(listDateValue) : null;
         
         // Check for list_by with invalid employee or invalid date
         if (listByValue && listByValue.trim() !== '') {
@@ -1599,7 +1599,7 @@ const ProductionTracker = ({
         if (actualVendor === 'BRT') {
           const priceByValue = record.inspection_price_by;
           const priceDateValue = record.inspection_price_date;
-          const parsedPriceDate = priceDateValue ? new Date(priceDateValue) : null;
+          const parsedPriceDate = priceDateValue ? parseDateLocal(priceDateValue) : null;
           
           // Check for price_by with invalid employee or invalid date
           if (priceByValue && priceByValue.trim() !== '') {

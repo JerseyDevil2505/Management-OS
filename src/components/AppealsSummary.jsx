@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, formatDateLocalYMD } from '../lib/supabaseClient';
 import { AlertCircle, Calendar, FileText, TrendingUp, FileDown } from 'lucide-react';
 
 const AppealsSummary = ({ jobs = [], onJobSelect }) => {
@@ -427,7 +427,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       );
     }
 
-    const filename = `Appeals_Summary_${selectedYear}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.pdf`;
+    const filename = `Appeals_Summary_${selectedYear}_${formatDateLocalYMD(new Date()).replace(/-/g, '')}.pdf`;
     doc.save(filename);
   };
 

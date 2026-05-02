@@ -11,7 +11,7 @@
  * CRITICAL: Added automatic rollback for failed batches - all or nothing!
  */
 
-import { supabase } from '../supabaseClient.js';
+import { supabase, parseDateLocal } from '../supabaseClient.js';
 
 export class MicrosystemsUpdater {
   constructor() {
@@ -1530,8 +1530,9 @@ export class MicrosystemsUpdater {
       
       if (!salePrice || !saleDate) return null;
       
-      // Extract sale year from date
-      const saleYear = new Date(saleDate).getFullYear();
+      // Extract sale year from date (local-safe for YYYY-MM-DD)
+      const sd = parseDateLocal(saleDate);
+      const saleYear = sd ? sd.getFullYear() : NaN;
       if (isNaN(saleYear)) return null;
       
       // Get county from job

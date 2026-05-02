@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 // Development logging wrapper
@@ -77,7 +77,7 @@ const BillingManagement = ({
   const [distributionForm, setDistributionForm] = useState({
     shareholder: '',
     amount: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateLocalYMD(new Date()),
     notes: ''
   });
   const [distributionMetrics, setDistributionMetrics] = useState({
@@ -105,7 +105,8 @@ const BillingManagement = ({
   //Invoice aging helpers
   const calculateInvoiceAge = (billingDate) => {
     const today = new Date();
-    const invoiceDate = new Date(billingDate);
+    const invoiceDate = parseDateLocal(billingDate);
+    if (!invoiceDate) return 0;
     const diffTime = today - invoiceDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
@@ -212,7 +213,7 @@ Thank you for your immediate attention to this matter.`;
     bondingRequired: true
   });
   const [billingForm, setBillingForm] = useState({
-    billingDate: new Date().toISOString().split('T')[0],
+    billingDate: formatDateLocalYMD(new Date()),
     percentageBilled: '',
     status: 'P', // Changed from 'D' to 'P' for Paid
     invoiceNumber: '',
@@ -753,7 +754,7 @@ const calculateDistributionMetrics = async () => {
       }
       
       // Save PDF
-      doc.save(`PPA_Bonding_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(`PPA_Bonding_Report_${formatDateLocalYMD(new Date())}.pdf`);
       
       alert('Bonding report PDF generated successfully!');
     } catch (error) {
@@ -924,7 +925,7 @@ const calculateDistributionMetrics = async () => {
           
           const billingData = {
             job_id: selectedJob.id,
-            billing_date: new Date(event.date).toISOString().split('T')[0],
+            billing_date: formatDateLocalYMD(parseDateLocal(event.date) || new Date(event.date)),
             percentage_billed: event.percentage / 100,
             status: event.status,
             invoice_number: event.invoiceNumber,
@@ -1014,7 +1015,7 @@ const calculateDistributionMetrics = async () => {
           
           const billingData = {
             job_id: selectedJob.id,
-            billing_date: new Date(event.date).toISOString().split('T')[0],
+            billing_date: formatDateLocalYMD(parseDateLocal(event.date) || new Date(event.date)),
             percentage_billed: event.percentage / 100,
             status: event.status,
             invoice_number: event.invoiceNumber,
@@ -1195,7 +1196,7 @@ const calculateDistributionMetrics = async () => {
       
       setShowBillingForm(false);
       setBillingForm({
-        billingDate: new Date().toISOString().split('T')[0],
+        billingDate: formatDateLocalYMD(new Date()),
         percentageBilled: '',
         status: 'P',
         invoiceNumber: '',
@@ -1813,8 +1814,8 @@ const calculateDistributionMetrics = async () => {
         .insert({
           job_name: legacyJobForm.jobName,
           client_name: legacyJobForm.jobName,  // Use job name as client name for legacy
-          start_date: new Date().toISOString().split('T')[0],  // Today's date
-          end_date: new Date().toISOString().split('T')[0],    // Today's date
+          start_date: formatDateLocalYMD(new Date()),  // Today's date (local)
+          end_date: formatDateLocalYMD(new Date()),    // Today's date (local)
           job_type: 'legacy_billing',
           billing_setup_complete: true,
           percent_billed: 0,
@@ -1861,7 +1862,7 @@ const calculateDistributionMetrics = async () => {
           
           const billingData = {
             job_id: newJob.id,
-            billing_date: new Date(event.date).toISOString().split('T')[0],
+            billing_date: formatDateLocalYMD(parseDateLocal(event.date) || new Date(event.date)),
             percentage_billed: event.percentage / 100,
             status: event.status,
             invoice_number: event.invoiceNumber,
@@ -3846,7 +3847,7 @@ const calculateDistributionMetrics = async () => {
                   setShowBulkPaste(false);
                   setBulkBillingText('');
                   setBillingForm({
-                    billingDate: new Date().toISOString().split('T')[0],
+                    billingDate: formatDateLocalYMD(new Date()),
                     percentageBilled: '',
                     status: 'P',
                     invoiceNumber: '',
@@ -4604,7 +4605,7 @@ const calculateDistributionMetrics = async () => {
                   setDistributionForm({
                     shareholder: '',
                     amount: '',
-                    date: new Date().toISOString().split('T')[0],
+                    date: formatDateLocalYMD(new Date()),
                     notes: ''
                   });
                 }}
@@ -4643,7 +4644,7 @@ const calculateDistributionMetrics = async () => {
                     setDistributionForm({
                       shareholder: '',
                       amount: '',
-                      date: new Date().toISOString().split('T')[0],
+                      date: formatDateLocalYMD(new Date()),
                       notes: ''
                     });
                     if (onRefresh) onRefresh();

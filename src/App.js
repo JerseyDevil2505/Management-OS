@@ -207,6 +207,10 @@ const App = () => {
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
 
+  // Help modal state
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpTab, setHelpTab] = useState('navigating-os');
+
   // Change Password modal state
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [cpCurrentPwd, setCpCurrentPwd] = useState('');
@@ -1358,6 +1362,13 @@ const App = () => {
                 )}
               </button>
               <button
+                onClick={() => setShowHelp(true)}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                title="How-to guides"
+              >
+                ❓ Help
+              </button>
+              <button
                 onClick={() => setShowChangePassword(true)}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
                 title="Change your password"
@@ -1781,6 +1792,237 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {/* Help Modal */}
+      {showHelp && (() => {
+        // Define tabs + steps here. Drop screenshots into public/help/<slug>/
+        // and reference them by file name in `img`. If the file doesn't exist
+        // the image just hides itself.
+        const HELP_TABS = [
+          {
+            id: 'navigating-os',
+            label: 'Navigating your Town with your Copilot',
+            intro:
+              "The Property Assessment Copilot was created to work WITH your Town's database and data collection vendors (BRT or Microsystems). The application is not connected live but rather is a snapshot of your most recent data file and code file update. Fingers crossed, maybe one day we can integrate directly with both.\n\n" +
+              "Because this is a snapshot, the FIRST thing to look at when you Go to a Job is the version banner at the top of the workspace — \"Current Data Version: X | Current Code Version: Y | Last Updated: ...\" That banner tells you exactly which file upload you are working from. If those numbers look stale, you (or whoever handles uploads on your side) can drop a new source or code file in and the snapshot refreshes.\n\n" +
+              "From there, the natural flow inside a Town is Market & Land Analysis (Data Quality → Pre-Valuation Setup → Land Valuation → Cost Valuation → Attribute & Card Analytics) into Final Valuation, where you can pick your approach: the Market Data tab (effective ages and depreciation) OR the Sales Comparison (CME) tool for the strict market approach. The CME tool and the Appeal Log are the two pieces that can stand on their own — you do not have to complete a full Market Analysis pass to use them.",
+            steps: [
+              { text: 'Top header (the dark bar at the very top): your Refresh button pulls the latest snapshot from the database, and Help is what you are reading now.', img: '01-top-nav.png' },
+              { text: '📋 Dashboard is your landing page. It says "Your Jobs" and shows one card per Town you have access to. Each card shows the Town\'s key stats — Total Line Items, Inspected, Residential / Commercial, Avg Measured Date, Most Recent Measured. The button on each card is "Go to Job" — that is how you enter a Town\'s workspace. The Dashboard is also where you upload a new source or code file when your vendor sends one.', img: '02-dashboard.png' },
+              { text: 'The version banner — read this first every time. Once you Go to a Job, the strip across the top of the workspace shows "Current Data Version: X | Current Code Version: Y" on the left and "Last Updated: <date>" right under it. Data Version goes up every time a new source file is uploaded; Code Version goes up every time a new code file is uploaded. If something on screen looks wrong, the version banner is the first place to check — you may be looking at a stale snapshot.', img: '03-version-banner.png' },
+              { text: 'The per-Town tabs (left to right, in the order they appear): Data Visualizations, Inspection Info, Market & Land Analysis, Final Valuation, Appeal Log. Assessor accounts open into Final Valuation by default since that is where you will spend most of your time.', img: '04-job-tabs.png' },
+              { text: 'Inspection Info — read-only summary of inspection coverage. Shows Improved Properties / Improved Entries / Improved Entry Rate cards at the top, then "Residential Inspections by VCS", "Breakdown by Property Class", "Inspector Breakdown", and "Missing Entries". Has an "Export PDF" button — good for status meetings.', img: '05-inspection-info.png' },
+              { text: 'Data Visualizations — charts only, nothing to edit. Includes Market History, VCS Average Sale Prices, Usable vs Non-Usable Sales, Sales NU Distribution, Design & Style Breakdown, Type & Use Breakdown, Building Class Distribution, Property Class Distribution. Use it to eyeball the data before you start analysis.', img: '06-data-viz.png' },
+              { text: 'Market & Land Analysis — the valuation prep workspace. Sub-tabs in the order they appear: "Data Quality / Error Checking", "Pre-Valuation Setup", "Overall Analysis", "Land Valuation", "Cost Valuation", "Attribute & Card Analytics". The 📍 Coordinates sub-tab lives at the end of the Data Quality strip — that is where you fix individual parcel lat/lng (see the Geocoding tab for how that works). Everything in this module flows DOWNSTREAM into Final Valuation.', img: '07-market-analysis.png' },
+              { text: 'Final Valuation — where values are actually produced. Sub-tabs in order: "Sales Review", "Market Data", "Ratable Comparison", "Sales Comparison (CME)", "Analytics". You have two ways to land at a value: the Market Data tab (the effective-age and depreciation approach — the "Market Data Approach" preview lives here) OR the Sales Comparison (CME) tool (the strict market approach with comparables, brackets, adjustments). Pick the one that fits the property.', img: '08-final-valuation.png' },
+              { text: 'Sales Comparison (CME) and Appeal Log can stand on their own. The CME has its own nested tabs ("Adjustments", "Sales Pool", "Search & Results", "Detailed", "Summary", "Vacant Land Evaluation") and reads its own data. Appeal Log is its own top-level Job tab — it loads the appeal_log directly. So if you only need to handle a few appeals or run one CME, you do not need to do a full Market Analysis pass first.', img: '09-cme-and-appeals.png' },
+              { text: 'Bottom line on data freshness: this app is NOT live-connected to BRT or Microsystems. Everything you see is the snapshot from your most recent source-file and code-file upload — and the version banner at the top of every Job tells you exactly which snapshot. When the Town\'s data changes on the vendor side, drop the new file in (see the "Updating your Town" tab) and the snapshot refreshes.', img: '10-snapshot.png' },
+            ],
+          },
+          {
+            id: 'updating-town',
+            label: 'Updating your Town',
+            intro:
+              "Two kinds of files keep your Town fresh:\n\n" +
+              "• DATA FILE (the blue \"Select File\" next to Source) — property record changes, class changes, new sales, ownership, etc. You will update this one often.\n" +
+              "• CODE FILE (the green \"Select File\" next to Code) — changes to the codebook itself: a new style, a new land adjustment, VCS edits. Updated much less often.\n\n" +
+              "The vendor (BRT vs Microsystems) is auto-detected from the file you pick — you do not have to tell the app which it is. Both imports run a comparison against what is already in the Town: you will see adds / removes / value changes, can review sales changes, keep valid sales that came in masked as $1, and continue normalization if you have already started a pass.\n\n" +
+              "Jump to your vendor's export steps below.",
+            links: [
+              { label: 'Microsystems export →', target: 'micro' },
+              { label: 'BRT export →', target: 'brt' },
+            ],
+            steps: [
+              { id: 'upload', heading: 'Where the upload happens (in the app)', text: 'Top of every Job, the file strip shows Source and Code. Blue "Select File" next to Source picks the new data file. Green "Select File" next to Code picks the new code file.\n\nIMPORTANT: picking the file does NOT update the Job. After you pick the file, the button changes to "Update" — you have to click Update to actually run the import. Once it finishes, the version banner just below the file strip bumps — that is your confirmation the snapshot refreshed.', img: '18-FileUpload.png' },
+              { heading: 'The File Comparison modal', text: 'After Update runs, the File Comparison Results modal opens. The four tiles across the top show what changed: Added, Deleted, Sales Changes, Class Changes. Click any tile to open that list:\n• Added / Deleted — new and removed line items\n• Sales Changes — every sale where Old vs New differs (book/page, price, NU, date). Per row you can choose Keep Old, Keep New, Keep Both, or Reject.\n• Class Changes — property class flips\nUse "View All Reports" if you want to see the running history of every comparison this Job has had. When you are happy, click "Mark Reviewed & Process" — that batch-applies your decisions to the Job. When it finishes you can close the window.', img: '21-comparison.png' },
+              { heading: 'Normalization Review (only if you have already started normalizing)', text: 'If you had already run a pass at Normalization before this update, a Normalization Review modal will pop next. Each changed sale needs a Keep or Reject decision before saving.\n\nWatch this one carefully — this is where a previously hidden / masked sale can be overridden by a < $100 transaction (e.g. a $1 deed transfer that came in on the new file). If you Keep blindly, you will lose the real sale. The bar at the top has an "Auto: Keep Clean / Reject Flagged" shortcut for the obvious ones, but eyeball the flagged rows yourself before saving.', img: '22-norm-rev.png' },
+              { id: 'micro', heading: 'MICROSYSTEMS — exporting your latest data + code file', text: 'From the Microsystems main menu, choose option 2 — Residential PRC Information.', img: '13-micro-main.png' },
+              { text: 'Once a record is loaded (Query any record, then press Q and Escape), click the WEB icon in the top toolbar. That opens the web version of Microsystems in a new tab.', img: '14-micro-web.png' },
+              { text: 'In the web version, click "Menu" in the action bar.', img: '15-micro-menu.png' },
+              { text: 'A new tab opens — choose "Upload/Download Menu".', img: '16-micro-UD.png' },
+              { text: 'Another tab opens — choose "Export to TXT File". A final tab will open with a "Click here for RPA File" link. Download the zip and extract it — the zip contains BOTH the data file and the code file.\n\nWhich file goes where in the app:\n• dataCCDD.txt → blue "Select File" next to Source (data)\n• codeCCDD.txt → green "Select File" next to Code (code)\n(CCDD = your county+district code, so the actual filenames will look like data0331.txt / code0331.txt for Riverton.)', img: '17-micro-export.png' },
+              { id: 'brt', heading: 'BRT — exporting your latest data file', text: 'In BRT Power Cama, open My Reports → Report Writer (or check My Reports first to see if the report is already saved there). The report you want is named COPILOT OS DATA. If it is not in either list, contact Dwayne at BRT or Jim to have it set up for your Town.', img: '19-BRT-Menu.png' },
+              { text: 'Once the Report Writer opens with COPILOT OS DATA loaded, click Run Selection Criteria. For larger Towns this can take a while — let it finish. When the Selection Criteria Results grid populates, click Save Results to CSV and pick a folder. That CSV is what you bring into the app using the blue "Select File" button next to Source.', img: '20-BRT-Report.png' },
+              { text: 'Code files on BRT: BRT does not currently provide a self-serve way to export the code file. If you make any table / codebook changes (new style, new land adjustment, VCS changes, etc.), contact Jim and he can push the updated code file for your Town.' },
+            ],
+          },
+          {
+            id: 'importing-appeal-logs',
+            label: 'Importing Appeal Logs',
+            intro:
+              "The Appeal Log is your workflow tool for defending appeal valuations — it is NOT meant to replace MyNJAppeal or PowerCama appeal tracking. Think of it as the place where you organize what you owe a defense for and what is already settled.\n\n" +
+              "You can re-import your appeal file as many times as you need. We check for already-imported appeals and just update hearing dates and judgments instead of creating duplicates.\n\n" +
+              "Microsystems users: at this time appeals on the Microsystems side have to be added manually with the \"+ Add Appeal\" button. Skip the vendor sections below — those are for the BRT family of tools.",
+            links: [
+              { label: 'MyNJAppeal (online) →', target: 'mynj' },
+              { label: 'BRT PowerCama →', target: 'brt-appeals' },
+            ],
+            steps: [
+              { id: 'mynj', heading: 'MyNJAppeal — for online appeal users', text: 'In MyNJAppeal, go to Appeal Management. At the bottom of the grid there is a "Click to export data" button — click it. That download is the file you will import into the Copilot.', img: '23-mynjappeal.png' },
+              { text: 'Back in the Copilot: open the Job → Appeal Log tab → click "Import MyNJAppeal" (the green button at the top of the log). Pick the file you just downloaded and it will populate your appeals automatically. Re-running the import later just refreshes hearing dates / judgments — no duplicates.', img: '24-mynjappeal-import.png' },
+              { id: 'brt-appeals', heading: 'BRT PowerCama — for appeals tracked in PowerCama', text: 'In BRT Power Cama, open the top-level Appeals menu and choose "View County Current Appeals" (or "Add/Edit Appeals" if you are still building the list).', img: '25-BRTappeals.png' },
+              { text: 'The appeals modal opens. At the bottom, click "Export to Excel". That XLSX is your import file.', img: '26-BRTappealmodal.png' },
+              { text: 'Back in the Copilot: Appeal Log tab → click "Import PwrCama Appeals" and pick the Excel file you just exported. Same rules — re-importing just updates hearing dates and judgments on appeals already in the log.', img: '27-importbrtappeals.png' },
+            ],
+          },
+          {
+            id: 'powercomp-photos',
+            label: 'Appeal Photos with the PowerComp',
+            intro:
+              "The Copilot can now generate a strict-market CME defense report and pair it with photos pulled from BRT's PowerComp Batch Taxpayer Report. End result: one PDF per appeal with comps, adjustments, map, and photos — ready for evidence submission.\n\n" +
+              "Why we built it this way: the LOJIK CME is a strict market approach (similar to a real appraisal) instead of relying on Building Class / Cost Conversion Factor / Effective Age. The Assessor controls how comps are picked, and you can run multiple appeals at once as long as they share a VCS or market bracket — much faster than running them one-by-one in PowerComp.\n\n" +
+              "Below is the full workflow, ordered. There is some one-time setup at the top (PowerComp version + a folder), then the repeatable per-appeal-cycle workflow.",
+            links: [
+              { label: 'One-time setup →', target: 'pwc-setup' },
+              { label: 'CME workflow →', target: 'pwc-cme' },
+              { label: 'PowerComp build →', target: 'pwc-build' },
+              { label: 'Photos back into Copilot →', target: 'pwc-merge' },
+            ],
+            steps: [
+              { id: 'pwc-setup', heading: '1. One-time setup — PowerComp version', text: 'You must be on PowerComp 2026 V43. The installer file from BRT is named "PowerCompSetup 2026 V43.msi" — reach out to Randy at BRT or Jim if you do not have it. UNINSTALL the older version BEFORE you install V43, otherwise the upgrade will not take cleanly.' },
+              { heading: '2. One-time setup — create the duda folder', text: 'Open File Explorer and navigate to C:\\Powerpad\\Comparables. Right-click → New → Folder → name it exactly "duda". This is where the Copilot drops the comp files PowerComp will pick up.', img: '28-filexp.png' },
+              { id: 'pwc-cme', heading: '3. Run evidence in the CME — group by VCS / market bracket', text: 'In Final Valuation → Sales Comparison (CME), run evidence on every appeal that needs a defense. Group similar properties (same VCS or market bracket) into the same saved Result Set so they share an adjustment frame. You can save Result Sets however you like — they all live under the Evaluate button so you can come back any time.' },
+              { heading: '4. Refine each appeal in the Detailed view', text: 'Open the Detailed view for every appeal. Check the sales pulled in: remove anything you would not stand behind in front of the board, add anything missing, and update appellant evidence if they submitted comps you want to address.', img: '30-loadcomps.png' },
+              { heading: '5. Export to PDF and Send to Appeal Log', text: 'When the Comps and Adjustments look right, hit Export to PDF. Verify the Map is accurate. If you want to hide the adjustments grid or hide the Director\'s Ratio study on this report, toggle that here. Instead of downloading the PDF, click "Send to Appeal Log".' },
+              { heading: '6. What "Send to Appeal Log" does', text: 'Two things happen back in the Appeal Log:\n• The CME Value column turns into a blue value — that means you have prepared comps and locked in a defended value.\n• The Action column shows a "Report ✓" badge — that means a final report is on file.\nThis is your at-a-glance status of which appeals are defense-ready.', img: '29-appeal-log-cme.png' },
+              { id: 'pwc-build', heading: '7. Build PowerComp files in bulk — orange Export CSV (PowerComp)', text: 'At the bottom of the page, click the orange "Export CSV (PowerComp)" button. (Other buttons in this row: green Import Batch PwrComp PDF, blue Batch Print Appeals, purple Bulk Upload Reports — we will use the green one in step 11.)', img: '35-PDF-Import.png' },
+              { heading: '8. Pick which Result Sets to ship to PowerComp', text: 'A modal opens listing every saved Result Set. Everything is checked by default — uncheck any saved run you do NOT want to send. Common reason to uncheck: a subject has both an assessor run AND an appellant run, or there is a manager rebuttal you do not want shipped. Click "Export N to CSV" when ready.', img: '31-selectall.png' },
+              { heading: '9. In PowerComp — Load Comps from File, then Select Record from File', text: 'Open PowerComp → Utilities → "Load Comps from File" → pick the CSV you just exported. The load is a silent success (no popup). IMMEDIATELY go back to Utilities → "Select Record from File" — that opens a popup listing every appeal. Click "Save All". PowerComp will flicker as it builds a .PWRC file for each appeal — give it time on a large batch.' },
+              { heading: '10. Verify the PowerComp output (CRITICAL)', text: 'Open C:\\Powerpad\\Comparables\\<your folder> — you should see one .PWRC per appeal you sent. Open each one and check TWO things:\n\n(a) Phantom comps. If appeal A has 3 comps, appeal B has 4 comps, appeal C has 3 comps — PowerComp sometimes carries the 4th comp from B forward into C. (Reported to Randy, no fix yet.) Delete any phantom column before printing.\n\n(b) Photos. The subject and every comp must show the right exterior photo. If any are missing or wrong, the photos for that parcel have not been pulled into PowerComp yet — go to PowerCama → Cama → "Refresh Pictures" to download photos for the Town. This is slow and may take multiple sessions, but it is a one-time-per-Town hit.\n\nAt this stage you do NOT care about adjustments or values inside PowerComp — those are already locked in by the Copilot. You are only verifying that the right subject + right comps + right photos are loaded.', img: '32-PowerComp-Files.png' },
+              { heading: '10a. What a missing-photos / phantom-comp page looks like', text: 'Subject photo present, but Comp 2 and Comp 3 are blank. Fix the photos in PowerCama (Refresh Pictures) before exporting the Batch Taxpayer Report.', img: '33-Photo-Bug.png' },
+              { heading: '10b. What a clean page looks like', text: 'Subject + every comp showing the correct exterior photo. This is what you want before you Batch Print.', img: '34-Photo-Complete.png' },
+              { id: 'pwc-merge', heading: '11. PowerComp — Batch Taxpayer Report', text: 'In PowerComp, go to File → Batch Taxpayer Report. Save the resulting PDF — that single PDF contains the photo pages for every appeal you just built.' },
+              { heading: '12. Back in the Copilot — Import Batch PwrComp PDF', text: 'In the Appeal Log, click the green "Import Batch PwrComp PDF" button (the one we left alone in step 7). Pick the PDF you just saved. The parser matches each subject by Block / Lot / Qualifier and drops the photo pages into the appeal\'s photo bucket.' },
+              { heading: '13. The photo badge — your finish line', text: 'In the Appeal Log Action column, the appeal now shows BOTH a "Report ✓" badge AND a small image badge — that means photos are attached. The blue print icon next to it now downloads the FULL evidence PDF (CME report + photo packet stitched together) ready for submission.', img: '36-photo-badge.png' },
+            ],
+          },
+          {
+            id: 'geocoding',
+            label: 'Geocoding (sources, matching, pitfalls)',
+            intro:
+              "Geocoding = giving every parcel a lat/lng. Coordinates power the Appeal Map and the distance-from-subject filter in the CME, so clean coords pay off everywhere downstream.\n\n" +
+              "Where they come from: the U.S. Census Bureau's free batch geocoder (matched against TIGER, their nationwide street database). The bulk run is an admin job — what you work with is the cleanup queue at Market Analysis → Data Quality → 📍 Coordinates for parcels that came back missing, low-confidence, or that you want to correct by hand.",
+            steps: [
+              { text: 'The cleanup queue has three buckets: Pending (no coords), Review (low-confidence — Tie, Non_Exact, ZIP Centroid, Approximate), Fixed (manual or high-confidence). Class chips narrow by property class; Sales Pool narrows to parcels inside the current sales-pool window so you can prioritize likely comps.', img: '11-geocoding.png' },
+              { text: 'To fix one by hand: click the "Open" link in the Map column → right-click the correct rooftop in Google Maps → copy lat/lng → click the pin chip on the row to bring up the Edit Geocode modal → paste into the single field (Latitude and Longitude both fill automatically) → Save. It jumps to Fixed instantly. After a re-upload, new parcels appear in Pending and your saved coords are preserved.', img: '12-geo-modal.png' },
+              { text: 'Pitfalls to know:\n• ALWAYS check your map on export — some Census matches land on the wrong block or at a ZIP centroid in a field. If a comp shows up across town, fix it here and re-export.\n• Tie = Census found more than one address that fits (same number on two streets). Manual fix only.\n• Condos inherit the mother lot\'s coords. If the mother lot is wrong, every child is wrong — fix the mother first.\n• Garbage addresses ("RT 1 BX 47", "REAR OF 123 MAIN") will not geocode cleanly and will need a manual lat/lng.' },
+            ],
+          },
+        ];
+        const activeTab = HELP_TABS.find(t => t.id === helpTab) || HELP_TABS[0];
+        return (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', zIndex: 9999,
+            }}
+            onClick={() => setShowHelp(false)}
+          >
+            <div
+              style={{
+                background: 'white', borderRadius: '12px', width: '90%', maxWidth: '780px',
+                maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Help &amp; How-to</h2>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                {HELP_TABS.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setHelpTab(t.id)}
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: helpTab === t.id ? 'white' : 'transparent',
+                      borderBottom: helpTab === t.id ? '2px solid #2563eb' : '2px solid transparent',
+                      color: helpTab === t.id ? '#2563eb' : '#374151',
+                      fontWeight: helpTab === t.id ? 600 : 500,
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Body */}
+              <div id="help-modal-body" style={{ padding: '20px', overflowY: 'auto' }}>
+                <p style={{ marginTop: 0, color: '#4b5563', fontSize: '0.95rem', whiteSpace: 'pre-line' }}>{activeTab.intro}</p>
+                {activeTab.links && activeTab.links.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 16px' }}>
+                    {activeTab.links.map((lnk) => (
+                      <button
+                        key={lnk.target}
+                        onClick={() => {
+                          const el = document.getElementById(`help-step-${lnk.target}`);
+                          const scroller = document.getElementById('help-modal-body');
+                          if (el && scroller) {
+                            scroller.scrollTo({ top: el.offsetTop - scroller.offsetTop - 8, behavior: 'smooth' });
+                          }
+                        }}
+                        style={{
+                          padding: '6px 12px', borderRadius: '999px', border: '1px solid #d1d5db',
+                          background: '#f9fafb', color: '#1f2937', cursor: 'pointer',
+                          fontSize: '0.85rem', fontWeight: 500,
+                        }}
+                      >
+                        {lnk.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <ol style={{ paddingLeft: '20px', margin: 0 }}>
+                  {activeTab.steps.map((step, i) => (
+                    <li key={i} id={step.id ? `help-step-${step.id}` : undefined} style={{ marginBottom: '20px' }}>
+                      {step.heading && (
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111827', marginBottom: '6px' }}>
+                          {step.heading}
+                        </div>
+                      )}
+                      <div style={{ marginBottom: '8px', color: '#1f2937', whiteSpace: 'pre-line' }}>{step.text}</div>
+                      {step.img && (
+                        <img
+                          src={`/${step.img}`}
+                          alt=""
+                          style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #e5e7eb', display: 'block' }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Change Password Modal */}
       {showChangePassword && (
