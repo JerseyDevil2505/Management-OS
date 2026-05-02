@@ -207,6 +207,10 @@ const App = () => {
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
 
+  // Help modal state
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpTab, setHelpTab] = useState('updating-town');
+
   // Change Password modal state
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [cpCurrentPwd, setCpCurrentPwd] = useState('');
@@ -1358,6 +1362,13 @@ const App = () => {
                 )}
               </button>
               <button
+                onClick={() => setShowHelp(true)}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                title="How-to guides"
+              >
+                ❓ Help
+              </button>
+              <button
                 onClick={() => setShowChangePassword(true)}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
                 title="Change your password"
@@ -1781,6 +1792,133 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {/* Help Modal */}
+      {showHelp && (() => {
+        // Define tabs + steps here. Drop screenshots into public/help/<slug>/
+        // and reference them by file name in `img`. If the file doesn't exist
+        // the image just hides itself.
+        const HELP_TABS = [
+          {
+            id: 'updating-town',
+            label: 'Updating your Town',
+            intro: 'Re-uploading a new source file (BRT or Microsystems) over an existing job. The updater diffs against what is already there, flags new/changed records, and refreshes analytics.',
+            steps: [
+              { text: 'Open the job, go to the File Upload area, and drop in the new source file.', img: 'help/updating-town/01-upload.png' },
+              { text: 'Confirm the vendor was detected correctly (BRT vs Microsystems).', img: 'help/updating-town/02-vendor.png' },
+              { text: 'Review the comparison report — adds, removes, and value changes.', img: 'help/updating-town/03-comparison.png' },
+              { text: 'Approve the update. The system flags new records and marks the job for analytics refresh.', img: 'help/updating-town/04-approve.png' },
+            ],
+          },
+          {
+            id: 'importing-appeal-logs',
+            label: 'Importing Appeal Logs',
+            intro: 'Bringing appeals into the Appeal Log from XLS, CSV, PDF, or manual entry.',
+            steps: [
+              { text: 'Open the job → Final Valuation → Appeal Log tab.', img: 'help/importing-appeals/01-open.png' },
+              { text: 'Click Import and choose the file type (XLS / CSV / PDF).', img: 'help/importing-appeals/02-import.png' },
+              { text: 'Map any unrecognized columns if prompted (county exports vary).', img: 'help/importing-appeals/03-map.png' },
+              { text: 'Review the import preview, then confirm to write to the appeal log.', img: 'help/importing-appeals/04-confirm.png' },
+            ],
+          },
+          {
+            id: 'powercomp-photos',
+            label: 'Appeal Photos with the PowerComp',
+            intro: 'PPA appeal reports do not include property photos. Import the BRT PowerComp Batch Taxpayer Report PDF; the system slices the photo pages per subject and stitches them into the appeal report at print time.',
+            steps: [
+              { text: 'In Appeal Log, click "Import Batch PwrComp PDF".', img: 'help/powercomp/01-import-button.png' },
+              { text: 'Upload the PowerComp PDF. The parser matches each subject by Block / Lot / Qualifier.', img: 'help/powercomp/02-upload.png' },
+              { text: 'Photo pages are stored per subject in the powercomp-photos bucket (a "BRT Technologies PowerComp" footer is added — leave it on, attribution is required).', img: 'help/powercomp/03-stored.png' },
+              { text: 'When you print an appeal report, the photo packet is automatically merged in the canonical order. Re-import to replace if PowerComp re-issues photos.', img: 'help/powercomp/04-print.png' },
+            ],
+          },
+        ];
+        const activeTab = HELP_TABS.find(t => t.id === helpTab) || HELP_TABS[0];
+        return (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', zIndex: 9999,
+            }}
+            onClick={() => setShowHelp(false)}
+          >
+            <div
+              style={{
+                background: 'white', borderRadius: '12px', width: '90%', maxWidth: '780px',
+                maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Help &amp; How-to</h2>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                {HELP_TABS.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setHelpTab(t.id)}
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: helpTab === t.id ? 'white' : 'transparent',
+                      borderBottom: helpTab === t.id ? '2px solid #2563eb' : '2px solid transparent',
+                      color: helpTab === t.id ? '#2563eb' : '#374151',
+                      fontWeight: helpTab === t.id ? 600 : 500,
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '20px', overflowY: 'auto' }}>
+                <p style={{ marginTop: 0, color: '#4b5563', fontSize: '0.95rem' }}>{activeTab.intro}</p>
+                <ol style={{ paddingLeft: '20px', margin: 0 }}>
+                  {activeTab.steps.map((step, i) => (
+                    <li key={i} style={{ marginBottom: '20px' }}>
+                      <div style={{ marginBottom: '8px', color: '#1f2937' }}>{step.text}</div>
+                      {step.img && (
+                        <img
+                          src={`/${step.img}`}
+                          alt=""
+                          style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid #e5e7eb', display: 'block' }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Change Password Modal */}
       {showChangePassword && (
