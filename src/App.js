@@ -1822,12 +1822,25 @@ const App = () => {
           {
             id: 'updating-town',
             label: 'Updating your Town',
-            intro: 'Re-uploading a new source file (BRT or Microsystems) over an existing job. The updater diffs against what is already there, flags new/changed records, and refreshes analytics.',
+            intro:
+              "Two kinds of files keep your Town fresh:\n\n" +
+              "• DATA FILE (the blue \"Select File\" next to Source) — property record changes, class changes, new sales, ownership, etc. You will update this one often.\n" +
+              "• CODE FILE (the green \"Select File\" next to Code) — changes to the codebook itself: a new style, a new land adjustment, VCS edits. Updated much less often.\n\n" +
+              "The vendor (BRT vs Microsystems) is auto-detected from the file you pick — you do not have to tell the app which it is. Both imports run a comparison against what is already in the Town: you will see adds / removes / value changes, can review sales changes, keep valid sales that came in masked as $1, and continue normalization if you have already started a pass.\n\n" +
+              "Jump to your vendor's export steps below.",
+            links: [
+              { label: 'Microsystems export →', target: 'micro' },
+              { label: 'BRT export →', target: 'brt' },
+            ],
             steps: [
-              { text: 'Open the job, go to the File Upload area, and drop in the new source file.', img: 'help/updating-town/01-upload.png' },
-              { text: 'Confirm the vendor was detected correctly (BRT vs Microsystems).', img: 'help/updating-town/02-vendor.png' },
-              { text: 'Review the comparison report — adds, removes, and value changes.', img: 'help/updating-town/03-comparison.png' },
-              { text: 'Approve the update. The system flags new records and marks the job for analytics refresh.', img: 'help/updating-town/04-approve.png' },
+              { id: 'upload', heading: 'Where the upload happens (in the app)', text: 'Top of every Job, the file strip shows Source and Code. Blue "Select File" next to Source uploads the new data file. Green "Select File" next to Code uploads the new code file. The version banner just below it bumps as soon as the import finishes — that is your confirmation the snapshot refreshed.', img: '18-FileUpload.png' },
+              { heading: 'What the comparison report covers', text: 'After you pick the file, the import previews adds / removes / changes before anything is written. Sales changes show up here — you can keep a previously valid sale that has been re-imported as a $1 masked sale, and any normalization you started carries forward instead of being wiped out.' },
+              { id: 'micro', heading: 'MICROSYSTEMS — exporting your latest data + code file', text: 'From the Microsystems main menu, choose option 2 — Residential PRC Information.', img: '13-micro-main.png' },
+              { text: 'Once a record is loaded (Query any record, then press Q and Escape), click the WEB icon in the top toolbar. That opens the web version of Microsystems in a new tab.', img: '14-micro-web.png' },
+              { text: 'In the web version, click "Menu" in the action bar.', img: '15-micro-menu.png' },
+              { text: 'A new tab opens — choose "Upload/Download Menu".', img: '16-micro-UD.png' },
+              { text: 'Another tab opens — choose "Export to TXT File". A final tab will open with a "Click here for RPA File" link. Download the zip and extract it — the zip contains BOTH the data file and the code file. Bring those into the app using the blue (data) and green (code) Select File buttons above.', img: '17-micro-export.png' },
+              { id: 'brt', heading: 'BRT — exporting your latest data + code file', text: 'BRT walkthrough coming next — we will document this together once you run through it on the BRT side.' },
             ],
           },
           {
@@ -1919,12 +1932,40 @@ const App = () => {
               </div>
 
               {/* Body */}
-              <div style={{ padding: '20px', overflowY: 'auto' }}>
+              <div id="help-modal-body" style={{ padding: '20px', overflowY: 'auto' }}>
                 <p style={{ marginTop: 0, color: '#4b5563', fontSize: '0.95rem', whiteSpace: 'pre-line' }}>{activeTab.intro}</p>
+                {activeTab.links && activeTab.links.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 16px' }}>
+                    {activeTab.links.map((lnk) => (
+                      <button
+                        key={lnk.target}
+                        onClick={() => {
+                          const el = document.getElementById(`help-step-${lnk.target}`);
+                          const scroller = document.getElementById('help-modal-body');
+                          if (el && scroller) {
+                            scroller.scrollTo({ top: el.offsetTop - scroller.offsetTop - 8, behavior: 'smooth' });
+                          }
+                        }}
+                        style={{
+                          padding: '6px 12px', borderRadius: '999px', border: '1px solid #d1d5db',
+                          background: '#f9fafb', color: '#1f2937', cursor: 'pointer',
+                          fontSize: '0.85rem', fontWeight: 500,
+                        }}
+                      >
+                        {lnk.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <ol style={{ paddingLeft: '20px', margin: 0 }}>
                   {activeTab.steps.map((step, i) => (
-                    <li key={i} style={{ marginBottom: '20px' }}>
-                      <div style={{ marginBottom: '8px', color: '#1f2937' }}>{step.text}</div>
+                    <li key={i} id={step.id ? `help-step-${step.id}` : undefined} style={{ marginBottom: '20px' }}>
+                      {step.heading && (
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111827', marginBottom: '6px' }}>
+                          {step.heading}
+                        </div>
+                      )}
+                      <div style={{ marginBottom: '8px', color: '#1f2937', whiteSpace: 'pre-line' }}>{step.text}</div>
                       {step.img && (
                         <img
                           src={`/${step.img}`}
