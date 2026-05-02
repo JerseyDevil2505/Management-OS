@@ -209,7 +209,7 @@ const App = () => {
 
   // Help modal state
   const [showHelp, setShowHelp] = useState(false);
-  const [helpTab, setHelpTab] = useState('updating-town');
+  const [helpTab, setHelpTab] = useState('navigating-os');
 
   // Change Password modal state
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -1800,6 +1800,28 @@ const App = () => {
         // the image just hides itself.
         const HELP_TABS = [
           {
+            id: 'navigating-os',
+            label: 'Navigating your Town with your Copilot',
+            intro:
+              "The Property Assessment Copilot was created to work WITH your Town's database and data collection vendors (BRT or Microsystems). The application is not connected live but rather is a snapshot of your most recent data file and code file update. Fingers crossed, maybe one day we can integrate directly with both.\n\n" +
+              "Quick rule of thumb: most Towns flow Management Checklist → Production Tracker → Market Analysis → Final Valuation. The CME (Comparable Market Evaluation) and the Appeal Log are the two pieces that can stand on their own — you can use them without going through the whole Market Analysis flow first.",
+            steps: [
+              { text: 'Top of the page (the dark header) is your home base. The big tabs across the top — Employees, Jobs, Appeals, Billing, Payroll, Users, Organizations, Revenue, Geocoder — are office-wide tools that work across every Town. The Refresh button reloads the latest snapshot from the database. The Help button is what you are reading right now.', img: 'help/navigating/01-top-nav.png' },
+              { text: 'Jobs is where you live day-to-day. Each "Job" is one Town. From the Jobs page you can create a new Town, archive a finished one, see status at a glance, and click any Town to open it.', img: 'help/navigating/02-jobs.png' },
+              { text: 'When you open a Town you drop into the Job workspace. Across the top of the workspace are the per-Town modules: Management Checklist, Production Tracker, Inspection Info, Data Visualizations, Market Analysis, and Final Valuation. Think of these as rooms inside the Town\'s house.', img: 'help/navigating/03-job-modules.png' },
+              { text: 'Management Checklist is your project to-do list for the Town. Items here track deliverables, approvals, and document uploads. It is mostly self-contained but it is where most projects start.', img: 'help/navigating/04-checklist.png' },
+              { text: 'Production Tracker is the engine for inspection analytics. It reads what your inspectors have entered, validates the codes against your employee roster, flags problems (bad list_by, old dates, missing pricing), and writes a clean snapshot. The output of Production Tracker feeds Inspection Info, Employee analytics, Payroll attribution, and the entry-rate stats you see on the Jobs dashboard.', img: 'help/navigating/05-production-tracker.png' },
+              { text: 'Inspection Info is a read-only summary view — coverage by class, by VCS, by inspector, plus a printable PDF. Good for status meetings. It pulls straight from what Production Tracker validated.', img: 'help/navigating/06-inspection-info.png' },
+              { text: 'Data Visualizations gives you charts of the property mix and sales activity for the Town. It does not write anything — it is just there to help you eyeball the data before you start analysis.', img: 'help/navigating/07-data-viz.png' },
+              { text: 'Market Analysis is a multi-tab workspace where you do the actual valuation prep: Land Valuation (rates and brackets), Pre-Valuation (sales normalization), Attribute Cards, Overall Analysis, Data Quality, Coordinates cleanup, and Cost Valuation. Most of what you do here flows DOWNSTREAM into Final Valuation.', img: 'help/navigating/08-market-analysis.png' },
+              { text: 'Final Valuation is where values actually get produced. The big pieces are: Sales Comparison / CME (the Comparable Market Evaluation tool), the Appeal Log, the Detailed Appraisal Grid (manual appraisals with PDF export), Adjustments, Sales Review, Market Data, Vacant Land, Ratable Comparison, and Analytics. Most of these read from Market Analysis output, BUT — important — the CME tool and the Appeal Log can be run on their own. If you only need to handle a handful of appeals, you do not need to do a full Market Analysis pass first.', img: 'help/navigating/09-final-valuation.png' },
+              { text: 'Back at the office-wide level: Geocoder (admin only) is where parcels get latitude/longitude coordinates. Coordinates feed the appeal map and the distance filter inside the CME, so doing a clean geocode pass early pays off later.', img: 'help/navigating/10-geocoder.png' },
+              { text: 'Appeals (the top-level button, not the per-Town tab) is a cross-Town dashboard that rolls up appeal stats from every Town you have access to. Useful at the firm level.', img: 'help/navigating/11-appeals-summary.png' },
+              { text: 'Billing, Payroll, Revenue, Users, and Organizations are operational tools. They are mostly self-contained — they do not feed the per-Town valuation flow, but Payroll does pull from the inspection data that Production Tracker validates.', img: 'help/navigating/12-ops-tools.png' },
+              { text: 'A note on data freshness: this app is NOT live-connected to BRT or Microsystems. Everything you see is the snapshot from your most recent source-file and code-file upload. When the Town\'s data changes on the vendor side, you re-upload the new file (see the "Updating your Town" tab) and the snapshot refreshes.', img: 'help/navigating/13-snapshot.png' },
+            ],
+          },
+          {
             id: 'updating-town',
             label: 'Updating your Town',
             intro: 'Re-uploading a new source file (BRT or Microsystems) over an existing job. The updater diffs against what is already there, flags new/changed records, and refreshes analytics.',
@@ -1888,7 +1910,7 @@ const App = () => {
 
               {/* Body */}
               <div style={{ padding: '20px', overflowY: 'auto' }}>
-                <p style={{ marginTop: 0, color: '#4b5563', fontSize: '0.95rem' }}>{activeTab.intro}</p>
+                <p style={{ marginTop: 0, color: '#4b5563', fontSize: '0.95rem', whiteSpace: 'pre-line' }}>{activeTab.intro}</p>
                 <ol style={{ paddingLeft: '20px', margin: 0 }}>
                   {activeTab.steps.map((step, i) => (
                     <li key={i} style={{ marginBottom: '20px' }}>
