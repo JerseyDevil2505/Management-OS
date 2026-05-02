@@ -1820,27 +1820,6 @@ const App = () => {
             ],
           },
           {
-            id: 'geocoding',
-            label: 'Geocoding (sources, matching, pitfalls)',
-            intro:
-              "Geocoding = giving every parcel a latitude/longitude. Coordinates power the Appeal Map and the distance-from-subject filter inside the CME, so a clean geocode pass pays off everywhere downstream.\n\n" +
-              "You will not run the bulk Census process — that is an admin tool. What you DO have, inside any Town, is Market Analysis → Data Quality → 📍 Coordinates, which is the cleanup queue for individual parcels that came back un-matched, low-confidence, or that you want to correct by hand.",
-            steps: [
-              { text: 'Where the coordinates come from: the U.S. Census Bureau\'s free batch geocoder. We send a CSV of addresses, the Census matches them against TIGER (their nationwide street database), and sends results back. We do this manually instead of using a paid live API because it is free and reliable, and a Town\'s addresses do not change often enough to need a live feed.', img: 'help/geocoding/01-source.png' },
-              { text: 'How matches are graded: each row comes back as Exact / Match / Non_Exact / Tie / No_Match / ZIP Centroid / Approximate. Exact and Match are good. Non_Exact and Approximate are usable but worth a sanity check. Tie means Census found more than one address that fits and could not pick. No_Match means Census could not find it at all.', img: 'help/geocoding/02-match-quality.png' },
-              { text: 'Address normalization happens automatically before we send to Census: street suffixes are canonicalized (RD/ROAD, ST/STREET, etc.), routes get rewritten, and numbered streets are submitted both as a digit and as a word ("336 3RD ST" AND "336 THIRD ST") because Census indexes them inconsistently from one street segment to the next.', img: 'help/geocoding/03-normalization.png' },
-              { text: 'Special handling: condo children (qualifier starts with "C") inherit the mother lot\'s coordinates instead of being geocoded individually — Census usually fails on "123 MAIN ST UNIT 4B". Parcels with no street number, PO boxes, or bare lot descriptions get marked "skipped" so they stop appearing in your cleanup queue. ZIP-sweep variants are sent for stubborn parcels using the Town\'s known ZIPs.', img: 'help/geocoding/04-special-handling.png' },
-              { text: 'Your cleanup queue (Data Quality → 📍 Coordinates): three buckets — Pending (no coords yet), Review (low-confidence Census match — Tie, Non_Exact, ZIP Centroid, Approximate), and Fixed (manual entries plus high-confidence Census matches). Counts shown at the top.', img: 'help/geocoding/05-cleanup-queue.png' },
-              { text: 'How to fix one by hand: each row has an "Open in Google Maps" link prefilled with the parcel\'s address. Open it, right-click the correct rooftop on the map, copy the lat/lng, click the pin chip on the row, paste, save. The row moves to the Fixed bucket immediately — no refresh needed.', img: 'help/geocoding/06-manual-fix.png' },
-              { text: 'Filter chips: Class chips (multi-select) narrow the queue to specific property classes. The Sales Pool chip narrows to parcels with a sales date inside the current sales-pool window — useful when you want to prioritize coordinates for parcels you will actually pull as comps in the CME. Counts on the chips tell you exactly what each one would yield.', img: 'help/geocoding/07-filter-chips.png' },
-              { text: 'Updating after a re-upload: when you upload a new source file, new parcels show up in Pending automatically. Existing coordinates are preserved (we never overwrite a saved coord on a re-upload). So your manual fixes are safe — you just work the new Pending count.', img: 'help/geocoding/08-after-reupload.png' },
-              { text: 'PITFALL #1 — ALWAYS check your map on export. A small share of Census matches will be off by a block, on the wrong side of the street, or pinned to a ZIP centroid out in a field. If a comp is showing up at the wrong end of town on the appeal map, that is the symptom. Open the parcel in the Coordinates queue, fix it, re-export.', img: 'help/geocoding/09-pitfall-check-map.png' },
-              { text: 'PITFALL #2 — Tie matches. A "Tie" means more than one street segment fit (often the same address number on two streets with the same name in adjacent boroughs). These need a manual fix. Do not assume Census picked the right one.', img: 'help/geocoding/10-pitfall-ties.png' },
-              { text: 'PITFALL #3 — Condo mother-lot inheritance. If the mother lot itself is wrong, every condo child inherits the wrong coordinates. Fix the mother lot first, then any children that did not auto-update can be re-saved.', img: 'help/geocoding/11-pitfall-condos.png' },
-              { text: 'PITFALL #4 — Vendor address quality. Garbage in, garbage out. If your source file has "RT 1 BX 47" or "REAR OF 123 MAIN" we cannot geocode it cleanly. These typically end up Skipped or Review and need a manual lat/lng.', img: 'help/geocoding/12-pitfall-bad-addresses.png' },
-            ],
-          },
-          {
             id: 'updating-town',
             label: 'Updating your Town',
             intro: 'Re-uploading a new source file (BRT or Microsystems) over an existing job. The updater diffs against what is already there, flags new/changed records, and refreshes analytics.',
@@ -1871,6 +1850,26 @@ const App = () => {
               { text: 'Upload the PowerComp PDF. The parser matches each subject by Block / Lot / Qualifier.', img: 'help/powercomp/02-upload.png' },
               { text: 'Photo pages are stored per subject in the powercomp-photos bucket (a "BRT Technologies PowerComp" footer is added — leave it on, attribution is required).', img: 'help/powercomp/03-stored.png' },
               { text: 'When you print an appeal report, the photo packet is automatically merged in the canonical order. Re-import to replace if PowerComp re-issues photos.', img: 'help/powercomp/04-print.png' },
+            ],
+          },
+          {
+            id: 'geocoding',
+            label: 'Geocoding (sources, matching, pitfalls)',
+            intro:
+              "Geocoding = giving every parcel a latitude/longitude. Coordinates power the Appeal Map and the distance-from-subject filter inside the CME, so a clean geocode pass pays off everywhere downstream.\n\n" +
+              "You will not run the bulk Census process — that is an admin tool. What you DO have, inside any Town, is Market Analysis → Data Quality → 📍 Coordinates, which is the cleanup queue for individual parcels that came back un-matched, low-confidence, or that you want to correct by hand.",
+            steps: [
+              { text: 'Your cleanup queue (Data Quality → 📍 Coordinates): three buckets across the top — Pending (no coords yet), Review (low-confidence Census match — Tie, Non_Exact, ZIP Centroid, Approximate), and Fixed (manual entries plus high-confidence Census matches). Class chips narrow by property class; the Sales Pool chip narrows to parcels in the current sales-pool window so you can prioritize comp candidates.', img: '11-geocoding.png' },
+              { text: 'Where the coordinates come from: the U.S. Census Bureau\'s free batch geocoder. We send a CSV of addresses, the Census matches them against TIGER (their nationwide street database), and sends results back. We do this manually instead of using a paid live API because it is free and reliable, and a Town\'s addresses do not change often enough to need a live feed.', img: '12-geocoding-source.png' },
+              { text: 'How matches are graded: each row comes back as Exact / Match / Non_Exact / Tie / No_Match / ZIP Centroid / Approximate. Exact and Match are good. Non_Exact and Approximate are usable but worth a sanity check. Tie means Census found more than one address that fits and could not pick. No_Match means Census could not find it at all.', img: '13-geocoding-match-quality.png' },
+              { text: 'Address normalization happens automatically before we send to Census: street suffixes are canonicalized (RD/ROAD, ST/STREET, etc.), routes get rewritten, and numbered streets are submitted both as a digit and as a word ("336 3RD ST" AND "336 THIRD ST") because Census indexes them inconsistently from one street segment to the next.', img: '14-geocoding-normalization.png' },
+              { text: 'Special handling: condo children (qualifier starts with "C") inherit the mother lot\'s coordinates instead of being geocoded individually — Census usually fails on "123 MAIN ST UNIT 4B". Parcels with no street number, PO boxes, or bare lot descriptions get marked "skipped" so they stop appearing in your cleanup queue. ZIP-sweep variants are sent for stubborn parcels using the Town\'s known ZIPs.', img: '15-geocoding-special-handling.png' },
+              { text: 'How to fix one by hand: each row has an "Open" link in the Map column prefilled with the parcel\'s address in Google Maps. Open it, right-click the correct rooftop, copy the lat/lng, click the pin chip on the row, paste, save. The row moves to the Fixed bucket immediately — no refresh needed.', img: '16-geocoding-manual-fix.png' },
+              { text: 'Updating after a re-upload: when you upload a new source file, new parcels show up in Pending automatically. Existing coordinates are preserved (we never overwrite a saved coord on a re-upload). So your manual fixes are safe — you just work the new Pending count.', img: '17-geocoding-after-reupload.png' },
+              { text: 'PITFALL #1 — ALWAYS check your map on export. A small share of Census matches will be off by a block, on the wrong side of the street, or pinned to a ZIP centroid out in a field. If a comp is showing up at the wrong end of town on the appeal map, that is the symptom. Open the parcel in the Coordinates queue, fix it, re-export.', img: '18-geocoding-pitfall-map.png' },
+              { text: 'PITFALL #2 — Tie matches. A "Tie" means more than one street segment fit (often the same address number on two streets with the same name in adjacent boroughs). These need a manual fix. Do not assume Census picked the right one.', img: '19-geocoding-pitfall-ties.png' },
+              { text: 'PITFALL #3 — Condo mother-lot inheritance. If the mother lot itself is wrong, every condo child inherits the wrong coordinates. Fix the mother lot first, then any children that did not auto-update can be re-saved.', img: '20-geocoding-pitfall-condos.png' },
+              { text: 'PITFALL #4 — Vendor address quality. Garbage in, garbage out. If your source file has "RT 1 BX 47" or "REAR OF 123 MAIN" we cannot geocode it cleanly. These typically end up Skipped or Review and need a manual lat/lng.', img: '21-geocoding-pitfall-bad-addresses.png' },
             ],
           },
         ];
