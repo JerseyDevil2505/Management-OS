@@ -9,24 +9,31 @@
 //
 // Wired into App.js header behind an admin-only "📷 Photos" button.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   isSupported,
+  canUsePersistentPicker,
   addSource,
   listSources,
   removeSource,
-  indexSourcesForCcdd,
+  addSessionSource,
+  listSessionSources,
+  removeSessionSource,
+  indexAllForCcdd,
 } from '../lib/localPhotoSource';
 
 export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
   const [sources, setSources] = useState([]);
+  const [sessionSources, setSessionSources] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [ccdd, setCcdd] = useState(defaultCcdd || '');
   const [testResult, setTestResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   const supported = isSupported();
+  const persistentOk = canUsePersistentPicker();
 
   useEffect(() => {
     if (open) {
@@ -41,8 +48,9 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
 
   const refresh = async () => {
     try {
-      const list = await listSources();
+      const list = supported ? await listSources() : [];
       setSources(list);
+      setSessionSources(listSessionSources());
     } catch (e) {
       setError(e?.message || String(e));
     }
@@ -64,11 +72,34 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
     }
   };
 
+  const handleSessionPick = () => {
+    setError('');
+    setInfo('');
+    fileInputRef.current?.click();
+  };
+
+  const handleSessionFiles = (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    // Derive a friendly label from the first file's relative path
+    const firstRel = files[0].webkitRelativePath || files[0].name;
+    const folderLabel = firstRel.split('/')[0] || `Session folder`;
+    const rec = addSessionSource(`${folderLabel} (session)`, files);
+    if (rec) setInfo(`Loaded ${rec.files.length} files from "${rec.label}". Session-only — they will not persist after a reload.`);
+    refresh();
+    // Allow re-picking the same folder later
+    e.target.value = '';
+  };
+
   const handleRemove = async (id) => {
     setError('');
     setBusy(true);
     try {
-      await removeSource(id);
+      if (id.startsWith('sess_')) {
+        removeSessionSource(id);
+      } else {
+        await removeSource(id);
+      }
       await refresh();
     } catch (e) {
       setError(e?.message || String(e));
@@ -87,7 +118,7 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
     }
     setBusy(true);
     try {
-      const result = await indexSourcesForCcdd(ccdd.trim());
+      const result = await indexAllForCcdd(ccdd.trim());
       setTestResult(result);
     } catch (e) {
       setError(e?.message || String(e));
@@ -123,7 +154,12 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
         <div style={{ padding: '20px', overflowY: 'auto' }}>
           {!supported && (
             <div style={{ padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '6px', marginBottom: '16px', fontSize: '0.9rem' }}>
-              Your browser does not support persistent local-folder access. Use Chrome, Edge, Brave, or Opera to test this feature.
+              Your browser does not support the persistent folder picker. Use Chrome, Edge, Brave, or Opera for the full experience — or use the "Pick Folder (session only)" fallback below.
+            </div>
+          )}
+          {supported && !persistentOk && (
+            <div style={{ padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '6px', marginBottom: '16px', fontSize: '0.9rem' }}>
+              The persistent folder picker is blocked because the app is running inside a preview iframe. Open the app in a full browser tab for persistent access — or use the session-only picker below to test the indexer right now.
             </div>
           )}
 
@@ -132,14 +168,32 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
           </p>
 
           {/* Add source */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
             <button
               onClick={handleAdd}
-              disabled={!supported || busy}
-              style={{ padding: '8px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: supported && !busy ? 'pointer' : 'not-allowed', fontWeight: 500, opacity: supported && !busy ? 1 : 0.5 }}
+              disabled={!persistentOk || busy}
+              style={{ padding: '8px 14px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: persistentOk && !busy ? 'pointer' : 'not-allowed', fontWeight: 500, opacity: persistentOk && !busy ? 1 : 0.5 }}
+              title={persistentOk ? 'Persistent — saved across reloads' : 'Open the app in a full browser tab to use the persistent picker'}
             >
-              + Add Photo Source
+              + Add Photo Source (persistent)
             </button>
+            <button
+              onClick={handleSessionPick}
+              disabled={busy}
+              style={{ padding: '8px 14px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '6px', cursor: busy ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: busy ? 0.5 : 1 }}
+              title="Works in iframes / Safari / Firefox — session only, not saved across reloads"
+            >
+              + Pick Folder (session only)
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleSessionFiles}
+              style={{ display: 'none' }}
+            />
           </div>
 
           {error && (
@@ -155,15 +209,20 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
 
           {/* Source list */}
           <h3 style={{ fontSize: '0.95rem', margin: '12px 0 8px', color: '#111827' }}>Connected sources</h3>
-          {sources.length === 0 ? (
+          {sources.length === 0 && sessionSources.length === 0 ? (
             <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>None yet.</div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {sources.map((s) => (
+              {[...sources, ...sessionSources].map((s) => (
                 <li key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '6px' }}>
                   <div>
-                    <div style={{ fontWeight: 500, color: '#1f2937' }}>{s.label}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>added {new Date(s.createdAt).toLocaleString()}</div>
+                    <div style={{ fontWeight: 500, color: '#1f2937' }}>
+                      {s.label}{' '}
+                      {s.session && <span style={{ fontSize: '0.7rem', color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: '4px', marginLeft: '4px' }}>session</span>}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                      {s.session ? `${s.files} files` : `added ${new Date(s.createdAt).toLocaleString()}`}
+                    </div>
                   </div>
                   <button
                     onClick={() => handleRemove(s.id)}
@@ -192,8 +251,8 @@ export default function PhotoSourcesModal({ open, onClose, defaultCcdd }) {
             />
             <button
               onClick={handleTest}
-              disabled={busy || sources.length === 0}
-              style={{ padding: '6px 14px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: busy || sources.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: busy || sources.length === 0 ? 0.5 : 1 }}
+              disabled={busy || (sources.length === 0 && sessionSources.length === 0)}
+              style={{ padding: '6px 14px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: busy || (sources.length === 0 && sessionSources.length === 0) ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: busy || (sources.length === 0 && sessionSources.length === 0) ? 0.5 : 1 }}
             >
               {busy ? 'Indexing…' : 'Run Test Index'}
             </button>

@@ -60,6 +60,17 @@ export function isSupported() {
     && typeof window.indexedDB !== 'undefined';
 }
 
+/** True only when we are in a top-level browsing context (not iframed). */
+export function canUsePersistentPicker() {
+  if (!isSupported()) return false;
+  try {
+    return window.top === window.self;
+  } catch (_e) {
+    // cross-origin iframe — accessing window.top throws
+    return false;
+  }
+}
+
 /**
  * Prompt the user to pick a folder, persist the handle, and return the saved
  * record. The optional `label` lets the user tag a source ("Powerpad",
@@ -269,7 +280,128 @@ export async function indexSourcesForCcdd(ccdd, opts = {}) {
 
 /** Convenience: read the bytes of a single matched photo. */
 export async function readPhoto(match) {
+  if (match?.file) return match.file; // session-source already holds the File
   if (!match?.fileHandle) throw new Error('No file handle on match.');
   const file = await match.fileHandle.getFile();
   return file;
+}
+
+// ---------------------------------------------------------------------------
+// Session-only fallback (works inside cross-origin iframes via <input webkitdirectory>)
+// ---------------------------------------------------------------------------
+//
+// When the persistent File System Access API is unavailable (Safari, Firefox,
+// or cross-origin iframe like the Builder editor preview), the UI can fall
+// back to <input type="file" webkitdirectory multiple>. That gives us a flat
+// list of File objects with relative paths. We hold them in memory only for
+// this session (no IndexedDB, no persistence).
+
+const sessionSources = []; // [{ id, label, files: File[] }]
+
+export function addSessionSource(label, fileList) {
+  const files = Array.from(fileList || []);
+  if (files.length === 0) return null;
+  const id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const rec = { id, label: label || `Session folder (${files.length} files)`, files, session: true };
+  sessionSources.push(rec);
+  return rec;
+}
+
+export function listSessionSources() {
+  return sessionSources.map(({ id, label, files }) => ({ id, label, files: files.length, session: true }));
+}
+
+export function removeSessionSource(id) {
+  const i = sessionSources.findIndex((s) => s.id === id);
+  if (i >= 0) sessionSources.splice(i, 1);
+}
+
+/**
+ * Index session-source File lists for a CCDD. Same shape as
+ * indexSourcesForCcdd so callers can use either path uniformly.
+ *
+ * For each session source we look at each File's webkitRelativePath; the path
+ * segment immediately under the chosen folder must match the CCDD (so the user
+ * can either pick the parent Pictures folder OR the CCDD subfolder directly,
+ * and we handle both).
+ */
+export function indexSessionSourcesForCcdd(ccdd) {
+  const ccddStr = String(ccdd);
+  const index = new Map();
+  const bySource = [];
+  let totalFiles = 0;
+  let unmatched = 0;
+
+  for (const src of sessionSources) {
+    const report = { sourceId: src.id, sourceLabel: src.label, found: 0, error: null };
+    for (const file of src.files) {
+      // webkitRelativePath looks like "Pictures/1705/1705-1-1--1.jpg" or
+      // "1705/1705-1-1--1.jpg" if they picked the CCDD folder directly.
+      const rel = file.webkitRelativePath || file.name;
+      const segments = rel.split('/').filter(Boolean);
+      // Require the file to live under a CCDD-matching segment, or be one folder deep
+      const inCcdd = segments.some((seg) => seg.toLowerCase() === ccddStr.toLowerCase());
+      if (!inCcdd) continue;
+      totalFiles += 1;
+      const parsed = parsePhotoName(file.name);
+      if (!parsed || parsed.ccdd !== ccddStr) {
+        unmatched += 1;
+        continue;
+      }
+      const key = parcelKey(parsed.block, parsed.lot, parsed.qualifier);
+      const arr = index.get(key) || [];
+      arr.push({
+        sourceId: src.id,
+        sourceLabel: src.label,
+        vendor: parsed.vendor,
+        file,
+        name: file.name,
+        photoNum: parsed.photoNum,
+      });
+      index.set(key, arr);
+      report.found += 1;
+    }
+    bySource.push(report);
+  }
+
+  for (const arr of index.values()) {
+    arr.sort((a, b) => a.photoNum - b.photoNum);
+  }
+
+  return {
+    bySource,
+    totals: { sources: sessionSources.length, files: totalFiles, parcels: index.size, unmatched },
+    index,
+  };
+}
+
+/**
+ * Combined indexer: walks both persistent sources (if supported) and any
+ * session-only sources, returning a merged result.
+ */
+export async function indexAllForCcdd(ccdd, opts = {}) {
+  const persistent = isSupported()
+    ? await indexSourcesForCcdd(ccdd, opts)
+    : { bySource: [], totals: { sources: 0, files: 0, parcels: 0, unmatched: 0 }, index: new Map() };
+  const session = indexSessionSourcesForCcdd(ccdd);
+
+  // Merge maps
+  const index = new Map(persistent.index);
+  for (const [key, arr] of session.index.entries()) {
+    const existing = index.get(key) || [];
+    existing.push(...arr);
+    existing.sort((a, b) => a.photoNum - b.photoNum);
+    index.set(key, existing);
+  }
+
+  return {
+    bySource: [...persistent.bySource, ...session.bySource],
+    totals: {
+      sources: persistent.totals.sources + session.totals.sources,
+      files: persistent.totals.files + session.totals.files,
+      parcels: index.size,
+      unmatched: persistent.totals.unmatched + session.totals.unmatched,
+    },
+    index,
+  };
 }
