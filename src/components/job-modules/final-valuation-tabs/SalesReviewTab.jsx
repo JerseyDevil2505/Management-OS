@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import {
   Download,
   Save,
@@ -35,8 +35,8 @@ function formatPercent(value) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return '-';
+  const date = parseDateLocal(dateStr);
+  if (!date) return '-';
   return date.toLocaleDateString('en-US');
 }
 
@@ -97,8 +97,10 @@ const SalesReviewTab = ({
   const getPeriodClassification = useCallback((saleDate, endDate) => {
     if (!saleDate || !endDate) return null;
 
-    const sale = new Date(saleDate);
-    const assessmentYear = new Date(endDate).getFullYear();
+    const sale = parseDateLocal(saleDate);
+    if (!sale) return null;
+    const endLocal = parseDateLocal(endDate);
+    const assessmentYear = endLocal ? endLocal.getFullYear() : new Date().getFullYear();
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
@@ -350,10 +352,12 @@ const SalesReviewTab = ({
 
     // Date range filter (only apply if user has set custom dates)
     if (dateRange.start && dateRange.end && periodFilter.length === 0) {
+      const rangeStart = parseDateLocal(dateRange.start);
+      const rangeEnd = parseDateLocal(dateRange.end);
       filtered = filtered.filter(p => {
         if (!p.sales_date) return false;
-        const saleDate = new Date(p.sales_date);
-        return saleDate >= new Date(dateRange.start) && saleDate <= new Date(dateRange.end);
+        const saleDate = parseDateLocal(p.sales_date);
+        return saleDate && rangeStart && rangeEnd && saleDate >= rangeStart && saleDate <= rangeEnd;
       });
     }
 
@@ -761,22 +765,22 @@ const SalesReviewTab = ({
       case 'CSP':
         // CSP: 10/1 of prior year → 12/31 of assessment year
         setDateRange({
-          start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
-          end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0]
+          start: formatDateLocalYMD(new Date(assessmentYear - 1, 9, 1)),
+          end: formatDateLocalYMD(new Date(assessmentYear, 11, 31))
         });
         break;
       case 'PSP':
         // PSP: 10/1 of two years prior → 9/30 of prior year
         setDateRange({
-          start: new Date(assessmentYear - 2, 9, 1).toISOString().split('T')[0],
-          end: new Date(assessmentYear - 1, 8, 30).toISOString().split('T')[0]
+          start: formatDateLocalYMD(new Date(assessmentYear - 2, 9, 1)),
+          end: formatDateLocalYMD(new Date(assessmentYear - 1, 8, 30))
         });
         break;
       case 'HSP':
         // HSP: 10/1 of three years prior → 9/30 of two years prior
         setDateRange({
-          start: new Date(assessmentYear - 3, 9, 1).toISOString().split('T')[0],
-          end: new Date(assessmentYear - 2, 8, 30).toISOString().split('T')[0]
+          start: formatDateLocalYMD(new Date(assessmentYear - 3, 9, 1)),
+          end: formatDateLocalYMD(new Date(assessmentYear - 2, 8, 30))
         });
         setPeriodFilter([]);
         break;
@@ -1032,7 +1036,7 @@ const SalesReviewTab = ({
     ws['!cols'] = headers.map(() => ({ wch: 15 }));
 
     XLSX.utils.book_append_sheet(wb, ws, 'Sales Review');
-    XLSX.writeFile(wb, `Sales_Review_${jobData?.job_name || 'Export'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Sales_Review_${jobData?.job_name || 'Export'}_${formatDateLocalYMD(new Date())}.xlsx`);
   };
 
   // ==================== RENDER ====================

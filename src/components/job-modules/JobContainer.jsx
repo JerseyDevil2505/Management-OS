@@ -910,7 +910,8 @@ const JobContainer = ({
         ...jobData,
         updated_at: jobData?.updated_at || selectedJob.updated_at,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
-        due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
+        // Use string substring to avoid timezone shift on 'YYYY-MM-DD' end_date
+        due_year: selectedJob.end_date ? Number(String(selectedJob.end_date).slice(0, 4)) : 'TBD',
         latest_data_version: currentFileVersion,
         latest_code_version: currentCodeVersion,
         property_count: count || 0,
@@ -994,7 +995,8 @@ const JobContainer = ({
       const fallbackJobData = {
         ...selectedJob,
         manager_name: 'Manager Name Here',
-        due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
+        // Use string substring to avoid timezone shift on 'YYYY-MM-DD' end_date
+        due_year: selectedJob.end_date ? Number(String(selectedJob.end_date).slice(0, 4)) : 'TBD',
         latest_data_version: 1,
         latest_code_version: 1,
         property_count: 0,

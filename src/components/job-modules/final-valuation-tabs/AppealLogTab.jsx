@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
@@ -274,19 +274,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return bracket ? bracket.label : null;
     };
 
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const endDateLocal = parseDateLocal(jobData.end_date);
+    const assessmentYear = endDateLocal ? endDateLocal.getFullYear() : new Date().getFullYear();
 
-    // Define period boundaries
-    const cspStart = new Date(`${assessmentYear - 1}-10-01`);
-    const cspEnd = new Date(`${assessmentYear}-12-31`);
-    const pspStart = new Date(`${assessmentYear - 2}-10-01`);
-    const pspEnd = new Date(`${assessmentYear - 1}-09-30`);
-    const hspStart = new Date(`${assessmentYear - 3}-10-01`);
-    const hspEnd = new Date(`${assessmentYear - 2}-09-30`);
+    // Define period boundaries (local time, month is 0-indexed)
+    const cspStart = new Date(assessmentYear - 1, 9, 1);    // Oct 1 prior year
+    const cspEnd   = new Date(assessmentYear,     11, 31);  // Dec 31 assessment year
+    const pspStart = new Date(assessmentYear - 2, 9, 1);    // Oct 1 two years prior
+    const pspEnd   = new Date(assessmentYear - 1, 8, 30);   // Sep 30 prior year
+    const hspStart = new Date(assessmentYear - 3, 9, 1);    // Oct 1 three years prior
+    const hspEnd   = new Date(assessmentYear - 2, 8, 30);   // Sep 30 two years prior
 
     const inPeriod = (saleDate, start, end) => {
-      const date = new Date(saleDate);
-      return date >= start && date <= end;
+      const date = parseDateLocal(saleDate);
+      return date && date >= start && date <= end;
     };
 
     // Build bracket map
@@ -820,8 +821,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return dateVal.split('T')[0];
       }
       // Otherwise parse and format
-      const date = new Date(dateVal);
-      return date.toISOString().split('T')[0];
+      const date = parseDateLocal(dateVal) || new Date(dateVal);
+      return formatDateLocalYMD(date);
     };
 
     if (isEditing) {
@@ -1160,7 +1161,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       // Calculate derived fields
       const calculatedEvidenceDueDate = formData.hearing_date
-        ? new Date(new Date(formData.hearing_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        ? (() => {
+            const h = parseDateLocal(formData.hearing_date);
+            if (!h) return null;
+            const d = new Date(h.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return formatDateLocalYMD(d);
+          })()
         : null;
 
       const appealData = {
@@ -1821,14 +1827,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const appealType = attorney ? 'represented' : 'petitioner';
 
         let hearingDate = null;
-        if (row['HEARING_DATE'] && !isNaN(new Date(row['HEARING_DATE']).getTime())) {
-          hearingDate = new Date(row['HEARING_DATE']).toISOString().split('T')[0];
+        if (row['HEARING_DATE']) {
+          // Excel/XLSX returns Date objects for date cells; format using local components
+          // so a date-only cell isn't shifted by UTC conversion.
+          const raw = row['HEARING_DATE'];
+          const hd = raw instanceof Date ? raw : (parseDateLocal(raw) || new Date(raw));
+          if (!isNaN(hd.getTime())) hearingDate = formatDateLocalYMD(hd);
         }
         let evidenceDueDate = null;
         if (hearingDate) {
-          const d = new Date(hearingDate);
-          d.setDate(d.getDate() - 7);
-          evidenceDueDate = d.toISOString().split('T')[0];
+          const d = parseDateLocal(hearingDate);
+          if (d) {
+            d.setDate(d.getDate() - 7);
+            evidenceDueDate = formatDateLocalYMD(d);
+          }
         }
 
         const taxCourtPending = String(row['ATTRIB_TAXCOURTPENDING'] || '').trim().toUpperCase() === 'Y';
@@ -2824,7 +2836,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
     // Generate filename with job name and date
     const jobName = jobData?.job_name || 'Appeals';
-    const timestamp = new Date().toISOString().split('T')[0];
+    const timestamp = formatDateLocalYMD(new Date());
     const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
 
     // Add data validation dropdowns for Status Code and Stip Status

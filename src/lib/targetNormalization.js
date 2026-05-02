@@ -12,7 +12,7 @@
  * Also handles cleanup of stale normalized values (≤100, NU'd, removed sales).
  */
 
-import { supabase, worksheetService } from './supabaseClient';
+import { supabase, worksheetService, parseDateLocal } from './supabaseClient';
 
 /**
  * Compute time-normalized prices for a specific set of changed sales.
@@ -162,7 +162,7 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
     // Flag conditions
     const isNUd = salesNu && !['', ' ', '0', '00', '07', '7', '32', '36'].includes(String(salesNu).trim());
     const hasSale = salePrice && salePrice > minSalePrice && saleDate;
-    const saleYear = saleDate ? new Date(saleDate).getFullYear() : null;
+    const saleYear = saleDate ? (parseDateLocal(saleDate)?.getFullYear() ?? null) : null;
     const inYearRange = saleYear && saleYear >= salesFromYear;
 
     // Check card validity

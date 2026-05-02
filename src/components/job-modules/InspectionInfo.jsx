@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Database, CheckCircle, AlertCircle, TrendingUp, Users, FileText, Home, Calendar, FileDown } from 'lucide-react';
+import { parseDateLocal, formatDateLocalYMD } from '../../lib/supabaseClient';
 
 const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
   // Year filter — gates everything on inspection_measure_date year so a measure
@@ -12,7 +13,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     const years = new Set();
     (properties || []).forEach(p => {
       if (p.inspection_measure_date) {
-        const y = new Date(p.inspection_measure_date).getFullYear();
+        const d = parseDateLocal(p.inspection_measure_date);
+        const y = d ? d.getFullYear() : NaN;
         if (!Number.isNaN(y)) years.add(y);
       }
     });
@@ -25,7 +27,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     const target = parseInt(selectedYear, 10);
     return (properties || []).filter(p => {
       if (!p.inspection_measure_date) return false;
-      return new Date(p.inspection_measure_date).getFullYear() === target;
+      const d = parseDateLocal(p.inspection_measure_date);
+      return d ? d.getFullYear() === target : false;
     });
   }, [properties, selectedYear]);
   // Extract refusal codes from parsed code definitions
@@ -236,7 +239,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
         if (isResClass) {
           // Average inspected date uses measure_date
           if (prop.inspection_measure_date) {
-            residentialEntryDates.push(new Date(prop.inspection_measure_date));
+            const d = parseDateLocal(prop.inspection_measure_date);
+            if (d) residentialEntryDates.push(d);
           }
 
           // Most recent interior entry uses list_date
@@ -247,8 +251,8 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
               ? (infoByCode && entryCodes.includes(infoByCode))
               : hasEntry;
             if (isInterior) {
-              const entryDate = new Date(prop.inspection_list_date);
-              if (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry) {
+              const entryDate = parseDateLocal(prop.inspection_list_date);
+              if (entryDate && (!mostRecentInteriorEntry || entryDate > mostRecentInteriorEntry)) {
                 mostRecentInteriorEntry = entryDate;
               }
             }
@@ -550,7 +554,7 @@ const InspectionInfo = ({ jobData, properties = [], inspectionData = [] }) => {
     }
 
     const safeJob = jobName.replace(/[^a-z0-9]+/gi, '_');
-    const filename = `Inspection_Info_${safeJob}_${yearLbl}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.pdf`;
+    const filename = `Inspection_Info_${safeJob}_${yearLbl}_${formatDateLocalYMD(new Date()).replace(/-/g, '')}.pdf`;
     doc.save(filename);
   };
 
