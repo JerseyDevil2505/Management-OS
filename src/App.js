@@ -15,7 +15,6 @@ import RevenueManagement from './components/RevenueManagement';
 import AssessorDashboard from './components/AssessorDashboard';
 import AppealsSummary from './components/AppealsSummary';
 import GeocodingTool from './components/GeocodingTool';
-import PhotoSourcesModal from './components/PhotoSourcesModal';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -211,9 +210,6 @@ const App = () => {
   // Help modal state
   const [showHelp, setShowHelp] = useState(false);
   const [helpTab, setHelpTab] = useState('navigating-os');
-
-  // Photo Sources modal (admin-only beta)
-  const [showPhotoSources, setShowPhotoSources] = useState(false);
 
   // Change Password modal state
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -1372,19 +1368,6 @@ const App = () => {
               >
                 ❓ Help
               </button>
-              {(() => {
-                const role = user?.role?.toString?.().toLowerCase?.() || '';
-                if (role !== 'admin' && role !== 'owner') return null;
-                return (
-                  <button
-                    onClick={() => setShowPhotoSources(true)}
-                    className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-                    title="Connect local photo folders (beta)"
-                  >
-                    📷 Photos
-                  </button>
-                );
-              })()}
               <button
                 onClick={() => setShowChangePassword(true)}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
@@ -2040,13 +2023,6 @@ const App = () => {
           </div>
         );
       })()}
-
-      {/* Photo Sources Modal (admin beta) */}
-      <PhotoSourcesModal
-        open={showPhotoSources}
-        onClose={() => setShowPhotoSources(false)}
-        defaultCcdd={selectedJob?.ccddCode || selectedJob?.ccdd || selectedJob?.ccdd_code}
-      />
 
       {/* Change Password Modal */}
       {showChangePassword && (

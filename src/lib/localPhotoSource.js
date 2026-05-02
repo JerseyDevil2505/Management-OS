@@ -18,8 +18,9 @@
 //     the feature there.
 
 const DB_NAME = 'lojik-photo-sources';
-const DB_VERSION = 1;
-const STORE_SOURCES = 'sources';
+const DB_VERSION = 2;
+const STORE_SOURCES = 'sources';        // global / multi-source list (v1, kept for back-compat)
+const STORE_JOB_SOURCES = 'job_sources'; // per-job source map: { jobId, ccdd, label, handle, ... }
 
 // ---------------------------------------------------------------------------
 // IndexedDB plumbing
@@ -33,14 +34,17 @@ function openDb() {
       if (!db.objectStoreNames.contains(STORE_SOURCES)) {
         db.createObjectStore(STORE_SOURCES, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(STORE_JOB_SOURCES)) {
+        db.createObjectStore(STORE_JOB_SOURCES, { keyPath: 'jobId' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-function txStore(db, mode) {
-  return db.transaction(STORE_SOURCES, mode).objectStore(STORE_SOURCES);
+function txStore(db, mode, storeName = STORE_SOURCES) {
+  return db.transaction(storeName, mode).objectStore(storeName);
 }
 
 function reqAsPromise(req) {
@@ -284,6 +288,158 @@ export async function readPhoto(match) {
   if (!match?.fileHandle) throw new Error('No file handle on match.');
   const file = await match.fileHandle.getFile();
   return file;
+}
+
+// ---------------------------------------------------------------------------
+// Per-Job source — the recommended path
+// ---------------------------------------------------------------------------
+//
+// Each Job remembers the folder its photos live in. Stored in IndexedDB keyed
+// by jobId so a single browser/machine resolves the right folder
+// automatically when the Job opens. Per-Town, per-machine, persistent.
+//
+// Shape: { jobId, ccdd, label, handle, createdAt }
+//
+// Workflow:
+//   1. JobContainer mounts → call getJobSource(jobId).
+//   2. If found → ensurePermission(handle) → indexJobSource(jobId, ccdd).
+//   3. If not found → user clicks "Connect Photo Folder" → pickJobSource(jobId, ccdd).
+
+/**
+ * Validate that a folder either IS the CCDD subfolder, or contains it as a
+ * direct child. Returns one of:
+ *   { matches: true,  foundAs: 'self',   resolvedHandle: <ccdd dir handle> }
+ *   { matches: true,  foundAs: 'parent', resolvedHandle: <ccdd dir handle> }
+ *   { matches: false, foundAs: null,     resolvedHandle: null }
+ */
+export async function validateSourceForCcdd(handle, ccdd) {
+  if (!handle || !ccdd) return { matches: false, foundAs: null, resolvedHandle: null };
+  const ccddStr = String(ccdd).toLowerCase();
+
+  // Case 1: the picked folder IS the CCDD folder
+  if (handle.name && handle.name.toLowerCase() === ccddStr) {
+    return { matches: true, foundAs: 'self', resolvedHandle: handle };
+  }
+
+  // Case 2: the picked folder contains a CCDD subfolder
+  try {
+    for await (const [name, entry] of handle.entries()) {
+      if (entry.kind === 'directory' && name.toLowerCase() === ccddStr) {
+        return { matches: true, foundAs: 'parent', resolvedHandle: entry };
+      }
+    }
+  } catch (_e) {
+    // permission revoked or empty
+  }
+  return { matches: false, foundAs: null, resolvedHandle: null };
+}
+
+/** Read the saved per-Job source (if any) and re-grant permission. */
+export async function getJobSource(jobId) {
+  if (!isSupported() || !jobId) return null;
+  const db = await openDb();
+  const rec = await reqAsPromise(txStore(db, 'readonly', STORE_JOB_SOURCES).get(jobId));
+  db.close();
+  if (!rec) return null;
+  // Re-request permission silently if granted, otherwise caller decides
+  try {
+    await ensurePermission(rec.handle, 'read');
+  } catch (_e) {/* caller handles */ }
+  return rec;
+}
+
+/**
+ * Open the persistent picker, validate against the Job's CCDD, persist on success.
+ * Returns:
+ *   { ok: true, record }                               — saved
+ *   { ok: false, reason: 'mismatch', folderName }      — folder does not contain CCDD
+ *   { ok: false, reason: 'permission' | <error> }
+ */
+export async function pickJobSource(jobId, ccdd, opts = {}) {
+  if (!canUsePersistentPicker()) {
+    return { ok: false, reason: 'unsupported' };
+  }
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ id: `lojik-photos-job-${jobId}`, mode: 'read' });
+  } catch (e) {
+    if (e?.name === 'AbortError') return { ok: false, reason: 'cancelled' };
+    return { ok: false, reason: e?.message || String(e) };
+  }
+  const perm = await ensurePermission(handle, 'read');
+  if (perm !== 'granted') return { ok: false, reason: 'permission' };
+
+  const v = await validateSourceForCcdd(handle, ccdd);
+  if (!v.matches && !opts.allowMismatch) {
+    return { ok: false, reason: 'mismatch', folderName: handle.name, ccdd };
+  }
+
+  const record = {
+    jobId,
+    ccdd: String(ccdd),
+    label: handle.name,
+    handle, // store the original picked handle (so user can move CCDD subfolders inside later)
+    foundAs: v.foundAs,
+    createdAt: new Date().toISOString(),
+  };
+  const db = await openDb();
+  await reqAsPromise(txStore(db, 'readwrite', STORE_JOB_SOURCES).put(record));
+  db.close();
+  return { ok: true, record };
+}
+
+export async function clearJobSource(jobId) {
+  if (!isSupported() || !jobId) return;
+  const db = await openDb();
+  await reqAsPromise(txStore(db, 'readwrite', STORE_JOB_SOURCES).delete(jobId));
+  db.close();
+}
+
+/**
+ * Walk the saved per-Job source's CCDD subfolder and build the parcel index.
+ * Same shape as indexSourcesForCcdd but for a single Job.
+ */
+export async function indexJobSource(jobId) {
+  const rec = await getJobSource(jobId);
+  if (!rec) return null;
+  const v = await validateSourceForCcdd(rec.handle, rec.ccdd);
+  if (!v.matches) return { error: 'CCDD subfolder no longer found in saved source.' };
+  const ccddDir = v.resolvedHandle;
+  const index = new Map();
+  let totalFiles = 0;
+  let unmatched = 0;
+  try {
+    for await (const [name, entry] of ccddDir.entries()) {
+      if (entry.kind !== 'file') continue;
+      totalFiles += 1;
+      const parsed = parsePhotoName(name);
+      if (!parsed || parsed.ccdd !== rec.ccdd) {
+        unmatched += 1;
+        continue;
+      }
+      const key = parcelKey(parsed.block, parsed.lot, parsed.qualifier);
+      const arr = index.get(key) || [];
+      arr.push({
+        sourceLabel: rec.label,
+        vendor: parsed.vendor,
+        fileHandle: entry,
+        name,
+        photoNum: parsed.photoNum,
+      });
+      index.set(key, arr);
+    }
+  } catch (e) {
+    return { error: e?.message || String(e) };
+  }
+  for (const arr of index.values()) {
+    arr.sort((a, b) => a.photoNum - b.photoNum);
+  }
+  return {
+    label: rec.label,
+    ccdd: rec.ccdd,
+    totals: { files: totalFiles, parcels: index.size, unmatched },
+    index,
+  };
 }
 
 // ---------------------------------------------------------------------------

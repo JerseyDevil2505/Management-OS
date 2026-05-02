@@ -9,6 +9,7 @@ import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
+import JobPhotoSourcePanel from './JobPhotoSourcePanel';
 
 // Centralized package detection - O(n) single pass
 // Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
@@ -1448,6 +1449,12 @@ const JobContainer = ({
             )}
           </div>
         )}
+
+        {/* Per-Job photo source (beta) — connect a local Pictures folder for this Town */}
+        <JobPhotoSourcePanel
+          jobId={selectedJob?.id}
+          ccdd={jobData?.ccdd_code || jobData?.ccdd || selectedJob?.ccdd_code || selectedJob?.ccdd}
+        />
 
         {/* Module Navigation Tabs */}
         <div className="mb-6">
