@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 import AppealMap, { distanceMiles } from '../../AppealMap';
+import ParcelPhotoStrip, { ExportPhotosPreview } from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
@@ -229,12 +230,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [includeMap, setIncludeMap] = useState(() => readToggle('detailedExport_includeMap', true)); // Embed subject+comps map in PDF
   const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
   const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
+  const [includePhotos, setIncludePhotos] = useState(() => readToggle('detailedExport_includePhotos', true));
+  // Map preview is collapsed by default (it dominated the modal). Click to expand.
+  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', false));
 
   // Persist toggle state across sessions
   useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
   useEffect(() => { try { localStorage.setItem('detailedExport_includeMap', String(includeMap)); } catch (e) {} }, [includeMap]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideAppellantEvidence', String(hideAppellantEvidence)); } catch (e) {} }, [hideAppellantEvidence]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideDirectorsRatio', String(hideDirectorsRatio)); } catch (e) {} }, [hideDirectorsRatio]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_includePhotos', String(includePhotos)); } catch (e) {} }, [includePhotos]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_mapExpanded', String(mapExpanded)); } catch (e) {} }, [mapExpanded]);
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
   // Appellant-supplied comps (loaded from appeal_log on modal open). Each
   // entry is the saved slot enriched with the resolved property record so we
@@ -343,6 +349,46 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     return { subject: subjectPayload, comps: compsPayload, appellantComps: appellantPayload };
   }, [subject, comps, appellantCompsState, applyGeocodePatch]);
+
+  // Parcels payload for the per-parcel photo strip (Subject + Comps + Appellant comps).
+  // Independent of geocoding — photos work regardless of lat/lng.
+  const photoStripParcels = useMemo(() => {
+    const out = [];
+    if (subject?.property_composite_key) {
+      out.push({
+        composite_key: subject.property_composite_key,
+        block: subject.property_block,
+        lot: subject.property_lot,
+        qualifier: subject.property_qualifier,
+        address: subject.property_location || '',
+        roleLabel: 'SUBJECT',
+        roleColor: 'bg-red-100 text-red-800',
+      });
+    }
+    (comps || []).forEach((c, i) => {
+      if (!c || c.is_manual_comp) return;
+      if (!c.property_composite_key) return;
+      out.push({
+        composite_key: c.property_composite_key,
+        block: c.property_block,
+        lot: c.property_lot,
+        qualifier: c.property_qualifier,
+        address: c.property_location || '',
+        roleLabel: `COMP ${i + 1}`,
+        roleColor: 'bg-blue-100 text-blue-800',
+      });
+    });
+    // Appellant comps intentionally NOT included here. They get their own
+    // photos via the Appellant Evidence flow when those parcels are searched
+    // separately as detailed-grid subjects.
+    // Dedupe by composite_key (subject can also appear as a self-comp in some flows)
+    const seen = new Set();
+    return out.filter((p) => {
+      if (seen.has(p.composite_key)) return false;
+      seen.add(p.composite_key);
+      return true;
+    });
+  }, [subject, comps]);
 
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
@@ -2985,6 +3031,98 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       }
     }
 
+    // ============== Subject & Comps Photos page (optional) ==============
+    // Pulls picked front photos from `appeal_photos` for every parcel in
+    // photoStripParcels. One image per parcel, captioned with role + address.
+    // Skipped silently if includePhotos is off, no jobId, no parcels, or
+    // every parcel returns nothing (so we don't emit a blank page).
+    if (includePhotos && jobData?.id && photoStripParcels.length > 0) {
+      try {
+        const keys = photoStripParcels.map((p) => p.composite_key).filter(Boolean);
+        const { data: photoRows } = await supabase
+          .from('appeal_photos')
+          .select('storage_path, property_composite_key, original_filename, capture_ts')
+          .eq('job_id', jobData.id)
+          .in('property_composite_key', keys);
+        const photoByKey = {};
+        (photoRows || []).forEach((r) => { photoByKey[r.property_composite_key] = r; });
+        const parcelsWithPhotos = photoStripParcels.filter((p) => photoByKey[p.composite_key]);
+
+        if (parcelsWithPhotos.length > 0) {
+          // Download each picked photo and convert to data URL for jsPDF
+          const photoCells = await Promise.all(parcelsWithPhotos.map(async (p) => {
+            const row = photoByKey[p.composite_key];
+            try {
+              const { data: blob } = await supabase.storage
+                .from('appeal-photos')
+                .download(row.storage_path);
+              if (!blob) return null;
+              const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              return { parcel: p, dataUrl };
+            } catch (_e) {
+              return null;
+            }
+          }));
+          const usable = photoCells.filter(Boolean);
+
+          if (usable.length > 0) {
+            doc.addPage();
+            addHeader(subjectBlockLot);
+            doc.setFontSize(14);
+            doc.setTextColor(...lojikBlue);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Subject & Comps Photos', pageWidth / 2, 70, { align: 'center' });
+
+            // Grid: 3 cols x 2 rows on landscape letter (792x612pt).
+            // Cell ~240w x 200h leaves room for caption + page header.
+            const gridLeft = 36;
+            const gridTop = 90;
+            const cellW = 240;
+            const cellH = 200;
+            const gapX = 12;
+            const gapY = 24;
+            const cols = 3;
+            usable.slice(0, 6).forEach((item, idx) => {
+              const col = idx % cols;
+              const row = Math.floor(idx / cols);
+              const x = gridLeft + col * (cellW + gapX);
+              const y = gridTop + row * (cellH + gapY);
+              try {
+                doc.addImage(item.dataUrl, 'JPEG', x, y, cellW, cellH - 30, undefined, 'FAST');
+              } catch (e) {
+                try { doc.addImage(item.dataUrl, 'PNG', x, y, cellW, cellH - 30, undefined, 'FAST'); } catch (_e) {}
+              }
+              // Caption: role label only. Addresses are intentionally omitted
+              // here - the comp grid earlier in the report already shows them
+              // and repeating them under photos creates visual clutter.
+              doc.setFontSize(9);
+              doc.setTextColor(20, 20, 20);
+              doc.setFont('helvetica', 'bold');
+              doc.text(item.parcel.roleLabel, x, y + cellH - 12);
+            });
+            // If more than 6, drop a small note at the bottom.
+            if (usable.length > 6) {
+              doc.setFontSize(8);
+              doc.setTextColor(120, 120, 120);
+              doc.text(
+                `+ ${usable.length - 6} additional parcel photo(s) not shown (page limit).`,
+                pageWidth / 2,
+                gridTop + 2 * (cellH + gapY) + 4,
+                { align: 'center' },
+              );
+            }
+          }
+        }
+      } catch (photosErr) {
+        console.warn('Photos page generation failed:', photosErr);
+      }
+    }
+
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const block = subject.property_block || '';
@@ -3074,7 +3212,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3438,6 +3576,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
+                {/* Include Photos Toggle - emit a Photos page in the PDF using the picked appeal_photos */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={includePhotos}
+                    onChange={(e) => setIncludePhotos(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">📷 Include Photos</span>
+                </label>
                 {/* Hide Appellant Evidence Toggle - some assessors prefer to package only the detailed grids */}
                 <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
                   <input
@@ -3776,19 +3924,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             {/* Map preview (also captured by html2canvas for the PDF).
                 Renders at a fixed 600x420 size so the on-screen preview matches
-                what gets embedded in the PDF, including auto-zoom level. */}
+                what gets embedded in the PDF, including auto-zoom level.
+                Collapsed by default - click the header to expand. When
+                collapsed we keep the capture div mounted off-screen so
+                html2canvas can still grab it for the PDF. */}
             {includeMap && mapHasSubject && (
               <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
-                <div className="flex items-center justify-between mb-2">
+                <button
+                  type="button"
+                  onClick={() => setMapExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between mb-2 hover:bg-gray-100 rounded px-1 py-0.5 -mx-1"
+                >
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <span className="text-gray-500">{mapExpanded ? '▾' : '▸'}</span>
                     <MapIcon size={16} className="text-blue-600" />
                     Subject &amp; Comps Map (PDF preview)
                   </div>
                   <span className="text-xs text-gray-500">
                     {mapGeocodedCount} of {mapTotalCount} parcels geocoded ·
-                    OpenStreetMap tiles
+                    click to {mapExpanded ? 'collapse' : 'expand'}
                   </span>
-                </div>
+                </button>
+                <div
+                  style={mapExpanded ? {} : { position: 'absolute', left: -99999, top: 0, width: 600, pointerEvents: 'none', visibility: 'hidden' }}
+                  aria-hidden={!mapExpanded}
+                >
                 <div className="flex gap-3 items-start">
                   <div ref={mapCaptureRef} style={{ width: 600, flex: '0 0 600px' }}>
                     <AppealMap
@@ -3865,6 +4025,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     add them.
                   </p>
                 )}
+                </div>
+              </div>
+            )}
+
+            {/* Photos preview (read-only summary of currently picked front photos).
+                Picking/adding photos happens in the main Detailed view, not here. */}
+            {includePhotos && photoStripParcels.length > 0 && (
+              <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+                <ExportPhotosPreview jobId={jobData?.id} parcels={photoStripParcels} />
               </div>
             )}
 
@@ -3960,6 +4129,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }}
         />
       )}
+
+      {/* Per-parcel photo strip — preview/select/add the front photo for each parcel.
+          Lives at the bottom of Detailed (NOT in the export modal). The picked
+          photo is uploaded to `appeal-photos` storage and recorded in the
+          `appeal_photos` table, keyed by (job_id, property_composite_key). */}
+      <div className="px-4 pb-4">
+        <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+      </div>
     </div>
   );
 };
