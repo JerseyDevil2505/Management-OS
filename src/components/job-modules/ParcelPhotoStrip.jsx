@@ -1,19 +1,15 @@
 // src/components/job-modules/ParcelPhotoStrip.jsx
 //
-// Renders one row per parcel (Subject + each Comp + each Appellant comp).
-// Each row:
-//   - Large preview of the currently focused photo
-//   - Thumbnail strip (sorted by photoNum asc; default focus = highest = most recent)
-//   - ◀ / ▶ arrow buttons + arrow-key navigation when row has focus
-//   - Star ("Use as front photo") -> uploads bytes to `appeal-photos` bucket and
-//     upserts an `appeal_photos` row keyed by (job_id, property_composite_key)
-//   - "Add Photo" target: drag-drop a file OR paste from clipboard
-//   - Empty state: "no photos found in folder for <key>" + add affordance
+// Compact horizontal photo row that mirrors the comp-grid columns above.
+// One small column per parcel (Subject + each Comp). Each column shows the
+// currently-focused photo, a counter, ◀ / ▶ to cycle, and a star to mark it
+// as the front photo for that parcel. Empty cell -> click to add (file
+// picker), or paste from clipboard while the cell is focused.
 //
-// Reads from JobPhotoSourceContext (no folder walk here).
+// Reads the indexed photo map from JobPhotoSourceContext.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Star, Upload, Loader2, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Plus, Loader2, Check } from 'lucide-react';
 import { useJobPhotoSource } from '../../contexts/JobPhotoSourceContext';
 import { readPhoto } from '../../lib/localPhotoSource';
 import { supabase } from '../../lib/supabaseClient';
@@ -26,7 +22,6 @@ const SUPPORTED_PASTE_MIME = /^image\//;
 
 function fmtCaptureTs(ts) {
   if (!ts || ts.length !== 14) return null;
-  // T20241106144506 -> 11/06/24 2:45pm
   const yy = ts.slice(2, 4);
   const mm = ts.slice(4, 6);
   const dd = ts.slice(6, 8);
@@ -42,40 +37,33 @@ function safeStorageKey(s) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-parcel row
+// Per-parcel column
 // ---------------------------------------------------------------------------
 
-function ParcelRow({ parcel, jobId, savedPhoto, onSaved }) {
-  const { getPhotosFor, connected, source } = useJobPhotoSource();
+function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
+  const { getPhotosFor, connected } = useJobPhotoSource();
   const folderPhotos = useMemo(
     () => getPhotosFor(parcel.block, parcel.lot, parcel.qualifier),
     [getPhotosFor, parcel.block, parcel.lot, parcel.qualifier],
   );
 
-  // Local additions made in this session that aren't on disk (paste/drag)
-  const [extras, setExtras] = useState([]); // [{ name, file, photoNum, source }]
+  // Local additions (paste / file-picker) not on disk
+  const [extras, setExtras] = useState([]);
   const photos = useMemo(() => [...folderPhotos, ...extras], [folderPhotos, extras]);
 
-  // Default focus = most recent (last in sorted asc list)
   const [focusIdx, setFocusIdx] = useState(() => Math.max(0, photos.length - 1));
   useEffect(() => {
     setFocusIdx((i) => Math.min(Math.max(0, i), Math.max(0, photos.length - 1)));
   }, [photos.length]);
 
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [previewBusy, setPreviewBusy] = useState(false);
   const previewUrlRef = useRef(null);
 
-  // Build preview blob URL whenever focus changes
   useEffect(() => {
     let cancelled = false;
     async function run() {
       const m = photos[focusIdx];
-      if (!m) {
-        setPreviewUrl(null);
-        return;
-      }
-      setPreviewBusy(true);
+      if (!m) { setPreviewUrl(null); return; }
       try {
         const file = await readPhoto(m);
         if (cancelled) return;
@@ -83,11 +71,7 @@ function ParcelRow({ parcel, jobId, savedPhoto, onSaved }) {
         const url = URL.createObjectURL(file);
         previewUrlRef.current = url;
         setPreviewUrl(url);
-      } catch (e) {
-        setPreviewUrl(null);
-      } finally {
-        if (!cancelled) setPreviewBusy(false);
-      }
+      } catch (_e) { setPreviewUrl(null); }
     }
     run();
     return () => { cancelled = true; };
@@ -115,7 +99,6 @@ function ParcelRow({ parcel, jobId, savedPhoto, onSaved }) {
       const ext = (m.name?.split('.').pop() || 'jpg').toLowerCase();
       const path = `${jobId}/${safeStorageKey(parcel.composite_key)}/front_${Date.now()}.${ext}`;
 
-      // If a previous front photo exists, remove its blob to keep the bucket tidy.
       if (savedPhoto?.storage_path) {
         try { await supabase.storage.from('appeal-photos').remove([savedPhoto.storage_path]); } catch (_e) {}
       }
@@ -153,51 +136,36 @@ function ParcelRow({ parcel, jobId, savedPhoto, onSaved }) {
     }
   }, [photos, focusIdx, jobId, parcel.composite_key, parcel.appeal_id, savedPhoto, onSaved]);
 
-  // ----- arrow-key navigation -----
-  const rowRef = useRef(null);
+  // Arrow keys when this column has focus
   const onKeyDown = (e) => {
-    if (photos.length === 0) return;
+    if (photos.length < 2) return;
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       setFocusIdx((i) => (i - 1 + photos.length) % photos.length);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       setFocusIdx((i) => (i + 1) % photos.length);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      // Quick keyboard pick
-      e.preventDefault();
-      handlePick();
     }
   };
 
-  // ----- drag/drop and paste add-photo -----
-  const [dragOver, setDragOver] = useState(false);
+  // Add-photo: file picker (click) + clipboard paste (when focused)
+  const fileInputRef = useRef(null);
   const addExtra = useCallback((file, source) => {
     if (!file || !file.type || !SUPPORTED_PASTE_MIME.test(file.type)) return;
     setExtras((arr) => {
       const next = [...arr, {
         name: file.name || `${source}-${Date.now()}.png`,
         file,
-        // Sort to the end (newest)
         photoNum: Number.MAX_SAFE_INTEGER - (1000 - arr.length),
         source,
         vendor: null,
         captureTs: null,
       }];
-      // Move focus to the new one
       setTimeout(() => setFocusIdx(folderPhotos.length + next.length - 1), 0);
       return next;
     });
   }, [folderPhotos.length]);
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) addExtra(file, 'user_upload');
-  };
-
-  // Paste handler scoped to the row when it has focus
   const onPaste = useCallback((e) => {
     const items = e.clipboardData?.items || [];
     for (const item of items) {
@@ -212,174 +180,119 @@ function ParcelRow({ parcel, jobId, savedPhoto, onSaved }) {
     }
   }, [addExtra]);
 
+  const onFilePicked = (e) => {
+    const file = e.target.files?.[0];
+    if (file) addExtra(file, 'user_upload');
+    e.target.value = '';
+  };
+
+  const empty = photos.length === 0;
+
   return (
     <div
-      ref={rowRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
       onPaste={onPaste}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={onDrop}
-      className={`outline-none border rounded-lg p-3 mb-3 ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} focus:ring-2 focus:ring-blue-400`}
+      className="flex-1 min-w-0 flex flex-col items-stretch outline-none focus:ring-2 focus:ring-blue-400 rounded"
     >
-      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${parcel.roleColor || 'bg-gray-100 text-gray-700'}`}>
-            {parcel.roleLabel}
-          </span>
-          <span className="text-sm font-medium text-gray-800">
-            {parcel.address || `${parcel.block}-${parcel.lot}${parcel.qualifier ? '-' + parcel.qualifier : ''}`}
-          </span>
-          <span className="text-xs text-gray-500">
-            {photos.length > 0
-              ? `Photo ${focusIdx + 1} of ${photos.length}`
-              : 'No photos found'}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            disabled={photos.length < 2}
-            onClick={() => setFocusIdx((i) => (i - 1 + photos.length) % photos.length)}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
-            title="Previous photo (←)"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            disabled={photos.length < 2}
-            onClick={() => setFocusIdx((i) => (i + 1) % photos.length)}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
-            title="Next photo (→)"
-          >
-            <ChevronRight size={18} />
-          </button>
-          <button
-            disabled={!photos.length || saving}
-            onClick={handlePick}
-            className={`ml-2 px-2 py-1 text-xs rounded flex items-center gap-1 ${
-              isPicked
-                ? 'bg-green-100 text-green-800'
-                : 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500 disabled:opacity-50'
-            }`}
-            title="Use as front photo for this parcel"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" />
-              : isPicked ? <Check size={14} /> : <Star size={14} />}
-            {isPicked ? 'Front photo' : 'Use as front photo'}
-          </button>
-        </div>
+      {/* Role chip header (mirrors comp grid header) */}
+      <div className="flex items-center justify-center mb-1">
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${parcel.roleColor || 'bg-gray-100 text-gray-700'}`}>
+          {parcel.roleLabel}
+        </span>
       </div>
 
-      <div className="flex gap-3">
-        {/* Large preview */}
-        <div className="w-72 h-48 bg-gray-100 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-          {previewBusy ? (
-            <Loader2 size={20} className="animate-spin text-gray-400" />
-          ) : previewUrl ? (
-            <img src={previewUrl} alt="" className="object-contain w-full h-full" />
+      {/* Photo cell */}
+      {empty ? (
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full aspect-[4/3] bg-gray-50 hover:bg-blue-50 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded flex flex-col items-center justify-center text-gray-400 hover:text-blue-600 text-[10px] gap-1 px-1 text-center"
+          title={connected ? 'Click to add a photo (or paste with Ctrl+V)' : 'No photo folder connected. Click to add a photo.'}
+        >
+          <Plus size={18} />
+          <span>Add photo</span>
+        </button>
+      ) : (
+        <div className="relative w-full aspect-[4/3] bg-gray-100 rounded overflow-hidden border border-gray-200">
+          {previewUrl ? (
+            <img src={previewUrl} alt="" className="object-cover w-full h-full" />
           ) : (
-            <span className="text-xs text-gray-400 px-3 text-center">
-              {connected
-                ? 'No photo. Drag-drop, paste from clipboard, or capture in the field.'
-                : 'Connect a photo folder for this Town to preview photos →'}
+            <div className="w-full h-full flex items-center justify-center">
+              <Loader2 size={16} className="animate-spin text-gray-400" />
+            </div>
+          )}
+          {/* Picked badge */}
+          {isPicked && (
+            <span className="absolute top-1 right-1 bg-green-600 text-white rounded-full p-0.5">
+              <Check size={10} />
             </span>
           )}
         </div>
+      )}
 
-        {/* Thumbnail strip */}
-        <div className="flex-1 min-w-0 overflow-x-auto">
-          <div className="flex gap-1.5">
-            {photos.map((p, i) => (
-              <Thumb
-                key={`${p.name}-${i}`}
-                photo={p}
-                active={i === focusIdx}
-                onClick={() => setFocusIdx(i)}
-              />
-            ))}
-            <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 text-[10px] text-center px-1 flex-shrink-0">
-              <Upload size={16} />
-              <span>Drag/Paste</span>
-            </div>
-          </div>
-          <div className="text-[11px] text-gray-500 mt-2">
-            {(() => {
-              const m = photos[focusIdx];
-              if (!m) return source ? 'Tip: drag a JPG onto this row or paste a screenshot (Ctrl+V).' : null;
-              const ts = m.captureTs ? fmtCaptureTs(m.captureTs) : null;
-              return (
-                <>
-                  <span className="font-mono">{m.name}</span>
-                  {ts && <> · captured {ts}</>}
-                  {m.source && <> · {m.source}</>}
-                </>
-              );
-            })()}
-          </div>
-          {saveError && <div className="text-xs text-red-700 mt-1">{saveError}</div>}
-        </div>
+      {/* Controls row */}
+      <div className="flex items-center justify-between mt-1 gap-1">
+        <button
+          disabled={photos.length < 2}
+          onClick={() => setFocusIdx((i) => (i - 1 + photos.length) % photos.length)}
+          className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-20"
+          title="Previous (←)"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="text-[10px] text-gray-500 tabular-nums">
+          {empty ? '0/0' : `${focusIdx + 1}/${photos.length}`}
+        </span>
+        <button
+          disabled={photos.length < 2}
+          onClick={() => setFocusIdx((i) => (i + 1) % photos.length)}
+          className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-20"
+          title="Next (→)"
+        >
+          <ChevronRight size={14} />
+        </button>
       </div>
+
+      {/* Pick + Add row */}
+      <div className="flex items-center gap-1 mt-1">
+        <button
+          disabled={empty || saving}
+          onClick={handlePick}
+          className={`flex-1 px-1.5 py-0.5 text-[10px] rounded flex items-center justify-center gap-1 ${
+            isPicked
+              ? 'bg-green-100 text-green-800'
+              : 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500 disabled:opacity-40 disabled:bg-gray-100 disabled:text-gray-400'
+          }`}
+          title="Use as front photo"
+        >
+          {saving ? <Loader2 size={10} className="animate-spin" />
+            : isPicked ? <Check size={10} /> : <Star size={10} />}
+          {isPicked ? 'Front' : 'Use'}
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="px-1 py-0.5 text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded flex items-center gap-0.5"
+          title="Add another photo (or paste with Ctrl+V while focused)"
+        >
+          <Plus size={10} />
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFilePicked} />
+      </div>
+
+      {saveError && <div className="text-[10px] text-red-700 mt-0.5 truncate" title={saveError}>{saveError}</div>}
     </div>
   );
 }
 
-function Thumb({ photo, active, onClick }) {
-  const [url, setUrl] = useState(null);
-  const urlRef = useRef(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const file = await readPhoto(photo);
-        if (cancelled) return;
-        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-        const u = URL.createObjectURL(file);
-        urlRef.current = u;
-        setUrl(u);
-      } catch (_e) { /* ignore */ }
-    })();
-    return () => { cancelled = true; };
-  }, [photo]);
-  useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
-
-  return (
-    <button
-      onClick={onClick}
-      className={`w-20 h-20 rounded overflow-hidden border-2 flex-shrink-0 ${active ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200 hover:border-gray-400'}`}
-      title={photo.name}
-    >
-      {url ? <img src={url} alt="" className="object-cover w-full h-full" /> : <div className="w-full h-full bg-gray-100" />}
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-//
-// Props:
-//   jobId
-//   parcels: Array<{
-//     composite_key, block, lot, qualifier, address,
-//     roleLabel, roleColor (tailwind chip classes), appeal_id (optional)
-//   }>
-//
-// Loads existing `appeal_photos` for this job in one round-trip and caches
-// per-composite_key for the rows.
-
 // ---------------------------------------------------------------------------
 // Export modal preview - read-only thumbnail row of currently-picked photos
 // ---------------------------------------------------------------------------
-//
-// Lives inside the Export PDF modal. Shows ONLY the photo that's been picked
-// for each parcel (or a "no front photo" placeholder). Clicking a thumbnail
-// scrolls the main Detailed strip into view via a hash so the user can swap
-// the pick without leaving the modal feel. No upload happens here.
 
 export function ExportPhotosPreview({ jobId, parcels = [] }) {
   const [savedMap, setSavedMap] = useState({});
-  const [urls, setUrls] = useState({}); // composite_key -> blob/object URL (signed)
+  const [urls, setUrls] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -396,7 +309,6 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
       (data || []).forEach((r) => { map[r.property_composite_key] = r; });
       setSavedMap(map);
 
-      // Get signed URLs for each picked photo
       const urlMap = {};
       await Promise.all((data || []).map(async (r) => {
         try {
@@ -423,23 +335,23 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
           </span>
         </div>
         <span className="text-[11px] text-gray-500">
-          To change a pick, scroll down to the parcel photo strip in the main view.
+          To change a pick, scroll to the parcel photo strip in the main view.
         </span>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-2">
         {parcels.map((p) => {
           const url = urls[p.composite_key];
           return (
-            <div key={p.composite_key} className="flex-shrink-0 w-32">
-              <div className="w-32 h-24 bg-gray-100 rounded overflow-hidden border border-gray-200 flex items-center justify-center">
+            <div key={p.composite_key} className="flex-1 min-w-0">
+              <div className="text-center mb-1">
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.roleColor}`}>{p.roleLabel}</span>
+              </div>
+              <div className="w-full aspect-[4/3] bg-gray-100 rounded overflow-hidden border border-gray-200 flex items-center justify-center">
                 {url ? (
                   <img src={url} alt="" className="object-cover w-full h-full" />
                 ) : (
                   <span className="text-[10px] text-gray-400 px-2 text-center">No front photo</span>
                 )}
-              </div>
-              <div className="text-[10px] mt-1">
-                <span className={`font-semibold px-1 rounded ${p.roleColor}`}>{p.roleLabel}</span>
               </div>
             </div>
           );
@@ -449,11 +361,14 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main: compact horizontal strip aligned with the comp grid above
+// ---------------------------------------------------------------------------
+
 export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
   const { connected, indexResult, source } = useJobPhotoSource();
-  const [savedMap, setSavedMap] = useState({}); // composite_key -> appeal_photos row
+  const [savedMap, setSavedMap] = useState({});
 
-  // Bulk-load existing front photos for these parcels
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -476,32 +391,36 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
   if (parcels.length === 0) return null;
 
   return (
-    <div className="mt-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+    <div className="mt-3 border-t border-gray-200 pt-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <h3 className="text-xs font-semibold text-gray-700 flex items-center gap-2">
           📷 Parcel Photos
           {connected && indexResult && (
-            <span className="text-xs text-gray-500 font-normal">
+            <span className="text-[10px] text-gray-500 font-normal">
               ({indexResult.totals.parcels.toLocaleString()} parcels indexed from {source.label})
             </span>
           )}
         </h3>
-        <span className="text-[11px] text-gray-500">Click a thumbnail or use ← → · Star to pick the front photo · Drag-drop or paste to add</span>
+        <span className="text-[10px] text-gray-500">← → cycle · ⭐ pick · + add (or Ctrl+V to paste)</span>
       </div>
-      {!connected && (
-        <div className="mb-3 px-3 py-2 bg-amber-50 text-amber-900 rounded text-xs">
-          No photo folder connected for this Town. Photos can still be added per-parcel via drag-drop or paste, but the disk index is empty.
+
+      {/* Layout mirrors the comp grid: a left "Attribute" gutter then one cell
+          per parcel. Gutter width tuned to match the sticky attribute column
+          in DetailedAppraisalGrid (~140px). */}
+      <div className="flex items-stretch gap-2">
+        <div className="w-[140px] flex-shrink-0 text-[11px] text-gray-600 pt-4">
+          Photo
         </div>
-      )}
-      {parcels.map((p) => (
-        <ParcelRow
-          key={p.composite_key}
-          parcel={p}
-          jobId={jobId}
-          savedPhoto={savedMap[p.composite_key]}
-          onSaved={(row) => setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }))}
-        />
-      ))}
+        {parcels.map((p) => (
+          <ParcelColumn
+            key={p.composite_key}
+            parcel={p}
+            jobId={jobId}
+            savedPhoto={savedMap[p.composite_key]}
+            onSaved={(row) => setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }))}
+          />
+        ))}
+      </div>
     </div>
   );
 }
