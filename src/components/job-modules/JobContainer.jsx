@@ -10,6 +10,7 @@ import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 import JobPhotoSourcePanel from './JobPhotoSourcePanel';
+import { JobPhotoSourceProvider } from '../../contexts/JobPhotoSourceContext';
 
 // Centralized package detection - O(n) single pass
 // Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
@@ -1301,7 +1302,10 @@ const JobContainer = ({
   // FIXED: Combined loading state check
   const isLoading = isLoadingVersion || isLoadingProperties;
 
+  const photoCcdd = jobData?.ccdd_code || jobData?.ccdd || selectedJob?.ccdd_code || selectedJob?.ccdd;
+
   return (
+    <JobPhotoSourceProvider jobId={selectedJob?.id} ccdd={photoCcdd}>
     <div className="bg-white">
       {/* Enhanced File Version Status Banner with Progress Bar */}
       <div className="max-w-6xl mx-auto p-6">
@@ -1451,10 +1455,7 @@ const JobContainer = ({
         )}
 
         {/* Per-Job photo source (beta) — connect a local Pictures folder for this Town */}
-        <JobPhotoSourcePanel
-          jobId={selectedJob?.id}
-          ccdd={jobData?.ccdd_code || jobData?.ccdd || selectedJob?.ccdd_code || selectedJob?.ccdd}
-        />
+        <JobPhotoSourcePanel />
 
         {/* Module Navigation Tabs */}
         <div className="mb-6">
@@ -1536,6 +1537,7 @@ const JobContainer = ({
         )}
       </div>
     </div>
+    </JobPhotoSourceProvider>
   );
 };
 

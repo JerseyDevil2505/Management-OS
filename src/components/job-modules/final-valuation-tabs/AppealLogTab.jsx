@@ -2267,6 +2267,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const buckets = {
       static: [],
       dynamic: [],
+      photos: [], // NEW: subject + comps photos page emitted by DetailedAppraisalGrid from appeal_photos
       map: [],
       appellant: [],
       chapter123: [],
@@ -2285,6 +2286,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const idx = i - 1;
         if (text.includes('chapter 123')) {
           buckets.chapter123.push(idx);
+        } else if (text.includes('subject & comps photos') || text.includes('subject &amp; comps photos')) {
+          buckets.photos.push(idx);
         } else if (text.includes('subject & comps location map') || text.includes('subject &amp; comps location map')) {
           buckets.map.push(idx);
         } else if (text.includes('appellant evidence summary') || text.includes('no evidence supplied by appellant')) {
@@ -2321,9 +2324,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     addReportRange(buckets.static);
     // 2. Dynamic Adjustments
     addReportRange(buckets.dynamic);
-    // 3. Photo packet
-    let hasPhotos = false;
-    if (photoBytes) {
+    // 3a. Direct-from-folder Photos page (new appeal_photos workflow). Always
+    //     preferred over the legacy PowerComp packet when present.
+    addReportRange(buckets.photos);
+    // 3b. Legacy PowerComp photo packet (fallback for pre-appeal_photos reports)
+    let hasPhotos = buckets.photos.length > 0;
+    if (photoBytes && !hasPhotos) {
       const photoDoc = await PDFDocument.load(photoBytes);
       const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
       for (const p of photoPages) out.addPage(p);

@@ -3,126 +3,36 @@
 // Per-Job widget that lets the user connect a local photo folder for THIS
 // Town. Sits next to the version banner inside JobContainer.
 //
-// - Persistent (FileSystemDirectoryHandle stored in IndexedDB keyed by jobId)
-// - Validates the picked folder against the Job's CCDD before saving
-// - Re-prompts for permission silently on subsequent visits
-// - "Re-index" button to rebuild the parcel map after Refresh Pictures
-//
-// No upload happens here — index is in-memory + filenames only. Picking a
-// "front photo" per appeal (which writes to Supabase) lives in the Appeal Log.
+// All state now lives in JobPhotoSourceContext so the index can be shared
+// with downstream consumers (ParcelPhotoStrip in DetailedAppraisalGrid, etc.).
+// This component is purely presentational + click handlers.
 
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  canUsePersistentPicker,
-  getJobSource,
-  pickJobSource,
-  clearJobSource,
-  indexJobSource,
-} from '../../lib/localPhotoSource';
+import React from 'react';
+import { useJobPhotoSource } from '../../contexts/JobPhotoSourceContext';
 
-export default function JobPhotoSourcePanel({ jobId, ccdd }) {
-  const [loaded, setLoaded] = useState(false);
-  const [source, setSource] = useState(null);
-  const [indexResult, setIndexResult] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [warning, setWarning] = useState('');
-
-  const supported = canUsePersistentPicker();
-
-  const refresh = useCallback(async () => {
-    if (!jobId) return;
-    setError('');
-    setWarning('');
-    try {
-      const rec = await getJobSource(jobId);
-      setSource(rec || null);
-      if (rec) {
-        // Auto-index in the background once permission is granted
-        const result = await indexJobSource(jobId);
-        setIndexResult(result || null);
-        if (result?.error) setWarning(result.error);
-      } else {
-        setIndexResult(null);
-      }
-    } catch (e) {
-      setError(e?.message || String(e));
-    } finally {
-      setLoaded(true);
-    }
-  }, [jobId]);
-
-  useEffect(() => { refresh(); }, [refresh]);
+export default function JobPhotoSourcePanel() {
+  const {
+    ccdd,
+    supported,
+    loaded,
+    source,
+    indexResult,
+    busy,
+    error,
+    warning,
+    connected,
+    connect,
+    disconnect,
+    reindex,
+  } = useJobPhotoSource();
 
   if (!ccdd) return null; // no CCDD → no point
+  if (!loaded) return null;
 
   const openInNewTab = () => {
     try { window.open(window.location.href, '_blank', 'noopener'); } catch (_e) {}
   };
 
-  const handleConnect = async (allowMismatch = false) => {
-    setError('');
-    setWarning('');
-    if (!supported) {
-      setError('IFRAME_BLOCKED');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await pickJobSource(jobId, ccdd, { allowMismatch });
-      if (!res.ok) {
-        if (res.reason === 'cancelled') { setBusy(false); return; }
-        if (res.reason === 'unsupported') {
-          setError('IFRAME_BLOCKED');
-          setBusy(false);
-          return;
-        }
-        if (res.reason === 'mismatch') {
-          setWarning(`The folder you picked ("${res.folderName}") does not contain a "${res.ccdd}" subfolder, and is not named "${res.ccdd}" itself. Pick the CCDD folder for this Town, or click "Use Anyway" if you know what you're doing.`);
-          setBusy(false);
-          return;
-        }
-        setError(res.reason || 'Failed to connect folder.');
-        setBusy(false);
-        return;
-      }
-      await refresh();
-    } catch (e) {
-      setError(e?.message || String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setBusy(true);
-    try {
-      await clearJobSource(jobId);
-      setSource(null);
-      setIndexResult(null);
-      setWarning('');
-      setError('');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleReindex = async () => {
-    setBusy(true);
-    setWarning('');
-    try {
-      const result = await indexJobSource(jobId);
-      setIndexResult(result || null);
-      if (result?.error) setWarning(result.error);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!loaded) return null;
-
-  // Compact UI — collapsed when connected, expanded when not
-  const connected = !!source && !!indexResult && !indexResult.error;
   const parcels = indexResult?.totals?.parcels || 0;
   const files = indexResult?.totals?.files || 0;
 
@@ -144,7 +54,7 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
           {connected ? (
             <>
               <button
-                onClick={handleReindex}
+                onClick={reindex}
                 disabled={busy}
                 className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
                 title="Re-walk the folder (use after Refresh Pictures)"
@@ -152,7 +62,7 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
                 {busy ? 'Re-indexing…' : 'Re-Index'}
               </button>
               <button
-                onClick={handleDisconnect}
+                onClick={disconnect}
                 disabled={busy}
                 className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded hover:bg-red-100 disabled:opacity-50"
               >
@@ -161,7 +71,7 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
             </>
           ) : (
             <button
-              onClick={() => handleConnect(false)}
+              onClick={() => connect(false)}
               disabled={busy}
               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
               title={`Pick a folder for CCDD ${ccdd} (e.g. C:\\Powerpad\\Pictures\\${ccdd})`}
@@ -194,7 +104,7 @@ export default function JobPhotoSourcePanel({ jobId, ccdd }) {
           <span>{warning}</span>
           {warning.startsWith('The folder you picked') && (
             <button
-              onClick={() => handleConnect(true)}
+              onClick={() => connect(true)}
               className="px-2 py-0.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700"
             >
               Use Anyway
