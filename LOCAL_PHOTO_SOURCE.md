@@ -7,6 +7,33 @@ up exactly where this one stops.
 
 ---
 
+## Next branch, do this first (post-merge picker fix)
+
+PR #189 merged before the picker fix landed. If `pickJobSource` throws or the
+folder picker never opens, it's because `showDirectoryPicker`'s `id` option is
+capped at 32 characters and only allows `[a-zA-Z0-9_-]`. The original code
+passed `lojik-photos-job-${jobId}` where `jobId` is a 36-char UUID — total
+length 53, which silently fails in Chrome.
+
+**Fix (one line) in `src/lib/localPhotoSource.js`, inside `pickJobSource`:**
+
+```js
+// before
+handle = await window.showDirectoryPicker({ id: `lojik-photos-job-${jobId}`, mode: 'read' });
+// after
+handle = await window.showDirectoryPicker({ id: `lojik-photos-${ccdd}`, mode: 'read' });
+```
+
+Why CCDD instead of jobId: the picker `id` only controls which "last folder"
+Chrome remembers between sessions. Scoping it by CCDD (4 digits) is short,
+stable, and actually more useful — every Job in the same Town will reopen to
+the same Pictures folder. The jobId scoping was over-specific and broke the
+length limit.
+
+This change has been applied on this branch.
+
+---
+
 ## Goal (what we're ultimately building)
 
 Replace the PowerComp PDF rip flow with a direct read of the photos already
