@@ -378,19 +378,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         roleColor: 'bg-blue-100 text-blue-800',
       });
     });
-    (appellantCompsState || []).forEach((entry, i) => {
-      const p = entry?.property;
-      if (!p?.property_composite_key) return;
-      out.push({
-        composite_key: p.property_composite_key,
-        block: p.property_block || entry.slot?.block,
-        lot: p.property_lot || entry.slot?.lot,
-        qualifier: p.property_qualifier || entry.slot?.qualifier,
-        address: p.property_location || '',
-        roleLabel: `APPELLANT ${i + 1}`,
-        roleColor: 'bg-orange-100 text-orange-800',
-      });
-    });
+    // Appellant comps intentionally NOT included here. They get their own
+    // photos via the Appellant Evidence flow when those parcels are searched
+    // separately as detailed-grid subjects.
     // Dedupe by composite_key (subject can also appear as a self-comp in some flows)
     const seen = new Set();
     return out.filter((p) => {
@@ -398,7 +388,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       seen.add(p.composite_key);
       return true;
     });
-  }, [subject, comps, appellantCompsState]);
+  }, [subject, comps]);
 
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
@@ -3107,13 +3097,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               } catch (e) {
                 try { doc.addImage(item.dataUrl, 'PNG', x, y, cellW, cellH - 30, undefined, 'FAST'); } catch (_e) {}
               }
-              doc.setFontSize(8);
+              // Caption: role label only. Addresses are intentionally omitted
+              // here - the comp grid earlier in the report already shows them
+              // and repeating them under photos creates visual clutter.
+              doc.setFontSize(9);
               doc.setTextColor(20, 20, 20);
               doc.setFont('helvetica', 'bold');
-              doc.text(item.parcel.roleLabel, x, y + cellH - 18);
-              doc.setFont('helvetica', 'normal');
-              const addrLines = doc.splitTextToSize(item.parcel.address || '', cellW);
-              doc.text(addrLines.slice(0, 2), x, y + cellH - 8);
+              doc.text(item.parcel.roleLabel, x, y + cellH - 12);
             });
             // If more than 6, drop a small note at the bottom.
             if (usable.length > 6) {

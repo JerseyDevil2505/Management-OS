@@ -440,7 +440,6 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
               </div>
               <div className="text-[10px] mt-1">
                 <span className={`font-semibold px-1 rounded ${p.roleColor}`}>{p.roleLabel}</span>
-                <div className="text-gray-600 truncate" title={p.address}>{p.address}</div>
               </div>
             </div>
           );
