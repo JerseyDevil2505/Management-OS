@@ -3078,32 +3078,66 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             doc.setFont('helvetica', 'bold');
             doc.text('Subject & Comps Photos', pageWidth / 2, 70, { align: 'center' });
 
-            // Grid: 3 cols x 2 rows on landscape letter (792x612pt).
-            // Cell ~240w x 200h leaves room for caption + page header.
-            const gridLeft = 36;
-            const gridTop = 90;
-            const cellW = 240;
-            const cellH = 200;
+            // Adaptive grid sized to the number of usable photos. We cap the
+            // photo aspect ratio at 4:3 and pick the largest cell width that
+            // still fits inside the available page area, so a 1- or 2-photo
+            // page fills the sheet instead of leaving a tiny thumbnail in
+            // the corner.
+            const shown = usable.slice(0, 6);
+            const n = shown.length;
+            const layoutTable = {
+              1: [1, 1],
+              2: [2, 1],
+              3: [3, 1],
+              4: [2, 2],
+              5: [3, 2],
+              6: [3, 2],
+            };
+            const [cols, rows] = layoutTable[n] || [3, 2];
+
+            const margin = 36;
+            const headerY = 90;
+            const captionH = 18;
             const gapX = 12;
             const gapY = 24;
-            const cols = 3;
-            usable.slice(0, 6).forEach((item, idx) => {
+            const targetAspect = 4 / 3; // width / height cap
+
+            const pageH = doc.internal.pageSize.getHeight();
+            const availW = pageWidth - margin * 2;
+            const availH = pageH - headerY - margin;
+
+            const maxCellW = (availW - gapX * (cols - 1)) / cols;
+            const maxCellH = (availH - gapY * (rows - 1)) / rows;
+            const maxCellPhotoH = maxCellH - captionH;
+
+            // Largest cellW that fits both width budget AND photo-height
+            // budget given the 4:3 aspect cap.
+            const cellW = Math.min(maxCellW, maxCellPhotoH * targetAspect);
+            const photoH = cellW / targetAspect;
+            const cellH = photoH + captionH;
+
+            const gridW = cols * cellW + (cols - 1) * gapX;
+            const gridH = rows * cellH + (rows - 1) * gapY;
+            const offsetX = margin + (availW - gridW) / 2;
+            const offsetY = headerY + (availH - gridH) / 2;
+
+            shown.forEach((item, idx) => {
               const col = idx % cols;
               const row = Math.floor(idx / cols);
-              const x = gridLeft + col * (cellW + gapX);
-              const y = gridTop + row * (cellH + gapY);
+              const x = offsetX + col * (cellW + gapX);
+              const y = offsetY + row * (cellH + gapY);
               try {
-                doc.addImage(item.dataUrl, 'JPEG', x, y, cellW, cellH - 30, undefined, 'FAST');
+                doc.addImage(item.dataUrl, 'JPEG', x, y, cellW, photoH, undefined, 'FAST');
               } catch (e) {
-                try { doc.addImage(item.dataUrl, 'PNG', x, y, cellW, cellH - 30, undefined, 'FAST'); } catch (_e) {}
+                try { doc.addImage(item.dataUrl, 'PNG', x, y, cellW, photoH, undefined, 'FAST'); } catch (_e) {}
               }
-              // Caption: role label only. Addresses are intentionally omitted
-              // here - the comp grid earlier in the report already shows them
-              // and repeating them under photos creates visual clutter.
-              doc.setFontSize(9);
+              // Centered, bold 10pt caption beneath each cell. Addresses are
+              // intentionally omitted - the comp grid earlier in the report
+              // already shows them.
+              doc.setFontSize(10);
               doc.setTextColor(20, 20, 20);
               doc.setFont('helvetica', 'bold');
-              doc.text(item.parcel.roleLabel, x, y + cellH - 12);
+              doc.text(item.parcel.roleLabel, x + cellW / 2, y + photoH + 13, { align: 'center' });
             });
             // If more than 6, drop a small note at the bottom.
             if (usable.length > 6) {
@@ -3112,7 +3146,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               doc.text(
                 `+ ${usable.length - 6} additional parcel photo(s) not shown (page limit).`,
                 pageWidth / 2,
-                gridTop + 2 * (cellH + gapY) + 4,
+                pageH - margin / 2,
                 { align: 'center' },
               );
             }
@@ -3946,7 +3980,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   </span>
                 </button>
                 <div
-                  style={mapExpanded ? {} : { position: 'absolute', left: -99999, top: 0, width: 600, pointerEvents: 'none', visibility: 'hidden' }}
+                  style={mapExpanded ? {} : { position: 'absolute', left: -99999, top: 0, width: 600, pointerEvents: 'none' }}
                   aria-hidden={!mapExpanded}
                 >
                 <div className="flex gap-3 items-start">
