@@ -361,7 +361,7 @@ export async function pickJobSource(jobId, ccdd, opts = {}) {
   }
   let handle;
   try {
-    handle = await window.showDirectoryPicker({ id: `lojik-photos-job-${jobId}`, mode: 'read' });
+    handle = await window.showDirectoryPicker({ id: `lojik-photos-${ccdd}`, mode: 'read' });
   } catch (e) {
     if (e?.name === 'AbortError') return { ok: false, reason: 'cancelled' };
     return { ok: false, reason: e?.message || String(e) };
