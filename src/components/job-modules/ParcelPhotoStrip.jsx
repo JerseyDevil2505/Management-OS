@@ -405,13 +405,14 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
       </div>
 
       {/* Layout mirrors the comp grid: a left "Attribute" gutter then one
-          equal-width cell per parcel. Sized to comfortably fit 6 columns
-          (Subject + Comp 1..5) on a standard desktop viewport. Each column is
-          flex-1 so it auto-divides whatever space is available. */}
-      <div className="flex items-stretch gap-2">
-        <div className="w-[110px] flex-shrink-0 text-[11px] text-gray-600 pt-5">
-          Photo
-        </div>
+          equal-width cell per parcel. Using a CSS grid with minmax(0, 1fr)
+          guarantees every parcel column is exactly the same width, which in
+          turn keeps every aspect-square thumbnail visually identical. */}
+      <div
+        className="grid gap-2 items-start parcel-photo-grid"
+        style={{ gridTemplateColumns: `110px repeat(${parcels.length}, minmax(0, 1fr))` }}
+      >
+        <div aria-hidden="true" />
         {parcels.map((p) => (
           <ParcelColumn
             key={p.composite_key}
