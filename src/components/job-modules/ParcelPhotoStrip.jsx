@@ -290,7 +290,7 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
 // Export modal preview - read-only thumbnail row of currently-picked photos
 // ---------------------------------------------------------------------------
 
-export function ExportPhotosPreview({ jobId, parcels = [] }) {
+export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) {
   const [savedMap, setSavedMap] = useState({});
   const [urls, setUrls] = useState({});
 
@@ -325,11 +325,16 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
 
   const pickedCount = Object.keys(savedMap).length;
 
+  const trimmedAppeal = String(appealNumber || '').trim();
+  const headerLabel = trimmedAppeal
+    ? `Appeal #${trimmedAppeal} — with Photos`
+    : 'Report — with Photos';
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          📷 Photos in PDF
+          📷 {headerLabel}
           <span className="text-xs text-gray-500 font-normal">
             ({pickedCount} of {parcels.length} parcels have a front photo)
           </span>

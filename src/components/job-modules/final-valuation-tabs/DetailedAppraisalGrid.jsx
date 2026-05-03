@@ -4033,7 +4033,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 Picking/adding photos happens in the main Detailed view, not here. */}
             {includePhotos && photoStripParcels.length > 0 && (
               <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
-                <ExportPhotosPreview jobId={jobData?.id} parcels={photoStripParcels} />
+                <ExportPhotosPreview jobId={jobData?.id} parcels={photoStripParcels} appealNumber={appealNumber} />
               </div>
             )}
 
