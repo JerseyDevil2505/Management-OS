@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 import AppealMap, { distanceMiles } from '../../AppealMap';
-import ParcelPhotoStrip, { ExportPhotosPreview } from '../ParcelPhotoStrip';
+import ParcelPhotoStrip from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
@@ -4026,14 +4026,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   </p>
                 )}
                 </div>
-              </div>
-            )}
-
-            {/* Photos preview (read-only summary of currently picked front photos).
-                Picking/adding photos happens in the main Detailed view, not here. */}
-            {includePhotos && photoStripParcels.length > 0 && (
-              <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
-                <ExportPhotosPreview jobId={jobData?.id} parcels={photoStripParcels} appealNumber={appealNumber} />
               </div>
             )}
 
