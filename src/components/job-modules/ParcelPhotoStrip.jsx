@@ -290,7 +290,7 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
 // Export modal preview - read-only thumbnail row of currently-picked photos
 // ---------------------------------------------------------------------------
 
-export function ExportPhotosPreview({ jobId, parcels = [] }) {
+export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) {
   const [savedMap, setSavedMap] = useState({});
   const [urls, setUrls] = useState({});
 
@@ -325,11 +325,16 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
 
   const pickedCount = Object.keys(savedMap).length;
 
+  const trimmedAppeal = String(appealNumber || '').trim();
+  const headerLabel = trimmedAppeal
+    ? `Appeal #${trimmedAppeal} — with Photos`
+    : 'Report — with Photos';
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          📷 Photos in PDF
+          📷 {headerLabel}
           <span className="text-xs text-gray-500 font-normal">
             ({pickedCount} of {parcels.length} parcels have a front photo)
           </span>
@@ -405,13 +410,14 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
       </div>
 
       {/* Layout mirrors the comp grid: a left "Attribute" gutter then one
-          equal-width cell per parcel. Sized to comfortably fit 6 columns
-          (Subject + Comp 1..5) on a standard desktop viewport. Each column is
-          flex-1 so it auto-divides whatever space is available. */}
-      <div className="flex items-stretch gap-2">
-        <div className="w-[110px] flex-shrink-0 text-[11px] text-gray-600 pt-5">
-          Photo
-        </div>
+          equal-width cell per parcel. Using a CSS grid with minmax(0, 1fr)
+          guarantees every parcel column is exactly the same width, which in
+          turn keeps every aspect-square thumbnail visually identical. */}
+      <div
+        className="grid gap-2 items-start parcel-photo-grid"
+        style={{ gridTemplateColumns: `110px repeat(${parcels.length}, minmax(0, 1fr))` }}
+      >
+        <div aria-hidden="true" />
         {parcels.map((p) => (
           <ParcelColumn
             key={p.composite_key}

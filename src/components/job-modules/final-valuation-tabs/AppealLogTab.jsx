@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera } from 'lucide-react';
 import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
@@ -147,6 +147,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [batchPrintProgress, setBatchPrintProgress] = useState(null); // { current, total, label }
   const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
+  const [directPhotosByKey, setDirectPhotosByKey] = useState({}); // composite_key -> appeal_photos row
 
   // Appeal reports (uploaded from Detailed tab). Bucket is the source of truth
   // for what the per-row print + batch print actually output.
@@ -1428,6 +1429,36 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     })();
     return () => { cancelled = true; };
   }, [jobData?.id]);
+
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('appeal_photos')
+        .select('property_composite_key, storage_path, original_filename, source, picked_at')
+        .eq('job_id', jobData.id);
+      if (cancelled) return;
+      if (error) { console.error('load direct photos failed', error); return; }
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setDirectPhotosByKey(map);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  const handlePreviewDirectPhoto = async (compositeKey) => {
+    const row = directPhotosByKey[compositeKey];
+    if (!row) return;
+    const { data, error } = await supabase
+      .storage.from('appeal-photos')
+      .createSignedUrl(row.storage_path, 60 * 5);
+    if (error || !data?.signedUrl) {
+      alert('Could not open direct photo: ' + (error?.message || 'unknown error'));
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  };
 
   // Load uploaded appeal reports for this job. The Appeal Log row chip and
   // the print pipeline both key off this map.
@@ -3937,6 +3968,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       {(() => {
                         const key = compositeKeyForAppeal(appeal);
                         const hasPacket = !!photoPacketsByKey[key];
+                        const directPhoto = directPhotosByKey[key];
+                        const hasDirect = !!directPhoto;
                         const reportMeta = appealReportsByKey[key];
                         const printable = !!reportMeta;
                         const chipClass = printable
@@ -3954,11 +3987,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                             >
                               {chipLabel}
                             </span>
+                            {hasDirect && (
+                              <button
+                                onClick={() => handlePreviewDirectPhoto(key)}
+                                className="text-green-600 hover:text-green-800 p-1 hover:bg-green-50 rounded"
+                                title={`Direct photo on file (${directPhoto.original_filename || 'photo'}) — click to preview`}
+                              >
+                                <Camera className="w-4 h-4" />
+                              </button>
+                            )}
                             {hasPacket && (
                               <button
                                 onClick={() => handlePreviewPhotoPacket(key)}
                                 className="text-teal-600 hover:text-teal-800 p-1 hover:bg-teal-50 rounded"
-                                title={`PowerComp photo packet on file (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
+                                title={`PowerComp photo packet on file (legacy) (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
                               >
                                 <ImageIcon className="w-4 h-4" />
                               </button>
@@ -3970,7 +4012,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                               title={
                                 !printable
                                   ? 'No saved report — generate one from CME → Detailed first'
-                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report')
+                                  : (hasDirect
+                                      ? 'Print Appeal Report (with direct photos embedded)'
+                                      : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report'))
                               }
                             >
                               <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />
