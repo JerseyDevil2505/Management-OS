@@ -136,9 +136,21 @@ export async function ensurePermission(handle, mode = 'read') {
 // lot back to a "." for keying.
 
 const IMG_EXT_RE = /\.(jpe?g|png|gif|bmp|tiff?)$/i;
+// PowerCama "soft delete" tombstone — original photo renamed `<name>.jpg.BAK`
+// when removed in PowerCama. Skip entirely (not a photo, not even unmatched).
+const BAK_EXT_RE = /\.bak$/i;
+// PowerCama capture-time stamp embedded in filenames: `TYYYYMMDDHHMMSS`
+// optionally followed by a same-second sequence suffix `-NN`. When present,
+// it replaces the simple numeric photo number.
+const TSTAMP_RE = /^T(\d{14})(?:-(\d+))?$/;
+
+export function isTombstoneFile(filename) {
+  return typeof filename === 'string' && BAK_EXT_RE.test(filename);
+}
 
 export function parsePhotoName(filename) {
   if (!filename || typeof filename !== 'string') return null;
+  if (BAK_EXT_RE.test(filename)) return null;
   if (!IMG_EXT_RE.test(filename)) return null;
   const stem = filename.replace(IMG_EXT_RE, '');
 
@@ -157,9 +169,26 @@ export function parsePhotoName(filename) {
 
   const [ccdd, block, lotRaw, qualifier, photoNum] = parts;
   if (!/^\d{4}$/.test(ccdd)) return null;
-  if (!/^\d+$/.test(photoNum)) return null;
   if (!block) return null;
   if (!lotRaw) return null;
+
+  // photoNum may be a simple integer (`01`) OR a PowerCama capture timestamp
+  // (`T20241106144506` or `T20241106144506-01`). Normalize both into a single
+  // sortable numeric so "highest = most recent" still works.
+  let photoNumeric;
+  let captureTs = null;
+  let captureSeq = null;
+  if (/^\d+$/.test(photoNum)) {
+    photoNumeric = Number(photoNum);
+  } else {
+    const m = photoNum.match(TSTAMP_RE);
+    if (!m) return null;
+    captureTs = m[1];
+    captureSeq = m[2] ? Number(m[2]) : 0;
+    // Combine timestamp + seq into one numeric so T-stamped photos sort
+    // chronologically and always rank above legacy numeric photos.
+    photoNumeric = Number(captureTs) * 100 + captureSeq;
+  }
 
   // Decimal char is the "other" separator
   const decimalChar = fieldSep === '-' ? '_' : '-';
@@ -170,7 +199,9 @@ export function parsePhotoName(filename) {
     block,
     lot,
     qualifier: qualifier || null,
-    photoNum: Number(photoNum),
+    photoNum: photoNumeric,
+    captureTs,
+    captureSeq,
     vendor: fieldSep === '-' ? 'micro' : 'brt',
   };
 }
@@ -234,6 +265,8 @@ export async function indexSourcesForCcdd(ccdd, opts = {}) {
       // Walk files inside the CCDD subfolder (one level deep is fine for both vendors)
       for await (const [name, entry] of ccddDir.entries()) {
         if (entry.kind !== 'file') continue;
+        // PowerCama tombstones — not a photo, don't count it at all.
+        if (isTombstoneFile(name)) continue;
         totalFiles += 1;
         const parsed = parsePhotoName(name);
         if (!parsed) {
@@ -411,6 +444,8 @@ export async function indexJobSource(jobId) {
   try {
     for await (const [name, entry] of ccddDir.entries()) {
       if (entry.kind !== 'file') continue;
+      // PowerCama tombstones — not a photo, don't count it at all.
+      if (isTombstoneFile(name)) continue;
       totalFiles += 1;
       const parsed = parsePhotoName(name);
       if (!parsed || parsed.ccdd !== rec.ccdd) {
@@ -425,6 +460,8 @@ export async function indexJobSource(jobId) {
         fileHandle: entry,
         name,
         photoNum: parsed.photoNum,
+        captureTs: parsed.captureTs,
+        captureSeq: parsed.captureSeq,
       });
       index.set(key, arr);
     }
@@ -498,6 +535,7 @@ export function indexSessionSourcesForCcdd(ccdd) {
       // Require the file to live under a CCDD-matching segment, or be one folder deep
       const inCcdd = segments.some((seg) => seg.toLowerCase() === ccddStr.toLowerCase());
       if (!inCcdd) continue;
+      if (isTombstoneFile(file.name)) continue;
       totalFiles += 1;
       const parsed = parsePhotoName(file.name);
       if (!parsed || parsed.ccdd !== ccddStr) {
