@@ -207,14 +207,14 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="w-full aspect-[4/3] bg-gray-50 hover:bg-blue-50 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded flex flex-col items-center justify-center text-gray-400 hover:text-blue-600 text-[10px] gap-1 px-1 text-center"
+          className="w-full aspect-square bg-gray-50 hover:bg-blue-50 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded flex flex-col items-center justify-center text-gray-400 hover:text-blue-600 text-[10px] gap-1 px-1 text-center"
           title={connected ? 'Click to add a photo (or paste with Ctrl+V)' : 'No photo folder connected. Click to add a photo.'}
         >
           <Plus size={18} />
           <span>Add photo</span>
         </button>
       ) : (
-        <div className="relative w-full aspect-[4/3] bg-gray-100 rounded overflow-hidden border border-gray-200">
+        <div className="relative w-full aspect-square bg-gray-100 rounded overflow-hidden border border-gray-200">
           {previewUrl ? (
             <img src={previewUrl} alt="" className="object-cover w-full h-full" />
           ) : (
@@ -346,7 +346,7 @@ export function ExportPhotosPreview({ jobId, parcels = [] }) {
               <div className="text-center mb-1">
                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.roleColor}`}>{p.roleLabel}</span>
               </div>
-              <div className="w-full aspect-[4/3] bg-gray-100 rounded overflow-hidden border border-gray-200 flex items-center justify-center">
+              <div className="w-full aspect-square bg-gray-100 rounded overflow-hidden border border-gray-200 flex items-center justify-center">
                 {url ? (
                   <img src={url} alt="" className="object-cover w-full h-full" />
                 ) : (
@@ -404,11 +404,12 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
         <span className="text-[10px] text-gray-500">← → cycle · ⭐ pick · + add (or Ctrl+V to paste)</span>
       </div>
 
-      {/* Layout mirrors the comp grid: a left "Attribute" gutter then one cell
-          per parcel. Gutter width tuned to match the sticky attribute column
-          in DetailedAppraisalGrid (~140px). */}
+      {/* Layout mirrors the comp grid: a left "Attribute" gutter then one
+          equal-width cell per parcel. Sized to comfortably fit 6 columns
+          (Subject + Comp 1..5) on a standard desktop viewport. Each column is
+          flex-1 so it auto-divides whatever space is available. */}
       <div className="flex items-stretch gap-2">
-        <div className="w-[140px] flex-shrink-0 text-[11px] text-gray-600 pt-4">
+        <div className="w-[110px] flex-shrink-0 text-[11px] text-gray-600 pt-5">
           Photo
         </div>
         {parcels.map((p) => (
