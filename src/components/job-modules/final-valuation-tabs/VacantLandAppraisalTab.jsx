@@ -1756,7 +1756,7 @@ const VacantLandAppraisalTab = ({
               satellite/boundary capture or uploads a manual file via the cell. */}
           {photoStripParcels.length > 0 && (
             <div className="px-3 pb-3">
-              <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+              <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} pickLabel="Selected" />
             </div>
           )}
         </div>

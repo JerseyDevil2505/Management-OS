@@ -40,7 +40,7 @@ function safeStorageKey(s) {
 // Per-parcel column
 // ---------------------------------------------------------------------------
 
-function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
+function ParcelColumn({ parcel, jobId, savedPhoto, onSaved, pickLabel = 'Front' }) {
   const { getPhotosFor, connected } = useJobPhotoSource();
   const folderPhotos = useMemo(
     () => getPhotosFor(parcel.block, parcel.lot, parcel.qualifier),
@@ -275,11 +275,11 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
               ? 'bg-green-100 text-green-800'
               : 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500 disabled:opacity-40 disabled:bg-gray-100 disabled:text-gray-400'
           }`}
-          title="Use as front photo"
+          title={`Use as ${pickLabel.toLowerCase()} photo for the report`}
         >
           {saving ? <Loader2 size={10} className="animate-spin" />
             : isPicked ? <Check size={10} /> : <Star size={10} />}
-          {isPicked ? 'Front' : 'Use'}
+          {isPicked ? pickLabel : 'Use'}
         </button>
         <button
           type="button"
@@ -381,7 +381,7 @@ export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) 
 // Main: compact horizontal strip aligned with the comp grid above
 // ---------------------------------------------------------------------------
 
-export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
+export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Front' }) {
   const { connected, indexResult, source } = useJobPhotoSource();
   const [savedMap, setSavedMap] = useState({});
 
@@ -437,6 +437,7 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
             key={`${p.roleLabel}::${p.composite_key}`}
             parcel={p}
             jobId={jobId}
+            pickLabel={pickLabel}
             savedPhoto={savedMap[p.composite_key]}
             onSaved={(row) => setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }))}
           />
