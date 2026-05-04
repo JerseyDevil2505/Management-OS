@@ -358,7 +358,7 @@ export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) 
         {parcels.map((p) => {
           const url = urls[p.composite_key];
           return (
-            <div key={p.composite_key} className="flex-1 min-w-0">
+            <div key={`${p.roleLabel}::${p.composite_key}`} className="flex-1 min-w-0">
               <div className="text-center mb-1">
                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.roleColor}`}>{p.roleLabel}</span>
               </div>
@@ -430,8 +430,11 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
       >
         <div aria-hidden="true" />
         {parcels.map((p) => (
+          // Key must be role-scoped: when COMP 1 IS the subject sale, both
+          // SUBJECT and COMP 1 carry the same composite_key on purpose so they
+          // both render and both pull the same saved Front photo.
           <ParcelColumn
-            key={p.composite_key}
+            key={`${p.roleLabel}::${p.composite_key}`}
             parcel={p}
             jobId={jobId}
             savedPhoto={savedMap[p.composite_key]}
