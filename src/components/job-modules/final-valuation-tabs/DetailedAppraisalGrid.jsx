@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCompEvaluator';
 import AppealMap, { distanceMiles } from '../../AppealMap';
+import ParcelPhotoStrip from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
@@ -229,12 +230,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [includeMap, setIncludeMap] = useState(() => readToggle('detailedExport_includeMap', true)); // Embed subject+comps map in PDF
   const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
   const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
+  const [includePhotos, setIncludePhotos] = useState(() => readToggle('detailedExport_includePhotos', true));
+  // Map preview defaults to expanded — easier to confirm the auto-zoom and
+  // marker placement at a glance before exporting. Persisted toggle still
+  // remembers the user's last choice across sessions.
+  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', true));
 
   // Persist toggle state across sessions
   useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
   useEffect(() => { try { localStorage.setItem('detailedExport_includeMap', String(includeMap)); } catch (e) {} }, [includeMap]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideAppellantEvidence', String(hideAppellantEvidence)); } catch (e) {} }, [hideAppellantEvidence]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideDirectorsRatio', String(hideDirectorsRatio)); } catch (e) {} }, [hideDirectorsRatio]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_includePhotos', String(includePhotos)); } catch (e) {} }, [includePhotos]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_mapExpanded', String(mapExpanded)); } catch (e) {} }, [mapExpanded]);
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
   // Appellant-supplied comps (loaded from appeal_log on modal open). Each
   // entry is the saved slot enriched with the resolved property record so we
@@ -343,6 +351,56 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     return { subject: subjectPayload, comps: compsPayload, appellantComps: appellantPayload };
   }, [subject, comps, appellantCompsState, applyGeocodePatch]);
+
+  // Parcels payload for the per-parcel photo strip (Subject + Comps + Appellant comps).
+  // Independent of geocoding — photos work regardless of lat/lng.
+  const photoStripParcels = useMemo(() => {
+    const out = [];
+    if (subject?.property_composite_key) {
+      out.push({
+        composite_key: subject.property_composite_key,
+        block: subject.property_block,
+        lot: subject.property_lot,
+        qualifier: subject.property_qualifier,
+        address: subject.property_location || '',
+        roleLabel: 'SUBJECT',
+        roleColor: 'bg-red-100 text-red-800',
+      });
+    }
+    (comps || []).forEach((c, i) => {
+      // Render every comp slot the grid renders so picker labels stay aligned
+      // with the grid columns (COMP 1, COMP 2, ...). Manual comps and slots
+      // missing a composite_key still get a cell — they just won't have a DB
+      // lookup; the cell falls back to its empty/add state.
+      if (!c) return;
+      const slotKey = c.property_composite_key || `slot-${i + 1}`;
+      out.push({
+        composite_key: slotKey,
+        block: c.property_block,
+        lot: c.property_lot,
+        qualifier: c.property_qualifier,
+        address: c.property_location || '',
+        roleLabel: `COMP ${i + 1}`,
+        roleColor: 'bg-blue-100 text-blue-800',
+        isManual: !!c.is_manual_comp,
+        hasParcelKey: !!c.property_composite_key,
+      });
+    });
+    // Appellant comps intentionally NOT included here. They get their own
+    // photos via the Appellant Evidence flow when those parcels are searched
+    // separately as detailed-grid subjects.
+    // Dedupe by (roleLabel + composite_key) so a comp that is the subject
+    // sale (same composite_key as SUBJECT) still gets its own COMP cell —
+    // we only suppress true duplicates within the same role.
+    const seen = new Set();
+    return out.filter((p) => {
+      if (p.composite_key.startsWith('slot-')) return true;
+      const dedupeKey = `${p.roleLabel}::${p.composite_key}`;
+      if (seen.has(dedupeKey)) return false;
+      seen.add(dedupeKey);
+      return true;
+    });
+  }, [subject, comps]);
 
   const mapHasSubject = !!mapData.subject;
   const mapGeocodedCount =
@@ -1907,6 +1965,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const subjectBlockLot = `${subject.property_block}/${subject.property_lot}${subject.property_qualifier ? '/' + subject.property_qualifier : ''}`;
     addHeader(subjectBlockLot);
 
+    // Section page-range tracker. We render sections in their existing order
+    // and use jsPDF.movePage at the end to put them in the report order:
+    // Static → Dynamic → Photos → Map → Evidence → Ch123. Each end-marker is
+    // captured right after its block runs (or skipped, in which case the
+    // section's start..end is empty and contributes no pages).
+    const sectionEnds = { initial: doc.getNumberOfPages() };
+
     // Prepare table data
     const visibleAttributes = allAttributes
       .filter(attr => rowVisibility[attr.id])
@@ -2183,6 +2248,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         doc.setFontSize(prevSize);
       }
     });
+    sectionEnds.staticEnd = doc.getNumberOfPages();
 
     // Page 2: Dynamic adjustments (if any exist and are visible)
     if (dynamicAttrs.length > 0) {
@@ -2372,6 +2438,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }
         });
       }
+      sectionEnds.dynamicEnd = doc.getNumberOfPages();
     }
 
     // ==================== APPELLANT EVIDENCE SUMMARY PAGE ====================
@@ -2708,6 +2775,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     } catch (e) {
       console.error('Failed to render appellant evidence summary page:', e);
     }
+    sectionEnds.evidenceEnd = doc.getNumberOfPages();
 
     // ==================== CHAPTER 123 TEST ====================
     // Add Chapter 123 Analysis on a new page. User can suppress entirely via the
@@ -2853,6 +2921,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ch123TableEndY + 12
     );
     } // end !hideDirectorsRatio
+    sectionEnds.ch123End = doc.getNumberOfPages();
 
     // ============== Subject + Comps Map page (optional) ==============
     if (includeMap && mapHasSubject && mapCaptureRef.current) {
@@ -2984,6 +3053,258 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         console.warn('Map capture failed:', mapErr);
       }
     }
+    sectionEnds.mapEnd = doc.getNumberOfPages();
+
+    // ============== Subject & Comps Photos page (optional) ==============
+    // Pulls picked front photos from `appeal_photos` for every parcel in
+    // photoStripParcels. One image per parcel, captioned with role + address.
+    // Skipped silently if includePhotos is off, no jobId, no parcels, or
+    // every parcel returns nothing (so we don't emit a blank page).
+    if (includePhotos && jobData?.id && photoStripParcels.length > 0) {
+      try {
+        const keys = photoStripParcels.map((p) => p.composite_key).filter(Boolean);
+        const { data: photoRows } = await supabase
+          .from('appeal_photos')
+          .select('storage_path, property_composite_key, original_filename, capture_ts')
+          .eq('job_id', jobData.id)
+          .in('property_composite_key', keys);
+        const photoByKey = {};
+        (photoRows || []).forEach((r) => { photoByKey[r.property_composite_key] = r; });
+        const parcelsWithPhotos = photoStripParcels.filter((p) => photoByKey[p.composite_key]);
+
+        if (parcelsWithPhotos.length > 0) {
+          // Download each picked photo and convert to data URL for jsPDF
+          const photoCells = await Promise.all(parcelsWithPhotos.map(async (p) => {
+            const row = photoByKey[p.composite_key];
+            try {
+              const { data: blob } = await supabase.storage
+                .from('appeal-photos')
+                .download(row.storage_path);
+              if (!blob) return null;
+              const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              return { parcel: p, dataUrl };
+            } catch (_e) {
+              return null;
+            }
+          }));
+          const usable = photoCells.filter(Boolean);
+
+          // Split into subject + comps. Subject is always first in
+          // photoStripParcels (see the useMemo above). If subject has no
+          // photo, we still paginate by comps with subject row left blank
+          // — but in practice a Photos page with no subject is almost
+          // never useful, so we just skip in that case.
+          const subjectCell = usable.find((u) => u.parcel.roleLabel === 'SUBJECT') || null;
+          const compCells = usable.filter((u) => u.parcel.roleLabel !== 'SUBJECT');
+
+          if (subjectCell || compCells.length > 0) {
+            // Legacy PowerComp packet layout, faithfully ported:
+            //   - landscape letter (792 x 612 pt)
+            //   - margin 36, header band 56, footer band 22
+            //   - subject sits on top row, centered, capped to a landscape
+            //     aspect so a 4:3 home photo fills the cell
+            //   - comps sit on a single row below, 3 per page max
+            //   - 4 or 5 comps => second page repeats the subject on top
+            //     and shows comps 4 (and 5) below
+            const blqLabel = subjectBlockLot;
+            const PAGE_W = 792;
+            const PAGE_H = 612;
+            const lMargin = 36;
+            const headerH = 56;
+            const footerH = 22;
+            const captionGap = 4;
+            const captionH = 12;
+            const cellPad = 2;
+            const rowGap = 14;
+            const colGap = 14;
+
+            const contentTop = lMargin + headerH;
+            const contentBottom = PAGE_H - lMargin - footerH;
+            const contentH = contentBottom - contentTop;
+            const contentW = PAGE_W - lMargin * 2;
+
+            const subjRowH = Math.floor((contentH - rowGap) * 0.46);
+            const compRowH = contentH - rowGap - subjRowH;
+            const subjPhotoH = subjRowH - captionGap - captionH - cellPad * 2;
+            const compPhotoH = compRowH - captionGap - captionH - cellPad * 2;
+
+            const subjPhotoW = Math.min(contentW * 0.75, subjPhotoH * 1.5);
+            const subjCellW = subjPhotoW + cellPad * 2;
+            const subjCellH = subjPhotoH + cellPad * 2;
+            const subjX = lMargin + (contentW - subjCellW) / 2;
+            const subjY = contentTop;
+
+            const compPhotoW = (contentW - colGap * 2) / 3 - cellPad * 2;
+            const compCellW = compPhotoW + cellPad * 2;
+            const compsY = contentTop + subjRowH + rowGap;
+
+            const drawPhotoPageHeader = () => {
+              addLogoToPage(lMargin, lMargin - 5);
+              let hY = lMargin + 10;
+              if (appealNumber) {
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(80, 80, 80);
+                doc.text(`Appeal #: ${appealNumber}`, PAGE_W - lMargin, hY, { align: 'right' });
+                hY += 14;
+              }
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(18);
+              doc.setFont('helvetica', 'bold');
+              doc.text(blqLabel, PAGE_W - lMargin, hY + 10, { align: 'right' });
+            };
+            const drawPhotoPageFooter = () => {
+              doc.setFontSize(7);
+              doc.setTextColor(150, 150, 150);
+              doc.setFont('helvetica', 'italic');
+              doc.text('Subject and comparable photographs.', lMargin, PAGE_H - lMargin + 8);
+              doc.setFont('helvetica', 'normal');
+              doc.text(blqLabel, PAGE_W - lMargin, PAGE_H - lMargin + 8, { align: 'right' });
+            };
+            const drawSubjectCell = () => {
+              if (!subjectCell) return;
+              try {
+                doc.addImage(
+                  subjectCell.dataUrl, 'JPEG',
+                  subjX + cellPad, subjY + cellPad,
+                  subjPhotoW, subjPhotoH,
+                  undefined, 'FAST'
+                );
+              } catch (_e) {
+                try {
+                  doc.addImage(
+                    subjectCell.dataUrl, 'PNG',
+                    subjX + cellPad, subjY + cellPad,
+                    subjPhotoW, subjPhotoH,
+                    undefined, 'FAST'
+                  );
+                } catch (_e2) {}
+              }
+              doc.setFontSize(11);
+              doc.setTextColor(140, 0, 0);
+              doc.setFont('helvetica', 'bold');
+              doc.text(
+                'Subject',
+                subjX + subjCellW / 2,
+                subjY + subjCellH + captionGap + captionH - 2,
+                { align: 'center' }
+              );
+            };
+            const drawCompRow = (slots) => {
+              const totalW = compCellW * slots.length + colGap * Math.max(0, slots.length - 1);
+              const startX = lMargin + (contentW - totalW) / 2;
+              slots.forEach((cell, i) => {
+                const x = startX + i * (compCellW + colGap);
+                if (cell) {
+                  try {
+                    doc.addImage(
+                      cell.dataUrl, 'JPEG',
+                      x + cellPad, compsY + cellPad,
+                      compPhotoW, compPhotoH,
+                      undefined, 'FAST'
+                    );
+                  } catch (_e) {
+                    try {
+                      doc.addImage(
+                        cell.dataUrl, 'PNG',
+                        x + cellPad, compsY + cellPad,
+                        compPhotoW, compPhotoH,
+                        undefined, 'FAST'
+                      );
+                    } catch (_e2) {}
+                  }
+                }
+                doc.setFontSize(10);
+                doc.setTextColor(30, 60, 140);
+                doc.setFont('helvetica', 'bold');
+                doc.text(
+                  cell ? cell.parcel.roleLabel : '',
+                  x + compCellW / 2,
+                  compsY + compPhotoH + cellPad * 2 + captionGap + captionH - 2,
+                  { align: 'center' }
+                );
+              });
+            };
+
+            // Page 1: subject + comps 1-3
+            doc.addPage([PAGE_W, PAGE_H], 'landscape');
+            drawPhotoPageHeader();
+            drawSubjectCell();
+            drawCompRow(compCells.slice(0, 3));
+            drawPhotoPageFooter();
+
+            // Page 2: subject (repeated) + comps 4-5
+            if (compCells.length > 3) {
+              doc.addPage([PAGE_W, PAGE_H], 'landscape');
+              drawPhotoPageHeader();
+              drawSubjectCell();
+              drawCompRow(compCells.slice(3, 5));
+              drawPhotoPageFooter();
+            }
+          }
+        }
+      } catch (photosErr) {
+        console.warn('Photos page generation failed:', photosErr);
+      }
+    }
+    sectionEnds.photosEnd = doc.getNumberOfPages();
+
+    // ==================== REORDER PAGES ====================
+    // Render order above is: Static → Dynamic → Evidence → Ch123 → Map → Photos.
+    // Final report order should be: Static → Dynamic → Photos → Map → Evidence → Ch123.
+    // We use doc.movePage to shuffle pages into the desired order without
+    // re-rendering anything.
+    try {
+      const rangeFor = (startEnd, endEnd) => {
+        const start = (startEnd || 0) + 1;
+        const end = endEnd || 0;
+        if (end < start) return [];
+        const out = [];
+        for (let p = start; p <= end; p++) out.push(p);
+        return out;
+      };
+      const staticPages   = rangeFor(0, sectionEnds.staticEnd);
+      const dynamicPages  = rangeFor(sectionEnds.staticEnd, sectionEnds.dynamicEnd ?? sectionEnds.staticEnd);
+      const evidencePages = rangeFor(sectionEnds.dynamicEnd ?? sectionEnds.staticEnd, sectionEnds.evidenceEnd);
+      const ch123Pages    = rangeFor(sectionEnds.evidenceEnd, sectionEnds.ch123End);
+      const mapPages      = rangeFor(sectionEnds.ch123End, sectionEnds.mapEnd);
+      const photosPages   = rangeFor(sectionEnds.mapEnd, sectionEnds.photosEnd);
+
+      // Desired order of original page numbers
+      const originalOrder = [
+        ...staticPages,
+        ...dynamicPages,
+        ...photosPages,
+        ...mapPages,
+        ...evidencePages,
+        ...ch123Pages,
+      ];
+
+      // Build current ordering as a list of "original page numbers" then walk
+      // each desired position and shuffle via movePage. Track shifts in our
+      // local array so the next move uses correct current-positions.
+      const total = doc.getNumberOfPages();
+      if (originalOrder.length === total) {
+        const current = [];
+        for (let i = 1; i <= total; i++) current.push(i);
+        for (let target = 0; target < originalOrder.length; target++) {
+          const wantedOrigPage = originalOrder[target];
+          const curIdx = current.indexOf(wantedOrigPage);
+          if (curIdx === target) continue;
+          // jsPDF.movePage(targetPage, beforePage) — both 1-indexed.
+          doc.movePage(curIdx + 1, target + 1);
+          const [moved] = current.splice(curIdx, 1);
+          current.splice(target, 0, moved);
+        }
+      }
+    } catch (reorderErr) {
+      console.warn('PDF page reorder failed:', reorderErr);
+    }
 
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
     const ccdd = jobData?.ccdd || 'UNKNOWN';
@@ -3074,7 +3395,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3438,6 +3759,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </span>
                   </label>
                 )}
+                {/* Include Photos Toggle - emit a Photos page in the PDF using the picked appeal_photos */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={includePhotos}
+                    onChange={(e) => setIncludePhotos(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">📷 Include Photos</span>
+                </label>
                 {/* Hide Appellant Evidence Toggle - some assessors prefer to package only the detailed grids */}
                 <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
                   <input
@@ -3776,19 +4107,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             {/* Map preview (also captured by html2canvas for the PDF).
                 Renders at a fixed 600x420 size so the on-screen preview matches
-                what gets embedded in the PDF, including auto-zoom level. */}
+                what gets embedded in the PDF, including auto-zoom level.
+                Collapsed by default - click the header to expand. When
+                collapsed we keep the capture div mounted off-screen so
+                html2canvas can still grab it for the PDF. */}
             {includeMap && mapHasSubject && (
               <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
-                <div className="flex items-center justify-between mb-2">
+                <button
+                  type="button"
+                  onClick={() => setMapExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between mb-2 hover:bg-gray-100 rounded px-1 py-0.5 -mx-1"
+                >
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <span className="text-gray-500">{mapExpanded ? '▾' : '▸'}</span>
                     <MapIcon size={16} className="text-blue-600" />
                     Subject &amp; Comps Map (PDF preview)
                   </div>
                   <span className="text-xs text-gray-500">
                     {mapGeocodedCount} of {mapTotalCount} parcels geocoded ·
-                    OpenStreetMap tiles
+                    click to {mapExpanded ? 'collapse' : 'expand'}
                   </span>
-                </div>
+                </button>
+                <div
+                  style={mapExpanded ? {} : { position: 'absolute', left: -99999, top: 0, width: 600, pointerEvents: 'none' }}
+                  aria-hidden={!mapExpanded}
+                >
                 <div className="flex gap-3 items-start">
                   <div ref={mapCaptureRef} style={{ width: 600, flex: '0 0 600px' }}>
                     <AppealMap
@@ -3865,6 +4208,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     add them.
                   </p>
                 )}
+                </div>
               </div>
             )}
 
@@ -3960,6 +4304,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }}
         />
       )}
+
+      {/* Per-parcel photo strip — preview/select/add the front photo for each parcel.
+          Lives at the bottom of Detailed (NOT in the export modal). The picked
+          photo is uploaded to `appeal-photos` storage and recorded in the
+          `appeal_photos` table, keyed by (job_id, property_composite_key). */}
+      <div className="px-4 pb-4">
+        <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+      </div>
     </div>
   );
 };

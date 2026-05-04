@@ -5,7 +5,7 @@ import {
   Building, MapPin, Mail, FileCheck, Target, ExternalLink, FileUp, CheckSquare, 
   Square, FileDown, Printer, Archive, Save, X, XCircle, ArrowRight
 } from 'lucide-react';
-import { supabase, checklistService } from '../../lib/supabaseClient';
+import { supabase, checklistService, parseDateLocal } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange, properties = [], inspectionData = [], onJobUpdate }) => {
@@ -40,7 +40,8 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const formatDate = (dateString) => {
     if (!dateString) return 'Not available';
     try {
-      return new Date(dateString).toLocaleDateString();
+      const d = parseDateLocal(dateString);
+      return d ? d.toLocaleDateString() : 'Invalid date';
     } catch (error) {
       return 'Invalid date';
     }

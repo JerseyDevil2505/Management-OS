@@ -9,6 +9,8 @@ import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
+import JobPhotoSourcePanel from './JobPhotoSourcePanel';
+import { JobPhotoSourceProvider } from '../../contexts/JobPhotoSourceContext';
 
 // Centralized package detection - O(n) single pass
 // Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
@@ -910,7 +912,8 @@ const JobContainer = ({
         ...jobData,
         updated_at: jobData?.updated_at || selectedJob.updated_at,
         manager_name: 'Manager Name Here', // TODO: Resolve from employees table using assigned_manager UUID
-        due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
+        // Use string substring to avoid timezone shift on 'YYYY-MM-DD' end_date
+        due_year: selectedJob.end_date ? Number(String(selectedJob.end_date).slice(0, 4)) : 'TBD',
         latest_data_version: currentFileVersion,
         latest_code_version: currentCodeVersion,
         property_count: count || 0,
@@ -994,7 +997,8 @@ const JobContainer = ({
       const fallbackJobData = {
         ...selectedJob,
         manager_name: 'Manager Name Here',
-        due_year: selectedJob.end_date ? new Date(selectedJob.end_date).getFullYear() : 'TBD',
+        // Use string substring to avoid timezone shift on 'YYYY-MM-DD' end_date
+        due_year: selectedJob.end_date ? Number(String(selectedJob.end_date).slice(0, 4)) : 'TBD',
         latest_data_version: 1,
         latest_code_version: 1,
         property_count: 0,
@@ -1298,7 +1302,10 @@ const JobContainer = ({
   // FIXED: Combined loading state check
   const isLoading = isLoadingVersion || isLoadingProperties;
 
+  const photoCcdd = jobData?.ccdd_code || jobData?.ccdd || selectedJob?.ccdd_code || selectedJob?.ccdd;
+
   return (
+    <JobPhotoSourceProvider jobId={selectedJob?.id} ccdd={photoCcdd}>
     <div className="bg-white">
       {/* Enhanced File Version Status Banner with Progress Bar */}
       <div className="max-w-6xl mx-auto p-6">
@@ -1447,6 +1454,9 @@ const JobContainer = ({
           </div>
         )}
 
+        {/* Per-Job photo source (beta) — connect a local Pictures folder for this Town */}
+        <JobPhotoSourcePanel />
+
         {/* Module Navigation Tabs */}
         <div className="mb-6">
           <div className="border-b border-gray-200">
@@ -1527,6 +1537,7 @@ const JobContainer = ({
         )}
       </div>
     </div>
+    </JobPhotoSourceProvider>
   );
 };
 

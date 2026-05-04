@@ -131,6 +131,48 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   }
 });
 
+// ===== DATE-ONLY HELPERS =====
+// Postgres `date` columns come back as 'YYYY-MM-DD'. `new Date('YYYY-MM-DD')` is
+// parsed as UTC midnight, which becomes the previous local day in negative-UTC
+// zones (e.g. America/New_York). That's the off-by-one bug behind the
+// 11/5 vs 11/6 mismatch. These helpers parse / format date-only values in
+// the local timezone so the displayed day matches the stored day.
+
+/**
+ * Parse a date-only string ('YYYY-MM-DD') as a local Date.
+ * Passes through full ISO timestamps (with 'T') and existing Date objects.
+ * Returns null for falsy / unparseable input.
+ */
+export function parseDateLocal(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== 'string') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // Date-only YYYY-MM-DD (or YYYY-MM-DDT00:00:00 with no zone) -> local
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ]00:00:00(?:\.0+)?)?$/);
+  if (dateOnlyMatch) {
+    const [, y, m, d] = dateOnlyMatch;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Format a Date (or date-only string) as 'YYYY-MM-DD' using LOCAL components.
+ * Use instead of `.toISOString().split('T')[0]` for "today" defaults / filenames.
+ */
+export function formatDateLocalYMD(value = new Date()) {
+  const d = value instanceof Date ? value : parseDateLocal(value);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ===== SOURCE FILE DATA ACCESS HELPERS =====
 // These replace raw_data access with source file content parsing
 
@@ -3286,7 +3328,7 @@ export const jobService = {
         state: componentFields.state || 'NJ',
         vendor_type: componentFields.vendor,
         status: componentFields.status || 'draft',
-        start_date: componentFields.createdDate || new Date().toISOString().split('T')[0],
+        start_date: componentFields.createdDate || formatDateLocalYMD(new Date()),
         end_date: componentFields.dueDate,
         target_completion_date: componentFields.dueDate,
         total_properties: componentFields.totalProperties || 0,

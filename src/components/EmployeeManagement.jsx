@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Upload, Search, Mail, Phone, MapPin, Clock, AlertTriangle, Settings, Database, CheckCircle, Loader, Edit, X, Copy, FileText, Download, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { employeeService, supabase } from '../lib/supabaseClient';
+import { employeeService, supabase, parseDateLocal } from '../lib/supabaseClient';
 
 const EmployeeManagement = ({
   employees: propEmployees = [],
@@ -317,7 +317,11 @@ const loadEmployees = () => {
         if (!measureDate) {
           matchesQuarter = false;
         } else {
-          const recordDate = new Date(measureDate);
+          const recordDate = parseDateLocal(measureDate);
+          if (!recordDate) {
+            matchesQuarter = false;
+            return matchesRegion && matchesQuarter;
+          }
           const [prefix, year] = filter.quarter.split('-');
           const recordYear = recordDate.getFullYear();
 

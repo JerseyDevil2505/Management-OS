@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Save, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const AnalyticsTab = ({ jobData, properties }) => {
@@ -41,8 +41,10 @@ const AnalyticsTab = ({ jobData, properties }) => {
   const getSalesPeriod = useCallback((salesDate) => {
     if (!salesDate || !jobData?.end_date) return null;
 
-    const sale = new Date(salesDate);
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const sale = parseDateLocal(salesDate);
+    if (!sale) return null;
+    const endLocal = parseDateLocal(jobData.end_date);
+    const assessmentYear = endLocal ? endLocal.getFullYear() : new Date().getFullYear();
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
@@ -331,7 +333,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
     worksheet['!cols'] = Array(8).fill({ wch: 12 });
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Analysis');
-    XLSX.writeFile(workbook, `VCS_Analysis_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `VCS_Analysis_${jobData.job_name}_${formatDateLocalYMD(new Date())}.xlsx`);
   };
 
   const displayData = selectedRun ? selectedRun.run_data : vcsAnalytics;

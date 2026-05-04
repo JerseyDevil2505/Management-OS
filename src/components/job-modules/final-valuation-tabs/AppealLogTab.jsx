@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera } from 'lucide-react';
+import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
@@ -147,6 +147,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [batchPrintProgress, setBatchPrintProgress] = useState(null); // { current, total, label }
   const [batchPrintResult, setBatchPrintResult] = useState(null); // { built, withPhotos, failed }
   const [photoPacketsByKey, setPhotoPacketsByKey] = useState({}); // composite_key -> { id, page_count, imported_at, source_filename, storage_path }
+  const [directPhotosByKey, setDirectPhotosByKey] = useState({}); // composite_key -> appeal_photos row
 
   // Appeal reports (uploaded from Detailed tab). Bucket is the source of truth
   // for what the per-row print + batch print actually output.
@@ -274,19 +275,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return bracket ? bracket.label : null;
     };
 
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const endDateLocal = parseDateLocal(jobData.end_date);
+    const assessmentYear = endDateLocal ? endDateLocal.getFullYear() : new Date().getFullYear();
 
-    // Define period boundaries
-    const cspStart = new Date(`${assessmentYear - 1}-10-01`);
-    const cspEnd = new Date(`${assessmentYear}-12-31`);
-    const pspStart = new Date(`${assessmentYear - 2}-10-01`);
-    const pspEnd = new Date(`${assessmentYear - 1}-09-30`);
-    const hspStart = new Date(`${assessmentYear - 3}-10-01`);
-    const hspEnd = new Date(`${assessmentYear - 2}-09-30`);
+    // Define period boundaries (local time, month is 0-indexed)
+    const cspStart = new Date(assessmentYear - 1, 9, 1);    // Oct 1 prior year
+    const cspEnd   = new Date(assessmentYear,     11, 31);  // Dec 31 assessment year
+    const pspStart = new Date(assessmentYear - 2, 9, 1);    // Oct 1 two years prior
+    const pspEnd   = new Date(assessmentYear - 1, 8, 30);   // Sep 30 prior year
+    const hspStart = new Date(assessmentYear - 3, 9, 1);    // Oct 1 three years prior
+    const hspEnd   = new Date(assessmentYear - 2, 8, 30);   // Sep 30 two years prior
 
     const inPeriod = (saleDate, start, end) => {
-      const date = new Date(saleDate);
-      return date >= start && date <= end;
+      const date = parseDateLocal(saleDate);
+      return date && date >= start && date <= end;
     };
 
     // Build bracket map
@@ -820,8 +822,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return dateVal.split('T')[0];
       }
       // Otherwise parse and format
-      const date = new Date(dateVal);
-      return date.toISOString().split('T')[0];
+      const date = parseDateLocal(dateVal) || new Date(dateVal);
+      return formatDateLocalYMD(date);
     };
 
     if (isEditing) {
@@ -1160,7 +1162,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       // Calculate derived fields
       const calculatedEvidenceDueDate = formData.hearing_date
-        ? new Date(new Date(formData.hearing_date).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        ? (() => {
+            const h = parseDateLocal(formData.hearing_date);
+            if (!h) return null;
+            const d = new Date(h.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return formatDateLocalYMD(d);
+          })()
         : null;
 
       const appealData = {
@@ -1422,6 +1429,36 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     })();
     return () => { cancelled = true; };
   }, [jobData?.id]);
+
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('appeal_photos')
+        .select('property_composite_key, storage_path, original_filename, source, picked_at')
+        .eq('job_id', jobData.id);
+      if (cancelled) return;
+      if (error) { console.error('load direct photos failed', error); return; }
+      const map = {};
+      for (const row of data || []) map[row.property_composite_key] = row;
+      setDirectPhotosByKey(map);
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  const handlePreviewDirectPhoto = async (compositeKey) => {
+    const row = directPhotosByKey[compositeKey];
+    if (!row) return;
+    const { data, error } = await supabase
+      .storage.from('appeal-photos')
+      .createSignedUrl(row.storage_path, 60 * 5);
+    if (error || !data?.signedUrl) {
+      alert('Could not open direct photo: ' + (error?.message || 'unknown error'));
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  };
 
   // Load uploaded appeal reports for this job. The Appeal Log row chip and
   // the print pipeline both key off this map.
@@ -1821,14 +1858,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const appealType = attorney ? 'represented' : 'petitioner';
 
         let hearingDate = null;
-        if (row['HEARING_DATE'] && !isNaN(new Date(row['HEARING_DATE']).getTime())) {
-          hearingDate = new Date(row['HEARING_DATE']).toISOString().split('T')[0];
+        if (row['HEARING_DATE']) {
+          // Excel/XLSX returns Date objects for date cells; format using local components
+          // so a date-only cell isn't shifted by UTC conversion.
+          const raw = row['HEARING_DATE'];
+          const hd = raw instanceof Date ? raw : (parseDateLocal(raw) || new Date(raw));
+          if (!isNaN(hd.getTime())) hearingDate = formatDateLocalYMD(hd);
         }
         let evidenceDueDate = null;
         if (hearingDate) {
-          const d = new Date(hearingDate);
-          d.setDate(d.getDate() - 7);
-          evidenceDueDate = d.toISOString().split('T')[0];
+          const d = parseDateLocal(hearingDate);
+          if (d) {
+            d.setDate(d.getDate() - 7);
+            evidenceDueDate = formatDateLocalYMD(d);
+          }
         }
 
         const taxCourtPending = String(row['ATTRIB_TAXCOURTPENDING'] || '').trim().toUpperCase() === 'Y';
@@ -2255,6 +2298,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const buckets = {
       static: [],
       dynamic: [],
+      photos: [], // NEW: subject + comps photos page emitted by DetailedAppraisalGrid from appeal_photos
       map: [],
       appellant: [],
       chapter123: [],
@@ -2273,6 +2317,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const idx = i - 1;
         if (text.includes('chapter 123')) {
           buckets.chapter123.push(idx);
+        } else if (text.includes('subject & comps photos') || text.includes('subject &amp; comps photos')) {
+          buckets.photos.push(idx);
         } else if (text.includes('subject & comps location map') || text.includes('subject &amp; comps location map')) {
           buckets.map.push(idx);
         } else if (text.includes('appellant evidence summary') || text.includes('no evidence supplied by appellant')) {
@@ -2309,9 +2355,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     addReportRange(buckets.static);
     // 2. Dynamic Adjustments
     addReportRange(buckets.dynamic);
-    // 3. Photo packet
-    let hasPhotos = false;
-    if (photoBytes) {
+    // 3a. Direct-from-folder Photos page (new appeal_photos workflow). Always
+    //     preferred over the legacy PowerComp packet when present.
+    addReportRange(buckets.photos);
+    // 3b. Legacy PowerComp photo packet (fallback for pre-appeal_photos reports)
+    let hasPhotos = buckets.photos.length > 0;
+    if (photoBytes && !hasPhotos) {
       const photoDoc = await PDFDocument.load(photoBytes);
       const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
       for (const p of photoPages) out.addPage(p);
@@ -2824,7 +2873,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
     // Generate filename with job name and date
     const jobName = jobData?.job_name || 'Appeals';
-    const timestamp = new Date().toISOString().split('T')[0];
+    const timestamp = formatDateLocalYMD(new Date());
     const filename = `${jobName}_AppealLog_${timestamp}.xlsx`;
 
     // Add data validation dropdowns for Status Code and Stip Status
@@ -3919,6 +3968,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       {(() => {
                         const key = compositeKeyForAppeal(appeal);
                         const hasPacket = !!photoPacketsByKey[key];
+                        const directPhoto = directPhotosByKey[key];
+                        const hasDirect = !!directPhoto;
                         const reportMeta = appealReportsByKey[key];
                         const printable = !!reportMeta;
                         const chipClass = printable
@@ -3936,15 +3987,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                             >
                               {chipLabel}
                             </span>
-                            {hasPacket && (
+                            {hasDirect && (
                               <button
-                                onClick={() => handlePreviewPhotoPacket(key)}
-                                className="text-teal-600 hover:text-teal-800 p-1 hover:bg-teal-50 rounded"
-                                title={`PowerComp photo packet on file (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
+                                onClick={() => handlePreviewDirectPhoto(key)}
+                                className="text-green-600 hover:text-green-800 p-1 hover:bg-green-50 rounded"
+                                title={`Direct photo on file (${directPhoto.original_filename || 'photo'}) — click to preview`}
                               >
-                                <ImageIcon className="w-4 h-4" />
+                                <Camera className="w-4 h-4" />
                               </button>
                             )}
+                            {/* Legacy PowerComp photo-packet preview hidden per request —
+                                superseded by the local-folder photo workflow. The packet
+                                is still appended to printed reports when one is on file. */}
                             <button
                               onClick={() => handlePrintAppeal(appeal)}
                               disabled={printingAppealId === appeal.id || !printable}
@@ -3952,7 +4006,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                               title={
                                 !printable
                                   ? 'No saved report — generate one from CME → Detailed first'
-                                  : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report')
+                                  : (hasDirect
+                                      ? 'Print Appeal Report (with direct photos embedded)'
+                                      : (hasPacket ? 'Print Appeal Report (with PowerComp photos appended)' : 'Print Appeal Report'))
                               }
                             >
                               <Printer className={`w-4 h-4 ${printingAppealId === appeal.id ? 'animate-pulse' : ''}`} />

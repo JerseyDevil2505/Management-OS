@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Filter, TrendingUp, PieChart as PieIcon, BarChart3, Download, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
-import { interpretCodes } from '../../lib/supabaseClient';
+import { interpretCodes, parseDateLocal, formatDateLocalYMD } from '../../lib/supabaseClient';
 
 const DataVisualizations = ({ jobData, properties }) => {
   const [filters, setFilters] = useState({
@@ -25,8 +25,8 @@ const DataVisualizations = ({ jobData, properties }) => {
     const priorYear = now.getFullYear() - 1;
     const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
     return {
-      start: startDate.toISOString().split('T')[0],
-      end: now.toISOString().split('T')[0]
+      start: formatDateLocalYMD(startDate),
+      end: formatDateLocalYMD(now)
     };
   });
 
@@ -36,8 +36,8 @@ const DataVisualizations = ({ jobData, properties }) => {
     const priorYear = now.getFullYear() - 1;
     const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
     return {
-      start: startDate.toISOString().split('T')[0],
-      end: now.toISOString().split('T')[0]
+      start: formatDateLocalYMD(startDate),
+      end: formatDateLocalYMD(now)
     };
   });
 
@@ -201,7 +201,9 @@ const DataVisualizations = ({ jobData, properties }) => {
     
     qualifiedProperties.forEach(prop => {
       if (prop.sales_date && prop.sales_price && prop.sales_price > 100) {
-        const year = new Date(prop.sales_date).getFullYear();
+        const yd = parseDateLocal(prop.sales_date);
+        const year = yd ? yd.getFullYear() : NaN;
+        if (Number.isNaN(year)) return;
         if (!salesByYear[year]) {
           salesByYear[year] = {
             year,
@@ -236,16 +238,16 @@ const DataVisualizations = ({ jobData, properties }) => {
   const salesNuData = useMemo(() => {
     const nuCounts = {};
 
-    const startDate = new Date(nuDateRange.start);
-    const endDate = new Date(nuDateRange.end);
+    const startDate = parseDateLocal(nuDateRange.start);
+    const endDate = parseDateLocal(nuDateRange.end);
 
     filteredProperties.forEach(prop => {
       // Hard rule: always exclude sales <= $100
       if (prop.sales_price != null && prop.sales_price <= 100) return;
 
       if (prop.sales_date) {
-        const saleDate = new Date(prop.sales_date);
-        if (saleDate >= startDate && saleDate <= endDate) {
+        const saleDate = parseDateLocal(prop.sales_date);
+        if (saleDate && startDate && endDate && saleDate >= startDate && saleDate <= endDate) {
           let nuCode = (prop.sales_nu || '').trim();
 
           // Exclude NU 25 (non-market sales)
@@ -284,8 +286,8 @@ const DataVisualizations = ({ jobData, properties }) => {
       'Non-Usable': 0
     };
 
-    const startDate = new Date(usableDateRange.start);
-    const endDate = new Date(usableDateRange.end);
+    const startDate = parseDateLocal(usableDateRange.start);
+    const endDate = parseDateLocal(usableDateRange.end);
 
     // Usable codes: blank, 00, 07, 32, 36
     const usableCodes = ['', '00', '07', '32', '36'];
@@ -302,8 +304,8 @@ const DataVisualizations = ({ jobData, properties }) => {
       if (prop.sales_price != null && prop.sales_price <= 100) return;
 
       if (prop.sales_date && prop.sales_price) {
-        const saleDate = new Date(prop.sales_date);
-        if (saleDate >= startDate && saleDate <= endDate) {
+        const saleDate = parseDateLocal(prop.sales_date);
+        if (saleDate && startDate && endDate && saleDate >= startDate && saleDate <= endDate) {
           const salePrice = parseFloat(prop.sales_price) || 0;
           const nuCode = (prop.sales_nu || '').trim();
 
@@ -435,8 +437,8 @@ const DataVisualizations = ({ jobData, properties }) => {
     const priorYear = now.getFullYear() - 1;
     const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
     return {
-      start: startDate.toISOString().split('T')[0],
-      end: now.toISOString().split('T')[0]
+      start: formatDateLocalYMD(startDate),
+      end: formatDateLocalYMD(now)
     };
   });
 
@@ -446,8 +448,8 @@ const DataVisualizations = ({ jobData, properties }) => {
   // VCS Distribution by Sale Price (with date range and property type filter)
   const vcsValueData = useMemo(() => {
     const vcsTotals = {};
-    const startDate = new Date(vcsSalesDateRange.start);
-    const endDate = new Date(vcsSalesDateRange.end);
+    const startDate = parseDateLocal(vcsSalesDateRange.start);
+    const endDate = parseDateLocal(vcsSalesDateRange.end);
 
     // Property type mapping
     const propertyTypeMap = {
@@ -469,8 +471,8 @@ const DataVisualizations = ({ jobData, properties }) => {
 
       // Check date range and sales data
       if (prop.sales_date && prop.sales_price) {
-        const saleDate = new Date(prop.sales_date);
-        if (saleDate >= startDate && saleDate <= endDate) {
+        const saleDate = parseDateLocal(prop.sales_date);
+        if (saleDate && startDate && endDate && saleDate >= startDate && saleDate <= endDate) {
           const vcs = prop.property_vcs || 'Unknown';
           const salePrice = parseFloat(prop.sales_price) || 0;
 
@@ -597,7 +599,7 @@ const DataVisualizations = ({ jobData, properties }) => {
       XLSX.utils.book_append_sheet(workbook, vcsSheet, 'VCS Analysis');
     }
 
-    XLSX.writeFile(workbook, `Data_Visualization_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Data_Visualization_${jobData.job_name}_${formatDateLocalYMD(new Date())}.xlsx`);
   };
 
   // Custom Tooltip Components
