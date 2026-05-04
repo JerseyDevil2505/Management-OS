@@ -190,13 +190,16 @@ export function parsePhotoName(filename) {
     photoNumeric = Number(captureTs) * 100 + captureSeq;
   }
 
-  // Decimal char is the "other" separator
+  // Decimal char is the "other" separator. Both block and lot can carry a
+  // decimal in NJ data (e.g. block 14.01, lot 6.35), so normalize both.
   const decimalChar = fieldSep === '-' ? '_' : '-';
-  const lot = lotRaw.includes(decimalChar) ? lotRaw.replace(decimalChar, '.') : lotRaw;
+  const normalizeDecimal = (v) => (v && v.includes(decimalChar) ? v.replace(decimalChar, '.') : v);
+  const blockNorm = normalizeDecimal(block);
+  const lot = normalizeDecimal(lotRaw);
 
   return {
     ccdd,
-    block,
+    block: blockNorm,
     lot,
     qualifier: qualifier || null,
     photoNum: photoNumeric,
