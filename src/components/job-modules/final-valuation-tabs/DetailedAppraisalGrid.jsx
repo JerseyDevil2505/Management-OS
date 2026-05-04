@@ -366,26 +366,35 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       });
     }
     (comps || []).forEach((c, i) => {
-      if (!c || c.is_manual_comp) return;
-      if (!c.property_composite_key) return;
+      // Render every comp slot the grid renders so picker labels stay aligned
+      // with the grid columns (COMP 1, COMP 2, ...). Manual comps and slots
+      // missing a composite_key still get a cell — they just won't have a DB
+      // lookup; the cell falls back to its empty/add state.
+      if (!c) return;
+      const slotKey = c.property_composite_key || `slot-${i + 1}`;
       out.push({
-        composite_key: c.property_composite_key,
+        composite_key: slotKey,
         block: c.property_block,
         lot: c.property_lot,
         qualifier: c.property_qualifier,
         address: c.property_location || '',
         roleLabel: `COMP ${i + 1}`,
         roleColor: 'bg-blue-100 text-blue-800',
+        isManual: !!c.is_manual_comp,
+        hasParcelKey: !!c.property_composite_key,
       });
     });
     // Appellant comps intentionally NOT included here. They get their own
     // photos via the Appellant Evidence flow when those parcels are searched
     // separately as detailed-grid subjects.
-    // Dedupe by composite_key (subject can also appear as a self-comp in some flows)
+    // Dedupe only on real composite_keys (synthetic slot-N keys are unique by
+    // construction). Subject is preserved; only later duplicates are dropped.
     const seen = new Set();
     return out.filter((p) => {
-      if (seen.has(p.composite_key)) return false;
-      seen.add(p.composite_key);
+      if (!p.composite_key.startsWith('slot-')) {
+        if (seen.has(p.composite_key)) return false;
+        seen.add(p.composite_key);
+      }
       return true;
     });
   }, [subject, comps]);
@@ -3070,85 +3079,162 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }));
           const usable = photoCells.filter(Boolean);
 
-          if (usable.length > 0) {
-            doc.addPage();
-            addHeader(subjectBlockLot);
-            doc.setFontSize(14);
-            doc.setTextColor(...lojikBlue);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Subject & Comps Photos', pageWidth / 2, 70, { align: 'center' });
+          // Split into subject + comps. Subject is always first in
+          // photoStripParcels (see the useMemo above). If subject has no
+          // photo, we still paginate by comps with subject row left blank
+          // — but in practice a Photos page with no subject is almost
+          // never useful, so we just skip in that case.
+          const subjectCell = usable.find((u) => u.parcel.roleLabel === 'SUBJECT') || null;
+          const compCells = usable.filter((u) => u.parcel.roleLabel !== 'SUBJECT');
 
-            // Adaptive grid sized to the number of usable photos. We cap the
-            // photo aspect ratio at 4:3 and pick the largest cell width that
-            // still fits inside the available page area, so a 1- or 2-photo
-            // page fills the sheet instead of leaving a tiny thumbnail in
-            // the corner.
-            const shown = usable.slice(0, 6);
-            const n = shown.length;
-            const layoutTable = {
-              1: [1, 1],
-              2: [2, 1],
-              3: [3, 1],
-              4: [2, 2],
-              5: [3, 2],
-              6: [3, 2],
-            };
-            const [cols, rows] = layoutTable[n] || [3, 2];
+          if (subjectCell || compCells.length > 0) {
+            // Legacy PowerComp packet layout, faithfully ported:
+            //   - landscape letter (792 x 612 pt)
+            //   - margin 36, header band 56, footer band 22
+            //   - subject sits on top row, centered, capped to a landscape
+            //     aspect so a 4:3 home photo fills the cell
+            //   - comps sit on a single row below, 3 per page max
+            //   - 4 or 5 comps => second page repeats the subject on top
+            //     and shows comps 4 (and 5) below
+            const blqLabel = subjectBlockLot;
+            const PAGE_W = 792;
+            const PAGE_H = 612;
+            const lMargin = 36;
+            const headerH = 56;
+            const footerH = 22;
+            const captionGap = 4;
+            const captionH = 12;
+            const cellPad = 2;
+            const rowGap = 14;
+            const colGap = 14;
 
-            const margin = 36;
-            const headerY = 90;
-            const captionH = 18;
-            const gapX = 12;
-            const gapY = 24;
-            const targetAspect = 4 / 3; // width / height cap
+            const contentTop = lMargin + headerH;
+            const contentBottom = PAGE_H - lMargin - footerH;
+            const contentH = contentBottom - contentTop;
+            const contentW = PAGE_W - lMargin * 2;
 
-            const pageH = doc.internal.pageSize.getHeight();
-            const availW = pageWidth - margin * 2;
-            const availH = pageH - headerY - margin;
+            const subjRowH = Math.floor((contentH - rowGap) * 0.46);
+            const compRowH = contentH - rowGap - subjRowH;
+            const subjPhotoH = subjRowH - captionGap - captionH - cellPad * 2;
+            const compPhotoH = compRowH - captionGap - captionH - cellPad * 2;
 
-            const maxCellW = (availW - gapX * (cols - 1)) / cols;
-            const maxCellH = (availH - gapY * (rows - 1)) / rows;
-            const maxCellPhotoH = maxCellH - captionH;
+            const subjPhotoW = Math.min(contentW * 0.75, subjPhotoH * 1.5);
+            const subjCellW = subjPhotoW + cellPad * 2;
+            const subjCellH = subjPhotoH + cellPad * 2;
+            const subjX = lMargin + (contentW - subjCellW) / 2;
+            const subjY = contentTop;
 
-            // Largest cellW that fits both width budget AND photo-height
-            // budget given the 4:3 aspect cap.
-            const cellW = Math.min(maxCellW, maxCellPhotoH * targetAspect);
-            const photoH = cellW / targetAspect;
-            const cellH = photoH + captionH;
+            const compPhotoW = (contentW - colGap * 2) / 3 - cellPad * 2;
+            const compCellW = compPhotoW + cellPad * 2;
+            const compsY = contentTop + subjRowH + rowGap;
 
-            const gridW = cols * cellW + (cols - 1) * gapX;
-            const gridH = rows * cellH + (rows - 1) * gapY;
-            const offsetX = margin + (availW - gridW) / 2;
-            const offsetY = headerY + (availH - gridH) / 2;
-
-            shown.forEach((item, idx) => {
-              const col = idx % cols;
-              const row = Math.floor(idx / cols);
-              const x = offsetX + col * (cellW + gapX);
-              const y = offsetY + row * (cellH + gapY);
-              try {
-                doc.addImage(item.dataUrl, 'JPEG', x, y, cellW, photoH, undefined, 'FAST');
-              } catch (e) {
-                try { doc.addImage(item.dataUrl, 'PNG', x, y, cellW, photoH, undefined, 'FAST'); } catch (_e) {}
+            const drawPhotoPageHeader = () => {
+              addLogoToPage(lMargin, lMargin - 5);
+              let hY = lMargin + 10;
+              if (appealNumber) {
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(80, 80, 80);
+                doc.text(`Appeal #: ${appealNumber}`, PAGE_W - lMargin, hY, { align: 'right' });
+                hY += 14;
               }
-              // Centered, bold 10pt caption beneath each cell. Addresses are
-              // intentionally omitted - the comp grid earlier in the report
-              // already shows them.
-              doc.setFontSize(10);
-              doc.setTextColor(20, 20, 20);
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(18);
               doc.setFont('helvetica', 'bold');
-              doc.text(item.parcel.roleLabel, x + cellW / 2, y + photoH + 13, { align: 'center' });
-            });
-            // If more than 6, drop a small note at the bottom.
-            if (usable.length > 6) {
-              doc.setFontSize(8);
-              doc.setTextColor(120, 120, 120);
+              doc.text(blqLabel, PAGE_W - lMargin, hY + 10, { align: 'right' });
+
+              doc.setFontSize(13);
+              doc.setTextColor(...lojikBlue);
+              doc.setFont('helvetica', 'bold');
+              doc.text('Subject & Comps Photos', PAGE_W / 2, lMargin + 28, { align: 'center' });
+            };
+            const drawPhotoPageFooter = () => {
+              doc.setFontSize(7);
+              doc.setTextColor(150, 150, 150);
+              doc.setFont('helvetica', 'italic');
+              doc.text('Subject and comparable photographs.', lMargin, PAGE_H - lMargin + 8);
+              doc.setFont('helvetica', 'normal');
+              doc.text(blqLabel, PAGE_W - lMargin, PAGE_H - lMargin + 8, { align: 'right' });
+            };
+            const drawSubjectCell = () => {
+              if (!subjectCell) return;
+              try {
+                doc.addImage(
+                  subjectCell.dataUrl, 'JPEG',
+                  subjX + cellPad, subjY + cellPad,
+                  subjPhotoW, subjPhotoH,
+                  undefined, 'FAST'
+                );
+              } catch (_e) {
+                try {
+                  doc.addImage(
+                    subjectCell.dataUrl, 'PNG',
+                    subjX + cellPad, subjY + cellPad,
+                    subjPhotoW, subjPhotoH,
+                    undefined, 'FAST'
+                  );
+                } catch (_e2) {}
+              }
+              doc.setFontSize(11);
+              doc.setTextColor(140, 0, 0);
+              doc.setFont('helvetica', 'bold');
               doc.text(
-                `+ ${usable.length - 6} additional parcel photo(s) not shown (page limit).`,
-                pageWidth / 2,
-                pageH - margin / 2,
-                { align: 'center' },
+                'Subject',
+                subjX + subjCellW / 2,
+                subjY + subjCellH + captionGap + captionH - 2,
+                { align: 'center' }
               );
+            };
+            const drawCompRow = (slots) => {
+              const totalW = compCellW * slots.length + colGap * Math.max(0, slots.length - 1);
+              const startX = lMargin + (contentW - totalW) / 2;
+              slots.forEach((cell, i) => {
+                const x = startX + i * (compCellW + colGap);
+                if (cell) {
+                  try {
+                    doc.addImage(
+                      cell.dataUrl, 'JPEG',
+                      x + cellPad, compsY + cellPad,
+                      compPhotoW, compPhotoH,
+                      undefined, 'FAST'
+                    );
+                  } catch (_e) {
+                    try {
+                      doc.addImage(
+                        cell.dataUrl, 'PNG',
+                        x + cellPad, compsY + cellPad,
+                        compPhotoW, compPhotoH,
+                        undefined, 'FAST'
+                      );
+                    } catch (_e2) {}
+                  }
+                }
+                doc.setFontSize(10);
+                doc.setTextColor(30, 60, 140);
+                doc.setFont('helvetica', 'bold');
+                doc.text(
+                  cell ? cell.parcel.roleLabel : '',
+                  x + compCellW / 2,
+                  compsY + compPhotoH + cellPad * 2 + captionGap + captionH - 2,
+                  { align: 'center' }
+                );
+              });
+            };
+
+            // Page 1: subject + comps 1-3
+            doc.addPage([PAGE_W, PAGE_H], 'landscape');
+            drawPhotoPageHeader();
+            drawSubjectCell();
+            drawCompRow(compCells.slice(0, 3));
+            drawPhotoPageFooter();
+
+            // Page 2: subject (repeated) + comps 4-5
+            if (compCells.length > 3) {
+              doc.addPage([PAGE_W, PAGE_H], 'landscape');
+              drawPhotoPageHeader();
+              drawSubjectCell();
+              drawCompRow(compCells.slice(3, 5));
+              drawPhotoPageFooter();
             }
           }
         }
