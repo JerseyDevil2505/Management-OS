@@ -231,8 +231,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
   const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
   const [includePhotos, setIncludePhotos] = useState(() => readToggle('detailedExport_includePhotos', true));
-  // Map preview is collapsed by default (it dominated the modal). Click to expand.
-  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', false));
+  // Map preview defaults to expanded — easier to confirm the auto-zoom and
+  // marker placement at a glance before exporting. Persisted toggle still
+  // remembers the user's last choice across sessions.
+  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', true));
 
   // Persist toggle state across sessions
   useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
@@ -387,14 +389,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Appellant comps intentionally NOT included here. They get their own
     // photos via the Appellant Evidence flow when those parcels are searched
     // separately as detailed-grid subjects.
-    // Dedupe only on real composite_keys (synthetic slot-N keys are unique by
-    // construction). Subject is preserved; only later duplicates are dropped.
+    // Dedupe by (roleLabel + composite_key) so a comp that is the subject
+    // sale (same composite_key as SUBJECT) still gets its own COMP cell —
+    // we only suppress true duplicates within the same role.
     const seen = new Set();
     return out.filter((p) => {
-      if (!p.composite_key.startsWith('slot-')) {
-        if (seen.has(p.composite_key)) return false;
-        seen.add(p.composite_key);
-      }
+      if (p.composite_key.startsWith('slot-')) return true;
+      const dedupeKey = `${p.roleLabel}::${p.composite_key}`;
+      if (seen.has(dedupeKey)) return false;
+      seen.add(dedupeKey);
       return true;
     });
   }, [subject, comps]);
@@ -1962,6 +1965,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const subjectBlockLot = `${subject.property_block}/${subject.property_lot}${subject.property_qualifier ? '/' + subject.property_qualifier : ''}`;
     addHeader(subjectBlockLot);
 
+    // Section page-range tracker. We render sections in their existing order
+    // and use jsPDF.movePage at the end to put them in the report order:
+    // Static → Dynamic → Photos → Map → Evidence → Ch123. Each end-marker is
+    // captured right after its block runs (or skipped, in which case the
+    // section's start..end is empty and contributes no pages).
+    const sectionEnds = { initial: doc.getNumberOfPages() };
+
     // Prepare table data
     const visibleAttributes = allAttributes
       .filter(attr => rowVisibility[attr.id])
@@ -2238,6 +2248,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         doc.setFontSize(prevSize);
       }
     });
+    sectionEnds.staticEnd = doc.getNumberOfPages();
 
     // Page 2: Dynamic adjustments (if any exist and are visible)
     if (dynamicAttrs.length > 0) {
@@ -2427,6 +2438,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }
         });
       }
+      sectionEnds.dynamicEnd = doc.getNumberOfPages();
     }
 
     // ==================== APPELLANT EVIDENCE SUMMARY PAGE ====================
@@ -2763,6 +2775,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     } catch (e) {
       console.error('Failed to render appellant evidence summary page:', e);
     }
+    sectionEnds.evidenceEnd = doc.getNumberOfPages();
 
     // ==================== CHAPTER 123 TEST ====================
     // Add Chapter 123 Analysis on a new page. User can suppress entirely via the
@@ -2908,6 +2921,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       ch123TableEndY + 12
     );
     } // end !hideDirectorsRatio
+    sectionEnds.ch123End = doc.getNumberOfPages();
 
     // ============== Subject + Comps Map page (optional) ==============
     if (includeMap && mapHasSubject && mapCaptureRef.current) {
@@ -3039,6 +3053,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         console.warn('Map capture failed:', mapErr);
       }
     }
+    sectionEnds.mapEnd = doc.getNumberOfPages();
 
     // ============== Subject & Comps Photos page (optional) ==============
     // Pulls picked front photos from `appeal_photos` for every parcel in
@@ -3142,11 +3157,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               doc.setFontSize(18);
               doc.setFont('helvetica', 'bold');
               doc.text(blqLabel, PAGE_W - lMargin, hY + 10, { align: 'right' });
-
-              doc.setFontSize(13);
-              doc.setTextColor(...lojikBlue);
-              doc.setFont('helvetica', 'bold');
-              doc.text('Subject & Comps Photos', PAGE_W / 2, lMargin + 28, { align: 'center' });
             };
             const drawPhotoPageFooter = () => {
               doc.setFontSize(7);
@@ -3241,6 +3251,59 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       } catch (photosErr) {
         console.warn('Photos page generation failed:', photosErr);
       }
+    }
+    sectionEnds.photosEnd = doc.getNumberOfPages();
+
+    // ==================== REORDER PAGES ====================
+    // Render order above is: Static → Dynamic → Evidence → Ch123 → Map → Photos.
+    // Final report order should be: Static → Dynamic → Photos → Map → Evidence → Ch123.
+    // We use doc.movePage to shuffle pages into the desired order without
+    // re-rendering anything.
+    try {
+      const rangeFor = (startEnd, endEnd) => {
+        const start = (startEnd || 0) + 1;
+        const end = endEnd || 0;
+        if (end < start) return [];
+        const out = [];
+        for (let p = start; p <= end; p++) out.push(p);
+        return out;
+      };
+      const staticPages   = rangeFor(0, sectionEnds.staticEnd);
+      const dynamicPages  = rangeFor(sectionEnds.staticEnd, sectionEnds.dynamicEnd ?? sectionEnds.staticEnd);
+      const evidencePages = rangeFor(sectionEnds.dynamicEnd ?? sectionEnds.staticEnd, sectionEnds.evidenceEnd);
+      const ch123Pages    = rangeFor(sectionEnds.evidenceEnd, sectionEnds.ch123End);
+      const mapPages      = rangeFor(sectionEnds.ch123End, sectionEnds.mapEnd);
+      const photosPages   = rangeFor(sectionEnds.mapEnd, sectionEnds.photosEnd);
+
+      // Desired order of original page numbers
+      const originalOrder = [
+        ...staticPages,
+        ...dynamicPages,
+        ...photosPages,
+        ...mapPages,
+        ...evidencePages,
+        ...ch123Pages,
+      ];
+
+      // Build current ordering as a list of "original page numbers" then walk
+      // each desired position and shuffle via movePage. Track shifts in our
+      // local array so the next move uses correct current-positions.
+      const total = doc.getNumberOfPages();
+      if (originalOrder.length === total) {
+        const current = [];
+        for (let i = 1; i <= total; i++) current.push(i);
+        for (let target = 0; target < originalOrder.length; target++) {
+          const wantedOrigPage = originalOrder[target];
+          const curIdx = current.indexOf(wantedOrigPage);
+          if (curIdx === target) continue;
+          // jsPDF.movePage(targetPage, beforePage) — both 1-indexed.
+          doc.movePage(curIdx + 1, target + 1);
+          const [moved] = current.splice(curIdx, 1);
+          current.splice(target, 0, moved);
+        }
+      }
+    } catch (reorderErr) {
+      console.warn('PDF page reorder failed:', reorderErr);
     }
 
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf

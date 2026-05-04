@@ -40,7 +40,7 @@ function safeStorageKey(s) {
 // Per-parcel column
 // ---------------------------------------------------------------------------
 
-function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
+function ParcelColumn({ parcel, jobId, savedPhoto, onSaved, pickLabel = 'Front' }) {
   const { getPhotosFor, connected } = useJobPhotoSource();
   const folderPhotos = useMemo(
     () => getPhotosFor(parcel.block, parcel.lot, parcel.qualifier),
@@ -52,9 +52,20 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
   const photos = useMemo(() => [...folderPhotos, ...extras], [folderPhotos, extras]);
 
   const [focusIdx, setFocusIdx] = useState(() => Math.max(0, photos.length - 1));
+  // Default the focused photo to the one already saved as Front (if any),
+  // otherwise fall back to the last photo in the list. Re-runs whenever the
+  // photo list changes or the saved Front pick changes so flipping the star
+  // immediately re-anchors the view.
   useEffect(() => {
+    if (savedPhoto?.original_filename && photos.length > 0) {
+      const idx = photos.findIndex((p) => p.name === savedPhoto.original_filename);
+      if (idx >= 0) {
+        setFocusIdx(idx);
+        return;
+      }
+    }
     setFocusIdx((i) => Math.min(Math.max(0, i), Math.max(0, photos.length - 1)));
-  }, [photos.length]);
+  }, [photos, savedPhoto?.original_filename]);
 
   const [previewUrl, setPreviewUrl] = useState(null);
   const previewUrlRef = useRef(null);
@@ -264,11 +275,11 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
               ? 'bg-green-100 text-green-800'
               : 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500 disabled:opacity-40 disabled:bg-gray-100 disabled:text-gray-400'
           }`}
-          title="Use as front photo"
+          title={`Use as ${pickLabel.toLowerCase()} photo for the report`}
         >
           {saving ? <Loader2 size={10} className="animate-spin" />
             : isPicked ? <Check size={10} /> : <Star size={10} />}
-          {isPicked ? 'Front' : 'Use'}
+          {isPicked ? pickLabel : 'Use'}
         </button>
         <button
           type="button"
@@ -347,7 +358,7 @@ export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) 
         {parcels.map((p) => {
           const url = urls[p.composite_key];
           return (
-            <div key={p.composite_key} className="flex-1 min-w-0">
+            <div key={`${p.roleLabel}::${p.composite_key}`} className="flex-1 min-w-0">
               <div className="text-center mb-1">
                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${p.roleColor}`}>{p.roleLabel}</span>
               </div>
@@ -370,7 +381,7 @@ export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) 
 // Main: compact horizontal strip aligned with the comp grid above
 // ---------------------------------------------------------------------------
 
-export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
+export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Front' }) {
   const { connected, indexResult, source } = useJobPhotoSource();
   const [savedMap, setSavedMap] = useState({});
 
@@ -419,10 +430,14 @@ export default function ParcelPhotoStrip({ jobId, parcels = [] }) {
       >
         <div aria-hidden="true" />
         {parcels.map((p) => (
+          // Key must be role-scoped: when COMP 1 IS the subject sale, both
+          // SUBJECT and COMP 1 carry the same composite_key on purpose so they
+          // both render and both pull the same saved Front photo.
           <ParcelColumn
-            key={p.composite_key}
+            key={`${p.roleLabel}::${p.composite_key}`}
             parcel={p}
             jobId={jobId}
+            pickLabel={pickLabel}
             savedPhoto={savedMap[p.composite_key]}
             onSaved={(row) => setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }))}
           />
