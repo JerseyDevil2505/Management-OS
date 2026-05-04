@@ -231,8 +231,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
   const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
   const [includePhotos, setIncludePhotos] = useState(() => readToggle('detailedExport_includePhotos', true));
-  // Map preview is collapsed by default (it dominated the modal). Click to expand.
-  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', false));
+  // Map preview defaults to expanded — easier to confirm the auto-zoom and
+  // marker placement at a glance before exporting. Persisted toggle still
+  // remembers the user's last choice across sessions.
+  const [mapExpanded, setMapExpanded] = useState(() => readToggle('detailedExport_mapExpanded', true));
 
   // Persist toggle state across sessions
   useEffect(() => { try { localStorage.setItem('detailedExport_showAdjustments', String(showAdjustments)); } catch (e) {} }, [showAdjustments]);
