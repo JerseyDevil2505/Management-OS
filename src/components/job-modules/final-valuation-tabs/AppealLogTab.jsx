@@ -3996,15 +3996,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                                 <Camera className="w-4 h-4" />
                               </button>
                             )}
-                            {hasPacket && (
-                              <button
-                                onClick={() => handlePreviewPhotoPacket(key)}
-                                className="text-teal-600 hover:text-teal-800 p-1 hover:bg-teal-50 rounded"
-                                title={`PowerComp photo packet on file (legacy) (${photoPacketsByKey[key].page_count || '?'} pages) — click to preview`}
-                              >
-                                <ImageIcon className="w-4 h-4" />
-                              </button>
-                            )}
+                            {/* Legacy PowerComp photo-packet preview hidden per request —
+                                superseded by the local-folder photo workflow. The packet
+                                is still appended to printed reports when one is on file. */}
                             <button
                               onClick={() => handlePrintAppeal(appeal)}
                               disabled={printingAppealId === appeal.id || !printable}
