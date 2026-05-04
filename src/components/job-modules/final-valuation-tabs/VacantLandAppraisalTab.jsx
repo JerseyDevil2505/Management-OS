@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 import AppealMap from '../../AppealMap';
+import ParcelPhotoStrip from '../ParcelPhotoStrip';
 
 // Canonical category values matching Method 1 dropdown
 const CATEGORY_OPTIONS = [
@@ -98,7 +99,46 @@ const VacantLandAppraisalTab = ({
   // <AppealMap> rendered inside the export modal so html2canvas can snap
   // it during PDF generation without the user seeing a flash.
   const [includeMap, setIncludeMap] = useState(true);
+  // Vacant-land photos default to ON. For raw land, the picked Front photo
+  // is often a satellite/boundary screenshot the user pasted in via the
+  // strip below the grid.
+  const [includePhotos, setIncludePhotos] = useState(true);
   const mapCaptureRef = useRef(null);
+
+  // Build the per-parcel photo strip payload (Subject + populated Comps).
+  // Mirrors DetailedAppraisalGrid's pattern so a comp that happens to share
+  // the subject's composite_key still gets its own cell (role-scoped key).
+  const photoStripParcels = useMemo(() => {
+    const out = [];
+    const subj = loadedProperties?.subject;
+    if (subj?.property_composite_key) {
+      out.push({
+        composite_key: subj.property_composite_key,
+        block: subj.property_block,
+        lot: subj.property_lot,
+        qualifier: subj.property_qualifier,
+        address: subj.property_location || '',
+        roleLabel: 'SUBJECT',
+        roleColor: 'bg-red-100 text-red-800',
+      });
+    }
+    [0, 1, 2, 3, 4].forEach((i) => {
+      const c = loadedProperties?.[`comp_${i}`];
+      if (!c) return;
+      const slotKey = c.property_composite_key || `slot-${i + 1}`;
+      out.push({
+        composite_key: slotKey,
+        block: c.property_block,
+        lot: c.property_lot,
+        qualifier: c.property_qualifier,
+        address: c.property_location || '',
+        roleLabel: `COMP ${i + 1}`,
+        roleColor: 'bg-blue-100 text-blue-800',
+        hasParcelKey: !!c.property_composite_key,
+      });
+    });
+    return out;
+  }, [loadedProperties]);
 
   // Build subject + comp lat/lng payload for AppealMap. Uses applyGeocodePatch
   // so any inline edits made via the chip are reflected immediately.
@@ -857,11 +897,165 @@ const VacantLandAppraisalTab = ({
       }
     }
 
+    // ============== Subject + Comps Photos page (optional) ==============
+    // Pulls the picked Front photo from `appeal_photos` for every parcel in
+    // photoStripParcels (Subject + populated Comps). Skipped silently if
+    // includePhotos is off, no jobId, no parcels, or none have a saved pick.
+    if (includePhotos && jobData?.id && photoStripParcels.length > 0) {
+      try {
+        const keys = photoStripParcels.map((p) => p.composite_key).filter(Boolean);
+        const { data: photoRows } = await supabase
+          .from('appeal_photos')
+          .select('storage_path, property_composite_key, original_filename, capture_ts')
+          .eq('job_id', jobData.id)
+          .in('property_composite_key', keys);
+        const photoByKey = {};
+        (photoRows || []).forEach((r) => { photoByKey[r.property_composite_key] = r; });
+        const parcelsWithPhotos = photoStripParcels.filter((p) => photoByKey[p.composite_key]);
+
+        if (parcelsWithPhotos.length > 0) {
+          const photoCells = await Promise.all(parcelsWithPhotos.map(async (p) => {
+            const row = photoByKey[p.composite_key];
+            try {
+              const { data: blob } = await supabase.storage
+                .from('appeal-photos')
+                .download(row.storage_path);
+              if (!blob) return null;
+              const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              return { parcel: p, dataUrl };
+            } catch (_e) {
+              return null;
+            }
+          }));
+          const usable = photoCells.filter(Boolean);
+          const subjectCell = usable.find((u) => u.parcel.roleLabel === 'SUBJECT') || null;
+          const compCells = usable.filter((u) => u.parcel.roleLabel !== 'SUBJECT');
+
+          if (subjectCell || compCells.length > 0) {
+            // Portrait letter (612 x 792). One subject cell on top, comps on
+            // a row below (3 per page). Page repeats subject if more comps.
+            const PAGE_W = 612;
+            const PAGE_H = 792;
+            const lMargin = 36;
+            const headerH = 56;
+            const footerH = 22;
+            const captionGap = 4;
+            const captionH = 12;
+            const cellPad = 2;
+            const rowGap = 14;
+            const colGap = 14;
+
+            const contentTop = lMargin + headerH;
+            const contentBottom = PAGE_H - lMargin - footerH;
+            const contentH = contentBottom - contentTop;
+            const contentW = PAGE_W - lMargin * 2;
+
+            const subjRowH = Math.floor((contentH - rowGap) * 0.55);
+            const compRowH = contentH - rowGap - subjRowH;
+            const subjPhotoH = subjRowH - captionGap - captionH - cellPad * 2;
+            const compPhotoH = compRowH - captionGap - captionH - cellPad * 2;
+
+            const subjPhotoW = Math.min(contentW * 0.85, subjPhotoH * 1.5);
+            const subjCellW = subjPhotoW + cellPad * 2;
+            const subjCellH = subjPhotoH + cellPad * 2;
+            const subjX = lMargin + (contentW - subjCellW) / 2;
+            const subjY = contentTop;
+
+            const compPhotoW = (contentW - colGap * 2) / 3 - cellPad * 2;
+            const compCellW = compPhotoW + cellPad * 2;
+            const compsY = contentTop + subjRowH + rowGap;
+
+            const drawPhotoPageHeader = () => {
+              if (logoDataUrl) {
+                try { doc.addImage(logoDataUrl, 'PNG', lMargin, lMargin - 5, 80, 35); } catch (_e) {}
+              }
+              let hY = lMargin + 10;
+              if (currentAppealNumber) {
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(80, 80, 80);
+                doc.text(`Appeal #: ${currentAppealNumber}`, PAGE_W - lMargin, hY, { align: 'right' });
+                hY += 14;
+              }
+              doc.setTextColor(0, 0, 0);
+              doc.setFontSize(16);
+              doc.setFont('helvetica', 'bold');
+              doc.text(subjectBLQ, PAGE_W - lMargin, hY + 10, { align: 'right' });
+            };
+            const drawPhotoPageFooter = () => {
+              doc.setFontSize(7);
+              doc.setTextColor(150, 150, 150);
+              doc.setFont('helvetica', 'italic');
+              doc.text('Subject and comparable photographs.', lMargin, PAGE_H - lMargin + 8);
+              doc.setFont('helvetica', 'normal');
+              doc.text(subjectBLQ, PAGE_W - lMargin, PAGE_H - lMargin + 8, { align: 'right' });
+            };
+            const drawSubjectCell = () => {
+              if (!subjectCell) return;
+              try {
+                doc.addImage(subjectCell.dataUrl, 'JPEG', subjX + cellPad, subjY + cellPad, subjPhotoW, subjPhotoH, undefined, 'FAST');
+              } catch (_e) {
+                try { doc.addImage(subjectCell.dataUrl, 'PNG', subjX + cellPad, subjY + cellPad, subjPhotoW, subjPhotoH, undefined, 'FAST'); } catch (_e2) {}
+              }
+              doc.setFontSize(11);
+              doc.setTextColor(140, 0, 0);
+              doc.setFont('helvetica', 'bold');
+              doc.text('Subject', subjX + subjCellW / 2, subjY + subjCellH + captionGap + captionH - 2, { align: 'center' });
+            };
+            const drawCompRow = (slots) => {
+              const totalW = compCellW * slots.length + colGap * Math.max(0, slots.length - 1);
+              const startX = lMargin + (contentW - totalW) / 2;
+              slots.forEach((cell, i) => {
+                const x = startX + i * (compCellW + colGap);
+                if (cell) {
+                  try {
+                    doc.addImage(cell.dataUrl, 'JPEG', x + cellPad, compsY + cellPad, compPhotoW, compPhotoH, undefined, 'FAST');
+                  } catch (_e) {
+                    try { doc.addImage(cell.dataUrl, 'PNG', x + cellPad, compsY + cellPad, compPhotoW, compPhotoH, undefined, 'FAST'); } catch (_e2) {}
+                  }
+                }
+                doc.setFontSize(10);
+                doc.setTextColor(30, 60, 140);
+                doc.setFont('helvetica', 'bold');
+                doc.text(
+                  cell ? cell.parcel.roleLabel : '',
+                  x + compCellW / 2,
+                  compsY + compPhotoH + cellPad * 2 + captionGap + captionH - 2,
+                  { align: 'center' },
+                );
+              });
+            };
+
+            doc.addPage([PAGE_W, PAGE_H], 'portrait');
+            drawPhotoPageHeader();
+            drawSubjectCell();
+            drawCompRow(compCells.slice(0, 3));
+            drawPhotoPageFooter();
+
+            if (compCells.length > 3) {
+              doc.addPage([PAGE_W, PAGE_H], 'portrait');
+              drawPhotoPageHeader();
+              drawSubjectCell();
+              drawCompRow(compCells.slice(3, 5));
+              drawPhotoPageFooter();
+            }
+          }
+        }
+      } catch (photosErr) {
+        console.warn('Vacant land photos page generation failed:', photosErr);
+      }
+    }
+
     const ccdd = jobData?.ccdd || 'UNKNOWN';
     const fileName = `VLA_${ccdd}_${vacantLandSubject.block}_${vacantLandSubject.lot}${vacantLandSubject.qualifier ? '_' + vacantLandSubject.qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [loadedProperties, vacantLandSubject, vacantLandResult, recalculatedValue, valuationMethod, jobData, appealNumber, getExportValue, getUnitLabel, applyGeocodePatch, includeMap, mapHasSubject]);
+  }, [loadedProperties, vacantLandSubject, vacantLandResult, recalculatedValue, valuationMethod, jobData, appealNumber, getExportValue, getUnitLabel, applyGeocodePatch, includeMap, mapHasSubject, includePhotos, photoStripParcels]);
 
   const subjectProp = loadedProperties.subject;
 
@@ -1556,6 +1750,15 @@ const VacantLandAppraisalTab = ({
               </tbody>
             </table>
           </div>
+
+          {/* Per-parcel photo strip (Subject + Comps). For vacant land most
+              parcels won't have a folder photo — the user typically pastes a
+              satellite/boundary capture or uploads a manual file via the cell. */}
+          {photoStripParcels.length > 0 && (
+            <div className="px-3 pb-3">
+              <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+            </div>
+          )}
         </div>
       )}
 
@@ -1733,6 +1936,15 @@ const VacantLandAppraisalTab = ({
                     className="rounded border-gray-300"
                   />
                   Include map page
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includePhotos}
+                    onChange={(e) => setIncludePhotos(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  Include photos page
                 </label>
               </div>
               <div className="flex gap-3">
