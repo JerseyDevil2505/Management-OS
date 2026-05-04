@@ -52,9 +52,20 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved }) {
   const photos = useMemo(() => [...folderPhotos, ...extras], [folderPhotos, extras]);
 
   const [focusIdx, setFocusIdx] = useState(() => Math.max(0, photos.length - 1));
+  // Default the focused photo to the one already saved as Front (if any),
+  // otherwise fall back to the last photo in the list. Re-runs whenever the
+  // photo list changes or the saved Front pick changes so flipping the star
+  // immediately re-anchors the view.
   useEffect(() => {
+    if (savedPhoto?.original_filename && photos.length > 0) {
+      const idx = photos.findIndex((p) => p.name === savedPhoto.original_filename);
+      if (idx >= 0) {
+        setFocusIdx(idx);
+        return;
+      }
+    }
     setFocusIdx((i) => Math.min(Math.max(0, i), Math.max(0, photos.length - 1)));
-  }, [photos.length]);
+  }, [photos, savedPhoto?.original_filename]);
 
   const [previewUrl, setPreviewUrl] = useState(null);
   const previewUrlRef = useRef(null);
