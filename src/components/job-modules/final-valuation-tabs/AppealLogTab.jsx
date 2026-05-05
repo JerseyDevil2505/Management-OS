@@ -2270,8 +2270,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
     const reportBytes = new Uint8Array(await rptBlob.arrayBuffer());
 
+    // Legacy PowerComp PDF photo-ripper output is no longer merged at print
+    // time. The Photos page emitted by DetailedAppraisalGrid / VacantLand from
+    // the picker is now the sole source of subject + comp photos. Old
+    // `appeal_powercomp_photos` rows / `powercomp-photos` blobs may still
+    // exist for legacy subjects but are intentionally ignored here.
     const key = compositeKeyForAppeal(appeal);
-    const photoBytes = await fetchPhotoPacketBytes(key);
 
     // Even with no photos, we still want to enforce the canonical section
     // order in the saved report:
@@ -2317,7 +2321,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const idx = i - 1;
         if (text.includes('chapter 123')) {
           buckets.chapter123.push(idx);
-        } else if (text.includes('subject & comps photos') || text.includes('subject &amp; comps photos')) {
+        } else if (
+          text.includes('subject & comps photos') ||
+          text.includes('subject &amp; comps photos') ||
+          // The Photos page emitted by DetailedAppraisalGrid / VacantLandAppraisalTab
+          // intentionally has no visible "Subject & Comps Photos" header (it shrinks
+          // the photos and is redundant with the obvious layout). Lock onto the
+          // italic footer caption that's drawn on every Photos page instead — it
+          // doesn't appear on any other section.
+          text.includes('subject and comparable photographs')
+        ) {
           buckets.photos.push(idx);
         } else if (text.includes('subject & comps location map') || text.includes('subject &amp; comps location map')) {
           buckets.map.push(idx);
@@ -2355,17 +2368,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     addReportRange(buckets.static);
     // 2. Dynamic Adjustments
     addReportRange(buckets.dynamic);
-    // 3a. Direct-from-folder Photos page (new appeal_photos workflow). Always
-    //     preferred over the legacy PowerComp packet when present.
+    // 3. Direct-from-folder Photos page (new appeal_photos workflow). Legacy
+    //    PowerComp packet merge has been retired — picker is the only source.
     addReportRange(buckets.photos);
-    // 3b. Legacy PowerComp photo packet (fallback for pre-appeal_photos reports)
-    let hasPhotos = buckets.photos.length > 0;
-    if (photoBytes && !hasPhotos) {
-      const photoDoc = await PDFDocument.load(photoBytes);
-      const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
-      for (const p of photoPages) out.addPage(p);
-      hasPhotos = true;
-    }
+    const hasPhotos = buckets.photos.length > 0;
     // 4. Map
     addReportRange(buckets.map);
     // 5. Appellant Evidence
@@ -2379,12 +2385,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     // sure we don't return an empty PDF.
     if (out.getPageCount() === 0) {
       for (const p of reportPages) out.addPage(p);
-      if (photoBytes) {
-        const photoDoc = await PDFDocument.load(photoBytes);
-        const photoPages = await out.copyPages(photoDoc, photoDoc.getPageIndices());
-        for (const p of photoPages) out.addPage(p);
-        hasPhotos = true;
-      }
     }
 
     return { bytes: await out.save(), hasPhotos };
