@@ -839,4 +839,4 @@ This codebase has been built iteratively over the course of a year. Every patter
 
 15. **Sales-pool window math is shared and Lojik-aware** — `SalesComparisonTab.getCSPDateRange`, `AppellantEvidencePanel.sampleRange`, `DetailedAppraisalGrid` (inline in the comps prep), the admin Geocoder's `csvSalesWindow`, and `CoordinatesSubTab.salesWindow` all anchor on `jobs.end_date` and all subtract one from the year when `organizations.org_type === 'assessor'` (Lojik). Don't fork this convention. If the window definition needs to change, change all five usages together — and confirm with the user, because that math is the basis for sales review, sales pool inclusion, comp date ranges, and the coordinate cleanup queue.
 
-😊
+😊📸
