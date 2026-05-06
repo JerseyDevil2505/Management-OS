@@ -3448,10 +3448,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       </div>
 
       {/* STICKY INSPECTION-UPDATE REMINDER BANNER */}
-      <div className="sticky top-0 z-20 bg-amber-50 border-l-4 border-amber-500 rounded-lg shadow-md p-4 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-amber-900 leading-relaxed">
-          <span className="font-semibold">If a recent inspection has been completed,</span> please ensure you run a file update to capture any changes from that inspection. Use the <span className="font-semibold">Listed By</span> and <span className="font-semibold">Date</span> to flip to the most recent inspection in the Appeal Log, then click <span className="font-semibold">Evaluate and Update</span> in that appeal's Detailed Valuation to capture any attribute changes.
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          backgroundColor: '#FFFBEB',
+          borderLeft: '4px solid #F59E0B',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '12px',
+        }}
+      >
+        <AlertCircle
+          style={{ width: 20, height: 20, color: '#D97706', flexShrink: 0, marginTop: 2 }}
+        />
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: '#78350F' }}>
+          <span style={{ fontWeight: 600 }}>If a recent inspection has been completed,</span>{' '}
+          please ensure you run a file update to capture any changes from that inspection. Use the{' '}
+          <span style={{ fontWeight: 600 }}>Listed By</span> and{' '}
+          <span style={{ fontWeight: 600 }}>Date</span> to flip to the most recent inspection in the
+          Appeal Log, then click <span style={{ fontWeight: 600 }}>Evaluate and Update</span> in
+          that appeal's Detailed Valuation to capture any attribute changes.
         </p>
       </div>
 
