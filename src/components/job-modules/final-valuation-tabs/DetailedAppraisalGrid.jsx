@@ -657,8 +657,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const getGarageDisplayText = (sqft) => {
     if (!sqft || sqft === 0) return 'None';
     const category = getGarageCategory(sqft);
-    const label = getGarageCategoryLabel(category);
-    return `${label} (${sqft.toLocaleString()} SF)`;
+    return getGarageCategoryLabel(category);
   };
 
   // Helper to render comp cells (shows all 5 even if empty)
