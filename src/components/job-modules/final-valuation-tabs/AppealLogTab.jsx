@@ -563,8 +563,21 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const property = properties.find(p => p.property_composite_key === appeal.property_composite_key);
 
     if (property && property.inspection_list_by && property.inspection_list_date) {
-      const date = new Date(property.inspection_list_date);
-      const formatted = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear()}`;
+      // Parse YYYY-MM-DD locally so the date doesn't shift back a day in
+      // negative-UTC timezones (new Date('2026-05-04') is UTC midnight,
+      // which becomes 5/3 in EST/EDT). Same approach as the Excel export
+      // at the bottom of this file.
+      const str = String(property.inspection_list_date).split('T')[0];
+      const parts = str.split('-');
+      let formatted = str;
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10);
+        const d = parseInt(parts[2], 10);
+        if (!isNaN(y) && !isNaN(mo) && !isNaN(d)) {
+          formatted = `${String(mo).padStart(2, '0')}/${String(d).padStart(2, '0')}/${y}`;
+        }
+      }
       return <span className="text-green-600 font-medium">{formatted}</span>;
     }
 

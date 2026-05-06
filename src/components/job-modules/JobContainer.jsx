@@ -143,7 +143,12 @@ const JobContainer = ({
   tenantConfig: tenantConfigProp
 }) => {
   const jobTenantConfig = tenantConfigProp || getJobTenantConfig(selectedJob);
-  const [activeModule, setActiveModule] = useState(jobTenantConfig.behavior.defaultJobTab);
+  // Archived/draft jobs are post-revaluation work — land users directly on
+  // Final Valuation regardless of tenant. Active jobs keep the tenant default
+  // (PPA → checklist, Lojik → final-valuation).
+  const isPostActiveStatus = ['archived', 'draft'].includes(selectedJob?.status);
+  const initialModule = isPostActiveStatus ? 'final-valuation' : jobTenantConfig.behavior.defaultJobTab;
+  const [activeModule, setActiveModule] = useState(initialModule);
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
@@ -187,7 +192,8 @@ const JobContainer = ({
   useEffect(() => {
     if (selectedJob) {
       const config = tenantConfigProp || getJobTenantConfig(selectedJob);
-      setActiveModule(config.behavior.defaultJobTab);
+      const postActive = ['archived', 'draft'].includes(selectedJob?.status);
+      setActiveModule(postActive ? 'final-valuation' : config.behavior.defaultJobTab);
       loadLatestFileVersions();
     }
   }, [selectedJob?.id]); // eslint-disable-line react-hooks/exhaustive-deps
