@@ -17,7 +17,12 @@ const FinalValuation = ({
   updateJobDataDirect = null
 }) => {
   const isAssessor = tenantConfig?.orgType === 'assessor';
-  const [activeTab, setActiveTab] = useState(isAssessor ? 'sales-comparison' : 'sales-review');
+  // Archived/draft jobs are appeal-mode work — open straight to Sales
+  // Comparison (CME) regardless of tenant.
+  const isPostActiveStatus = ['archived', 'draft'].includes(jobData?.status);
+  const [activeTab, setActiveTab] = useState(
+    (isAssessor || isPostActiveStatus) ? 'sales-comparison' : 'sales-review'
+  );
   const [finalValuationData, setFinalValuationData] = useState({});
   const [isLoadingFinalData, setIsLoadingFinalData] = useState(true);
 
