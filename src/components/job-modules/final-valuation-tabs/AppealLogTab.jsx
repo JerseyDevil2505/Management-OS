@@ -3447,6 +3447,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         </div>
       </div>
 
+      {/* STICKY INSPECTION-UPDATE REMINDER BANNER */}
+      <div className="sticky top-0 z-20 bg-amber-50 border-l-4 border-amber-500 rounded-lg shadow-md p-4 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-900 leading-relaxed">
+          <span className="font-semibold">If a recent inspection has been completed,</span> please ensure you run a file update to capture any changes from that inspection. Use the <span className="font-semibold">Listed By</span> and <span className="font-semibold">Date</span> to flip to the most recent inspection in the Appeal Log, then click <span className="font-semibold">Evaluate and Update</span> in that appeal's Detailed Valuation to capture any attribute changes.
+        </p>
+      </div>
+
       {/* FILTER BAR - DROPDOWN WITH CHIPS */}
       <div className="space-y-4">
         {/* Filter Cards Grid */}
