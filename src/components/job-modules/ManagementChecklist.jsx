@@ -648,8 +648,18 @@ useEffect(() => {
       // Get ALL property records with pagination
       const mailingData = await getAllPropertyRecords(jobData.id);
 
+      const vendorType = jobData?.vendor_type || jobData?.vendor_source;
+
       // Filter for residential properties and specific class 15s
       const filteredData = mailingData.filter(record => {
+        // Skip additional cards — only mail the primary card per parcel.
+        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
+        const card = record.property_addl_card;
+        const isMainCard = vendorType === 'BRT'
+          ? (!card || card === '1')
+          : (!card || String(card).toUpperCase() === 'M');
+        if (!isMainCard) return false;
+
         const propClass = record.property_m4_class?.toUpperCase() || '';
 
         // Include residential classes
@@ -778,24 +788,34 @@ useEffect(() => {
         }
       });
       
+      const vendorType = jobData?.vendor_type || jobData?.vendor_source;
+
       // Filter properties for 2nd attempt
       const secondAttemptProperties = propertyData.filter(property => {
+        // Skip additional cards — only mail the primary card per parcel.
+        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
+        const card = property.property_addl_card;
+        const isMainCard = vendorType === 'BRT'
+          ? (!card || card === '1')
+          : (!card || String(card).toUpperCase() === 'M');
+        if (!isMainCard) return false;
+
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const inspection = property.property_composite_key ? 
+        const inspection = property.property_composite_key ?
           inspectionMap.get(property.property_composite_key) : null;
-        
+
         // Check if it's a refusal based on job config
         if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
-        
+
         // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
           if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
-        
+
         return false;
       });
       
@@ -914,24 +934,34 @@ useEffect(() => {
         }
       });
       
+      const vendorType = jobData?.vendor_type || jobData?.vendor_source;
+
       // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
+        // Skip additional cards — only mail the primary card per parcel.
+        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
+        const card = property.property_addl_card;
+        const isMainCard = vendorType === 'BRT'
+          ? (!card || card === '1')
+          : (!card || String(card).toUpperCase() === 'M');
+        if (!isMainCard) return false;
+
         const propClass = property.property_m4_class?.toUpperCase() || '';
-        const inspection = property.property_composite_key ? 
+        const inspection = property.property_composite_key ?
           inspectionMap.get(property.property_composite_key) : null;
-        
+
         // Check if it's a refusal based on job config
         if (inspection && refusalCategories.includes(inspection.info_by_code)) {
           return true;
         }
-        
+
         // Check if it's class 2 or 3A with no inspection (list_by is null or empty)
         if (['2', '3A'].includes(propClass)) {
           if (!inspection || !inspection.list_by || inspection.list_by.trim() === '') {
             return true;
           }
         }
-        
+
         return false;
       });
       
