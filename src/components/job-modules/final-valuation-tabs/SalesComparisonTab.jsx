@@ -5980,13 +5980,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 qual: (p) => p.property_qualifier || '',
                 class: (p) => p.property_m4_class || '',
                 location: (p) => p.property_location || '',
-                style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
+                sales_date: (p) => p.sales_date || '',
                 sales_price: (p) => Number(p.sales_price) || 0,
+                type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
+                style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
+                year_built: (p) => Number(p.asset_year_built) || 0,
                 sfla: (p) => Number(p.asset_sfla) || 0,
                 ppsf: (p) => (p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0),
-                nu: (p) => p.sales_nu || '',
-                sales_date: (p) => p.sales_date || '',
-                year_built: (p) => Number(p.asset_year_built) || 0,
+                int_cond: (p) => p.asset_int_cond || '',
               };
               const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
               const sortKey = compBrowserSort.key;
@@ -6467,13 +6468,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               { key: 'qual', label: 'Qual', align: 'left' },
                               { key: 'class', label: 'Class', align: 'left' },
                               { key: 'location', label: 'Location', align: 'left' },
-                              { key: 'style', label: 'Style', align: 'left' },
-                              { key: 'sales_price', label: 'Sales Price', align: 'right' },
-                              { key: 'sfla', label: 'SFLA', align: 'right' },
-                              { key: 'ppsf', label: 'PPSF', align: 'right' },
-                              { key: 'nu', label: 'NU', align: 'center' },
                               { key: 'sales_date', label: 'Sale Date', align: 'left' },
+                              { key: 'sales_price', label: 'Sale Price', align: 'right' },
+                              { key: 'type_use', label: 'Type/Use', align: 'left' },
+                              { key: 'style', label: 'Style', align: 'left' },
                               { key: 'year_built', label: 'Yr Built', align: 'right' },
+                              { key: 'sfla', label: 'Size', align: 'right' },
+                              { key: 'ppsf', label: 'PPSF', align: 'right' },
+                              { key: 'int_cond', label: 'Int. Cond.', align: 'left' },
                             ].map(col => (
                               <th
                                 key={col.key}
@@ -6503,7 +6505,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <tbody className="divide-y divide-gray-100">
                           {rows.length === 0 && (
                             <tr>
-                              <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
+                              <td colSpan={15} className="px-4 py-8 text-center text-gray-500">
                                 No sales match the current filters. Try Reset Filters or toggle "Show all sales".
                               </td>
                             </tr>
@@ -6516,6 +6518,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             const rowBg = alreadyLoaded
                               ? 'bg-gray-100 text-gray-400'
                               : (p._included ? 'bg-green-50' : '');
+                            const intCondCode = p.asset_int_cond || '';
+                            const intCondName = intCondCode && codeDefinitions
+                              ? (interpretCodes.getInteriorConditionName(p, codeDefinitions, vendorType) || '')
+                              : '';
+                            const intCondDisplay = intCondCode
+                              ? (intCondName ? `${intCondCode} (${intCondName})` : intCondCode)
+                              : '';
                             return (
                               <tr
                                 key={key + '-' + idx}
@@ -6547,13 +6556,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
                                 <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
                                 <td className="px-2 py-1.5 truncate max-w-[180px]" title={p.property_location || ''}>{p.property_location || ''}</td>
-                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                                <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                                <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                                 <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `$${ppsf.toFixed(0)}` : '-'}</td>
-                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
-                                <td className="px-2 py-1.5">{p.sales_date || ''}</td>
-                                <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap" title={intCondName || ''}>{intCondDisplay || '-'}</td>
                               </tr>
                             );
                           })}
