@@ -6116,30 +6116,178 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           />
                         </div>
                       </div>
-                      <div className="text-xs" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-                        {poolFilterVCS.length > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800">
-                            VCS: {poolFilterVCS.join(', ')}
-                          </span>
-                        )}
-                        {poolFilterType.length > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800">
-                            Type/Use: {poolFilterType.join(', ')}
-                          </span>
-                        )}
-                        {poolFilterStyle.length > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 border border-violet-300 text-violet-800">
-                            Style: {poolFilterStyle.join(', ')}
-                          </span>
-                        )}
-                        {poolFilterView.length > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800">
-                            View: {poolFilterView.join(', ')}
-                          </span>
-                        )}
-                        {(poolFilterVCS.length + poolFilterType.length + poolFilterStyle.length + poolFilterView.length) === 0 && (
-                          <span className="text-gray-500">No VCS / Type / Style / View filters active. Manage these from the Sales Pool tab.</span>
-                        )}
+                      <div
+                        className="text-xs"
+                        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}
+                      >
+                        {/* Sales Codes */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sales Code</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {compFilters.salesCodes.map(code => (
+                              <span
+                                key={code}
+                                className="px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {code || '00'}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCompFilterChip('salesCodes')(code)}
+                                  className="hover:text-blue-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value && !compFilters.salesCodes.includes(e.target.value)) {
+                                  toggleCompFilterChip('salesCodes')(e.target.value);
+                                }
+                              }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Code</option>
+                              {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                                <option key={code} value={code}>{code || '00'}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* VCS */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">VCS</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterVCS.map(v => (
+                              <span
+                                key={v}
+                                className="px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {v}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterVCS(prev => prev.filter(x => x !== v))}
+                                  className="hover:text-green-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterVCS(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ VCS</option>
+                              {poolUniqueVCS.filter(v => !poolFilterVCS.includes(v)).map(v => (
+                                <option key={v} value={v}>{v}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Type/Use */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Type/Use</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterType.map(t => (
+                              <span
+                                key={t}
+                                className="px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('typeUse', t) || t}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterType(prev => prev.filter(x => x !== t))}
+                                  className="hover:text-blue-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterType(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Type</option>
+                              {poolUniqueTypes.filter(t => !poolFilterType.includes(t)).map(t => (
+                                <option key={t} value={t}>{getCodeLabel('typeUse', t) || t}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Style */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Style</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterStyle.map(s => (
+                              <span
+                                key={s}
+                                className="px-2 py-0.5 rounded-full bg-violet-100 border border-violet-300 text-violet-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('style', s) || s}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== s))}
+                                  className="hover:text-violet-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterStyle(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Style</option>
+                              {poolUniqueStyles.filter(s => !poolFilterStyle.includes(s)).map(s => (
+                                <option key={s} value={s}>{getCodeLabel('style', s) || s}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* View */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">View</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterView.map(v => (
+                              <span
+                                key={v}
+                                className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('view', v) || v}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))}
+                                  className="hover:text-amber-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterView(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ View</option>
+                              {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (
+                                <option key={v} value={v}>{getCodeLabel('view', v) || v}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
