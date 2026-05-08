@@ -189,6 +189,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [compBrowserSelected, setCompBrowserSelected] = useState([]); // ordered array of _poolKey
   const [compBrowserShowAll, setCompBrowserShowAll] = useState(false); // false = green (included) only
   const [compBrowserSearch, setCompBrowserSearch] = useState('');
+  const [compBrowserRadius, setCompBrowserRadius] = useState(''); // miles; '' = no radius filter
 
   // Tracks which saved result set (if any) is currently loaded. When set,
   // "Evaluate and update" in Detailed will write back to this row in
@@ -5924,6 +5925,31 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   (p.property_location || '').toLowerCase().includes(q)
                 );
               }
+
+              // Radius filter — only applies if subject is geocoded AND user entered a radius.
+              const subjectForBrowser = manualEvaluationResult?.subject;
+              const subjLat = parseFloat(subjectForBrowser?.property_latitude);
+              const subjLng = parseFloat(subjectForBrowser?.property_longitude);
+              const subjectGeocoded = Number.isFinite(subjLat) && Number.isFinite(subjLng);
+              const radiusMiles = parseFloat(compBrowserRadius);
+              const radiusActive = subjectGeocoded && Number.isFinite(radiusMiles) && radiusMiles > 0;
+
+              // Decorate each row with its distance (when computable) so we can
+              // both filter and surface it in the table for context.
+              rows = rows.map(p => {
+                const cLat = parseFloat(p.property_latitude);
+                const cLng = parseFloat(p.property_longitude);
+                const compGeocoded = Number.isFinite(cLat) && Number.isFinite(cLng);
+                const _distance = subjectGeocoded && compGeocoded
+                  ? distanceMiles([subjLat, subjLng], [cLat, cLng])
+                  : null;
+                return { ...p, _distance };
+              });
+
+              if (radiusActive) {
+                rows = rows.filter(p => p._distance != null && p._distance <= radiusMiles);
+              }
+
               // Newest sales first
               rows = [...rows].sort((a, b) => String(b.sales_date || '').localeCompare(String(a.sales_date || '')));
 
@@ -5955,6 +5981,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 setPoolFilterStyle([]);
                 setPoolFilterView([]);
                 setCompBrowserSearch('');
+                setCompBrowserRadius('');
               };
 
               const handleClearAllComps = () => {
@@ -6105,29 +6132,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         >
                           Apply Dates
                         </button>
-                        <div className="flex-1 min-w-[180px]">
-                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Search Block / Lot / Address</label>
-                          <input
-                            type="text"
-                            value={compBrowserSearch}
-                            onChange={(e) => setCompBrowserSearch(e.target.value)}
-                            placeholder="Quick search…"
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                          />
-                        </div>
-                      </div>
-                      <div
-                        className="text-xs"
-                        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 }}
-                      >
-                        {/* Sales Codes */}
+
+                        {/* Sales Codes (moved up so VCS/Type/Style/View row stays a clean 4-across) */}
                         <div style={{ minWidth: 180 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sales Code</label>
                           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                             {compFilters.salesCodes.map(code => (
                               <span
                                 key={code}
-                                className="px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
+                                className="text-xs px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                               >
                                 {code || '00'}
@@ -6147,7 +6160,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                   toggleCompFilterChip('salesCodes')(e.target.value);
                                 }
                               }}
-                              className="px-1 py-0.5 border border-gray-300 rounded"
+                              className="text-xs px-1 py-1 border border-gray-300 rounded"
                             >
                               <option value="">+ Code</option>
                               {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
@@ -6157,8 +6170,49 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           </div>
                         </div>
 
+                        {/* Radius (gated on subject geocoding) */}
+                        <div title={!subjectGeocoded ? 'Subject is not geocoded — radius filter unavailable' : 'Filter sales by miles from subject'}>
+                          <label
+                            className="block text-[11px] font-medium mb-0.5"
+                            style={{ color: subjectGeocoded ? '#4b5563' : '#9ca3af' }}
+                          >
+                            Within (miles){subjectGeocoded ? '' : ' — subject not geocoded'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.25"
+                            value={compBrowserRadius}
+                            onChange={(e) => setCompBrowserRadius(e.target.value)}
+                            disabled={!subjectGeocoded}
+                            placeholder="e.g. 1.5"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                            style={{ width: 90, backgroundColor: subjectGeocoded ? '#fff' : '#f3f4f6' }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-[180px]" style={{ flex: '1 1 180px', minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Search Block / Lot / Address</label>
+                          <input
+                            type="text"
+                            value={compBrowserSearch}
+                            onChange={(e) => setCompBrowserSearch(e.target.value)}
+                            placeholder="Quick search…"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className="text-xs"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                          gap: 16,
+                        }}
+                      >
                         {/* VCS */}
-                        <div style={{ minWidth: 180 }}>
+                        <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">VCS</label>
                           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                             {poolFilterVCS.map(v => (
@@ -6191,7 +6245,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         </div>
 
                         {/* Type/Use */}
-                        <div style={{ minWidth: 180 }}>
+                        <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Type/Use</label>
                           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                             {poolFilterType.map(t => (
@@ -6224,7 +6278,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         </div>
 
                         {/* Style */}
-                        <div style={{ minWidth: 180 }}>
+                        <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Style</label>
                           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                             {poolFilterStyle.map(s => (
@@ -6257,7 +6311,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         </div>
 
                         {/* View */}
-                        <div style={{ minWidth: 180 }}>
+                        <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">View</label>
                           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                             {poolFilterView.map(v => (
