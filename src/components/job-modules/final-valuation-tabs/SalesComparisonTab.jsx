@@ -183,6 +183,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
+  // Comp browser modal (Detailed tab) — lets users hand-pick comps from the
+  // sales pool without leaving Detailed. Shares filter state with Sales Pool.
+  const [compBrowserOpen, setCompBrowserOpen] = useState(false);
+  const [compBrowserSelected, setCompBrowserSelected] = useState([]); // ordered array of _poolKey
+  const [compBrowserShowAll, setCompBrowserShowAll] = useState(false); // false = green (included) only
+  const [compBrowserSearch, setCompBrowserSearch] = useState('');
+
   // Tracks which saved result set (if any) is currently loaded. When set,
   // "Evaluate and update" in Detailed will write back to this row in
   // job_cme_result_sets so the user doesn't have to switch tabs and re-save.
@@ -5681,8 +5688,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
             {/* Manual Entry Grid */}
             <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
-              <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
+              <div className="bg-gray-100 px-4 py-3 border-b border-gray-300 flex items-center justify-between gap-3">
                 <h4 className="font-semibold text-gray-900">Property Entry</h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompBrowserSelected([]);
+                    setCompBrowserSearch('');
+                    setCompBrowserOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                  title="Browse the sales pool and load comps without leaving Detailed"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  Browse Comps from Sales Pool
+                </button>
               </div>
 
               <div className="overflow-x-auto">
@@ -5871,6 +5891,342 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 />
               </div>
             )}
+
+            {/* COMP BROWSER MODAL — pick comps from the sales pool without leaving Detailed.
+                Default view = green (included) sales only. Toggle to see the full pool with
+                the same green/yellow/red coloring used in Sales Pool. Selection cap respects
+                empty slots in manualComps; already-loaded comps are disabled. */}
+            {compBrowserOpen && (() => {
+              const normPart = (v) => String(v == null ? '' : v).trim().toUpperCase();
+              const slotKey = (s) => `${normPart(s.block)}|${normPart(s.lot)}|${normPart(s.qualifier)}`;
+              const propKey = (p) => `${normPart(p.property_block)}|${normPart(p.property_lot)}|${normPart(p.property_qualifier)}`;
+              const loadedKeys = new Set(
+                manualComps.filter(c => c.block && c.lot).map(slotKey)
+              );
+              const emptySlots = manualComps.filter(c => !c.block && !c.lot).length;
+
+              // Source set: green-only by default, full pool when "Show all" is on.
+              const baseRows = compBrowserShowAll
+                ? salesPoolEntries
+                : salesPoolEntries.filter(e => e._included);
+
+              // Apply shared filter chips (same as Sales Pool) plus the local search box.
+              let rows = baseRows;
+              if (poolFilterVCS.length > 0) rows = rows.filter(p => poolFilterVCS.includes(p.property_vcs));
+              if (poolFilterType.length > 0) rows = rows.filter(p => poolFilterType.includes(p.asset_type_use));
+              if (poolFilterStyle.length > 0) rows = rows.filter(p => poolFilterStyle.includes(p.asset_design_style));
+              if (poolFilterView.length > 0) rows = rows.filter(p => poolFilterView.includes(p.asset_view));
+              if (compBrowserSearch.trim()) {
+                const q = compBrowserSearch.trim().toLowerCase();
+                rows = rows.filter(p =>
+                  (p.property_block || '').toLowerCase().includes(q) ||
+                  (p.property_lot || '').toLowerCase().includes(q) ||
+                  (p.property_location || '').toLowerCase().includes(q)
+                );
+              }
+              // Newest sales first
+              rows = [...rows].sort((a, b) => String(b.sales_date || '').localeCompare(String(a.sales_date || '')));
+
+              const selectedSet = new Set(compBrowserSelected);
+              const remainingCapacity = Math.max(0, emptySlots - selectedSet.size);
+
+              const toggleSelect = (key, alreadyLoaded) => {
+                if (alreadyLoaded) return;
+                setCompBrowserSelected(prev => {
+                  if (prev.includes(key)) return prev.filter(k => k !== key);
+                  if (prev.length >= emptySlots) return prev; // cap enforced
+                  return [...prev, key];
+                });
+              };
+
+              const handleResetFilters = () => {
+                setCompFilters(prev => ({
+                  ...prev,
+                  salesDateStart: cspDateRange.start,
+                  salesDateEnd: cspDateRange.end,
+                  salesCodes: []
+                }));
+                setStagedDateStart(cspDateRange.start);
+                setStagedDateEnd(cspDateRange.end);
+                setStagedSearch('');
+                setSalesPoolSearch('');
+                setPoolFilterVCS([]);
+                setPoolFilterType([]);
+                setPoolFilterStyle([]);
+                setPoolFilterView([]);
+                setCompBrowserSearch('');
+              };
+
+              const handleClearAllComps = () => {
+                if (manualComps.every(c => !c.block && !c.lot)) return;
+                if (!window.confirm('Clear all 5 comp slots and start fresh? Subject is preserved.')) return;
+                setManualComps([
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' }
+                ]);
+                setCompBrowserSelected([]);
+              };
+
+              const handleAddSelected = () => {
+                if (compBrowserSelected.length === 0) return;
+                const next = [...manualComps];
+                const emptyIdxs = next
+                  .map((c, i) => (!c.block && !c.lot) ? i : -1)
+                  .filter(i => i >= 0);
+                compBrowserSelected.forEach((key, i) => {
+                  if (i >= emptyIdxs.length) return;
+                  const sale = salesPoolEntries.find(e => e._poolKey === key);
+                  if (!sale) return;
+                  next[emptyIdxs[i]] = {
+                    block: String(sale.property_block || '').trim(),
+                    lot: String(sale.property_lot || '').trim(),
+                    qualifier: String(sale.property_qualifier || '').trim()
+                  };
+                });
+                setManualComps(next);
+                setCompBrowserSelected([]);
+                setCompBrowserOpen(false);
+              };
+
+              return (
+                <div
+                  className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4"
+                  onClick={() => setCompBrowserOpen(false)}
+                >
+                  <div
+                    className="bg-white rounded-lg shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-900">Browse Comps from Sales Pool</h3>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {emptySlots} of 5 slots open · {selectedSet.size} selected · {remainingCapacity} more allowed
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={compBrowserShowAll}
+                            onChange={(e) => setCompBrowserShowAll(e.target.checked)}
+                            className="rounded"
+                          />
+                          Show all sales (not just included)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100"
+                          title="Clear all filters (date range, codes, VCS, Type/Use, Style, View, search). These filters are shared with Sales Pool."
+                        >
+                          Reset Filters
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompBrowserOpen(false)}
+                          className="p-1 text-gray-500 hover:text-gray-800 hover:bg-gray-200 rounded"
+                          title="Close"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter strip */}
+                    <div className="px-5 py-3 border-b border-gray-200 bg-white space-y-2">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sale Date From</label>
+                          <input
+                            type="date"
+                            value={stagedDateStart}
+                            onChange={(e) => setStagedDateStart(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sale Date To</label>
+                          <input
+                            type="date"
+                            value={stagedDateEnd}
+                            onChange={(e) => setStagedDateEnd(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd }));
+                            setSalesPoolSearch(stagedSearch);
+                          }}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                        >
+                          Apply Dates
+                        </button>
+                        <div className="flex-1 min-w-[180px]">
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Search Block / Lot / Address</label>
+                          <input
+                            type="text"
+                            value={compBrowserSearch}
+                            onChange={(e) => setCompBrowserSearch(e.target.value)}
+                            placeholder="Quick search…"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        {poolFilterVCS.length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800">
+                            VCS: {poolFilterVCS.join(', ')}
+                          </span>
+                        )}
+                        {poolFilterType.length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800">
+                            Type/Use: {poolFilterType.join(', ')}
+                          </span>
+                        )}
+                        {poolFilterStyle.length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 border border-violet-300 text-violet-800">
+                            Style: {poolFilterStyle.join(', ')}
+                          </span>
+                        )}
+                        {poolFilterView.length > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800">
+                            View: {poolFilterView.join(', ')}
+                          </span>
+                        )}
+                        {(poolFilterVCS.length + poolFilterType.length + poolFilterStyle.length + poolFilterView.length) === 0 && (
+                          <span className="text-gray-500">No VCS / Type / Style / View filters active. Manage these from the Sales Pool tab.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="flex-1 overflow-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-10">Pick</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">VCS</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Block</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Lot</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Qual</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Class</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Location</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Style</th>
+                            <th className="px-2 py-2 text-right font-medium text-gray-600">Sales Price</th>
+                            <th className="px-2 py-2 text-right font-medium text-gray-600">SFLA</th>
+                            <th className="px-2 py-2 text-right font-medium text-gray-600">PPSF</th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600">NU</th>
+                            <th className="px-2 py-2 text-left font-medium text-gray-600">Sale Date</th>
+                            <th className="px-2 py-2 text-right font-medium text-gray-600">Yr Built</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rows.length === 0 && (
+                            <tr>
+                              <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
+                                No sales match the current filters. Try Reset Filters or toggle "Show all sales".
+                              </td>
+                            </tr>
+                          )}
+                          {rows.map((p, idx) => {
+                            const key = p._poolKey;
+                            const alreadyLoaded = loadedKeys.has(propKey(p));
+                            const isSelected = selectedSet.has(key);
+                            const ppsf = p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0;
+                            const rowBg = alreadyLoaded
+                              ? 'bg-gray-100 text-gray-400'
+                              : (p._included ? 'bg-green-50' : '');
+                            return (
+                              <tr
+                                key={key + '-' + idx}
+                                className={`${rowBg} ${alreadyLoaded ? '' : 'hover:bg-blue-50'} transition-colors`}
+                              >
+                                <td className="px-2 py-1.5 text-center">
+                                  {alreadyLoaded ? (
+                                    <span title="Already loaded in comp grid" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-300 text-white">
+                                      <CheckCircle className="w-4 h-4" />
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={!isSelected && remainingCapacity === 0}
+                                      onChange={() => toggleSelect(key, alreadyLoaded)}
+                                      className="rounded cursor-pointer"
+                                      title={!isSelected && remainingCapacity === 0 ? 'Slot cap reached — uncheck a row or clear comps' : ''}
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">
+                                  {p.property_vcs || ''}
+                                  {p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded">FARM</span>}
+                                  {p._isPackage && !p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-800 rounded">PKG</span>}
+                                </td>
+                                <td className="px-2 py-1.5">{p.property_block}</td>
+                                <td className="px-2 py-1.5">{p.property_lot}</td>
+                                <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
+                                <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
+                                <td className="px-2 py-1.5 truncate max-w-[180px]" title={p.property_location || ''}>{p.property_location || ''}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                                <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                                <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `$${ppsf.toFixed(0)}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                                <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                                <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg flex items-center justify-between gap-3">
+                      <div className="text-xs text-gray-600">
+                        Showing {rows.length} sale{rows.length === 1 ? '' : 's'} · {compBrowserShowAll ? 'all sales' : 'included only'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleClearAllComps}
+                          className="px-3 py-1.5 text-xs font-medium text-red-700 bg-white border border-red-300 rounded hover:bg-red-50"
+                          title="Empty all 5 comp slots so you can pick a fresh set (subject is preserved)"
+                        >
+                          Clear All Comps
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompBrowserOpen(false)}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddSelected}
+                          disabled={compBrowserSelected.length === 0}
+                          className={`px-3 py-1.5 text-xs font-medium rounded ${
+                            compBrowserSelected.length === 0
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          Add Selected ({compBrowserSelected.length})
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         )}
