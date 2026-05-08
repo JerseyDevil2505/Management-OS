@@ -844,16 +844,18 @@ useEffect(() => {
       const rows = [...matched, ...acceptedMismatches];
 
       const excelData = rows.map(record => {
+        // Zip stays in its own column so Lisa's mail merge can use it cleanly.
         const { cityState, zip } = parseCityStateZip(record.owner_csz);
         return {
           'Block': record.property_block,
           'Lot': record.property_lot,
-          'Qual': record.property_qualifier || '',
+          'Qualifier': record.property_qualifier || '',
           'Property Class': record.property_m4_class || record.property_cama_class || '',
-          'Property Location': record.property_location || '',
+          'Location': record.property_location || '',
           'Owner': record.owner_name || '',
-          'Owner Address': record.owner_street || '',
-          'City/State/Zip': [cityState, zip].filter(Boolean).join(' ').trim()
+          'Address': record.owner_street || '',
+          'City, State': cityState,
+          'Zip': zip
         };
       });
 
@@ -863,13 +865,14 @@ useEffect(() => {
 
       ws['!cols'] = [
         { wch: 12 }, // Block
-        { wch: 12 }, // Lot
-        { wch: 10 }, // Qual
-        { wch: 14 }, // Property Class
-        { wch: 45 }, // Property Location
+        { wch: 15 }, // Lot
+        { wch: 12 }, // Qualifier
+        { wch: 15 }, // Property Class
+        { wch: 45 }, // Location
         { wch: 35 }, // Owner
-        { wch: 40 }, // Owner Address
-        { wch: 30 }  // City/State/Zip
+        { wch: 40 }, // Address
+        { wch: 30 }, // City, State
+        { wch: 12 }  // Zip
       ];
 
       const range = XLSX.utils.decode_range(ws['!ref']);
