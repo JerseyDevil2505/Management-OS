@@ -6133,12 +6133,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           const subjType = subjectForBrowser.asset_type_use
                             ? (getCodeLabel('typeUse', subjectForBrowser.asset_type_use) || subjectForBrowser.asset_type_use)
                             : null;
+                          const subjIntCondCode = subjectForBrowser.asset_int_cond || '';
+                          const subjIntCondName = subjIntCondCode && codeDefinitions
+                            ? (interpretCodes.getInteriorConditionName(subjectForBrowser, codeDefinitions, vendorType) || '')
+                            : '';
+                          const subjIntCond = subjIntCondCode
+                            ? (subjIntCondName ? `${subjIntCondCode} (${subjIntCondName})` : subjIntCondCode)
+                            : null;
                           const chips = [
                             { label: 'VCS', value: subjectForBrowser.property_vcs },
                             { label: 'Type/Use', value: subjType },
                             { label: 'Style', value: subjStyle },
                             { label: 'SFLA', value: subjectForBrowser.asset_sfla ? `${Number(subjectForBrowser.asset_sfla).toLocaleString()} sf` : null },
                             { label: 'Yr Built', value: subjectForBrowser.asset_year_built },
+                            { label: 'Int. Cond.', value: subjIntCond },
                           ].filter(c => c.value != null && c.value !== '');
                           if (chips.length === 0) return null;
                           return (
