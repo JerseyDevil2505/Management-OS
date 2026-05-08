@@ -190,6 +190,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [compBrowserShowAll, setCompBrowserShowAll] = useState(false); // false = green (included) only
   const [compBrowserSearch, setCompBrowserSearch] = useState('');
   const [compBrowserRadius, setCompBrowserRadius] = useState(''); // miles; '' = no radius filter
+  const [compBrowserSort, setCompBrowserSort] = useState({ key: 'sales_date', dir: 'desc' });
 
   // Tracks which saved result set (if any) is currently loaded. When set,
   // "Evaluate and update" in Detailed will write back to this row in
@@ -5970,8 +5971,46 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 rows = rows.filter(p => p._distance != null && p._distance <= radiusMiles);
               }
 
-              // Newest sales first
-              rows = [...rows].sort((a, b) => String(b.sales_date || '').localeCompare(String(a.sales_date || '')));
+              // Sortable columns. Each entry maps a column key to the value extractor
+              // used for comparison; missing values sort last regardless of direction.
+              const sortAccessors = {
+                vcs: (p) => p.property_vcs || '',
+                block: (p) => p.property_block || '',
+                lot: (p) => p.property_lot || '',
+                qual: (p) => p.property_qualifier || '',
+                class: (p) => p.property_m4_class || '',
+                location: (p) => p.property_location || '',
+                style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
+                sales_price: (p) => Number(p.sales_price) || 0,
+                sfla: (p) => Number(p.asset_sfla) || 0,
+                ppsf: (p) => (p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0),
+                nu: (p) => p.sales_nu || '',
+                sales_date: (p) => p.sales_date || '',
+                year_built: (p) => Number(p.asset_year_built) || 0,
+              };
+              const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
+              const sortKey = compBrowserSort.key;
+              const sortDir = compBrowserSort.dir === 'asc' ? 1 : -1;
+              const accessor = sortAccessors[sortKey] || sortAccessors.sales_date;
+              rows = [...rows].sort((a, b) => {
+                const av = accessor(a);
+                const bv = accessor(b);
+                const aMissing = av === '' || av === 0 || av == null;
+                const bMissing = bv === '' || bv === 0 || bv == null;
+                if (aMissing && !bMissing) return 1;
+                if (!aMissing && bMissing) return -1;
+                if (numericKeys.has(sortKey)) return (av - bv) * sortDir;
+                return String(av).localeCompare(String(bv)) * sortDir;
+              });
+
+              const toggleSort = (key) => {
+                setCompBrowserSort(prev => prev.key === key
+                  ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                  : { key, dir: numericKeys.has(key) || key === 'sales_date' ? 'desc' : 'asc' });
+              };
+              const sortIndicator = (key) => compBrowserSort.key === key
+                ? (compBrowserSort.dir === 'asc' ? ' ▲' : ' ▼')
+                : '';
 
               const selectedSet = new Set(compBrowserSelected);
               const remainingCapacity = Math.max(0, emptySlots - selectedSet.size);
@@ -6080,11 +6119,61 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         gap: 16,
                       }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0, flex: '1 1 auto' }}>
                         <h3 className="text-base font-semibold text-gray-900">Browse Comps from Sales Pool</h3>
                         <p className="text-xs text-gray-600 mt-0.5">
                           {emptySlots} of 5 slots open · {selectedSet.size} selected · {remainingCapacity} more allowed
                         </p>
+                        {subjectForBrowser && (() => {
+                          const subjStyle = subjectForBrowser.asset_design_style
+                            ? (getCodeLabel('style', subjectForBrowser.asset_design_style) || subjectForBrowser.asset_design_style)
+                            : null;
+                          const subjType = subjectForBrowser.asset_type_use
+                            ? (getCodeLabel('typeUse', subjectForBrowser.asset_type_use) || subjectForBrowser.asset_type_use)
+                            : null;
+                          const chips = [
+                            { label: 'VCS', value: subjectForBrowser.property_vcs },
+                            { label: 'Type/Use', value: subjType },
+                            { label: 'Style', value: subjStyle },
+                            { label: 'SFLA', value: subjectForBrowser.asset_sfla ? `${Number(subjectForBrowser.asset_sfla).toLocaleString()} sf` : null },
+                            { label: 'Yr Built', value: subjectForBrowser.asset_year_built },
+                          ].filter(c => c.value != null && c.value !== '');
+                          if (chips.length === 0) return null;
+                          return (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                gap: 6,
+                                fontSize: 11,
+                              }}
+                              title="Subject snapshot — for quick reference while picking comps"
+                            >
+                              <span style={{ fontWeight: 600, color: '#374151' }}>Subject:</span>
+                              {chips.map(c => (
+                                <span
+                                  key={c.label}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '2px 8px',
+                                    backgroundColor: '#FEF3C7',
+                                    border: '1px solid #FDE68A',
+                                    borderRadius: 9999,
+                                    color: '#92400E',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 600 }}>{c.label}:</span>
+                                  <span>{c.value}</span>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <label
@@ -6371,19 +6460,44 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <thead className="bg-gray-50 sticky top-0 z-10">
                           <tr>
                             <th className="px-2 py-2 text-center font-medium text-gray-600 w-10">Pick</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">VCS</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Block</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Lot</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Qual</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Class</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Location</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Style</th>
-                            <th className="px-2 py-2 text-right font-medium text-gray-600">Sales Price</th>
-                            <th className="px-2 py-2 text-right font-medium text-gray-600">SFLA</th>
-                            <th className="px-2 py-2 text-right font-medium text-gray-600">PPSF</th>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600">NU</th>
-                            <th className="px-2 py-2 text-left font-medium text-gray-600">Sale Date</th>
-                            <th className="px-2 py-2 text-right font-medium text-gray-600">Yr Built</th>
+                            {[
+                              { key: 'vcs', label: 'VCS', align: 'left' },
+                              { key: 'block', label: 'Block', align: 'left' },
+                              { key: 'lot', label: 'Lot', align: 'left' },
+                              { key: 'qual', label: 'Qual', align: 'left' },
+                              { key: 'class', label: 'Class', align: 'left' },
+                              { key: 'location', label: 'Location', align: 'left' },
+                              { key: 'style', label: 'Style', align: 'left' },
+                              { key: 'sales_price', label: 'Sales Price', align: 'right' },
+                              { key: 'sfla', label: 'SFLA', align: 'right' },
+                              { key: 'ppsf', label: 'PPSF', align: 'right' },
+                              { key: 'nu', label: 'NU', align: 'center' },
+                              { key: 'sales_date', label: 'Sale Date', align: 'left' },
+                              { key: 'year_built', label: 'Yr Built', align: 'right' },
+                            ].map(col => (
+                              <th
+                                key={col.key}
+                                className={`px-2 py-2 font-medium text-gray-600 text-${col.align}`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSort(col.key)}
+                                  className="font-medium text-gray-600 hover:text-gray-900"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    textAlign: col.align,
+                                    width: '100%',
+                                    color: compBrowserSort.key === col.key ? '#1d4ed8' : undefined,
+                                  }}
+                                  title={`Sort by ${col.label}`}
+                                >
+                                  {col.label}{sortIndicator(col.key)}
+                                </button>
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
