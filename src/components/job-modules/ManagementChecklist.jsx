@@ -29,8 +29,16 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   const [generatingLists, setGeneratingLists] = useState({
     initial: false,
     second: false,
-    third: false
+    third: false,
+    chapter91: false
   }); // Separate loading states for each list
+
+  // Chapter 91 mailing audit. We open this modal whenever m4_class and cama_class
+  // disagree about whether a parcel is commercial (4A/4B/4C). Lisa's team needs to
+  // hand-audit those edge cases so we don't repeat the Harvey Cedars mistake of
+  // mailing 25 "commercial" parcels that were actually residential.
+  const [chapter91Audit, setChapter91Audit] = useState(null);
+  // Shape: { matched: [...], mismatches: [...], includedMismatchKeys: Set<string> }
   const [processingApprovals, setProcessingApprovals] = useState({}); // Track which approvals are being processed
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
@@ -752,6 +760,139 @@ useEffect(() => {
       alert('Failed to generate mailing list. Please ensure property data is loaded.');
     } finally {
       setGeneratingLists(prev => ({ ...prev, initial: false }));
+    }
+  };
+
+  // CHAPTER 91 — commercial mailing list (property class 4A/4B/4C). Before we
+  // export, we cross-check property_m4_class against property_cama_class and let
+  // the user audit the edge cases. Microsystems doesn't populate cama_class so
+  // those jobs only run the m4 side and skip the cross-check.
+  const buildChapter91Audit = async () => {
+    try {
+      setGeneratingLists(prev => ({ ...prev, chapter91: true }));
+
+      const COMMERCIAL = new Set(['4A', '4B', '4C']);
+      const vendorType = jobData?.vendor_type || jobData?.vendor_source;
+      const mailingData = await getAllPropertyRecords(jobData.id);
+
+      const matched = [];
+      const mismatches = [];
+
+      mailingData.forEach(record => {
+        // Primary cards only — same rule as the other mailers.
+        const card = record.property_addl_card;
+        const isMainCard = vendorType === 'BRT'
+          ? (!card || card === '1')
+          : (!card || String(card).toUpperCase() === 'M');
+        if (!isMainCard) return;
+
+        const m4 = (record.property_m4_class || '').toUpperCase().trim();
+        const cama = (record.property_cama_class || '').toUpperCase().trim();
+        const m4IsComm = COMMERCIAL.has(m4);
+        const camaIsComm = COMMERCIAL.has(cama);
+
+        // Either side commercial → in scope. Neither → ignore entirely.
+        if (!m4IsComm && !camaIsComm) return;
+
+        // Microsystems has no cama_class, so anything where m4 says commercial
+        // is treated as a clean match (no cross-check available).
+        if (!cama) {
+          if (m4IsComm) matched.push(record);
+          return;
+        }
+
+        // Both sides agree it's commercial AND they agree on which subclass.
+        if (m4IsComm && camaIsComm && m4 === cama) {
+          matched.push(record);
+          return;
+        }
+
+        // Anything else is an edge case for the audit list — covers:
+        //   m4 commercial, cama not (or different commercial subclass)
+        //   cama commercial, m4 not (or different commercial subclass)
+        mismatches.push({
+          ...record,
+          _m4: m4 || '(blank)',
+          _cama: cama || '(blank)',
+          _direction: m4IsComm && !camaIsComm ? 'm4→cama'
+            : !m4IsComm && camaIsComm ? 'cama→m4'
+            : 'subclass'
+        });
+      });
+
+      setChapter91Audit({
+        matched,
+        mismatches,
+        includedMismatchKeys: new Set(), // user opts in per row
+      });
+    } catch (error) {
+      console.error('Error building Chapter 91 audit:', error);
+      alert('Failed to build Chapter 91 audit list. Please ensure property data is loaded.');
+    } finally {
+      setGeneratingLists(prev => ({ ...prev, chapter91: false }));
+    }
+  };
+
+  const exportChapter91Excel = () => {
+    if (!chapter91Audit) return;
+    try {
+      const { matched, mismatches, includedMismatchKeys } = chapter91Audit;
+
+      const acceptedMismatches = mismatches.filter(r =>
+        includedMismatchKeys.has(r.property_composite_key || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`)
+      );
+      const rows = [...matched, ...acceptedMismatches];
+
+      const excelData = rows.map(record => {
+        const { cityState, zip } = parseCityStateZip(record.owner_csz);
+        return {
+          'Block': record.property_block,
+          'Lot': record.property_lot,
+          'Qual': record.property_qualifier || '',
+          'Property Class': record.property_m4_class || record.property_cama_class || '',
+          'Property Location': record.property_location || '',
+          'Owner': record.owner_name || '',
+          'Owner Address': record.owner_street || '',
+          'City/State/Zip': [cityState, zip].filter(Boolean).join(' ').trim()
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Chapter 91');
+
+      ws['!cols'] = [
+        { wch: 12 }, // Block
+        { wch: 12 }, // Lot
+        { wch: 10 }, // Qual
+        { wch: 14 }, // Property Class
+        { wch: 45 }, // Property Location
+        { wch: 35 }, // Owner
+        { wch: 40 }, // Owner Address
+        { wch: 30 }  // City/State/Zip
+      ];
+
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[addr]) continue;
+          ws[addr].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: R === 0 },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        }
+      }
+
+      const fileName = jobData?.job_name
+        ? `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Chapter_91_Mailing.xlsx`
+        : `Chapter_91_Mailing_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      setChapter91Audit(null);
+    } catch (error) {
+      console.error('Error exporting Chapter 91 list:', error);
+      alert('Failed to export Chapter 91 list.');
     }
   };
 
@@ -1518,7 +1659,9 @@ useEffect(() => {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className={`font-medium ${isNotApplicableForReassessment ? 'text-gray-500' : 'text-gray-800'}`}>
-                        {item.item_text}
+                        {item.special_action === 'generate_mailing_list'
+                          ? 'Initial Mailing List / Chapter 91'
+                          : item.item_text}
                       </h3>
                       {/* Show Not Applicable badge for reassessment */}
                       {isNotApplicableForReassessment && (
@@ -1686,14 +1829,25 @@ useEffect(() => {
                     </button>
                   )}
                   {item.special_action === 'generate_mailing_list' && (
-                    <button
-                      onClick={generateMailingListExcel}
-                      disabled={generatingLists.initial}
-                      className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
-                    >
-                      <Download className="w-4 h-4" />
-                      {generatingLists.initial ? 'Generating...' : 'Download Excel'}
-                    </button>
+                    <>
+                      <button
+                        onClick={generateMailingListExcel}
+                        disabled={generatingLists.initial}
+                        className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
+                      >
+                        <Download className="w-4 h-4" />
+                        {generatingLists.initial ? 'Generating...' : 'Initial Mailing Excel'}
+                      </button>
+                      <button
+                        onClick={buildChapter91Audit}
+                        disabled={generatingLists.chapter91}
+                        className="px-3 py-1 bg-indigo-500 text-white rounded-md text-sm hover:bg-indigo-600 disabled:bg-gray-400 flex items-center gap-1"
+                        title="Build Chapter 91 mailing list (4A/4B/4C). Audits any m4 vs cama class disagreements before exporting."
+                      >
+                        <Download className="w-4 h-4" />
+                        {generatingLists.chapter91 ? 'Building...' : 'Chapter 91 Excel'}
+                      </button>
+                    </>
                   )}
                   {item.special_action === 'generate_second_attempt_mailer' && (
                     <button 
@@ -1731,6 +1885,161 @@ useEffect(() => {
           );
         })}
       </div>
+
+      {/* Chapter 91 Audit Modal — surfaces m4 vs cama class disagreements
+          so the user can hand-pick which edge cases get included in the export. */}
+      {chapter91Audit && (() => {
+        const { matched, mismatches, includedMismatchKeys } = chapter91Audit;
+        const total = matched.length + mismatches.length;
+        const includedCount = matched.length + includedMismatchKeys.size;
+        const keyOf = (r) => r.property_composite_key || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`;
+
+        const toggleRow = (row) => {
+          const key = keyOf(row);
+          setChapter91Audit(prev => {
+            if (!prev) return prev;
+            const next = new Set(prev.includedMismatchKeys);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return { ...prev, includedMismatchKeys: next };
+          });
+        };
+
+        const allChecked = mismatches.length > 0 && includedMismatchKeys.size === mismatches.length;
+        const toggleAll = () => {
+          setChapter91Audit(prev => {
+            if (!prev) return prev;
+            const next = allChecked ? new Set() : new Set(prev.mismatches.map(keyOf));
+            return { ...prev, includedMismatchKeys: next };
+          });
+        };
+
+        return (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+            }}
+            onClick={() => setChapter91Audit(null)}
+          >
+            <div
+              style={{
+                backgroundColor: '#fff', borderRadius: 8,
+                width: '95vw', maxWidth: 1100, height: '85vh',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111827', margin: 0 }}>Chapter 91 Mailing — Audit</h3>
+                    <p style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>
+                      <strong>{matched.length} of {total} matched</strong>
+                      {mismatches.length > 0 && (
+                        <> · <span style={{ color: '#b45309' }}>{mismatches.length} edge case{mismatches.length === 1 ? '' : 's'} need review</span></>
+                      )}
+                      {' · '}<strong>{includedCount}</strong> will export
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setChapter91Audit(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}
+                    title="Close"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 0 }}>
+                {mismatches.length === 0 ? (
+                  <div style={{ padding: 32, textAlign: 'center', color: '#374151' }}>
+                    <CheckCircle style={{ width: 48, height: 48, color: '#16a34a', margin: '0 auto 12px' }} />
+                    <p style={{ fontSize: 14, fontWeight: 600 }}>No mismatches — all {matched.length} parcels agree on class.</p>
+                    <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Click Export to download the Chapter 91 list.</p>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
+                      <tr>
+                        <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', width: 40 }}>
+                          <input
+                            type="checkbox"
+                            checked={allChecked}
+                            onChange={toggleAll}
+                            title={allChecked ? 'Uncheck all' : 'Check all'}
+                          />
+                        </th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Block</th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Lot</th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Qual</th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Location</th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Owner</th>
+                        <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>M4</th>
+                        <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>CAMA</th>
+                        <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Conflict</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mismatches.map((row, i) => {
+                        const k = keyOf(row);
+                        const checked = includedMismatchKeys.has(k);
+                        return (
+                          <tr key={k + '-' + i} style={{ backgroundColor: checked ? '#ECFDF5' : 'transparent', borderBottom: '1px solid #f3f4f6' }}>
+                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleRow(row)} />
+                            </td>
+                            <td style={{ padding: '6px 8px' }}>{row.property_block}</td>
+                            <td style={{ padding: '6px 8px' }}>{row.property_lot}</td>
+                            <td style={{ padding: '6px 8px' }}>{row.property_qualifier || ''}</td>
+                            <td style={{ padding: '6px 8px' }}>{row.property_location || ''}</td>
+                            <td style={{ padding: '6px 8px' }}>{row.owner_name || ''}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600 }}>{row._m4}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 600 }}>{row._cama}</td>
+                            <td style={{ padding: '6px 8px', color: '#b45309', fontSize: 11 }}>
+                              {row._direction === 'm4→cama' && 'M4 says commercial, CAMA disagrees'}
+                              {row._direction === 'cama→m4' && 'CAMA says commercial, M4 disagrees'}
+                              {row._direction === 'subclass' && 'Different commercial subclass'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 12, color: '#4b5563' }}>
+                  {matched.length} matched + {includedMismatchKeys.size} edge case{includedMismatchKeys.size === 1 ? '' : 's'} = <strong>{includedCount}</strong> on export
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setChapter91Audit(null)}
+                    style={{ padding: '6px 12px', fontSize: 13, backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={exportChapter91Excel}
+                    disabled={includedCount === 0}
+                    style={{
+                      padding: '6px 12px', fontSize: 13, color: '#fff', borderRadius: 4, border: 'none',
+                      backgroundColor: includedCount === 0 ? '#9ca3af' : '#4f46e5',
+                      cursor: includedCount === 0 ? 'not-allowed' : 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    Export {includedCount} to Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Archive Confirmation Modal */}
       {showArchiveConfirm && (
