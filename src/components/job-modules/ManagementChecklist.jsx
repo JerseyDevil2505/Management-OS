@@ -160,6 +160,28 @@ useEffect(() => {
     console.log(`✅ Using ${mailingFields.length} property records from props`);
     return mailingFields;
   };
+
+  // Vendor-aware primary-card check used by every mailer (Initial, Chapter 91,
+  // 2nd Attempt, 3rd Attempt). Mirrors the SalesComparisonTab helper so the
+  // mailers, evaluator, and grouping logic all agree on what "main card" means.
+  //  - BRT: card '1' (or empty / non-numeric) is main; any other number is additional.
+  //  - Microsystems: typically 'M' / 'MAIN', but jobs can also use numeric main
+  //    cards, so we accept '1' / empty as well.
+  const isPrimaryCard = (cardValue) => {
+    const card = (cardValue || '').toString().trim();
+    const vendorType = jobData?.vendor_type || jobData?.vendor_source;
+    if (vendorType === 'Microsystems') {
+      const upper = card.toUpperCase();
+      if (upper === 'M' || upper === 'MAIN' || upper === '') return true;
+      const n = parseInt(card, 10);
+      return n === 1; // some Microsystems jobs key main as numeric 1
+    }
+    // BRT (default): blank or 1 is main; non-numeric tokens treated as main too.
+    if (card === '') return true;
+    const n = parseInt(card, 10);
+    return Number.isNaN(n) || n === 1;
+  };
+
   // Use inspection data from props instead of fetching
   const getAllInspectionData = async (jobId) => {
     console.log('🔍 Using inspection data from props');
@@ -665,12 +687,7 @@ useEffect(() => {
       // Filter for residential properties and specific class 15s
       const filteredData = mailingData.filter(record => {
         // Skip additional cards — only mail the primary card per parcel.
-        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
-        const card = record.property_addl_card;
-        const isMainCard = vendorType === 'BRT'
-          ? (!card || card === '1')
-          : (!card || String(card).toUpperCase() === 'M');
-        if (!isMainCard) return false;
+        if (!isPrimaryCard(record.property_addl_card)) return false;
 
         const propClass = record.property_m4_class?.toUpperCase() || '';
 
@@ -776,7 +793,6 @@ useEffect(() => {
       setGeneratingLists(prev => ({ ...prev, chapter91: true }));
 
       const COMMERCIAL = new Set(['4A', '4B', '4C']);
-      const vendorType = jobData?.vendor_type || jobData?.vendor_source;
       const mailingData = await getAllPropertyRecords(jobData.id);
 
       const matched = [];
@@ -784,11 +800,7 @@ useEffect(() => {
 
       mailingData.forEach(record => {
         // Primary cards only — same rule as the other mailers.
-        const card = record.property_addl_card;
-        const isMainCard = vendorType === 'BRT'
-          ? (!card || card === '1')
-          : (!card || String(card).toUpperCase() === 'M');
-        if (!isMainCard) return;
+        if (!isPrimaryCard(record.property_addl_card)) return;
 
         const m4 = (record.property_m4_class || '').toUpperCase().trim();
         const cama = (record.property_cama_class || '').toUpperCase().trim();
@@ -941,12 +953,7 @@ useEffect(() => {
       // Filter properties for 2nd attempt
       const secondAttemptProperties = propertyData.filter(property => {
         // Skip additional cards — only mail the primary card per parcel.
-        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
-        const card = property.property_addl_card;
-        const isMainCard = vendorType === 'BRT'
-          ? (!card || card === '1')
-          : (!card || String(card).toUpperCase() === 'M');
-        if (!isMainCard) return false;
+        if (!isPrimaryCard(property.property_addl_card)) return false;
 
         const propClass = property.property_m4_class?.toUpperCase() || '';
         const inspection = property.property_composite_key ?
@@ -1087,12 +1094,7 @@ useEffect(() => {
       // Filter properties for 3rd attempt (same logic as 2nd for now)
       const thirdAttemptProperties = propertyData.filter(property => {
         // Skip additional cards — only mail the primary card per parcel.
-        // BRT primary = '1' (or null); Microsystems primary = 'M' (or null).
-        const card = property.property_addl_card;
-        const isMainCard = vendorType === 'BRT'
-          ? (!card || card === '1')
-          : (!card || String(card).toUpperCase() === 'M');
-        if (!isMainCard) return false;
+        if (!isPrimaryCard(property.property_addl_card)) return false;
 
         const propClass = property.property_m4_class?.toUpperCase() || '';
         const inspection = property.property_composite_key ?
