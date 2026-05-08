@@ -183,6 +183,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
   const [editingResultIndex, setEditingResultIndex] = useState(null); // Track which result row is being edited
 
+  // Comp browser modal (Detailed tab) — lets users hand-pick comps from the
+  // sales pool without leaving Detailed. Shares filter state with Sales Pool.
+  const [compBrowserOpen, setCompBrowserOpen] = useState(false);
+  const [compBrowserSelected, setCompBrowserSelected] = useState([]); // ordered array of _poolKey
+  const [compBrowserShowAll, setCompBrowserShowAll] = useState(false); // false = green (included) only
+  const [compBrowserSearch, setCompBrowserSearch] = useState('');
+  const [compBrowserRadius, setCompBrowserRadius] = useState(''); // miles; '' = no radius filter
+  const [compBrowserSort, setCompBrowserSort] = useState({ key: 'sales_date', dir: 'desc' });
+
   // Tracks which saved result set (if any) is currently loaded. When set,
   // "Evaluate and update" in Detailed will write back to this row in
   // job_cme_result_sets so the user doesn't have to switch tabs and re-save.
@@ -1584,6 +1593,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         return;
       }
 
+      // Mirror the bulk Evaluate readiness gate: confirm Adjustments Configuration,
+      // Adjustments Grid defaults, AND Attribute Condition Config are all saved.
+      // Without condition config, interior/exterior condition ranks silently return 0.
+      try {
+        const ackKey = `cme_eval_ack_${jobData?.id}`;
+        const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
+        if (!alreadyAcked) {
+          const { configMissing, adjustmentsMissing, conditionConfigMissing } = await checkAdjustmentReadiness();
+          if (configMissing || adjustmentsMissing || conditionConfigMissing) {
+            setPreEvalCheck({ configMissing, adjustmentsMissing, conditionConfigMissing });
+            setIsManualEvaluating(false);
+            return;
+          }
+          sessionStorage.setItem(ackKey, '1');
+        }
+      } catch (_) { /* non-critical */ }
+
       // Find subject by block, lot, qualifier (normalize for comparison)
       const subjectRaw = properties.find(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
@@ -1770,7 +1796,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Verifies the user has saved the Adjustments Configuration AND the Adjustments grid
   // before letting an Evaluate run go through. Only blocks the FIRST evaluate per session per job.
   const checkAdjustmentReadiness = async () => {
-    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false };
+    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false, conditionConfigMissing: false };
     try {
       const [{ data: settingsRows }, { data: gridRows }] = await Promise.all([
         supabase
@@ -1786,10 +1812,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       const configMissing = !settingsRows || settingsRows.length === 0;
       const hasDefaults = (gridRows || []).some(r => r.is_default === true);
       const adjustmentsMissing = !hasDefaults;
-      return { configMissing, adjustmentsMissing };
+      const condCfg = jobData?.attribute_condition_config;
+      const conditionConfigMissing = !condCfg ||
+        (typeof condCfg === 'object' && !condCfg.interior && !condCfg.exterior);
+      return { configMissing, adjustmentsMissing, conditionConfigMissing };
     } catch (e) {
       console.warn('Pre-evaluate readiness check failed (allowing evaluate):', e?.message);
-      return { configMissing: false, adjustmentsMissing: false };
+      return { configMissing: false, adjustmentsMissing: false, conditionConfigMissing: false };
     }
   };
 
@@ -1807,9 +1836,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       const ackKey = `cme_eval_ack_${jobData?.id}`;
       const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
       if (!alreadyAcked) {
-        const { configMissing, adjustmentsMissing } = await checkAdjustmentReadiness();
-        if (configMissing || adjustmentsMissing) {
-          setPreEvalCheck({ configMissing, adjustmentsMissing });
+        const { configMissing, adjustmentsMissing, conditionConfigMissing } = await checkAdjustmentReadiness();
+        if (configMissing || adjustmentsMissing || conditionConfigMissing) {
+          setPreEvalCheck({ configMissing, adjustmentsMissing, conditionConfigMissing });
           return; // Block evaluate until user resolves
         }
         sessionStorage.setItem(ackKey, '1');
@@ -5681,8 +5710,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
             {/* Manual Entry Grid */}
             <div data-cme-manual-entry className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden">
-              <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
+              <div className="bg-gray-100 px-4 py-3 border-b border-gray-300 flex items-center justify-between gap-3">
                 <h4 className="font-semibold text-gray-900">Property Entry</h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompBrowserSelected([]);
+                    setCompBrowserSearch('');
+                    setCompBrowserOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                  title="Browse the sales pool and load comps without leaving Detailed"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  Browse Comps from Sales Pool
+                </button>
               </div>
 
               <div className="overflow-x-auto">
@@ -5871,6 +5913,725 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 />
               </div>
             )}
+
+            {/* COMP BROWSER MODAL — pick comps from the sales pool without leaving Detailed.
+                Default view = green (included) sales only. Toggle to see the full pool with
+                the same green/yellow/red coloring used in Sales Pool. Selection cap respects
+                empty slots in manualComps; already-loaded comps are disabled. */}
+            {compBrowserOpen && (() => {
+              const normPart = (v) => String(v == null ? '' : v).trim().toUpperCase();
+              const slotKey = (s) => `${normPart(s.block)}|${normPart(s.lot)}|${normPart(s.qualifier)}`;
+              const propKey = (p) => `${normPart(p.property_block)}|${normPart(p.property_lot)}|${normPart(p.property_qualifier)}`;
+              const loadedKeys = new Set(
+                manualComps.filter(c => c.block && c.lot).map(slotKey)
+              );
+              const emptySlots = manualComps.filter(c => !c.block && !c.lot).length;
+
+              // Source set: green-only by default, full pool when "Show all" is on.
+              const baseRows = compBrowserShowAll
+                ? salesPoolEntries
+                : salesPoolEntries.filter(e => e._included);
+
+              // Apply shared filter chips (same as Sales Pool) plus the local search box.
+              let rows = baseRows;
+              if (poolFilterVCS.length > 0) rows = rows.filter(p => poolFilterVCS.includes(p.property_vcs));
+              if (poolFilterType.length > 0) rows = rows.filter(p => poolFilterType.includes(p.asset_type_use));
+              if (poolFilterStyle.length > 0) rows = rows.filter(p => poolFilterStyle.includes(p.asset_design_style));
+              if (poolFilterView.length > 0) rows = rows.filter(p => poolFilterView.includes(p.asset_view));
+              if (compBrowserSearch.trim()) {
+                const q = compBrowserSearch.trim().toLowerCase();
+                rows = rows.filter(p =>
+                  (p.property_block || '').toLowerCase().includes(q) ||
+                  (p.property_lot || '').toLowerCase().includes(q) ||
+                  (p.property_location || '').toLowerCase().includes(q)
+                );
+              }
+
+              // Radius filter — only applies if subject is geocoded AND user entered a radius.
+              const subjectForBrowser = manualEvaluationResult?.subject;
+              const subjLat = parseFloat(subjectForBrowser?.property_latitude);
+              const subjLng = parseFloat(subjectForBrowser?.property_longitude);
+              const subjectGeocoded = Number.isFinite(subjLat) && Number.isFinite(subjLng);
+              const radiusMiles = parseFloat(compBrowserRadius);
+              const radiusActive = subjectGeocoded && Number.isFinite(radiusMiles) && radiusMiles > 0;
+
+              // Decorate each row with its distance (when computable) so we can
+              // both filter and surface it in the table for context.
+              rows = rows.map(p => {
+                const cLat = parseFloat(p.property_latitude);
+                const cLng = parseFloat(p.property_longitude);
+                const compGeocoded = Number.isFinite(cLat) && Number.isFinite(cLng);
+                const _distance = subjectGeocoded && compGeocoded
+                  ? distanceMiles([subjLat, subjLng], [cLat, cLng])
+                  : null;
+                return { ...p, _distance };
+              });
+
+              if (radiusActive) {
+                rows = rows.filter(p => p._distance != null && p._distance <= radiusMiles);
+              }
+
+              // Sortable columns. Each entry maps a column key to the value extractor
+              // used for comparison; missing values sort last regardless of direction.
+              const sortAccessors = {
+                vcs: (p) => p.property_vcs || '',
+                block: (p) => p.property_block || '',
+                lot: (p) => p.property_lot || '',
+                qual: (p) => p.property_qualifier || '',
+                class: (p) => p.property_m4_class || '',
+                location: (p) => p.property_location || '',
+                sales_date: (p) => p.sales_date || '',
+                sales_price: (p) => Number(p.sales_price) || 0,
+                nu: (p) => p.sales_nu || '',
+                type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
+                style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
+                year_built: (p) => Number(p.asset_year_built) || 0,
+                sfla: (p) => Number(p.asset_sfla) || 0,
+                ppsf: (p) => (p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0),
+                int_cond: (p) => p.asset_int_cond || '',
+              };
+              const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
+              const sortKey = compBrowserSort.key;
+              const sortDir = compBrowserSort.dir === 'asc' ? 1 : -1;
+              const accessor = sortAccessors[sortKey] || sortAccessors.sales_date;
+              rows = [...rows].sort((a, b) => {
+                const av = accessor(a);
+                const bv = accessor(b);
+                const aMissing = av === '' || av === 0 || av == null;
+                const bMissing = bv === '' || bv === 0 || bv == null;
+                if (aMissing && !bMissing) return 1;
+                if (!aMissing && bMissing) return -1;
+                if (numericKeys.has(sortKey)) return (av - bv) * sortDir;
+                return String(av).localeCompare(String(bv)) * sortDir;
+              });
+
+              const toggleSort = (key) => {
+                setCompBrowserSort(prev => prev.key === key
+                  ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                  : { key, dir: numericKeys.has(key) || key === 'sales_date' ? 'desc' : 'asc' });
+              };
+              const sortIndicator = (key) => compBrowserSort.key === key
+                ? (compBrowserSort.dir === 'asc' ? ' ▲' : ' ▼')
+                : '';
+
+              const selectedSet = new Set(compBrowserSelected);
+              const remainingCapacity = Math.max(0, emptySlots - selectedSet.size);
+
+              const toggleSelect = (key, alreadyLoaded) => {
+                if (alreadyLoaded) return;
+                setCompBrowserSelected(prev => {
+                  if (prev.includes(key)) return prev.filter(k => k !== key);
+                  if (prev.length >= emptySlots) return prev; // cap enforced
+                  return [...prev, key];
+                });
+              };
+
+              const handleResetFilters = () => {
+                setCompFilters(prev => ({
+                  ...prev,
+                  salesDateStart: cspDateRange.start,
+                  salesDateEnd: cspDateRange.end,
+                  salesCodes: []
+                }));
+                setStagedDateStart(cspDateRange.start);
+                setStagedDateEnd(cspDateRange.end);
+                setStagedSearch('');
+                setSalesPoolSearch('');
+                setPoolFilterVCS([]);
+                setPoolFilterType([]);
+                setPoolFilterStyle([]);
+                setPoolFilterView([]);
+                setCompBrowserSearch('');
+                setCompBrowserRadius('');
+              };
+
+              const handleClearAllComps = () => {
+                if (manualComps.every(c => !c.block && !c.lot)) return;
+                if (!window.confirm('Clear all 5 comp slots and start fresh? Subject is preserved.')) return;
+                setManualComps([
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' },
+                  { block: '', lot: '', qualifier: '' }
+                ]);
+                setCompBrowserSelected([]);
+              };
+
+              const handleAddSelected = () => {
+                if (compBrowserSelected.length === 0) return;
+                const next = [...manualComps];
+                const emptyIdxs = next
+                  .map((c, i) => (!c.block && !c.lot) ? i : -1)
+                  .filter(i => i >= 0);
+                compBrowserSelected.forEach((key, i) => {
+                  if (i >= emptyIdxs.length) return;
+                  const sale = salesPoolEntries.find(e => e._poolKey === key);
+                  if (!sale) return;
+                  next[emptyIdxs[i]] = {
+                    block: String(sale.property_block || '').trim(),
+                    lot: String(sale.property_lot || '').trim(),
+                    qualifier: String(sale.property_qualifier || '').trim()
+                  };
+                });
+                setManualComps(next);
+                setCompBrowserSelected([]);
+                setCompBrowserOpen(false);
+              };
+
+              return (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 50,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 16,
+                  }}
+                  onClick={() => setCompBrowserOpen(false)}
+                >
+                  <div
+                    style={{
+                      backgroundColor: '#fff',
+                      borderRadius: 8,
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                      width: '95vw',
+                      maxWidth: 1280,
+                      height: '85vh',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div
+                      className="px-5 py-3 border-b border-gray-200 bg-gray-50"
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 16,
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+                        <h3 className="text-base font-semibold text-gray-900">Browse Comps from Sales Pool</h3>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {emptySlots} of 5 slots open · {selectedSet.size} selected · {remainingCapacity} more allowed
+                        </p>
+                        {subjectForBrowser && (() => {
+                          const subjStyle = subjectForBrowser.asset_design_style
+                            ? (getCodeLabel('style', subjectForBrowser.asset_design_style) || subjectForBrowser.asset_design_style)
+                            : null;
+                          const subjType = subjectForBrowser.asset_type_use
+                            ? (getCodeLabel('typeUse', subjectForBrowser.asset_type_use) || subjectForBrowser.asset_type_use)
+                            : null;
+                          const subjIntCondCode = subjectForBrowser.asset_int_cond || '';
+                          const subjIntCondName = subjIntCondCode && codeDefinitions
+                            ? (interpretCodes.getInteriorConditionName(subjectForBrowser, codeDefinitions, vendorType) || '')
+                            : '';
+                          const subjIntCond = subjIntCondCode
+                            ? (subjIntCondName ? `${subjIntCondCode} (${subjIntCondName})` : subjIntCondCode)
+                            : null;
+                          const chips = [
+                            { label: 'VCS', value: subjectForBrowser.property_vcs },
+                            { label: 'Type/Use', value: subjType },
+                            { label: 'Style', value: subjStyle },
+                            { label: 'SFLA', value: subjectForBrowser.asset_sfla ? `${Number(subjectForBrowser.asset_sfla).toLocaleString()} sf` : null },
+                            { label: 'Yr Built', value: subjectForBrowser.asset_year_built },
+                            { label: 'Int. Cond.', value: subjIntCond },
+                          ].filter(c => c.value != null && c.value !== '');
+                          if (chips.length === 0) return null;
+                          return (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                gap: 6,
+                                fontSize: 11,
+                              }}
+                              title="Subject snapshot — for quick reference while picking comps"
+                            >
+                              <span style={{ fontWeight: 600, color: '#374151' }}>Subject:</span>
+                              {chips.map(c => (
+                                <span
+                                  key={c.label}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '2px 8px',
+                                    backgroundColor: '#FEF3C7',
+                                    border: '1px solid #FDE68A',
+                                    borderRadius: 9999,
+                                    color: '#92400E',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 600 }}>{c.label}:</span>
+                                  <span>{c.value}</span>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <label
+                          className="text-sm text-gray-700 cursor-pointer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={compBrowserShowAll}
+                            onChange={(e) => setCompBrowserShowAll(e.target.checked)}
+                            className="rounded"
+                          />
+                          Show all sales (not just included)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100"
+                          title="Clear all filters (date range, codes, VCS, Type/Use, Style, View, search). These filters are shared with Sales Pool."
+                        >
+                          Reset Filters
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompBrowserOpen(false)}
+                          className="p-1 text-gray-500 hover:text-gray-800 hover:bg-gray-200 rounded"
+                          title="Close"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter strip */}
+                    <div
+                      className="px-5 py-3 border-b border-gray-200 bg-white"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12, marginBottom: 8 }}>
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sale Date From</label>
+                          <input
+                            type="date"
+                            value={stagedDateStart}
+                            onChange={(e) => setStagedDateStart(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sale Date To</label>
+                          <input
+                            type="date"
+                            value={stagedDateEnd}
+                            onChange={(e) => setStagedDateEnd(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompFilters(prev => ({ ...prev, salesDateStart: stagedDateStart, salesDateEnd: stagedDateEnd }));
+                            setSalesPoolSearch(stagedSearch);
+                          }}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                        >
+                          Apply Dates
+                        </button>
+
+                        {/* Sales Codes (moved up so VCS/Type/Style/View row stays a clean 4-across) */}
+                        <div style={{ minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sales Code</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {compFilters.salesCodes.map(code => (
+                              <span
+                                key={code}
+                                className="text-xs px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {code || '00'}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCompFilterChip('salesCodes')(code)}
+                                  className="hover:text-blue-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value && !compFilters.salesCodes.includes(e.target.value)) {
+                                  toggleCompFilterChip('salesCodes')(e.target.value);
+                                }
+                              }}
+                              className="text-xs px-1 py-1 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Code</option>
+                              {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                                <option key={code} value={code}>{code || '00'}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Radius (gated on subject geocoding) */}
+                        <div title={!subjectGeocoded ? 'Subject is not geocoded — radius filter unavailable' : 'Filter sales by miles from subject'}>
+                          <label
+                            className="block text-[11px] font-medium mb-0.5"
+                            style={{ color: subjectGeocoded ? '#4b5563' : '#9ca3af' }}
+                          >
+                            Within (miles){subjectGeocoded ? '' : ' — subject not geocoded'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.25"
+                            value={compBrowserRadius}
+                            onChange={(e) => setCompBrowserRadius(e.target.value)}
+                            disabled={!subjectGeocoded}
+                            placeholder="e.g. 1.5"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                            style={{ width: 90, backgroundColor: subjectGeocoded ? '#fff' : '#f3f4f6' }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-[180px]" style={{ flex: '1 1 180px', minWidth: 180 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Search Block / Lot / Address</label>
+                          <input
+                            type="text"
+                            value={compBrowserSearch}
+                            onChange={(e) => setCompBrowserSearch(e.target.value)}
+                            placeholder="Quick search…"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className="text-xs"
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                          gap: 16,
+                        }}
+                      >
+                        {/* VCS */}
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">VCS</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterVCS.map(v => (
+                              <span
+                                key={v}
+                                className="px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {v}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterVCS(prev => prev.filter(x => x !== v))}
+                                  className="hover:text-green-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterVCS(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ VCS</option>
+                              {poolUniqueVCS.filter(v => !poolFilterVCS.includes(v)).map(v => (
+                                <option key={v} value={v}>{v}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Type/Use */}
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Type/Use</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterType.map(t => (
+                              <span
+                                key={t}
+                                className="px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 text-blue-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('typeUse', t) || t}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterType(prev => prev.filter(x => x !== t))}
+                                  className="hover:text-blue-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterType(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Type</option>
+                              {poolUniqueTypes.filter(t => !poolFilterType.includes(t)).map(t => (
+                                <option key={t} value={t}>{getCodeLabel('typeUse', t) || t}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Style */}
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Style</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterStyle.map(s => (
+                              <span
+                                key={s}
+                                className="px-2 py-0.5 rounded-full bg-violet-100 border border-violet-300 text-violet-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('style', s) || s}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== s))}
+                                  className="hover:text-violet-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterStyle(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Style</option>
+                              {poolUniqueStyles.filter(s => !poolFilterStyle.includes(s)).map(s => (
+                                <option key={s} value={s}>{getCodeLabel('style', s) || s}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* View */}
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">View</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterView.map(v => (
+                              <span
+                                key={v}
+                                className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {getCodeLabel('view', v) || v}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))}
+                                  className="hover:text-amber-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterView(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ View</option>
+                              {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (
+                                <option key={v} value={v}>{getCodeLabel('view', v) || v}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    <div style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 0 }}>
+                      <table className="min-w-full text-xs" style={{ width: '100%' }}>
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-10">Pick</th>
+                            {[
+                              { key: 'vcs', label: 'VCS', align: 'left' },
+                              { key: 'block', label: 'Block', align: 'left' },
+                              { key: 'lot', label: 'Lot', align: 'left' },
+                              { key: 'qual', label: 'Qual', align: 'left' },
+                              { key: 'class', label: 'Class', align: 'left' },
+                              { key: 'location', label: 'Location', align: 'left' },
+                              { key: 'sales_date', label: 'Sale Date', align: 'left' },
+                              { key: 'sales_price', label: 'Sale Price', align: 'right' },
+                              { key: 'nu', label: 'NU', align: 'center' },
+                              { key: 'type_use', label: 'Type/Use', align: 'left' },
+                              { key: 'style', label: 'Style', align: 'left' },
+                              { key: 'year_built', label: 'Yr Built', align: 'right' },
+                              { key: 'sfla', label: 'Size', align: 'right' },
+                              { key: 'ppsf', label: 'PPSF', align: 'right' },
+                              { key: 'int_cond', label: 'Int. Cond.', align: 'left' },
+                            ].map(col => (
+                              <th
+                                key={col.key}
+                                className={`px-2 py-2 font-medium text-gray-600 text-${col.align}`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSort(col.key)}
+                                  className="font-medium text-gray-600 hover:text-gray-900"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    textAlign: col.align,
+                                    width: '100%',
+                                    color: compBrowserSort.key === col.key ? '#1d4ed8' : undefined,
+                                  }}
+                                  title={`Sort by ${col.label}`}
+                                >
+                                  {col.label}{sortIndicator(col.key)}
+                                </button>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {rows.length === 0 && (
+                            <tr>
+                              <td colSpan={16} className="px-4 py-8 text-center text-gray-500">
+                                No sales match the current filters. Try Reset Filters or toggle "Show all sales".
+                              </td>
+                            </tr>
+                          )}
+                          {rows.map((p, idx) => {
+                            const key = p._poolKey;
+                            const alreadyLoaded = loadedKeys.has(propKey(p));
+                            const isSelected = selectedSet.has(key);
+                            const ppsf = p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0;
+                            const rowBg = alreadyLoaded
+                              ? 'bg-gray-100 text-gray-400'
+                              : (p._included ? 'bg-green-50' : '');
+                            const intCondCode = p.asset_int_cond || '';
+                            const intCondName = intCondCode && codeDefinitions
+                              ? (interpretCodes.getInteriorConditionName(p, codeDefinitions, vendorType) || '')
+                              : '';
+                            const intCondDisplay = intCondCode
+                              ? (intCondName ? `${intCondCode} (${intCondName})` : intCondCode)
+                              : '';
+                            return (
+                              <tr
+                                key={key + '-' + idx}
+                                className={`${rowBg} ${alreadyLoaded ? '' : 'hover:bg-blue-50'} transition-colors`}
+                              >
+                                <td className="px-2 py-1.5 text-center">
+                                  {alreadyLoaded ? (
+                                    <span title="Already loaded in comp grid" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-300 text-white">
+                                      <CheckCircle className="w-4 h-4" />
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={!isSelected && remainingCapacity === 0}
+                                      onChange={() => toggleSelect(key, alreadyLoaded)}
+                                      className="rounded cursor-pointer"
+                                      title={!isSelected && remainingCapacity === 0 ? 'Slot cap reached — uncheck a row or clear comps' : ''}
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">
+                                  {p.property_vcs || ''}
+                                  {p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded">FARM</span>}
+                                  {p._isPackage && !p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-800 rounded">PKG</span>}
+                                </td>
+                                <td className="px-2 py-1.5">{p.property_block}</td>
+                                <td className="px-2 py-1.5">{p.property_lot}</td>
+                                <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
+                                <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
+                                <td className="px-2 py-1.5 truncate max-w-[180px]" title={p.property_location || ''}>{p.property_location || ''}</td>
+                                <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                                <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                                <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
+                                <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                                <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `$${ppsf.toFixed(0)}` : '-'}</td>
+                                <td className="px-2 py-1.5 whitespace-nowrap" title={intCondName || ''}>{intCondDisplay || '-'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Footer */}
+                    <div
+                      className="px-5 py-3 border-t border-gray-200 bg-gray-50"
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        borderBottomLeftRadius: 8,
+                        borderBottomRightRadius: 8,
+                      }}
+                    >
+                      <div className="text-xs text-gray-600">
+                        Showing {rows.length} sale{rows.length === 1 ? '' : 's'} · {compBrowserShowAll ? 'all sales' : 'included only'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={handleClearAllComps}
+                          className="px-3 py-1.5 text-xs font-medium text-red-700 bg-white border border-red-300 rounded hover:bg-red-50"
+                          title="Empty all 5 comp slots so you can pick a fresh set (subject is preserved)"
+                        >
+                          Clear All Comps
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompBrowserOpen(false)}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddSelected}
+                          disabled={compBrowserSelected.length === 0}
+                          className={`px-3 py-1.5 text-xs font-medium rounded ${
+                            compBrowserSelected.length === 0
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          Add Selected ({compBrowserSelected.length})
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         )}
@@ -6787,7 +7548,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Setup required before evaluating</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  Two quick clicks before you run the first evaluation on this job:
+                  A few quick clicks before you run the first evaluation on this job:
                 </p>
               </div>
             </div>
@@ -6809,6 +7570,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <span className="text-gray-800">
                   <strong>Save Adjustments Grid</strong> — open <em>Adjustments → Adjustment Grid</em> and click <strong>Save Adjustments</strong>.
                   This locks in bracket values used during evaluation.
+                </span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.conditionConfigMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.conditionConfigMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Attribute Condition Config</strong> — open <em>Market Analysis → Attribute Cards</em> and save the interior/exterior condition baseline, better, and worse codes.
+                  Without this, condition adjustments silently fall back to baseline (0) during evaluation.
                 </span>
               </li>
             </ul>
