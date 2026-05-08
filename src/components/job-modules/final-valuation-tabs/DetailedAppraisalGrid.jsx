@@ -657,8 +657,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const getGarageDisplayText = (sqft) => {
     if (!sqft || sqft === 0) return 'None';
     const category = getGarageCategory(sqft);
-    const label = getGarageCategoryLabel(category);
-    return `${label} (${sqft.toLocaleString()} SF)`;
+    return getGarageCategoryLabel(category);
   };
 
   // Helper to render comp cells (shows all 5 even if empty)
@@ -2597,13 +2596,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
             const farmMode = !!appealRow.farm_mode;
 
-            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Location', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
             const subjRow = [
               'SUBJ',
               subject.property_block || '',
               subject.property_lot || '',
               subject.property_qualifier || '',
               subject.property_addl_card || subject.property_card || '\u2014',
+              subject.property_location || '\u2014',
               subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
               subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
               subject.sales_nu || '\u2014',
@@ -2639,6 +2639,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   // BLQ collapses into a single "OOT — address" cell across cols 1-3
                   addr, '', '',
                   slot.card || '\u2014',
+                  slot.manual_address ? String(slot.manual_address).toUpperCase() : '\u2014',
                   slot.sales_date || '\u2014',
                   slot.sales_price ? `$${Number(slot.sales_price).toLocaleString()}` : '\u2014',
                   slot.sales_nu || '\u2014',
@@ -2657,6 +2658,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 slot.lot || (compProp?.property_lot || ''),
                 slot.qualifier || (compProp?.property_qualifier || ''),
                 slot.card || (compProp?.property_addl_card || compProp?.property_card || '\u2014'),
+                compProp?.property_location || '\u2014',
                 slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
                 (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
                 slot.sales_nu || compProp?.sales_nu || '\u2014',
@@ -2680,16 +2682,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               null,         // 2: Lot
               null,         // 3: Qual
               'card',       // 4: Card
-              'sale_date',  // 5
-              'sale_price', // 6
-              'sale_nu',    // 7
-              'vcs',        // 8
-              'design',     // 9
-              'type_use',   // 10
-              'condition',  // 11
-              'year_built', // 12
-              'sfla',       // 13
-              'lot_size'    // 14
+              null,         // 5: Location (display only, no flag)
+              'sale_date',  // 6
+              'sale_price', // 7
+              'sale_nu',    // 8
+              'vcs',        // 9
+              'design',     // 10
+              'type_use',   // 11
+              'condition',  // 12
+              'year_built', // 13
+              'sfla',       // 14
+              'lot_size'    // 15
             ];
             // Same pastel hexes used in the panel UI (Tailwind {color}-100).
             const COLOR_FILL = {
