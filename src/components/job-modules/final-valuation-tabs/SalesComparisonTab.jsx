@@ -5982,6 +5982,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 location: (p) => p.property_location || '',
                 sales_date: (p) => p.sales_date || '',
                 sales_price: (p) => Number(p.sales_price) || 0,
+                nu: (p) => p.sales_nu || '',
                 type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
                 style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
                 year_built: (p) => Number(p.asset_year_built) || 0,
@@ -6470,6 +6471,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               { key: 'location', label: 'Location', align: 'left' },
                               { key: 'sales_date', label: 'Sale Date', align: 'left' },
                               { key: 'sales_price', label: 'Sale Price', align: 'right' },
+                              { key: 'nu', label: 'NU', align: 'center' },
                               { key: 'type_use', label: 'Type/Use', align: 'left' },
                               { key: 'style', label: 'Style', align: 'left' },
                               { key: 'year_built', label: 'Yr Built', align: 'right' },
@@ -6505,7 +6507,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <tbody className="divide-y divide-gray-100">
                           {rows.length === 0 && (
                             <tr>
-                              <td colSpan={15} className="px-4 py-8 text-center text-gray-500">
+                              <td colSpan={16} className="px-4 py-8 text-center text-gray-500">
                                 No sales match the current filters. Try Reset Filters or toggle "Show all sales".
                               </td>
                             </tr>
@@ -6558,6 +6560,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5 truncate max-w-[180px]" title={p.property_location || ''}>{p.property_location || ''}</td>
                                 <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                                 <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
