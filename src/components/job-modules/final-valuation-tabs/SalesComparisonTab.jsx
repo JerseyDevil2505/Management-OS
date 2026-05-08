@@ -1592,6 +1592,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         return;
       }
 
+      // Mirror the bulk Evaluate readiness gate: confirm Adjustments Configuration,
+      // Adjustments Grid defaults, AND Attribute Condition Config are all saved.
+      // Without condition config, interior/exterior condition ranks silently return 0.
+      try {
+        const ackKey = `cme_eval_ack_${jobData?.id}`;
+        const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
+        if (!alreadyAcked) {
+          const { configMissing, adjustmentsMissing, conditionConfigMissing } = await checkAdjustmentReadiness();
+          if (configMissing || adjustmentsMissing || conditionConfigMissing) {
+            setPreEvalCheck({ configMissing, adjustmentsMissing, conditionConfigMissing });
+            setIsManualEvaluating(false);
+            return;
+          }
+          sessionStorage.setItem(ackKey, '1');
+        }
+      } catch (_) { /* non-critical */ }
+
       // Find subject by block, lot, qualifier (normalize for comparison)
       const subjectRaw = properties.find(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
@@ -1778,7 +1795,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Verifies the user has saved the Adjustments Configuration AND the Adjustments grid
   // before letting an Evaluate run go through. Only blocks the FIRST evaluate per session per job.
   const checkAdjustmentReadiness = async () => {
-    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false };
+    if (!jobData?.id) return { configMissing: false, adjustmentsMissing: false, conditionConfigMissing: false };
     try {
       const [{ data: settingsRows }, { data: gridRows }] = await Promise.all([
         supabase
@@ -1794,10 +1811,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       const configMissing = !settingsRows || settingsRows.length === 0;
       const hasDefaults = (gridRows || []).some(r => r.is_default === true);
       const adjustmentsMissing = !hasDefaults;
-      return { configMissing, adjustmentsMissing };
+      const condCfg = jobData?.attribute_condition_config;
+      const conditionConfigMissing = !condCfg ||
+        (typeof condCfg === 'object' && !condCfg.interior && !condCfg.exterior);
+      return { configMissing, adjustmentsMissing, conditionConfigMissing };
     } catch (e) {
       console.warn('Pre-evaluate readiness check failed (allowing evaluate):', e?.message);
-      return { configMissing: false, adjustmentsMissing: false };
+      return { configMissing: false, adjustmentsMissing: false, conditionConfigMissing: false };
     }
   };
 
@@ -1815,9 +1835,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       const ackKey = `cme_eval_ack_${jobData?.id}`;
       const alreadyAcked = sessionStorage.getItem(ackKey) === '1';
       if (!alreadyAcked) {
-        const { configMissing, adjustmentsMissing } = await checkAdjustmentReadiness();
-        if (configMissing || adjustmentsMissing) {
-          setPreEvalCheck({ configMissing, adjustmentsMissing });
+        const { configMissing, adjustmentsMissing, conditionConfigMissing } = await checkAdjustmentReadiness();
+        if (configMissing || adjustmentsMissing || conditionConfigMissing) {
+          setPreEvalCheck({ configMissing, adjustmentsMissing, conditionConfigMissing });
           return; // Block evaluate until user resolves
         }
         sessionStorage.setItem(ackKey, '1');
@@ -7393,7 +7413,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Setup required before evaluating</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  Two quick clicks before you run the first evaluation on this job:
+                  A few quick clicks before you run the first evaluation on this job:
                 </p>
               </div>
             </div>
@@ -7415,6 +7435,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <span className="text-gray-800">
                   <strong>Save Adjustments Grid</strong> — open <em>Adjustments → Adjustment Grid</em> and click <strong>Save Adjustments</strong>.
                   This locks in bracket values used during evaluation.
+                </span>
+              </li>
+              <li className="flex items-start gap-2 text-sm">
+                <span className={preEvalCheck.conditionConfigMissing ? 'text-red-500' : 'text-green-600'}>
+                  {preEvalCheck.conditionConfigMissing ? '✗' : '✓'}
+                </span>
+                <span className="text-gray-800">
+                  <strong>Save Attribute Condition Config</strong> — open <em>Market Analysis → Attribute Cards</em> and save the interior/exterior condition baseline, better, and worse codes.
+                  Without this, condition adjustments silently fall back to baseline (0) during evaluation.
                 </span>
               </li>
             </ul>
