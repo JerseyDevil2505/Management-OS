@@ -138,12 +138,16 @@ useEffect(() => {
       return [];
     }
     
-    // Return only the fields we need for mailing lists
+    // Return only the fields we need for mailing lists.
+    // property_addl_card is required so primary-card guards work.
+    // property_cama_class is required for the Chapter 91 m4↔cama audit.
     const mailingFields = properties.map(record => ({
       property_block: record.property_block,
       property_lot: record.property_lot,
       property_qualifier: record.property_qualifier,
+      property_addl_card: record.property_addl_card,
       property_m4_class: record.property_m4_class,
+      property_cama_class: record.property_cama_class,
       property_location: record.property_location,
       property_facility: record.property_facility,
       owner_name: record.owner_name,
