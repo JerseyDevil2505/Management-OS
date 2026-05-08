@@ -5993,23 +5993,57 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
               return (
                 <div
-                  className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4"
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 50,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 16,
+                  }}
                   onClick={() => setCompBrowserOpen(false)}
                 >
                   <div
-                    className="bg-white rounded-lg shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col"
+                    style={{
+                      backgroundColor: '#fff',
+                      borderRadius: 8,
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                      width: '95vw',
+                      maxWidth: 1280,
+                      height: '85vh',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {/* Header */}
-                    <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg flex items-center justify-between gap-4">
+                    <div
+                      className="px-5 py-3 border-b border-gray-200 bg-gray-50"
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 16,
+                      }}
+                    >
                       <div>
                         <h3 className="text-base font-semibold text-gray-900">Browse Comps from Sales Pool</h3>
                         <p className="text-xs text-gray-600 mt-0.5">
                           {emptySlots} of 5 slots open · {selectedSet.size} selected · {remainingCapacity} more allowed
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <label
+                          className="text-sm text-gray-700 cursor-pointer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+                        >
                           <input
                             type="checkbox"
                             checked={compBrowserShowAll}
@@ -6038,8 +6072,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
 
                     {/* Filter strip */}
-                    <div className="px-5 py-3 border-b border-gray-200 bg-white space-y-2">
-                      <div className="flex flex-wrap items-end gap-3">
+                    <div
+                      className="px-5 py-3 border-b border-gray-200 bg-white"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12, marginBottom: 8 }}>
                         <div>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sale Date From</label>
                           <input
@@ -6079,7 +6116,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           />
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <div className="text-xs" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
                         {poolFilterVCS.length > 0 && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800">
                             VCS: {poolFilterVCS.join(', ')}
@@ -6107,8 +6144,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
 
                     {/* Table */}
-                    <div className="flex-1 overflow-auto">
-                      <table className="min-w-full text-xs">
+                    <div style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 0 }}>
+                      <table className="min-w-full text-xs" style={{ width: '100%' }}>
                         <thead className="bg-gray-50 sticky top-0 z-10">
                           <tr>
                             <th className="px-2 py-2 text-center font-medium text-gray-600 w-10">Pick</th>
@@ -6189,11 +6226,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
 
                     {/* Footer */}
-                    <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg flex items-center justify-between gap-3">
+                    <div
+                      className="px-5 py-3 border-t border-gray-200 bg-gray-50"
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        borderBottomLeftRadius: 8,
+                        borderBottomRightRadius: 8,
+                      }}
+                    >
                       <div className="text-xs text-gray-600">
                         Showing {rows.length} sale{rows.length === 1 ? '' : 's'} · {compBrowserShowAll ? 'all sales' : 'included only'}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button
                           type="button"
                           onClick={handleClearAllComps}
