@@ -37,8 +37,11 @@ const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checkli
   // disagree about whether a parcel is commercial (4A/4B/4C). Lisa's team needs to
   // hand-audit those edge cases so we don't repeat the Harvey Cedars mistake of
   // mailing 25 "commercial" parcels that were actually residential.
+  // Decisions are persisted to chapter91_audit_decisions so they survive reloads
+  // and the export always respects the saved Include/Ignore state.
   const [chapter91Audit, setChapter91Audit] = useState(null);
-  // Shape: { matched: [...], mismatches: [...], includedMismatchKeys: Set<string> }
+  // Shape: { matched: [...], mismatches: [...], decisions: { [composite_key]: 'include' | 'ignore' } }
+  const [savingDecisionKey, setSavingDecisionKey] = useState(null);
   const [processingApprovals, setProcessingApprovals] = useState({}); // Track which approvals are being processed
 
   // Extract year from end_date - just grab first 4 characters to avoid timezone issues
@@ -836,10 +839,23 @@ useEffect(() => {
         });
       });
 
+      // Hydrate saved Include/Ignore decisions for this job so the user picks
+      // up where they (or a teammate) left off.
+      const { data: savedDecisions, error: decErr } = await supabase
+        .from('chapter91_audit_decisions')
+        .select('property_composite_key, decision')
+        .eq('job_id', jobData.id);
+      if (decErr) console.warn('Could not load saved Chapter 91 decisions:', decErr.message);
+
+      const decisions = {};
+      (savedDecisions || []).forEach(d => {
+        decisions[d.property_composite_key] = d.decision;
+      });
+
       setChapter91Audit({
         matched,
         mismatches,
-        includedMismatchKeys: new Set(), // user opts in per row
+        decisions,
       });
     } catch (error) {
       console.error('Error building Chapter 91 audit:', error);
@@ -849,14 +865,78 @@ useEffect(() => {
     }
   };
 
+  // Persist a single Include/Ignore decision and reflect it locally.
+  const saveChapter91Decision = async (row, decision) => {
+    const key = row.property_composite_key
+      || `${row.property_block}-${row.property_lot}-${row.property_qualifier || ''}`;
+    if (!key) return;
+    setSavingDecisionKey(key);
+    try {
+      const payload = {
+        job_id: jobData.id,
+        property_composite_key: key,
+        decision,
+        property_block: row.property_block,
+        property_lot: row.property_lot,
+        property_qualifier: row.property_qualifier || null,
+        m4_class: row.property_m4_class || null,
+        cama_class: row.property_cama_class || null,
+        decided_by: currentUser?.email || currentUser?.id || null,
+        decided_at: new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('chapter91_audit_decisions')
+        .upsert(payload, { onConflict: 'job_id,property_composite_key' });
+      if (error) throw error;
+      setChapter91Audit(prev => prev ? {
+        ...prev,
+        decisions: { ...prev.decisions, [key]: decision }
+      } : prev);
+    } catch (e) {
+      console.error('Failed to save Chapter 91 decision:', e);
+      alert('Failed to save decision. Please try again.');
+    } finally {
+      setSavingDecisionKey(null);
+    }
+  };
+
+  // Reset a row back to undecided (deletes the persisted row).
+  const clearChapter91Decision = async (row) => {
+    const key = row.property_composite_key
+      || `${row.property_block}-${row.property_lot}-${row.property_qualifier || ''}`;
+    if (!key) return;
+    setSavingDecisionKey(key);
+    try {
+      const { error } = await supabase
+        .from('chapter91_audit_decisions')
+        .delete()
+        .eq('job_id', jobData.id)
+        .eq('property_composite_key', key);
+      if (error) throw error;
+      setChapter91Audit(prev => {
+        if (!prev) return prev;
+        const next = { ...prev.decisions };
+        delete next[key];
+        return { ...prev, decisions: next };
+      });
+    } catch (e) {
+      console.error('Failed to clear Chapter 91 decision:', e);
+      alert('Failed to clear decision. Please try again.');
+    } finally {
+      setSavingDecisionKey(null);
+    }
+  };
+
   const exportChapter91Excel = () => {
     if (!chapter91Audit) return;
     try {
-      const { matched, mismatches, includedMismatchKeys } = chapter91Audit;
+      const { matched, mismatches, decisions } = chapter91Audit;
 
-      const acceptedMismatches = mismatches.filter(r =>
-        includedMismatchKeys.has(r.property_composite_key || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`)
-      );
+      // Mismatches only export if explicitly marked Include in the persisted
+      // decisions table. Undecided and Ignored stay off the list.
+      const keyOf = (r) => r.property_composite_key
+        || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`;
+      const acceptedMismatches = mismatches.filter(r => decisions[keyOf(r)] === 'include');
       const rows = [...matched, ...acceptedMismatches];
 
       const excelData = rows.map(record => {
@@ -1896,31 +1976,18 @@ useEffect(() => {
       </div>
 
       {/* Chapter 91 Audit Modal — surfaces m4 vs cama class disagreements
-          so the user can hand-pick which edge cases get included in the export. */}
+          so the user can hand-pick which edge cases get included in the export.
+          Decisions persist in chapter91_audit_decisions so reload + export both
+          honor the saved Include/Ignore state. */}
       {chapter91Audit && (() => {
-        const { matched, mismatches, includedMismatchKeys } = chapter91Audit;
+        const { matched, mismatches, decisions } = chapter91Audit;
         const total = matched.length + mismatches.length;
-        const includedCount = matched.length + includedMismatchKeys.size;
-        const keyOf = (r) => r.property_composite_key || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`;
-
-        const toggleRow = (row) => {
-          const key = keyOf(row);
-          setChapter91Audit(prev => {
-            if (!prev) return prev;
-            const next = new Set(prev.includedMismatchKeys);
-            if (next.has(key)) next.delete(key); else next.add(key);
-            return { ...prev, includedMismatchKeys: next };
-          });
-        };
-
-        const allChecked = mismatches.length > 0 && includedMismatchKeys.size === mismatches.length;
-        const toggleAll = () => {
-          setChapter91Audit(prev => {
-            if (!prev) return prev;
-            const next = allChecked ? new Set() : new Set(prev.mismatches.map(keyOf));
-            return { ...prev, includedMismatchKeys: next };
-          });
-        };
+        const keyOf = (r) => r.property_composite_key
+          || `${r.property_block}-${r.property_lot}-${r.property_qualifier || ''}`;
+        const includedMismatches = mismatches.filter(r => decisions[keyOf(r)] === 'include').length;
+        const ignoredMismatches = mismatches.filter(r => decisions[keyOf(r)] === 'ignore').length;
+        const undecidedMismatches = mismatches.length - includedMismatches - ignoredMismatches;
+        const exportCount = matched.length + includedMismatches;
 
         return (
           <div
@@ -1947,9 +2014,18 @@ useEffect(() => {
                     <p style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>
                       <strong>{matched.length} of {total} matched</strong>
                       {mismatches.length > 0 && (
-                        <> · <span style={{ color: '#b45309' }}>{mismatches.length} edge case{mismatches.length === 1 ? '' : 's'} need review</span></>
+                        <>
+                          {' · '}<span style={{ color: '#16a34a' }}>{includedMismatches} included</span>
+                          {' · '}<span style={{ color: '#dc2626' }}>{ignoredMismatches} ignored</span>
+                          {undecidedMismatches > 0 && (
+                            <>{' · '}<span style={{ color: '#b45309', fontWeight: 600 }}>{undecidedMismatches} need review</span></>
+                          )}
+                        </>
                       )}
-                      {' · '}<strong>{includedCount}</strong> will export
+                      {' · '}<strong>{exportCount} will export</strong>
+                    </p>
+                    <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4, fontStyle: 'italic' }}>
+                      Decisions persist per job — Include adds the parcel to every future Chapter 91 export, Ignore keeps it off.
                     </p>
                   </div>
                   <button
@@ -1973,14 +2049,6 @@ useEffect(() => {
                   <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                     <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
                       <tr>
-                        <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', width: 40 }}>
-                          <input
-                            type="checkbox"
-                            checked={allChecked}
-                            onChange={toggleAll}
-                            title={allChecked ? 'Uncheck all' : 'Check all'}
-                          />
-                        </th>
                         <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Block</th>
                         <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Lot</th>
                         <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Qual</th>
@@ -1989,17 +2057,24 @@ useEffect(() => {
                         <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>M4</th>
                         <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>CAMA</th>
                         <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Conflict</th>
+                        <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', width: 220 }}>Decision</th>
                       </tr>
                     </thead>
                     <tbody>
                       {mismatches.map((row, i) => {
                         const k = keyOf(row);
-                        const checked = includedMismatchKeys.has(k);
+                        const decision = decisions[k]; // 'include' | 'ignore' | undefined
+                        const isSaving = savingDecisionKey === k;
+                        const rowBg = decision === 'include' ? '#ECFDF5'
+                          : decision === 'ignore' ? '#FEE2E2'
+                          : 'transparent';
+                        const btnBase = {
+                          padding: '4px 10px', fontSize: 11, borderRadius: 4,
+                          border: '1px solid', cursor: isSaving ? 'wait' : 'pointer',
+                          fontWeight: 600,
+                        };
                         return (
-                          <tr key={k + '-' + i} style={{ backgroundColor: checked ? '#ECFDF5' : 'transparent', borderBottom: '1px solid #f3f4f6' }}>
-                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                              <input type="checkbox" checked={checked} onChange={() => toggleRow(row)} />
-                            </td>
+                          <tr key={k + '-' + i} style={{ backgroundColor: rowBg, borderBottom: '1px solid #f3f4f6' }}>
                             <td style={{ padding: '6px 8px' }}>{row.property_block}</td>
                             <td style={{ padding: '6px 8px' }}>{row.property_lot}</td>
                             <td style={{ padding: '6px 8px' }}>{row.property_qualifier || ''}</td>
@@ -2012,6 +2087,54 @@ useEffect(() => {
                               {row._direction === 'cama→m4' && 'CAMA says commercial, M4 disagrees'}
                               {row._direction === 'subclass' && 'Different commercial subclass'}
                             </td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: 4 }}>
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => saveChapter91Decision(row, 'include')}
+                                  style={{
+                                    ...btnBase,
+                                    color: decision === 'include' ? '#fff' : '#16a34a',
+                                    backgroundColor: decision === 'include' ? '#16a34a' : '#fff',
+                                    borderColor: '#16a34a',
+                                  }}
+                                  title="Include this parcel in every Chapter 91 export"
+                                >
+                                  Include
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => saveChapter91Decision(row, 'ignore')}
+                                  style={{
+                                    ...btnBase,
+                                    color: decision === 'ignore' ? '#fff' : '#dc2626',
+                                    backgroundColor: decision === 'ignore' ? '#dc2626' : '#fff',
+                                    borderColor: '#dc2626',
+                                  }}
+                                  title="Exclude this parcel from every Chapter 91 export"
+                                >
+                                  Ignore
+                                </button>
+                                {decision && (
+                                  <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => clearChapter91Decision(row)}
+                                    style={{
+                                      ...btnBase,
+                                      color: '#6b7280',
+                                      backgroundColor: '#fff',
+                                      borderColor: '#d1d5db',
+                                    }}
+                                    title="Clear this decision"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -2022,26 +2145,31 @@ useEffect(() => {
 
               <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                 <div style={{ fontSize: 12, color: '#4b5563' }}>
-                  {matched.length} matched + {includedMismatchKeys.size} edge case{includedMismatchKeys.size === 1 ? '' : 's'} = <strong>{includedCount}</strong> on export
+                  {matched.length} matched + {includedMismatches} included = <strong>{exportCount}</strong> on export
+                  {undecidedMismatches > 0 && (
+                    <span style={{ marginLeft: 8, color: '#b45309' }}>
+                      ⚠ {undecidedMismatches} undecided will be excluded
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setChapter91Audit(null)}
                     style={{ padding: '6px 12px', fontSize: 13, backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
                   >
-                    Cancel
+                    Close
                   </button>
                   <button
                     onClick={exportChapter91Excel}
-                    disabled={includedCount === 0}
+                    disabled={exportCount === 0}
                     style={{
                       padding: '6px 12px', fontSize: 13, color: '#fff', borderRadius: 4, border: 'none',
-                      backgroundColor: includedCount === 0 ? '#9ca3af' : '#4f46e5',
-                      cursor: includedCount === 0 ? 'not-allowed' : 'pointer',
+                      backgroundColor: exportCount === 0 ? '#9ca3af' : '#4f46e5',
+                      cursor: exportCount === 0 ? 'not-allowed' : 'pointer',
                       fontWeight: 600
                     }}
                   >
-                    Export {includedCount} to Excel
+                    Export {exportCount} to Excel
                   </button>
                 </div>
               </div>
