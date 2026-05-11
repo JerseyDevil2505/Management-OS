@@ -3481,7 +3481,7 @@ const analyzeImportFile = async (file) => {
     <button
       onClick={() => setActiveSubTab('typeUseMap')}
       className={`mls-subtab-btn ${activeSubTab === 'typeUseMap' ? 'mls-subtab-btn--active' : ''}`}
-      title="Admin-only: map non-standard asset_type_use codes to the vendor standard"
+      title="Map non-standard asset_type_use codes to the vendor standard"
     >
       Type/Use Mapper
     </button>

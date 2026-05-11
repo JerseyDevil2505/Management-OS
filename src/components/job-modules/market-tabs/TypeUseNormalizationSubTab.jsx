@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Save, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Save, Check, RefreshCw } from 'lucide-react';
 
 const STANDARD_TARGETS = {
   BRT: [
@@ -30,53 +30,10 @@ const STANDARD_TARGETS = {
 };
 
 const TypeUseNormalizationSubTab = ({ jobData, properties, vendorType, onSaved }) => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [checkingRole, setCheckingRole] = useState(true);
   const [mapping, setMapping] = useState({});
   const [savedMapping, setSavedMapping] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        // Dev-mode bypass — mirrors the auto-login conditions in src/App.js
-        const host = (typeof window !== 'undefined' && window.location && window.location.hostname) || '';
-        const isDevHost = (
-          process.env.NODE_ENV === 'development' ||
-          host === 'localhost' ||
-          host.includes('builder.io') ||
-          host.includes('preview') ||
-          host.includes('fly.dev') ||
-          host.includes('github.dev') ||
-          host.includes('127.0.0.1') ||
-          host.includes('0.0.0.0')
-        );
-        if (isDevHost) {
-          if (alive) { setIsAdmin(true); setCheckingRole(false); }
-          return;
-        }
-
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { if (alive) { setIsAdmin(false); setCheckingRole(false); } return; }
-        // Authoritative role lookup — App.js uses the employees table
-        const { data: employee } = await supabase
-          .from('employees')
-          .select('role')
-          .eq('email', (user.email || '').toLowerCase())
-          .maybeSingle();
-        const role = (employee?.role || '').toString().toLowerCase();
-        if (alive) {
-          setIsAdmin(role === 'admin' || role === 'owner');
-          setCheckingRole(false);
-        }
-      } catch {
-        if (alive) { setIsAdmin(false); setCheckingRole(false); }
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
 
   useEffect(() => {
     const initial = jobData?.type_use_normalization_map || {};
@@ -149,19 +106,6 @@ const TypeUseNormalizationSubTab = ({ jobData, properties, vendorType, onSaved }
       setSaving(false);
     }
   };
-
-  if (checkingRole) {
-    return <div className="p-6 text-sm text-gray-500">Checking permissions…</div>;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="p-6 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-900">
-        <AlertTriangle className="inline w-4 h-4 mr-2" />
-        Type/Use Code Mapper is admin-only.
-      </div>
-    );
-  }
 
   return (
     <div className="w-full px-2">
