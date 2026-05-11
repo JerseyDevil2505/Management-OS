@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
+import TypeUseNormalizationSubTab from './TypeUseNormalizationSubTab';
 import { 
   TrendingUp, 
   Download, 
@@ -146,7 +147,7 @@ const PreValuationTab = ({
       try {
         const tabId = e?.detail?.tabId;
         if (!tabId) return;
-        const valid = ['marketAnalysis', 'unitRates', 'worksheet', 'zoning', 'normalization'];
+        const valid = ['typeUseMap', 'marketAnalysis', 'unitRates', 'worksheet', 'zoning', 'normalization'];
         if (valid.includes(tabId)) setActiveSubTab(tabId);
       } catch (err) {
         console.error('navigate_prevaluation_subtab handler error', err);
@@ -3478,6 +3479,13 @@ const analyzeImportFile = async (file) => {
       {/* Sub-tab Navigation */}
   <div className="mls-subtab-nav">
     <button
+      onClick={() => setActiveSubTab('typeUseMap')}
+      className={`mls-subtab-btn ${activeSubTab === 'typeUseMap' ? 'mls-subtab-btn--active' : ''}`}
+      title="Admin-only: map non-standard asset_type_use codes to the vendor standard"
+    >
+      Type/Use Mapper
+    </button>
+    <button
       onClick={() => setActiveSubTab('normalization')}
       className={`mls-subtab-btn ${activeSubTab === 'normalization' ? 'mls-subtab-btn--active' : ''}`}
     >
@@ -3511,6 +3519,16 @@ const analyzeImportFile = async (file) => {
       Zoning Requirements
     </button>
   </div>
+
+      {/* Type/Use Mapper Tab Content (admin-only, gated inside the component) */}
+      {activeSubTab === 'typeUseMap' && (
+        <TypeUseNormalizationSubTab
+          jobData={jobData}
+          properties={properties}
+          vendorType={vendorType}
+          onSaved={() => { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData?.id, { forceRefresh: true }); }}
+        />
+      )}
 
       {/* Normalization Tab Content */}
       {activeSubTab === 'normalization' && (
