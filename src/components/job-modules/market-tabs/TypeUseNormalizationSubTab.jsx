@@ -41,14 +41,32 @@ const TypeUseNormalizationSubTab = ({ jobData, properties, vendorType, onSaved }
     let alive = true;
     (async () => {
       try {
+        // Dev-mode bypass — mirrors the auto-login conditions in src/App.js
+        const host = (typeof window !== 'undefined' && window.location && window.location.hostname) || '';
+        const isDevHost = (
+          process.env.NODE_ENV === 'development' ||
+          host === 'localhost' ||
+          host.includes('builder.io') ||
+          host.includes('preview') ||
+          host.includes('fly.dev') ||
+          host.includes('github.dev') ||
+          host.includes('127.0.0.1') ||
+          host.includes('0.0.0.0')
+        );
+        if (isDevHost) {
+          if (alive) { setIsAdmin(true); setCheckingRole(false); }
+          return;
+        }
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { if (alive) { setIsAdmin(false); setCheckingRole(false); } return; }
-        const { data: profile } = await supabase
-          .from('profiles')
+        // Authoritative role lookup — App.js uses the employees table
+        const { data: employee } = await supabase
+          .from('employees')
           .select('role')
-          .eq('id', user.id)
-          .single();
-        const role = (profile?.role || '').toString().toLowerCase();
+          .eq('email', (user.email || '').toLowerCase())
+          .maybeSingle();
+        const role = (employee?.role || '').toString().toLowerCase();
         if (alive) {
           setIsAdmin(role === 'admin' || role === 'owner');
           setCheckingRole(false);
