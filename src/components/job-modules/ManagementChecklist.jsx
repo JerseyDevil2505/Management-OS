@@ -131,6 +131,48 @@ useEffect(() => {
     setValidFiles(fileChecks);
   };
 
+  // Natural ("human") sort key for Block / Lot strings: handles plain ints,
+  // decimal lots with significant trailing zeros (1.1 vs 1.10), and alpha
+  // suffixes (10A). Returns a tuple compared in order.
+  const naturalKey = (v) => {
+    const s = String(v ?? '').trim();
+    const m = s.match(/^(\d+)(?:\.(\d+))?(.*)$/);
+    if (!m) return [Infinity, 0, s];
+    return [parseInt(m[1], 10), parseInt(m[2] || '0', 10), (m[3] || '').toUpperCase()];
+  };
+
+  const compareBLQ = (a, b) => {
+    const [aB1, aB2, aBs] = naturalKey(a.property_block);
+    const [bB1, bB2, bBs] = naturalKey(b.property_block);
+    if (aB1 !== bB1) return aB1 - bB1;
+    if (aB2 !== bB2) return aB2 - bB2;
+    if (aBs !== bBs) return aBs.localeCompare(bBs);
+    const [aL1, aL2, aLs] = naturalKey(a.property_lot);
+    const [bL1, bL2, bLs] = naturalKey(b.property_lot);
+    if (aL1 !== bL1) return aL1 - bL1;
+    if (aL2 !== bL2) return aL2 - bL2;
+    if (aLs !== bLs) return aLs.localeCompare(bLs);
+    return String(a.property_qualifier || '').localeCompare(String(b.property_qualifier || ''));
+  };
+
+  // Force the Block / Lot / Qualifier columns to text type so Excel doesn't
+  // strip trailing zeros (e.g. lot ".10" becoming ".1") or right-align them
+  // as numbers. Assumes column order: A=Block, B=Lot, C=Qualifier.
+  const forceBLQAsText = (ws) => {
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+      for (const C of [0, 1, 2]) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[addr];
+        if (!cell) continue;
+        cell.t = 's';
+        cell.v = cell.v == null ? '' : String(cell.v);
+        if (!cell.s) cell.s = {};
+        cell.z = '@';
+      }
+    }
+  };
+
 // Use property records from props instead of fetching
   const getAllPropertyRecords = async (jobId) => {
     console.log('📊 Using property records from props');
@@ -714,6 +756,9 @@ useEffect(() => {
 
       console.log(`✅ Filtered to ${filteredData.length} residential properties`);
 
+      // Sort in human/block-and-lot order (1, 2, 3, 20, 100; 10A after 10)
+      filteredData.sort(compareBLQ);
+
       // Transform data for Excel with separated address columns
       const excelData = filteredData.map(record => {
         const { cityState, zip } = parseCityStateZip(record.owner_csz);
@@ -770,6 +815,10 @@ useEffect(() => {
           };
         }
       }
+
+      // Lock Block / Lot / Qualifier as text so Excel doesn't drop trailing
+      // zeros from decimal lots (.10 → .1) or coerce numeric-looking values.
+      forceBLQAsText(ws);
 
       // Generate Excel file and download
       const fileName = jobData?.job_name ?
@@ -939,6 +988,9 @@ useEffect(() => {
       const acceptedMismatches = mismatches.filter(r => decisions[keyOf(r)] === 'include');
       const rows = [...matched, ...acceptedMismatches];
 
+      // Block-and-lot order, human style.
+      rows.sort(compareBLQ);
+
       const excelData = rows.map(record => {
         // Zip stays in its own column so Lisa's mail merge can use it cleanly.
         const { cityState, zip } = parseCityStateZip(record.owner_csz);
@@ -982,6 +1034,9 @@ useEffect(() => {
           };
         }
       }
+
+      // Lock Block / Lot / Qualifier as text so trailing zeros survive.
+      forceBLQAsText(ws);
 
       const fileName = jobData?.job_name
         ? `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Chapter_91_Mailing.xlsx`
