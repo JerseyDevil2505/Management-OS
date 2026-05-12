@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera, Lock, Unlock } from 'lucide-react';
 import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
@@ -17,6 +17,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
+  const [selectedCohort, setSelectedCohort] = useState('standard'); // 'standard' | 'added_assessment'
+  const [yearArchives, setYearArchives] = useState([]); // rows from appeal_log_archives for this job
 
   // Column group visibility toggles
   const [expandedGroups, setExpandedGroups] = useState({
@@ -465,8 +467,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     };
 
     loadAppeals();
+    loadYearArchives();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties]);
+
+  const loadYearArchives = async () => {
+    if (!jobData?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('appeal_log_archives')
+        .select('*')
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+      setYearArchives(data || []);
+    } catch (err) {
+      console.warn('Failed to load appeal log archives:', err.message);
+    }
+  };
+
+  const isCohortArchived = (year, cohort) =>
+    yearArchives.some(a => a.appeal_year === year && a.cohort === cohort);
+
+  const archiveRowFor = (year, cohort) =>
+    yearArchives.find(a => a.appeal_year === year && a.cohort === cohort);
+
+  const isCurrentLocked = isCohortArchived(selectedYear, selectedCohort);
 
   // Get unique attorney and VCS values from appeals
   const uniqueAttorneys = useMemo(() => {
@@ -652,6 +677,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
   const filteredAppeals = useMemo(() => {
     let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
 
+    // Cohort scoping: standard vs added_assessment.
+    // Existing rows with no appeal_docket fall back to inferred cohort.
+    result = result.filter(a => {
+      const cohort = a.appeal_docket || inferCohortFromHearingDate(a.hearing_date);
+      return cohort === selectedCohort;
+    });
+
     // Apply active filters
     result = result.filter(a => {
       // Status filter
@@ -723,7 +755,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     }
 
     return result;
-  }, [appeals, selectedYear, filters, sortState]);
+  }, [appeals, selectedYear, selectedCohort, filters, sortState]);
 
   // Helper: Check if any filters are active
   const areFiltersActive = useMemo(() => {
@@ -931,6 +963,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       suffix: suffix || '',
       appealType: appealTypeMap[suffix] || 'petitioner'
     };
+  };
+
+  // Cohort inference: NJ Added/Omitted appeals (filed by 12/1) typically heard
+  // late fall through early spring; standard appeals (filed by 4/1, 5/1 in reval
+  // years) are heard May-Sept. Hearing month Nov-Mar => added_assessment.
+  // Rows can always be overridden manually via the appeal_docket column.
+  const inferCohortFromHearingDate = (hearingDate) => {
+    if (!hearingDate) return 'standard';
+    try {
+      const d = typeof hearingDate === 'string'
+        ? parseDateLocal(hearingDate)
+        : hearingDate;
+      const m = d.getMonth() + 1;
+      return (m >= 11 || m <= 3) ? 'added_assessment' : 'standard';
+    } catch {
+      return 'standard';
+    }
   };
 
   // Helper: Get bracket for an appeal
@@ -1195,6 +1244,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         job_id: jobData.id,
         ...formData,
         status: formData.status || 'D',
+        // Stamp cohort from the active toolbar selection so the new appeal
+        // lands in the same Standard / Added Assessment bucket the user is
+        // looking at. Manual edits can override later via the appeal_docket
+        // column.
+        appeal_docket: selectedCohort,
         // Sanitize date fields
         hearing_date: sanitizeDate(formData.hearing_date),
         evidence_due_date: sanitizeDate(calculatedEvidenceDueDate)
@@ -3233,6 +3287,60 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     setExportCsvCandidates(prev => prev.map(c => ({ ...c, checked })));
   };
 
+  // Archive the currently selected (year, cohort). Soft-warn if any appeal in
+  // scope is missing a judgment_value — that's the "judgments are in" gate.
+  const handleArchiveCurrentCohort = async () => {
+    if (isCurrentLocked) return;
+    const inScope = appeals.filter(a => {
+      const cohort = a.appeal_docket || inferCohortFromHearingDate(a.hearing_date);
+      return a.appeal_year === selectedYear && cohort === selectedCohort;
+    });
+    if (inScope.length === 0) {
+      alert(`No ${selectedCohort === 'standard' ? 'Standard' : 'Added Assessment'} appeals to archive for ${selectedYear}.`);
+      return;
+    }
+    const missingJudgment = inScope.filter(a => a.judgment_value == null && a.judgment_amount == null);
+    const cohortLabel = selectedCohort === 'standard' ? 'Standard' : 'Added Assessment';
+    let confirmMsg = `Archive ${selectedYear} ${cohortLabel} appeals (${inScope.length} rows)?\n\nThe log will become read-only for this cohort. You can unarchive at any time.`;
+    if (missingJudgment.length > 0) {
+      confirmMsg = `${missingJudgment.length} of ${inScope.length} appeals are missing judgment values. Archive anyway?\n\n${confirmMsg}`;
+    }
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('appeal_log_archives')
+        .insert({
+          job_id: jobData.id,
+          appeal_year: selectedYear,
+          cohort: selectedCohort,
+          archived_by: user?.id || null,
+        });
+      if (error) throw error;
+      await loadYearArchives();
+    } catch (err) {
+      console.error('Archive failed:', err);
+      alert(`Archive failed: ${err.message}`);
+    }
+  };
+
+  const handleUnarchiveCurrentCohort = async () => {
+    const row = archiveRowFor(selectedYear, selectedCohort);
+    if (!row) return;
+    if (!window.confirm(`Unlock ${selectedYear} ${selectedCohort === 'standard' ? 'Standard' : 'Added Assessment'} appeals? Edits and imports will be re-enabled.`)) return;
+    try {
+      const { error } = await supabase
+        .from('appeal_log_archives')
+        .delete()
+        .eq('id', row.id);
+      if (error) throw error;
+      await loadYearArchives();
+    } catch (err) {
+      console.error('Unarchive failed:', err);
+      alert(`Unarchive failed: ${err.message}`);
+    }
+  };
+
   // ==================== RENDER ====================
 
   return (
@@ -3242,12 +3350,42 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         <div className="flex items-center gap-2">
           <button
             onClick={handleOpenModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2"
+            disabled={isCurrentLocked}
+            title={isCurrentLocked ? 'This cohort is archived. Unlock it to add new appeals.' : ''}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Appeal
           </button>
+          {isCurrentLocked && (
+            <span className="archive-lock-badge inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-200">
+              <Lock className="w-3 h-3" />
+              {selectedYear} {selectedCohort === 'standard' ? 'Standard' : 'Added Assessment'} Archived
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Cohort:</label>
+            <div className="cohort-toggle inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+              {[
+                { value: 'standard', label: 'Standard' },
+                { value: 'added_assessment', label: 'Added Assessment' },
+              ].map(opt => {
+                const locked = isCohortArchived(selectedYear, opt.value);
+                const active = selectedCohort === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSelectedCohort(opt.value)}
+                    className={`cohort-btn px-3 py-2 font-medium inline-flex items-center gap-1 ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {opt.label}
+                    {locked && <Lock className="w-3 h-3" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Appeal Year:</label>
             <select
@@ -3260,10 +3398,31 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               ))}
             </select>
           </div>
+          {isCurrentLocked ? (
+            <button
+              onClick={handleUnarchiveCurrentCohort}
+              className="archive-toggle-btn px-3 py-2 bg-white border border-amber-300 text-amber-800 rounded-lg text-sm font-medium hover:bg-amber-50 flex items-center gap-2"
+              title={`Archived on ${archiveRowFor(selectedYear, selectedCohort)?.archived_at?.slice(0, 10) || ''}`}
+            >
+              <Unlock className="w-4 h-4" />
+              Unarchive
+            </button>
+          ) : (
+            <button
+              onClick={handleArchiveCurrentCohort}
+              className="archive-toggle-btn px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
+              title="Lock this cohort once judgments are in (~30-45 days after final hearing)"
+            >
+              <Lock className="w-4 h-4" />
+              Archive
+            </button>
+          )}
           <div className="flex flex-col items-stretch gap-0.5">
             <button
               onClick={() => { setShowImportModal(true); setImportResult(null); setImportFile(null); }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+              disabled={isCurrentLocked}
+              title={isCurrentLocked ? 'Cohort archived — unlock to import.' : ''}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload className="w-4 h-4" />
               Import MyNJAppeal
@@ -3277,7 +3436,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <div className="flex flex-col items-stretch gap-0.5">
             <button
               onClick={() => { setShowPwrCamaModal(true); setPwrCamaResult(null); setPwrCamaFile(null); }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+              disabled={isCurrentLocked}
+              title={isCurrentLocked ? 'Cohort archived — unlock to import.' : ''}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload className="w-4 h-4" />
               Import PwrCama Appeals
@@ -3296,7 +3457,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </button>
           <button
             onClick={() => { setShowImportExportModal(true); setImportExportResult(null); setImportExportFile(null); }}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2"
+            disabled={isCurrentLocked}
+            title={isCurrentLocked ? 'Cohort archived — unlock to import.' : ''}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Upload className="w-4 h-4" />
             Import from Export
