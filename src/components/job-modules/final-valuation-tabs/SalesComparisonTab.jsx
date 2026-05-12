@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
+import ManageResultSetsTab from './ManageResultSetsTab';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
@@ -632,6 +633,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         .from('job_cme_result_sets')
         .select('id, name, adjustment_bracket, created_at, results')
         .eq('job_id', jobData.id)
+        .is('archived_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -3507,7 +3509,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
     { id: 'summary', label: 'Summary', icon: BarChart3 },
-    { id: 'vacant-land', label: 'Vacant Land Evaluation', icon: FileText }
+    { id: 'vacant-land', label: 'Vacant Land Evaluation', icon: FileText },
+    { id: 'manage-result-sets', label: 'Manage Result Sets', icon: Archive }
   ];
 
   return (
@@ -7096,6 +7099,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               );
             })()}
           </div>
+        )}
+
+        {/* MANAGE RESULT SETS TAB */}
+        {activeSubTab === 'manage-result-sets' && (
+          <ManageResultSetsTab jobData={jobData} />
         )}
 
         {/* VACANT LAND APPRAISAL TAB */}

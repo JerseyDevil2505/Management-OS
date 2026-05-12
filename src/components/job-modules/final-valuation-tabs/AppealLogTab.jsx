@@ -3093,6 +3093,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         .from('job_cme_result_sets')
         .select('id, name, created_at, updated_at, results')
         .eq('job_id', jobData.id)
+        .is('archived_at', null)
         .order('updated_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
