@@ -392,8 +392,16 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
             inspectedSyncUpdates.push({ id: appeal.id, inspected: computedInspected });
           }
 
+          // Live current assessment: always read from property_records.values_mod_total
+          // when a matching property exists. The DB column on appeal_log is treated
+          // as a fallback (e.g. orphaned rows with no current property match).
+          const liveCurrent = property?.values_mod_total != null
+            ? property.values_mod_total
+            : appeal.current_assessment;
+
           return {
             ...appeal,
+            current_assessment: liveCurrent,
             inspected: computedInspected,
             appeal_type: appealType,
             // Derived fields from property match
@@ -1222,6 +1230,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return {
           ...appeal,
           appeal_type: appealType,
+          current_assessment: property?.values_mod_total != null ? property.values_mod_total : appeal.current_assessment,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
@@ -1780,6 +1789,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return {
           ...appeal,
           appeal_type: appealType,
+          current_assessment: property?.values_mod_total != null ? property.values_mod_total : appeal.current_assessment,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
@@ -2024,6 +2034,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return {
           ...appeal,
           appeal_type: appealType,
+          current_assessment: property?.values_mod_total != null ? property.values_mod_total : appeal.current_assessment,
           property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
           asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
           new_vcs: property?.new_vcs || null,
@@ -3035,6 +3046,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           return {
             ...appeal,
             appeal_type: appealType,
+            current_assessment: property?.values_mod_total != null ? property.values_mod_total : appeal.current_assessment,
             property_m4_class: property?.property_m4_class || appeal.property_m4_class || null,
             asset_type_use: property?.asset_type_use || appeal.asset_type_use || null,
             new_vcs: property?.new_vcs || null,

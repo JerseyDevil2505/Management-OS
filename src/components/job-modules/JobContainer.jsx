@@ -350,6 +350,9 @@ const JobContainer = ({
       setPropertyRecordsCount(count || 0);
 
       let allProperties = [];  // ADD THIS LINE!
+      // Job-level Type/Use code normalization map (admin-set in PreValuationTab → Type/Use Mapper)
+      // Null/empty = no mapping (pass-through). Applied here so all downstream consumers see normalized codes.
+      const typeUseMap = (jobData && jobData.type_use_normalization_map) || null;
 
       // Use client-side pagination with batches
       if (count && count > 0) {
@@ -478,8 +481,16 @@ const JobContainer = ({
                 // Remove the nested property_market_analysis and flatten fields
                 const { property_market_analysis, ...propertyData } = property;
 
+                // Apply job-level type/use mapping (preserve raw value for audit/UI)
+                const rawTypeUse = propertyData.asset_type_use;
+                const mappedTypeUse = typeUseMap && rawTypeUse != null && typeUseMap[rawTypeUse]
+                  ? typeUseMap[rawTypeUse]
+                  : rawTypeUse;
+
                 return {
                   ...propertyData,
+                  asset_type_use: mappedTypeUse,
+                  asset_type_use_raw: rawTypeUse,
                   // Flatten market analysis fields back onto the property
                   location_analysis: marketAnalysis.location_analysis || null,
                   new_vcs: marketAnalysis.new_vcs || null,
