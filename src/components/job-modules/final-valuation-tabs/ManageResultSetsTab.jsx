@@ -3,9 +3,11 @@ import { supabase } from '../../../lib/supabaseClient';
 import { Archive, ArchiveRestore, RefreshCw, Tag, Trash2, AlertCircle } from 'lucide-react';
 
 const ARCHIVE_CATEGORIES = [
-  { value: 'appeal', label: 'Appeal' },
-  { value: 'valuation', label: 'Valuation' },
-  { value: 'added', label: 'Added' },
+  { value: 'appeals', label: 'Appeals' },
+  { value: 'added_assessments', label: 'Added Assessments' },
+  { value: 'valuations', label: 'Valuations' },
+  { value: 'annuals', label: 'Annuals' },
+  { value: 'coah', label: 'COAH (New Construction)' },
 ];
 
 const categoryLabel = (value) =>
@@ -122,7 +124,7 @@ const ManageResultSetsTab = ({ jobData }) => {
 
   const handleArchiveSelected = async () => {
     if (selectedActiveCount === 0) return;
-    setArchiveCategory('valuation');
+    setArchiveCategory('valuations');
     setArchiveYear(new Date().getFullYear());
     setArchiveModalOpen(true);
   };
@@ -183,7 +185,7 @@ const ManageResultSetsTab = ({ jobData }) => {
 
   const handleRelabelSelected = async () => {
     if (selectedArchivedCount === 0) return;
-    setArchiveCategory(selectedRows[0]?.archive_category || 'valuation');
+    setArchiveCategory(selectedRows[0]?.archive_category || 'valuations');
     setArchiveYear(selectedRows[0]?.archive_year || new Date().getFullYear());
     // Reuse the archive modal — confirmRelabel mode keyed by selectedArchivedCount
     setArchiveModalOpen('relabel');
