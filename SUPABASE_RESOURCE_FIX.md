@@ -84,6 +84,63 @@ Don't tackle this until you're ready for production. You'll need to:
 
 This is a larger refactor but necessary for security in production.
 
+### What RLS Actually Is (Plain-English Refresher)
+
+Row-Level Security is a Postgres feature that lets the **database** decide which
+rows a connection can see or modify, instead of relying on app-side `WHERE`
+clauses. With RLS off, anyone holding the anon/authenticated key can technically
+read or write every row of every exposed table — the only thing keeping that
+from happening is the filters our React code remembers to add. With RLS on,
+every query is automatically rewritten with a scoping clause based on the
+current session (typical patterns: `auth.uid() = user_id`,
+`organization_id = ...`, or a join into `job_access_grants`).
+
+In Supabase's role model:
+- **anon** and **authenticated** keys go through PostgREST as low-privilege roles
+  and are subject to RLS.
+- **service_role** bypasses RLS entirely. It must only ever be used server-side.
+- That's why the security advisor keeps flagging us — the keys we ship to the
+  browser today aren't being constrained by the database.
+
+### Why It's Off Today
+
+Early development. Writing policies before the data model stabilized would have
+been thrown-away work, and we had no production users to protect.
+
+### Will Turning It Back On Require Code Changes?
+
+Mostly no — RLS lives in the database, not in supabase-js calls. The work is:
+
+1. **Audit any `service_role` usage in client code.** That key bypasses RLS, so
+   if it ever leaked into the browser bundle we have to move that call to a
+   server route / edge function before enabling RLS, otherwise it's the only
+   real refactor risk.
+2. **Confirm every existing query already has a scoping filter.** Once RLS is
+   on, a query like `supabase.from('jobs').select('*')` will silently return
+   only the rows the current user is allowed to see. Usually that's what we
+   want — but any UI that assumed "I'm getting everything" needs to either
+   become an `internal`-org-only view or get an explicit filter.
+3. **Make sure `auth.uid()` is populated** anywhere the anon/authenticated key
+   writes rows on a user's behalf (i.e., the user is signed in).
+4. **Write the policies.** One pass per table, mirroring the
+   `organization_id` / `job_id` / `job_access_grants` logic the app already
+   enforces in `WHERE` clauses today. The `internal` org gets a "see all" check
+   so admins keep working as they do now.
+
+### Recommended Sequencing
+
+1. Inventory every `service_role` usage and confirm none of it ships to the
+   browser.
+2. Roll out the pattern on one low-risk table first (e.g., `profiles`) — enable
+   RLS, write policies, smoke test.
+3. Apply the same pattern table by table, starting with the most sensitive
+   (`property_records`, `appeal_log`, `employees`, `jobs`) and ending with the
+   read-mostly lookup tables.
+4. Advisor warnings (and the monthly vulnerability email) drop off as each
+   table is enabled.
+
+---
+
 **Current state (audited):** 41 of 44 `public.*` tables have RLS **disabled**. The
 only three with RLS enabled are the newer CME-related tables:
 - `job_cme_bracket_mappings`
