@@ -4577,13 +4577,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   }, [parsedCodeDefinitions, vendorType]);
 
   // Pattern for codes/descriptions that should default to 'living' on first load.
+  // Includes the BRT-truncated forms (LIV / HEAT) since BRT label cells are narrow
+  // and code files routinely abbreviate (e.g. Cedar Grove: "LIV BSMT", or
+  // Franklin: "FIN B W/HEAT").
   const isLivingBasementLabel = (code, description) => {
     const haystack = `${code || ''} ${description || ''}`.toUpperCase();
     if (/\bLIVING\b/.test(haystack)) return true;
     if (/\bLIVABLE\b/.test(haystack)) return true;
+    if (/\bLIV\b/.test(haystack)) return true;            // BRT truncation: "LIV BSMT"
     if (/\bHEATED\b/.test(haystack)) return true;
     if (/W\/HEAT/.test(haystack)) return true;
     if (/\bWITH\s+HEAT\b/.test(haystack)) return true;
+    if (/\bHEAT\b/.test(haystack)) return true;
     return false;
   };
 
