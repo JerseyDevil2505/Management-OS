@@ -224,6 +224,31 @@ const AppellantEvidencePanel = ({
   ), [marketLandData]);
 
   const vendorType = jobData?.vendor_type || jobData?.vendor_detection?.vendor || 'BRT';
+
+  // Mirror DetailedAppraisalGrid / SalesComparisonTab so SFLA stays consistent
+  // across surfaces. Honors market_land_valuation.basement_type_config.
+  const basementTypeConfig = marketLandData?.basement_type_config || null;
+  const getAdjustedSFLA = useCallback((prop) => {
+    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
+    let sfla = Number(prop.asset_sfla) || 0;
+    const codeMode = (code) => {
+      if (!code) return null;
+      return basementTypeConfig?.codes?.[code.toString().trim().toUpperCase()]?.mode || null;
+    };
+    if (vendorType === 'BRT') {
+      if (codeMode(prop.fin_basement_code_1) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_1) || 0;
+      }
+      if (codeMode(prop.fin_basement_code_2) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_2) || 0;
+      }
+    } else if (vendorType === 'Microsystems') {
+      if (basementTypeConfig?.microsystemsMode === 'subtract' && prop.living_basement_area) {
+        sfla -= Number(prop.living_basement_area) || 0;
+      }
+    }
+    return Math.max(0, sfla);
+  }, [vendorType, basementTypeConfig]);
   const codeDefinitions = jobData?.parsed_code_definitions || null;
 
   // ----- Lookup helpers -----
@@ -774,7 +799,7 @@ const AppellantEvidencePanel = ({
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">T&amp;U</div><div className="font-semibold">{codeWithName(subject, 'asset_type_use')}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Cond</div><div className="font-semibold">{codeWithName(subject, 'asset_int_cond')}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
-            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(subject.asset_sfla)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(getAdjustedSFLA(subject) || subject.asset_sfla)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
@@ -914,7 +939,7 @@ const AppellantEvidencePanel = ({
                   <td className={cellCls('sfla')} title={cellTitle('sfla')}>
                     {slot.is_manual
                       ? <input type="number" value={slot.manual_sfla || ''} onChange={e => updateSlot(idx, 'manual_sfla', e.target.value)} placeholder="sf" className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
-                      : (compProp?.asset_sfla || '\u2014')}
+                      : ((compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla || '\u2014')}
                   </td>
                   <td className={cellCls('lot_size')} title={cellTitle('lot_size')}>
                     {slot.is_manual

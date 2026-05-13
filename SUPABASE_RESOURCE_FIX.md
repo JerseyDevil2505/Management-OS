@@ -84,6 +84,116 @@ Don't tackle this until you're ready for production. You'll need to:
 
 This is a larger refactor but necessary for security in production.
 
+### What RLS Actually Is (Plain-English Refresher)
+
+Row-Level Security is a Postgres feature that lets the **database** decide which
+rows a connection can see or modify, instead of relying on app-side `WHERE`
+clauses. With RLS off, anyone holding the anon/authenticated key can technically
+read or write every row of every exposed table — the only thing keeping that
+from happening is the filters our React code remembers to add. With RLS on,
+every query is automatically rewritten with a scoping clause based on the
+current session (typical patterns: `auth.uid() = user_id`,
+`organization_id = ...`, or a join into `job_access_grants`).
+
+In Supabase's role model:
+- **anon** and **authenticated** keys go through PostgREST as low-privilege roles
+  and are subject to RLS.
+- **service_role** bypasses RLS entirely. It must only ever be used server-side.
+- That's why the security advisor keeps flagging us — the keys we ship to the
+  browser today aren't being constrained by the database.
+
+### Why It's Off Today
+
+Early development. Writing policies before the data model stabilized would have
+been thrown-away work, and we had no production users to protect.
+
+### Will Turning It Back On Require Code Changes?
+
+Mostly no — RLS lives in the database, not in supabase-js calls. The work is:
+
+1. **Audit any `service_role` usage in client code.** That key bypasses RLS, so
+   if it ever leaked into the browser bundle we have to move that call to a
+   server route / edge function before enabling RLS, otherwise it's the only
+   real refactor risk.
+2. **Confirm every existing query already has a scoping filter.** Once RLS is
+   on, a query like `supabase.from('jobs').select('*')` will silently return
+   only the rows the current user is allowed to see. Usually that's what we
+   want — but any UI that assumed "I'm getting everything" needs to either
+   become an `internal`-org-only view or get an explicit filter.
+3. **Make sure `auth.uid()` is populated** anywhere the anon/authenticated key
+   writes rows on a user's behalf (i.e., the user is signed in).
+4. **Write the policies.** One pass per table, mirroring the
+   `organization_id` / `job_id` / `job_access_grants` logic the app already
+   enforces in `WHERE` clauses today. The `internal` org gets a "see all" check
+   so admins keep working as they do now.
+
+### Recommended Sequencing
+
+1. Inventory every `service_role` usage and confirm none of it ships to the
+   browser.
+2. Roll out the pattern on one low-risk table first (e.g., `profiles`) — enable
+   RLS, write policies, smoke test.
+3. Apply the same pattern table by table, starting with the most sensitive
+   (`property_records`, `appeal_log`, `employees`, `jobs`) and ending with the
+   read-mostly lookup tables.
+4. Advisor warnings (and the monthly vulnerability email) drop off as each
+   table is enabled.
+
+---
+
+**Current state (audited):** 41 of 44 `public.*` tables have RLS **disabled**. The
+only three with RLS enabled are the newer CME-related tables:
+- `job_cme_bracket_mappings`
+- `job_cme_result_sets`
+- `job_sales_pool_overrides`
+
+When the production push happens, every other table needs an RLS policy pass —
+most queries are scoped by `organization_id` / `job_id` / `job_access_grants`,
+so the policies should mirror that logic rather than invent new rules.
+
+---
+
+## Supabase Data API Default-Grant Change (May 30 / Oct 30, 2026)
+
+Supabase is changing the default so that **new** tables in `public` are no longer
+exposed to the Data API (supabase-js, PostgREST, GraphQL) unless an explicit
+`GRANT` is added.
+
+- **May 30, 2026:** default for newly-created Supabase projects.
+- **Oct 30, 2026:** enforced on **all existing projects**, including ours.
+
+**What stays safe:** every table that already exists keeps its current grants —
+nothing breaks on the cutover.
+
+**What changes for us:** any new `public.*` table created on or after Oct 30,
+2026 must include explicit grants in its migration, or supabase-js will return a
+`42501` error from the client.
+
+### Required boilerplate for new-table migrations going forward
+
+```sql
+-- Whatever your CREATE TABLE statement is...
+create table public.your_new_table ( ... );
+
+-- Required: expose it to the Data API roles the app uses.
+-- (anon is only needed if the table should be readable without auth.)
+grant select, insert, update, delete on public.your_new_table to authenticated;
+grant select, insert, update, delete on public.your_new_table to service_role;
+
+-- Strongly recommended: enable RLS at create time so the table is never
+-- briefly world-writable while we figure out policies later.
+alter table public.your_new_table enable row level security;
+
+-- Add at least one policy (example — replace with real scope):
+create policy "tenant scoped read"
+  on public.your_new_table
+  for select to authenticated
+  using ( /* org/job scoping check */ );
+```
+
+If a grant is missing in production, PostgREST returns `42501` with the exact
+GRANT statement to fix it — don't paper over that error, run the grant.
+
 ---
 
 ## Priority Order

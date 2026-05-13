@@ -396,32 +396,74 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     return 4; // MULTI CAR
   }, [garageThresholds]);
 
-  // Helper: Get adjusted SFLA for Franklin Township (exclude finished basement code "02")
+  // Basement type config (set in AttributeCardsTab → Basement Type Config).
+  // Mirrors the helper set in DetailedAppraisalGrid — see notes there.
+  const basementTypeConfig = marketLandData?.basement_type_config || null;
+
+  const getBasementCodeMode = useCallback((code) => {
+    if (!code) return null;
+    const cfg = basementTypeConfig?.codes?.[code.toString().trim().toUpperCase()];
+    return cfg?.mode || null;
+  }, [basementTypeConfig]);
+
+  // True when SFLA already includes a living/heated basement and the
+  // Finished Basement = Yes CME adjustment should therefore be suppressed.
+  const treatedAsLivingInSFLA = useCallback((prop) => {
+    if (!prop) return false;
+    if (vendorType === 'BRT') {
+      return getBasementCodeMode(prop.fin_basement_code_1) === 'living'
+        || getBasementCodeMode(prop.fin_basement_code_2) === 'living';
+    }
+    if (vendorType === 'Microsystems') {
+      const livingArea = Number(prop.living_basement_area) || 0;
+      return livingArea > 0 && basementTypeConfig?.microsystemsMode === 'living';
+    }
+    return false;
+  }, [vendorType, basementTypeConfig, getBasementCodeMode]);
+
+  // Helper: Get adjusted SFLA. Honors basement_type_config first; falls back
+  // to the legacy Franklin hardcode only when no config is set.
   const getAdjustedSFLA = useCallback((prop) => {
     if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
 
+    let sfla = Number(prop.asset_sfla) || 0;
+
+    // Config-driven subtraction
+    if (vendorType === 'BRT') {
+      if (getBasementCodeMode(prop.fin_basement_code_1) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_1) || 0;
+      }
+      if (getBasementCodeMode(prop.fin_basement_code_2) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_2) || 0;
+      }
+    } else if (vendorType === 'Microsystems') {
+      if (basementTypeConfig?.microsystemsMode === 'subtract' && prop.living_basement_area) {
+        sfla -= Number(prop.living_basement_area) || 0;
+      }
+    }
+
+    if (sfla !== Number(prop.asset_sfla)) return Math.max(0, sfla);
+
+    // Legacy Franklin fallback — only when no config has been set
+    const hasConfig = basementTypeConfig && (
+      Object.keys(basementTypeConfig.codes || {}).length > 0 ||
+      basementTypeConfig.microsystemsMode
+    );
     const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
-    if (!isFranklinJob) {
-      return prop.asset_sfla; // No adjustment for other townships
+    if (!hasConfig && isFranklinJob) {
+      const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
+      const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
+      if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
+        sfla -= prop.fin_basement_area_1;
+      }
+      if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
+        sfla -= prop.fin_basement_area_2;
+      }
+      return Math.max(0, sfla);
     }
 
-    // For Franklin: exclude fin_basement_area if code is "02"
-    let sfla = prop.asset_sfla;
-    const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
-    const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
-
-    // If finish code 1 is "02", subtract the corresponding area (fin_basement_area_1)
-    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
-      sfla -= prop.fin_basement_area_1;
-    }
-
-    // If finish code 2 is "02", subtract the corresponding area (fin_basement_area_2)
-    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
-      sfla -= prop.fin_basement_area_2;
-    }
-
-    return Math.max(0, sfla); // Ensure SFLA doesn't go negative
-  }, [jobData?.municipality]);
+    return sfla;
+  }, [jobData?.municipality, vendorType, basementTypeConfig, getBasementCodeMode]);
 
   // Load garage thresholds and detached condition multipliers on mount
   useEffect(() => {
@@ -688,6 +730,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         hasSubjectSale: r.hasSubjectSale,
       }));
 
+      // Bundle subject-selection chips into search_criteria so a reload
+      // restores "Which properties do you want to evaluate?" — without these,
+      // re-running Evaluate after a reload silently falls back to whole-town.
+      const searchCriteriaPayload = {
+        ...compFilters,
+        subject_selection: {
+          manualProperties,
+          subjectVCS,
+          subjectTypeUse,
+        },
+      };
+
       let error;
       let savedId = existingId;
       if (shouldOverwrite && existingId) {
@@ -696,7 +750,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           .from('job_cme_result_sets')
           .update({
             adjustment_bracket: compFilters.adjustmentBracket,
-            search_criteria: compFilters,
+            search_criteria: searchCriteriaPayload,
             results: serializedResults,
             updated_at: new Date().toISOString(),
           })
@@ -710,7 +764,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             job_id: jobData.id,
             name: name.trim(),
             adjustment_bracket: compFilters.adjustmentBracket,
-            search_criteria: compFilters,
+            search_criteria: searchCriteriaPayload,
             results: serializedResults,
           })
           .select('id')
@@ -765,13 +819,56 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       );
       setSelectedForSetAside(allIds);
 
-      // Restore adjustment bracket
-      if (data.adjustment_bracket) {
+      // Restore search criteria (filters) and the subject-selection chips.
+      // Without restoring manualProperties / subjectVCS / subjectTypeUse, a
+      // re-run of Evaluate after a reload silently widened to the whole town.
+      const savedCriteria = data.search_criteria || null;
+      // Fallback: legacy rows saved before subject_selection was bundled
+      // don't have chips. Reconstruct manualProperties from the saved
+      // result subjects so re-running Evaluate stays scoped to the same
+      // properties instead of silently widening to the whole town.
+      const reconstructedManual = Array.from(new Set(
+        (data.results || [])
+          .map(r => {
+            const s = r?.subject || {};
+            const block = String(s.property_block || '').trim();
+            const lot = String(s.property_lot || '').trim();
+            const qual = String(s.property_qualifier || '').trim();
+            if (!block || !lot) return null;
+            return qual ? `${block}-${lot}-${qual}` : `${block}-${lot}-`;
+          })
+          .filter(Boolean)
+      ));
+      if (savedCriteria && typeof savedCriteria === 'object') {
+        const { subject_selection, ...savedCompFilters } = savedCriteria;
         setCompFilters(prev => ({
           ...prev,
-          adjustmentBracket: data.adjustment_bracket,
-          autoAdjustment: data.adjustment_bracket === 'auto',
+          ...savedCompFilters,
+          adjustmentBracket:
+            data.adjustment_bracket ?? savedCompFilters.adjustmentBracket ?? prev.adjustmentBracket,
+          autoAdjustment:
+            (data.adjustment_bracket ?? savedCompFilters.adjustmentBracket) === 'auto',
         }));
+        const sel = (subject_selection && typeof subject_selection === 'object') ? subject_selection : {};
+        const savedManual = Array.isArray(sel.manualProperties) ? sel.manualProperties : [];
+        setManualProperties(savedManual.length > 0 ? savedManual : reconstructedManual);
+        if (Array.isArray(sel.subjectVCS)) {
+          setSubjectVCS(sel.subjectVCS);
+        }
+        if (Array.isArray(sel.subjectTypeUse)) {
+          setSubjectTypeUse(sel.subjectTypeUse);
+        }
+      } else {
+        if (data.adjustment_bracket) {
+          setCompFilters(prev => ({
+            ...prev,
+            adjustmentBracket: data.adjustment_bracket,
+            autoAdjustment: data.adjustment_bracket === 'auto',
+          }));
+        }
+        if (reconstructedManual.length > 0) {
+          setManualProperties(reconstructedManual);
+        }
       }
 
       // Scroll to results
@@ -1174,7 +1271,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (!groups[vcs]) groups[vcs] = { count: 0, totalPrice: 0, sflaSum: 0, yearBuiltSum: 0, yearBuiltCount: 0 };
       groups[vcs].count++;
       if (p.sales_price) { groups[vcs].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
-      if (p.asset_sfla) { groups[vcs].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      const adjSflaVcs = getAdjustedSFLA(p) || 0;
+      if (adjSflaVcs) { groups[vcs].sflaSum += adjSflaVcs; totals.sflaSum += adjSflaVcs; }
       if (p.asset_year_built) { groups[vcs].yearBuiltSum += p.asset_year_built; groups[vcs].yearBuiltCount++; totals.yearBuiltSum += p.asset_year_built; totals.yearBuiltCount++; }
       totals.count++;
     });
@@ -1205,7 +1303,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (!groups[style]) groups[style] = { count: 0, totalPrice: 0, sflaSum: 0 };
       groups[style].count++;
       if (p.sales_price) { groups[style].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
-      if (p.asset_sfla) { groups[style].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      const adjSflaStyle = getAdjustedSFLA(p) || 0;
+      if (adjSflaStyle) { groups[style].sflaSum += adjSflaStyle; totals.sflaSum += adjSflaStyle; }
       totals.count++;
     });
     const parsedCodes = jobData?.parsed_code_definitions;
@@ -1228,7 +1327,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (!groups[type]) groups[type] = { count: 0, totalPrice: 0, sflaSum: 0 };
       groups[type].count++;
       if (p.sales_price) { groups[type].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
-      if (p.asset_sfla) { groups[type].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      const adjSflaType = getAdjustedSFLA(p) || 0;
+      if (adjSflaType) { groups[type].sflaSum += adjSflaType; totals.sflaSum += adjSflaType; }
       totals.count++;
     });
     const parsedCodes = jobData?.parsed_code_definitions;
@@ -1251,7 +1351,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (!groups[view]) groups[view] = { count: 0, totalPrice: 0, sflaSum: 0 };
       groups[view].count++;
       if (p.sales_price) { groups[view].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
-      if (p.asset_sfla) { groups[view].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      const adjSflaView = getAdjustedSFLA(p) || 0;
+      if (adjSflaView) { groups[view].sflaSum += adjSflaView; totals.sflaSum += adjSflaView; }
       totals.count++;
     });
     const parsedCodes = jobData?.parsed_code_definitions;
@@ -2167,25 +2268,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             }
           }
 
-          // Size filter
+          // Size filter — uses adjusted SFLA on both sides so the math lines
+          // up with what the Detailed grid and sales pool table display.
+          const compAdjSfla = getAdjustedSFLA(comp) || 0;
+          const subjectAdjSfla = getAdjustedSFLA(subject) || 0;
           if (compFilters.useSizeRange) {
-            if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) {
+            if (compFilters.sizeMin && compAdjSfla < parseInt(compFilters.sizeMin)) {
               if (isFirstProperty) debugFilters.size++;
-              logExclusion('SFLA min', `comp=${comp.asset_sfla} < min=${compFilters.sizeMin}`);
+              logExclusion('SFLA min', `comp=${compAdjSfla} < min=${compFilters.sizeMin}`);
               return false;
             }
-            if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) {
+            if (compFilters.sizeMax && compAdjSfla > parseInt(compFilters.sizeMax)) {
               if (isFirstProperty) debugFilters.size++;
-              logExclusion('SFLA max', `comp=${comp.asset_sfla} > max=${compFilters.sizeMax}`);
+              logExclusion('SFLA max', `comp=${compAdjSfla} > max=${compFilters.sizeMax}`);
               return false;
             }
           } else if (compFilters.sizeWithinSqft > 0) {
             // Only apply tolerance filter if it's set to > 0
             // When cleared (0), no size restriction applies
-            const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
+            const sizeDiff = Math.abs(compAdjSfla - subjectAdjSfla);
             if (sizeDiff > compFilters.sizeWithinSqft) {
               if (isFirstProperty) debugFilters.size++;
-              logExclusion('SFLA', `diff=${sizeDiff} > limit=${compFilters.sizeWithinSqft} (comp=${comp.asset_sfla}, subject=${subject.asset_sfla})`);
+              logExclusion('SFLA', `diff=${sizeDiff} > limit=${compFilters.sizeWithinSqft} (comp=${compAdjSfla}, subject=${subjectAdjSfla})`);
               return false;
             }
           }
@@ -2763,9 +2867,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'finished_basement':
-        // Use fin_basement_area column
-        subjectValue = subject.fin_basement_area > 0 ? 1 : 0;
-        compValue = comp.fin_basement_area > 0 ? 1 : 0;
+        // Use fin_basement_area column. Suppress when basement is configured
+        // as 'living' (i.e., already inside SFLA) — counting it again here
+        // double-dips the size-normalized math.
+        subjectValue = (!treatedAsLivingInSFLA(subject) && subject.fin_basement_area > 0) ? 1 : 0;
+        compValue = (!treatedAsLivingInSFLA(comp) && comp.fin_basement_area > 0) ? 1 : 0;
         break;
 
       case 'deck':
@@ -3412,7 +3518,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         'Building Class': subject.asset_building_class || '',
         'Style': subject.asset_design_style || '',
         'Year Built': subject.asset_year_built || '',
-        'SFLA': subject.asset_sfla || 0,
+        'SFLA': getAdjustedSFLA(subject) || 0,
         'Lot Size (SF)': subject.market_manual_lot_sf || subject.asset_lot_sf || 0,
         'Current Land': currentLand,
         'Current Impr': currentImpr,
@@ -3947,25 +4053,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       if (poolFilterStyle.length > 0) displayed = displayed.filter(p => poolFilterStyle.includes(p.asset_design_style));
                       if (poolFilterView.length > 0) displayed = displayed.filter(p => poolFilterView.includes(p.asset_view));
 
-                      // Compute derived fields for sorting and display
-                      displayed = displayed.map(p => ({
-                        ...p,
-                        _currentAsmt: p.values_mod_total || p.values_cama_total || 0,
-                        _ppsf: p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0,
-                        // Sales Ratio = Current Assessment / Sale Price (calculate on ALL sales)
-                        _salesRatio: (p.values_mod_total || p.values_cama_total) && p.sales_price > 0
-                          ? ((p.values_mod_total || p.values_cama_total) / p.sales_price) * 100
-                          : 0,
-                      }));
+                      // Compute derived fields for sorting and display.
+                      // SFLA + PPSF use the adjusted SFLA so the table lines
+                      // up with the size filter and the Detailed comp grid.
+                      displayed = displayed.map(p => {
+                        const adjSfla = getAdjustedSFLA(p) || 0;
+                        return {
+                          ...p,
+                          _adjustedSfla: adjSfla,
+                          _currentAsmt: p.values_mod_total || p.values_cama_total || 0,
+                          _ppsf: p.sales_price && adjSfla > 0 ? p.sales_price / adjSfla : 0,
+                          // Sales Ratio = Current Assessment / Sale Price (calculate on ALL sales)
+                          _salesRatio: (p.values_mod_total || p.values_cama_total) && p.sales_price > 0
+                            ? ((p.values_mod_total || p.values_cama_total) / p.sales_price) * 100
+                            : 0,
+                        };
+                      });
 
                       // Sort
                       displayed.sort((a, b) => {
                         const dir = salesPoolSort.dir === 'asc' ? 1 : -1;
                         const field = salesPoolSort.field;
-                        const aVal = a[field];
-                        const bVal = b[field];
+                        // Re-route asset_sfla sort to the adjusted derived field
+                        const effectiveField = field === 'asset_sfla' ? '_adjustedSfla' : field;
+                        const aVal = a[effectiveField];
+                        const bVal = b[effectiveField];
                         // Numeric fields
-                        if (['sales_price', 'asset_sfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
+                        if (['sales_price', 'asset_sfla', '_adjustedSfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
                           return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
                         }
                         return String(aVal || '').localeCompare(String(bVal || '')) * dir;
@@ -4045,7 +4159,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             </td>
                             <td className="px-2 py-1.5 text-right whitespace-nowrap">{lotSizeDisplay}</td>
                             <td className="px-2 py-1.5 text-right">{p.asset_lot_frontage || '-'}</td>
-                            <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                            <td className="px-2 py-1.5 text-right">{p._adjustedSfla > 0 ? Number(p._adjustedSfla).toLocaleString() : '-'}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
                             </td>
@@ -5501,7 +5615,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Address</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold"># Comps</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">Projected Assessment</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Confidence</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Saved At</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Actions</th>
                       </tr>
@@ -5520,11 +5633,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center font-semibold text-green-700 bg-green-50">
                             ${(Math.round((evaluation.projected_assessment || 0) / 100) * 100).toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">
-                            {evaluation.confidence_score != null
-                              ? `${(evaluation.confidence_score * 100).toFixed(0)}%`
-                              : '-'}
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center text-gray-500">
                             {evaluation.created_at
@@ -5989,8 +6097,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
                 style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
                 year_built: (p) => Number(p.asset_year_built) || 0,
-                sfla: (p) => Number(p.asset_sfla) || 0,
-                ppsf: (p) => (p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0),
+                sfla: (p) => Number(getAdjustedSFLA(p)) || 0,
+                ppsf: (p) => {
+                  const adj = Number(getAdjustedSFLA(p)) || 0;
+                  return p.sales_price && adj > 0 ? p.sales_price / adj : 0;
+                },
                 int_cond: (p) => p.asset_int_cond || '',
               };
               const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
@@ -6147,7 +6258,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             { label: 'VCS', value: subjectForBrowser.property_vcs },
                             { label: 'Type/Use', value: subjType },
                             { label: 'Style', value: subjStyle },
-                            { label: 'SFLA', value: subjectForBrowser.asset_sfla ? `${Number(subjectForBrowser.asset_sfla).toLocaleString()} sf` : null },
+                            { label: 'SFLA', value: (() => {
+                              const adj = Number(getAdjustedSFLA(subjectForBrowser)) || 0;
+                              return adj > 0 ? `${adj.toLocaleString()} sf` : null;
+                            })() },
                             { label: 'Yr Built', value: subjectForBrowser.asset_year_built },
                             { label: 'Int. Cond.', value: subjIntCond },
                           ].filter(c => c.value != null && c.value !== '');
@@ -6527,7 +6641,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             const key = p._poolKey;
                             const alreadyLoaded = loadedKeys.has(propKey(p));
                             const isSelected = selectedSet.has(key);
-                            const ppsf = p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0;
+                            const adjSfla = Number(getAdjustedSFLA(p)) || 0;
+                            const ppsf = p.sales_price && adjSfla > 0 ? p.sales_price / adjSfla : 0;
                             const rowBg = alreadyLoaded
                               ? 'bg-gray-100 text-gray-400'
                               : (p._included ? 'bg-green-50' : '');
@@ -6575,7 +6690,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                                 <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
-                                <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                                <td className="px-2 py-1.5 text-right">{adjSfla > 0 ? Number(adjSfla).toLocaleString() : '-'}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `$${ppsf.toFixed(0)}` : '-'}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap" title={intCondName || ''}>{intCondDisplay || '-'}</td>
                               </tr>
