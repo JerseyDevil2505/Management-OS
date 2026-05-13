@@ -688,6 +688,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         hasSubjectSale: r.hasSubjectSale,
       }));
 
+      // Bundle subject-selection chips into search_criteria so a reload
+      // restores "Which properties do you want to evaluate?" — without these,
+      // re-running Evaluate after a reload silently falls back to whole-town.
+      const searchCriteriaPayload = {
+        ...compFilters,
+        subject_selection: {
+          manualProperties,
+          subjectVCS,
+          subjectTypeUse,
+        },
+      };
+
       let error;
       let savedId = existingId;
       if (shouldOverwrite && existingId) {
@@ -696,7 +708,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           .from('job_cme_result_sets')
           .update({
             adjustment_bracket: compFilters.adjustmentBracket,
-            search_criteria: compFilters,
+            search_criteria: searchCriteriaPayload,
             results: serializedResults,
             updated_at: new Date().toISOString(),
           })
@@ -710,7 +722,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             job_id: jobData.id,
             name: name.trim(),
             adjustment_bracket: compFilters.adjustmentBracket,
-            search_criteria: compFilters,
+            search_criteria: searchCriteriaPayload,
             results: serializedResults,
           })
           .select('id')
@@ -765,8 +777,32 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       );
       setSelectedForSetAside(allIds);
 
-      // Restore adjustment bracket
-      if (data.adjustment_bracket) {
+      // Restore search criteria (filters) and the subject-selection chips.
+      // Without restoring manualProperties / subjectVCS / subjectTypeUse, a
+      // re-run of Evaluate after a reload silently widened to the whole town.
+      const savedCriteria = data.search_criteria || null;
+      if (savedCriteria && typeof savedCriteria === 'object') {
+        const { subject_selection, ...savedCompFilters } = savedCriteria;
+        setCompFilters(prev => ({
+          ...prev,
+          ...savedCompFilters,
+          adjustmentBracket:
+            data.adjustment_bracket ?? savedCompFilters.adjustmentBracket ?? prev.adjustmentBracket,
+          autoAdjustment:
+            (data.adjustment_bracket ?? savedCompFilters.adjustmentBracket) === 'auto',
+        }));
+        if (subject_selection && typeof subject_selection === 'object') {
+          if (Array.isArray(subject_selection.manualProperties)) {
+            setManualProperties(subject_selection.manualProperties);
+          }
+          if (Array.isArray(subject_selection.subjectVCS)) {
+            setSubjectVCS(subject_selection.subjectVCS);
+          }
+          if (Array.isArray(subject_selection.subjectTypeUse)) {
+            setSubjectTypeUse(subject_selection.subjectTypeUse);
+          }
+        }
+      } else if (data.adjustment_bracket) {
         setCompFilters(prev => ({
           ...prev,
           adjustmentBracket: data.adjustment_bracket,
