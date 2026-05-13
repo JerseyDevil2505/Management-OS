@@ -673,6 +673,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     );
   };
 
+  // Cohort inference: NJ Added/Omitted appeals (filed by 12/1) typically heard
+  // late fall through early spring; standard appeals (filed by 4/1, 5/1 in reval
+  // years) are heard May-Sept. Hearing month Nov-Mar => added_assessment.
+  // Rows can always be overridden manually via the appeal_docket column.
+  const inferCohortFromHearingDate = (hearingDate) => {
+    if (!hearingDate) return 'standard';
+    try {
+      const d = typeof hearingDate === 'string'
+        ? parseDateLocal(hearingDate)
+        : hearingDate;
+      const m = d.getMonth() + 1;
+      return (m >= 11 || m <= 3) ? 'added_assessment' : 'standard';
+    } catch {
+      return 'standard';
+    }
+  };
+
   // Filter and sort appeals
   const filteredAppeals = useMemo(() => {
     let result = appeals.filter(a => !a.appeal_year || a.appeal_year === selectedYear);
@@ -963,23 +980,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       suffix: suffix || '',
       appealType: appealTypeMap[suffix] || 'petitioner'
     };
-  };
-
-  // Cohort inference: NJ Added/Omitted appeals (filed by 12/1) typically heard
-  // late fall through early spring; standard appeals (filed by 4/1, 5/1 in reval
-  // years) are heard May-Sept. Hearing month Nov-Mar => added_assessment.
-  // Rows can always be overridden manually via the appeal_docket column.
-  const inferCohortFromHearingDate = (hearingDate) => {
-    if (!hearingDate) return 'standard';
-    try {
-      const d = typeof hearingDate === 'string'
-        ? parseDateLocal(hearingDate)
-        : hearingDate;
-      const m = d.getMonth() + 1;
-      return (m >= 11 || m <= 3) ? 'added_assessment' : 'standard';
-    } catch {
-      return 'standard';
-    }
   };
 
   // Helper: Get bracket for an appeal
