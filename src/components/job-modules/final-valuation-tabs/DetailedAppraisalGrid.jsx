@@ -2730,7 +2730,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               codeWithName(subject, 'asset_type_use'),
               codeWithName(subject, 'asset_int_cond'),
               subject.asset_year_built || '\u2014',
-              subject.asset_sfla || '\u2014',
+              getAdjustedSFLA(subject) || subject.asset_sfla || '\u2014',
               lotDisplay(subject)
             ];
             const evaluations = appellantComps.map(slot => {
@@ -2785,7 +2785,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
                 compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
                 compProp?.asset_year_built || '\u2014',
-                compProp?.asset_sfla || '\u2014',
+                (compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla || '\u2014',
                 lotDisplay(compProp)
               ];
             });
