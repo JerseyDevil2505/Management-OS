@@ -822,7 +822,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   };
 
   // True when the property's SFLA includes a living-basement area
-  // (BRT code mode === 'living', or Microsystems mode === 'living' or default).
+  // (BRT code mode === 'living', or Microsystems mode === 'living').
+  // Drives the CME suppression logic — only 'living' mode suppresses.
   const sflaIncludesLivingBasement = (prop) => {
     if (!prop) return false;
     if (vendorType === 'BRT') {
@@ -836,14 +837,37 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return false;
   };
 
+  // True when the property has a configured living basement under EITHER
+  // treatment ('living' or 'subtract'). Drives the SFLA "*" badge — we want
+  // the user to see "this parcel has living basement" regardless of which
+  // treatment is selected; the tooltip explains the math.
+  const hasConfiguredLivingBasement = (prop) => {
+    if (!prop) return false;
+    if (vendorType === 'BRT') {
+      const m1 = getBasementCodeMode(prop.fin_basement_code_1);
+      const m2 = getBasementCodeMode(prop.fin_basement_code_2);
+      return m1 === 'living' || m1 === 'subtract' || m2 === 'living' || m2 === 'subtract';
+    }
+    if (vendorType === 'Microsystems') {
+      const livingArea = Number(prop.living_basement_area) || 0;
+      const mode = basementTypeConfig?.microsystemsMode;
+      return livingArea > 0 && (mode === 'living' || mode === 'subtract');
+    }
+    return false;
+  };
+
+  // Total SF of basement currently treated under the active mode for this
+  // property — used both for the badge tooltip and to size the badge text.
   const getLivingBasementBadgeArea = (prop) => {
     if (!prop) return 0;
     if (vendorType === 'BRT') {
       let area = 0;
-      if (getBasementCodeMode(prop.fin_basement_code_1) === 'living') {
+      const m1 = getBasementCodeMode(prop.fin_basement_code_1);
+      const m2 = getBasementCodeMode(prop.fin_basement_code_2);
+      if (m1 === 'living' || m1 === 'subtract') {
         area += Number(prop.fin_basement_area_1) || 0;
       }
-      if (getBasementCodeMode(prop.fin_basement_code_2) === 'living') {
+      if (m2 === 'living' || m2 === 'subtract') {
         area += Number(prop.fin_basement_area_2) || 0;
       }
       return area;
@@ -1045,12 +1069,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         const adjustedSFLA = getAdjustedSFLA(prop);
         if (!adjustedSFLA) return 'N/A';
+        if (!hasConfiguredLivingBasement(prop)) return adjustedSFLA.toLocaleString();
         const includesLiving = sflaIncludesLivingBasement(prop);
-        if (!includesLiving) return adjustedSFLA.toLocaleString();
-        const livingArea = getLivingBasementBadgeArea(prop);
-        const tip = livingArea > 0
-          ? `SFLA includes ${Math.round(livingArea).toLocaleString()} SF of living/heated basement`
-          : 'SFLA includes living/heated basement';
+        const area = getLivingBasementBadgeArea(prop);
+        const areaStr = area > 0 ? `${Math.round(area).toLocaleString()} SF of ` : '';
+        const tip = includesLiving
+          ? `SFLA includes ${areaStr}living/heated basement (Finished Basement adjustment suppressed)`
+          : `SFLA has ${areaStr}living/heated basement subtracted (Finished Basement adjustment applies)`;
         return (
           <span className="inline-flex items-center gap-1">
             <span>{adjustedSFLA.toLocaleString()}</span>
