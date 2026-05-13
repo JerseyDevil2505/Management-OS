@@ -332,7 +332,7 @@ const FileUploadButton = ({
 
 // FIXED: Handle code file update with proper Unicode sanitization and BRT support
 const handleCodeFileUpdate = async () => {
-  if (!codeFile || !codeFileContent) {
+  if (!codeFile) {
     addNotification('Please select a code file first', 'error');
     return;
   }
@@ -343,13 +343,30 @@ const handleCodeFileUpdate = async () => {
     setProcessing(true);
     setProcessingStatus('Processing code file...');
 
+    // Fall back to re-reading the File if state content is missing/empty.
+    // The upload handler sets codeFile synchronously but codeFileContent
+    // only after an await; a stale render or a failed read can leave
+    // content null while the Update Codes button is still visible.
+    let contentToProcess = codeFileContent;
+    if (!contentToProcess || !contentToProcess.length) {
+      try {
+        contentToProcess = await codeFile.text();
+        if (contentToProcess) setCodeFileContent(contentToProcess);
+      } catch (readErr) {
+        throw new Error(`Could not read code file: ${readErr.message}`);
+      }
+    }
+    if (!contentToProcess || !contentToProcess.length) {
+      throw new Error('Selected code file is empty');
+    }
+
     // Call the actual processor to handle the code file properly
     if (job.vendor_type === 'BRT') {
       const { brtProcessor } = await import('../../lib/data-pipeline/brt-processor.js');
-      await brtProcessor.processCodeFile(codeFileContent, job.id);
+      await brtProcessor.processCodeFile(contentToProcess, job.id);
     } else if (job.vendor_type === 'Microsystems') {
       const { microsystemsProcessor } = await import('../../lib/data-pipeline/microsystems-processor.js');
-      await microsystemsProcessor.processCodeFile(codeFileContent, job.id);
+      await microsystemsProcessor.processCodeFile(contentToProcess, job.id);
     } else {
       throw new Error('Unsupported vendor type');
     }
