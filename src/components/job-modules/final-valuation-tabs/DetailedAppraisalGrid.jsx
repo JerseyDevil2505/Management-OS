@@ -786,54 +786,52 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // ==================== BASEMENT-IN-SFLA HANDLING ====================
   // Driven by market_land_valuation.basement_type_config (set in
-  // AttributeCardsTab → Basement Type Config). For BRT, codes flagged with
-  // `subtract: true` get their fin_basement_area_N stripped out of SFLA. For
-  // Microsystems, `microsystemsSubtract: true` strips living_basement_area.
+  // AttributeCardsTab → Basement Type Config). Per-code mode is mutually
+  // exclusive:
+  //   'living'   — SFLA already includes the basement; render the * badge,
+  //                suppress the Finished Basement = Yes CME adjustment.
+  //   'subtract' — strip basement SF out of SFLA; let the Finished Basement
+  //                adjustment fire normally.
   // Franklin's pre-config hardcode is left as a fallback so behavior doesn't
   // change for them mid-appeal — their config can be wired up after appeals
   // close to retire the hardcode entirely.
   const basementTypeConfig = marketLandData?.basement_type_config || null;
 
+  const getBasementCodeMode = (code) => {
+    if (!code) return null;
+    const cfg = basementTypeConfig?.codes?.[code.toUpperCase()];
+    return cfg?.mode || null;
+  };
+
   const getBasementSubtractAmount = (prop) => {
     if (!prop) return 0;
     let subtract = 0;
     if (vendorType === 'BRT') {
-      const cfgCodes = basementTypeConfig?.codes || {};
-      const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
-      const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
-      if (code1 && cfgCodes[code1]?.subtract && prop.fin_basement_area_1) {
+      if (getBasementCodeMode(prop.fin_basement_code_1) === 'subtract') {
         subtract += Number(prop.fin_basement_area_1) || 0;
       }
-      if (code2 && cfgCodes[code2]?.subtract && prop.fin_basement_area_2) {
+      if (getBasementCodeMode(prop.fin_basement_code_2) === 'subtract') {
         subtract += Number(prop.fin_basement_area_2) || 0;
       }
     } else if (vendorType === 'Microsystems') {
-      if (basementTypeConfig?.microsystemsSubtract && prop.living_basement_area) {
+      if (basementTypeConfig?.microsystemsMode === 'subtract' && prop.living_basement_area) {
         subtract += Number(prop.living_basement_area) || 0;
       }
     }
     return subtract;
   };
 
-  // True when the property's SFLA either includes a living-basement area
-  // (BRT code flagged isLiving, or Microsystems living_basement_area > 0)
-  // *and* the user hasn't elected to subtract it. Drives the "*" badge.
+  // True when the property's SFLA includes a living-basement area
+  // (BRT code mode === 'living', or Microsystems mode === 'living' or default).
   const sflaIncludesLivingBasement = (prop) => {
     if (!prop) return false;
     if (vendorType === 'BRT') {
-      const cfgCodes = basementTypeConfig?.codes || {};
-      const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
-      const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
-      const flagged = (code) => {
-        if (!code) return false;
-        const cfg = cfgCodes[code];
-        return cfg?.isLiving && !cfg?.subtract;
-      };
-      return flagged(code1) || flagged(code2);
+      return getBasementCodeMode(prop.fin_basement_code_1) === 'living'
+        || getBasementCodeMode(prop.fin_basement_code_2) === 'living';
     }
     if (vendorType === 'Microsystems') {
       const livingArea = Number(prop.living_basement_area) || 0;
-      return livingArea > 0 && !basementTypeConfig?.microsystemsSubtract;
+      return livingArea > 0 && basementTypeConfig?.microsystemsMode === 'living';
     }
     return false;
   };
@@ -841,14 +839,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const getLivingBasementBadgeArea = (prop) => {
     if (!prop) return 0;
     if (vendorType === 'BRT') {
-      const cfgCodes = basementTypeConfig?.codes || {};
-      const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
-      const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
       let area = 0;
-      if (code1 && cfgCodes[code1]?.isLiving && !cfgCodes[code1]?.subtract) {
+      if (getBasementCodeMode(prop.fin_basement_code_1) === 'living') {
         area += Number(prop.fin_basement_area_1) || 0;
       }
-      if (code2 && cfgCodes[code2]?.isLiving && !cfgCodes[code2]?.subtract) {
+      if (getBasementCodeMode(prop.fin_basement_code_2) === 'living') {
         area += Number(prop.fin_basement_area_2) || 0;
       }
       return area;
@@ -875,7 +870,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // no-op and can be removed.
     const hasConfig = basementTypeConfig && (
       Object.keys(basementTypeConfig.codes || {}).length > 0 ||
-      basementTypeConfig.microsystemsSubtract
+      basementTypeConfig.microsystemsMode
     );
     const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
     if (!hasConfig && isFranklinJob) {
@@ -3642,7 +3637,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         case 'enclosed_porch_area': rawPropertyValue = aggregatedSubject.enclosed_porch_area; break;
                         case 'pool_area': rawPropertyValue = aggregatedSubject.pool_area; break;
                         case 'basement_area': rawPropertyValue = aggregatedSubject.basement_area; break;
-                        case 'fin_bsmt_area': rawPropertyValue = aggregatedSubject.fin_basement_area; break;
+                        case 'fin_bsmt_area':
+                          // Suppress when subject's basement is treated as
+                          // living-in-SFLA (already counted via SFLA).
+                          rawPropertyValue = sflaIncludesLivingBasement(aggregatedSubject) ? 0 : aggregatedSubject.fin_basement_area;
+                          break;
                         case 'ac_area': rawPropertyValue = aggregatedSubject.ac_area; break;
                         default: break;
                       }
@@ -3700,7 +3699,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         rawPropertyValue = comp.basement_area;
                         break;
                       case 'fin_bsmt_area':
-                        rawPropertyValue = comp.fin_basement_area;
+                        // Suppress when this comp's basement is treated as
+                        // living-in-SFLA — counting it again here would double
+                        // up against the SFLA-driven adjustment.
+                        rawPropertyValue = sflaIncludesLivingBasement(comp) ? 0 : comp.fin_basement_area;
                         break;
                       case 'ac_area':
                         rawPropertyValue = comp.ac_area;

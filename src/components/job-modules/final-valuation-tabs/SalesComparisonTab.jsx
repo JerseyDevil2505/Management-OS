@@ -396,32 +396,74 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     return 4; // MULTI CAR
   }, [garageThresholds]);
 
-  // Helper: Get adjusted SFLA for Franklin Township (exclude finished basement code "02")
+  // Basement type config (set in AttributeCardsTab → Basement Type Config).
+  // Mirrors the helper set in DetailedAppraisalGrid — see notes there.
+  const basementTypeConfig = marketLandData?.basement_type_config || null;
+
+  const getBasementCodeMode = useCallback((code) => {
+    if (!code) return null;
+    const cfg = basementTypeConfig?.codes?.[code.toString().trim().toUpperCase()];
+    return cfg?.mode || null;
+  }, [basementTypeConfig]);
+
+  // True when SFLA already includes a living/heated basement and the
+  // Finished Basement = Yes CME adjustment should therefore be suppressed.
+  const treatedAsLivingInSFLA = useCallback((prop) => {
+    if (!prop) return false;
+    if (vendorType === 'BRT') {
+      return getBasementCodeMode(prop.fin_basement_code_1) === 'living'
+        || getBasementCodeMode(prop.fin_basement_code_2) === 'living';
+    }
+    if (vendorType === 'Microsystems') {
+      const livingArea = Number(prop.living_basement_area) || 0;
+      return livingArea > 0 && basementTypeConfig?.microsystemsMode === 'living';
+    }
+    return false;
+  }, [vendorType, basementTypeConfig, getBasementCodeMode]);
+
+  // Helper: Get adjusted SFLA. Honors basement_type_config first; falls back
+  // to the legacy Franklin hardcode only when no config is set.
   const getAdjustedSFLA = useCallback((prop) => {
     if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
 
+    let sfla = Number(prop.asset_sfla) || 0;
+
+    // Config-driven subtraction
+    if (vendorType === 'BRT') {
+      if (getBasementCodeMode(prop.fin_basement_code_1) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_1) || 0;
+      }
+      if (getBasementCodeMode(prop.fin_basement_code_2) === 'subtract') {
+        sfla -= Number(prop.fin_basement_area_2) || 0;
+      }
+    } else if (vendorType === 'Microsystems') {
+      if (basementTypeConfig?.microsystemsMode === 'subtract' && prop.living_basement_area) {
+        sfla -= Number(prop.living_basement_area) || 0;
+      }
+    }
+
+    if (sfla !== Number(prop.asset_sfla)) return Math.max(0, sfla);
+
+    // Legacy Franklin fallback — only when no config has been set
+    const hasConfig = basementTypeConfig && (
+      Object.keys(basementTypeConfig.codes || {}).length > 0 ||
+      basementTypeConfig.microsystemsMode
+    );
     const isFranklinJob = jobData?.municipality?.toLowerCase().includes('franklin');
-    if (!isFranklinJob) {
-      return prop.asset_sfla; // No adjustment for other townships
+    if (!hasConfig && isFranklinJob) {
+      const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
+      const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
+      if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
+        sfla -= prop.fin_basement_area_1;
+      }
+      if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
+        sfla -= prop.fin_basement_area_2;
+      }
+      return Math.max(0, sfla);
     }
 
-    // For Franklin: exclude fin_basement_area if code is "02"
-    let sfla = prop.asset_sfla;
-    const code1 = (prop.fin_basement_code_1 || '').toString().trim().toUpperCase();
-    const code2 = (prop.fin_basement_code_2 || '').toString().trim().toUpperCase();
-
-    // If finish code 1 is "02", subtract the corresponding area (fin_basement_area_1)
-    if ((code1.includes('02') || code1.includes('FIN B W/HEAT')) && prop.fin_basement_area_1) {
-      sfla -= prop.fin_basement_area_1;
-    }
-
-    // If finish code 2 is "02", subtract the corresponding area (fin_basement_area_2)
-    if ((code2.includes('02') || code2.includes('FIN B W/HEAT')) && prop.fin_basement_area_2) {
-      sfla -= prop.fin_basement_area_2;
-    }
-
-    return Math.max(0, sfla); // Ensure SFLA doesn't go negative
-  }, [jobData?.municipality]);
+    return sfla;
+  }, [jobData?.municipality, vendorType, basementTypeConfig, getBasementCodeMode]);
 
   // Load garage thresholds and detached condition multipliers on mount
   useEffect(() => {
@@ -2799,9 +2841,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'finished_basement':
-        // Use fin_basement_area column
-        subjectValue = subject.fin_basement_area > 0 ? 1 : 0;
-        compValue = comp.fin_basement_area > 0 ? 1 : 0;
+        // Use fin_basement_area column. Suppress when basement is configured
+        // as 'living' (i.e., already inside SFLA) — counting it again here
+        // double-dips the size-normalized math.
+        subjectValue = (!treatedAsLivingInSFLA(subject) && subject.fin_basement_area > 0) ? 1 : 0;
+        compValue = (!treatedAsLivingInSFLA(comp) && comp.fin_basement_area > 0) ? 1 : 0;
         break;
 
       case 'deck':
