@@ -823,6 +823,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // Without restoring manualProperties / subjectVCS / subjectTypeUse, a
       // re-run of Evaluate after a reload silently widened to the whole town.
       const savedCriteria = data.search_criteria || null;
+      // Fallback: legacy rows saved before subject_selection was bundled
+      // don't have chips. Reconstruct manualProperties from the saved
+      // result subjects so re-running Evaluate stays scoped to the same
+      // properties instead of silently widening to the whole town.
+      const reconstructedManual = Array.from(new Set(
+        (data.results || [])
+          .map(r => {
+            const s = r?.subject || {};
+            const block = String(s.property_block || '').trim();
+            const lot = String(s.property_lot || '').trim();
+            const qual = String(s.property_qualifier || '').trim();
+            if (!block || !lot) return null;
+            return qual ? `${block}-${lot}-${qual}` : `${block}-${lot}-`;
+          })
+          .filter(Boolean)
+      ));
       if (savedCriteria && typeof savedCriteria === 'object') {
         const { subject_selection, ...savedCompFilters } = savedCriteria;
         setCompFilters(prev => ({
@@ -833,23 +849,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           autoAdjustment:
             (data.adjustment_bracket ?? savedCompFilters.adjustmentBracket) === 'auto',
         }));
-        if (subject_selection && typeof subject_selection === 'object') {
-          if (Array.isArray(subject_selection.manualProperties)) {
-            setManualProperties(subject_selection.manualProperties);
-          }
-          if (Array.isArray(subject_selection.subjectVCS)) {
-            setSubjectVCS(subject_selection.subjectVCS);
-          }
-          if (Array.isArray(subject_selection.subjectTypeUse)) {
-            setSubjectTypeUse(subject_selection.subjectTypeUse);
-          }
+        const sel = (subject_selection && typeof subject_selection === 'object') ? subject_selection : {};
+        const savedManual = Array.isArray(sel.manualProperties) ? sel.manualProperties : [];
+        setManualProperties(savedManual.length > 0 ? savedManual : reconstructedManual);
+        if (Array.isArray(sel.subjectVCS)) {
+          setSubjectVCS(sel.subjectVCS);
         }
-      } else if (data.adjustment_bracket) {
-        setCompFilters(prev => ({
-          ...prev,
-          adjustmentBracket: data.adjustment_bracket,
-          autoAdjustment: data.adjustment_bracket === 'auto',
-        }));
+        if (Array.isArray(sel.subjectTypeUse)) {
+          setSubjectTypeUse(sel.subjectTypeUse);
+        }
+      } else {
+        if (data.adjustment_bracket) {
+          setCompFilters(prev => ({
+            ...prev,
+            adjustmentBracket: data.adjustment_bracket,
+            autoAdjustment: data.adjustment_bracket === 'auto',
+          }));
+        }
+        if (reconstructedManual.length > 0) {
+          setManualProperties(reconstructedManual);
+        }
       }
 
       // Scroll to results
