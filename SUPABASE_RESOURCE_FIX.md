@@ -84,6 +84,59 @@ Don't tackle this until you're ready for production. You'll need to:
 
 This is a larger refactor but necessary for security in production.
 
+**Current state (audited):** 41 of 44 `public.*` tables have RLS **disabled**. The
+only three with RLS enabled are the newer CME-related tables:
+- `job_cme_bracket_mappings`
+- `job_cme_result_sets`
+- `job_sales_pool_overrides`
+
+When the production push happens, every other table needs an RLS policy pass —
+most queries are scoped by `organization_id` / `job_id` / `job_access_grants`,
+so the policies should mirror that logic rather than invent new rules.
+
+---
+
+## Supabase Data API Default-Grant Change (May 30 / Oct 30, 2026)
+
+Supabase is changing the default so that **new** tables in `public` are no longer
+exposed to the Data API (supabase-js, PostgREST, GraphQL) unless an explicit
+`GRANT` is added.
+
+- **May 30, 2026:** default for newly-created Supabase projects.
+- **Oct 30, 2026:** enforced on **all existing projects**, including ours.
+
+**What stays safe:** every table that already exists keeps its current grants —
+nothing breaks on the cutover.
+
+**What changes for us:** any new `public.*` table created on or after Oct 30,
+2026 must include explicit grants in its migration, or supabase-js will return a
+`42501` error from the client.
+
+### Required boilerplate for new-table migrations going forward
+
+```sql
+-- Whatever your CREATE TABLE statement is...
+create table public.your_new_table ( ... );
+
+-- Required: expose it to the Data API roles the app uses.
+-- (anon is only needed if the table should be readable without auth.)
+grant select, insert, update, delete on public.your_new_table to authenticated;
+grant select, insert, update, delete on public.your_new_table to service_role;
+
+-- Strongly recommended: enable RLS at create time so the table is never
+-- briefly world-writable while we figure out policies later.
+alter table public.your_new_table enable row level security;
+
+-- Add at least one policy (example — replace with real scope):
+create policy "tenant scoped read"
+  on public.your_new_table
+  for select to authenticated
+  using ( /* org/job scoping check */ );
+```
+
+If a grant is missing in production, PostgREST returns `42501` with the exact
+GRANT statement to fix it — don't paper over that error, run the grant.
+
 ---
 
 ## Priority Order
