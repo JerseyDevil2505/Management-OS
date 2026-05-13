@@ -481,6 +481,7 @@ export class MicrosystemsProcessor {
       fireplace_count: this.extractFireplaceCount(rawRecord),
       basement_area: this.extractBasementArea(rawRecord),
       fin_basement_area: this.extractFinBasementArea(rawRecord),
+      living_basement_area: this.extractLivingBasementArea(rawRecord),
       garage_area: this.extractGarageArea(rawRecord),
       deck_area: this.extractDeckArea(rawRecord),
       patio_area: this.extractPatioArea(rawRecord),
@@ -964,6 +965,28 @@ export class MicrosystemsProcessor {
     }
 
     return null;
+  }
+
+  /**
+   * Extract living/heated basement area from Bsmt Living Sf
+   * Same shape as Bsmt Finish Sq Ft — value can be a % of total Basement or raw SF.
+   */
+  extractLivingBasementArea(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord['Basement']) || 0;
+    const livingValue = rawRecord['Bsmt Living Sf'];
+
+    if (!livingValue || livingValue.toString().trim() === '') return null;
+
+    const str = livingValue.toString();
+    if (str.includes('%')) {
+      const percentage = parseFloat(str.replace('%', '').trim());
+      if (!isNaN(percentage) && basementArea > 0) {
+        return Math.round(basementArea * (percentage / 100));
+      }
+      return null;
+    }
+
+    return this.parseNumeric(str);
   }
 
   /**
