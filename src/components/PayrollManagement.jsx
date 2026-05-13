@@ -258,7 +258,10 @@ const PayrollManagement = ({
 
 const loadInitialData = async () => {
     try {
-      // Just check localStorage for last processed info
+      // Source the banner from the DB so it stays sticky across navigation,
+      // re-imports, and browsers/sessions where localStorage may be missing
+      // or out of sync. localStorage is only used to enrich startDate, which
+      // isn't persisted on inspection_data.
       const { data: lastInspection, error } = await supabase
         .from('inspection_data')
         .select('payroll_period_end, payroll_processed_date')
@@ -266,16 +269,33 @@ const loadInitialData = async () => {
         .order('payroll_period_end', { ascending: false })
         .limit(1)
         .single();
-      
-      if (!error && lastInspection) {
-        const storedInfo = localStorage.getItem('lastPayrollProcessed');
-        if (storedInfo) {
+
+      if (error || !lastInspection) return;
+
+      const { count } = await supabase
+        .from('inspection_data')
+        .select('id', { count: 'exact', head: true })
+        .eq('payroll_period_end', lastInspection.payroll_period_end);
+
+      let startDate = null;
+      const storedInfo = localStorage.getItem('lastPayrollProcessed');
+      if (storedInfo) {
+        try {
           const parsed = JSON.parse(storedInfo);
           if (parsed.endDate === lastInspection.payroll_period_end) {
-            setLastProcessedInfo(parsed);
+            startDate = parsed.startDate;
           }
+        } catch (_) {
+          // ignore malformed cache
         }
       }
+
+      setLastProcessedInfo({
+        startDate,
+        endDate: lastInspection.payroll_period_end,
+        processedDate: lastInspection.payroll_processed_date,
+        inspectionCount: count ?? 0,
+      });
     } catch (error) {
       console.error('Error loading last processed info:', error);
       // Don't set error for this, it's not critical
@@ -764,7 +784,8 @@ const loadInitialData = async () => {
         inspectionCount: allInspectionIds.length
       };
       localStorage.setItem('lastPayrollProcessed', JSON.stringify(processInfo));
-      
+      setLastProcessedInfo(processInfo);
+
       setSuccessMessage(`Successfully marked ${allInspectionIds.length} inspections as processed for period ending ${payrollPeriod.endDate}`);
 
       const nextPeriod = getNextPayrollPeriod(payrollPeriod.endDate);
@@ -924,7 +945,9 @@ const loadInitialData = async () => {
             <div>
               <span className="text-blue-700">Period:</span>
               <span className="ml-2 font-medium text-blue-900">
-                {formatDateForDisplay(lastProcessedInfo.startDate)} - {formatDateForDisplay(lastProcessedInfo.endDate)}
+                {lastProcessedInfo.startDate
+                  ? `${formatDateForDisplay(lastProcessedInfo.startDate)} - ${formatDateForDisplay(lastProcessedInfo.endDate)}`
+                  : `Ending ${formatDateForDisplay(lastProcessedInfo.endDate)}`}
               </span>
             </div>
             <div>
@@ -1391,7 +1414,7 @@ const loadInitialData = async () => {
                 </div>
                 <div className="flex items-center">
                   <span className="inline-block w-3 h-3 mr-2 bg-red-500 rounded-full"></span>
-                  <span className="text-gray-600">Stale (>30 days)</span>
+                  <span className="text-gray-600">Stale (&gt;30 days)</span>
                 </div>
                 <div className="flex items-center">
                   <span className="inline-block w-3 h-3 mr-2 bg-gray-400 rounded-full"></span>
