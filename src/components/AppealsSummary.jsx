@@ -51,7 +51,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
     )];
 
     if (hearingDates.length === 0) {
-      return { latest: null, hasMultiple: false };
+      return { latest: null, latestDate: null, hasMultiple: false };
     }
 
     // Use the last (final) hearing date — billing event occurs after final hearing
@@ -64,7 +64,15 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       year: '2-digit'
     });
 
-    return { latest, hasMultiple: hearingDates.length > 1 };
+    return { latest, latestDate: date, hasMultiple: hearingDates.length > 1 };
+  };
+
+  // A job is "Completed" once the final hearing date has passed — that's a billing event.
+  const isHearingCompleted = (latestDate) => {
+    if (!latestDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return latestDate < today;
   };
 
   const loadAppealsByJob = async () => {
@@ -177,6 +185,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             vacant: classBreakdown.vacant,
             hearingDate: hearingInfo.latest,
             hasMultipleHearings: hearingInfo.hasMultiple,
+            isCompleted: isHearingCompleted(hearingInfo.latestDate),
             snapshotAvailable: !!job.appeal_summary_snapshot
           });
         } else {
@@ -334,7 +343,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       row.statusBreakdown.hasCME,
       row.proSeCount,
       row.attorneyCount,
-      row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'
+      row.isCompleted
+        ? 'Completed'
+        : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')
     ]));
 
     // Totals row
@@ -392,8 +403,19 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
           return;
         }
 
-        // Per-row green tint when Has CME equals Total Appeals (matches UI bg-green-50)
         const summaryRow = jobAppealsSummary[rowIndex];
+
+        // Completed (final hearing past) — blue lock takes precedence over CME green
+        if (summaryRow && summaryRow.isCompleted) {
+          data.cell.styles.fillColor = [219, 234, 254]; // bg-blue-50
+          if (data.column.index === 14) {
+            data.cell.styles.textColor = [30, 64, 175]; // text-blue-800
+            data.cell.styles.fontStyle = 'bold';
+          }
+          return;
+        }
+
+        // Per-row green tint when Has CME equals Total Appeals (matches UI bg-green-50)
         if (summaryRow && summaryRow.totalAppeals > 0
             && summaryRow.statusBreakdown.hasCME === summaryRow.totalAppeals) {
           data.cell.styles.fillColor = [240, 253, 244]; // bg-green-50
@@ -540,10 +562,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             <tbody>
               {jobAppealsSummary.map((row, idx) => {
                 const cmeMatchesTotal = row.totalAppeals > 0 && row.statusBreakdown.hasCME === row.totalAppeals;
+                const rowClass = row.isCompleted
+                  ? 'bg-blue-50 hover:bg-blue-100'
+                  : (cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50');
                 return (
                 <tr
                   key={row.jobId}
-                  className={`border-b border-gray-200 ${cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}
+                  className={`border-b border-gray-200 ${rowClass}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
@@ -556,10 +581,10 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
-                  <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
+                  <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—'}</td>
+                  <td className={`px-4 py-3 text-sm text-center ${row.isCompleted ? 'text-blue-800 font-semibold' : 'text-gray-700'}`}>{row.isCompleted ? 'Completed' : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')}</td>
                 </tr>
                 );
               })}
