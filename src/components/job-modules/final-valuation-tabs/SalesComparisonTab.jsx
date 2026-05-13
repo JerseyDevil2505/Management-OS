@@ -5537,7 +5537,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Address</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold"># Comps</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">Projected Assessment</th>
-                        <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Confidence</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Saved At</th>
                         <th className="border border-gray-300 px-2 py-2 text-center font-semibold">Actions</th>
                       </tr>
@@ -5556,11 +5555,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center font-semibold text-green-700 bg-green-50">
                             ${(Math.round((evaluation.projected_assessment || 0) / 100) * 100).toLocaleString()}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-1.5 text-center">
-                            {evaluation.confidence_score != null
-                              ? `${(evaluation.confidence_score * 100).toFixed(0)}%`
-                              : '-'}
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-center text-gray-500">
                             {evaluation.created_at
