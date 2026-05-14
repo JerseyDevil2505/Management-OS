@@ -3669,6 +3669,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             properties={properties}
             adjustmentGrid={adjustmentGrid}
             cspDateRange={cspDateRange}
+            tenantConfig={tenantConfig}
           />
         )}
 
