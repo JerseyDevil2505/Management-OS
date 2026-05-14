@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, getRawDataForJob, propertyService } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp, Pencil, FlaskConical } from 'lucide-react';
+import AdjustmentStudyTab from './AdjustmentStudyTab';
 
 // Valid sales codes for CME averages (matches SalesComparisonTab defaults)
 const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
 
-const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [] }) => {
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [], adjustmentGrid: adjustmentGridProp = [], cspDateRange = null, tenantConfig = null }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
 
@@ -1507,6 +1508,17 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             Adjustment Grid
           </button>
           <button
+            onClick={() => setActiveSubTab('study')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
+              activeSubTab === 'study'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FlaskConical className="w-4 h-4" />
+            Adjustment Study
+          </button>
+          <button
             onClick={() => setActiveSubTab('mapping')}
             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
               activeSubTab === 'mapping'
@@ -2356,6 +2368,17 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             </div>
           )}
         </div>
+      )}
+
+      {/* Adjustment Study Tab */}
+      {activeSubTab === 'study' && (
+        <AdjustmentStudyTab
+          jobData={jobData}
+          properties={properties}
+          adjustmentGrid={adjustmentGridProp}
+          cspDateRange={cspDateRange}
+          tenantConfig={tenantConfig}
+        />
       )}
 
       {/* Bracket Mapping Tab */}

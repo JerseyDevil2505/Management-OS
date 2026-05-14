@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, FlaskConical } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
-import AdjustmentStudyTab from './AdjustmentStudyTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
@@ -3618,7 +3617,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
-    { id: 'adjustment-study', label: 'Adjustment Study', icon: FlaskConical },
     { id: 'sales-pool', label: `Sales Pool (${includedSalesCount})`, icon: List },
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
@@ -3659,12 +3657,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       <div className="tab-content">
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
-          <AdjustmentsTab jobData={jobData} properties={properties} />
-        )}
-
-        {/* ADJUSTMENT STUDY TAB — evidence-based regression support */}
-        {activeSubTab === 'adjustment-study' && (
-          <AdjustmentStudyTab
+          <AdjustmentsTab
             jobData={jobData}
             properties={properties}
             adjustmentGrid={adjustmentGrid}
