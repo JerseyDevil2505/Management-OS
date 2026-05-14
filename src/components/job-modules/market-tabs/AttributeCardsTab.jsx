@@ -109,6 +109,44 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
 
+  // ============ BASEMENT TYPE CONFIG STATE ============
+  // Shape: {
+  //   codes: { "<BRT_CODE>": { mode: 'living' | 'subtract' } },  // absence = Off
+  //   microsystemsMode: 'living' | 'subtract' | undefined,        // Microsystems global
+  // }
+  // 'living' = SFLA already includes the basement (badge fires, finished-basement
+  // CME adjustment is suppressed). 'subtract' = strip basement SF out of SFLA
+  // and let the finished-basement CME adjustment fire normally.
+  const normalizeBasementConfig = (raw) => {
+    const out = { codes: {}, microsystemsMode: undefined };
+    if (!raw || typeof raw !== 'object') return out;
+    if (raw.codes && typeof raw.codes === 'object') {
+      Object.entries(raw.codes).forEach(([code, cfg]) => {
+        if (!cfg) return;
+        // Backwards-compat: collapse the old { isLiving, subtract } shape
+        let mode = cfg.mode;
+        if (!mode) {
+          if (cfg.subtract) mode = 'subtract';
+          else if (cfg.isLiving) mode = 'living';
+        }
+        if (mode === 'living' || mode === 'subtract') {
+          out.codes[code.toUpperCase()] = { mode };
+        }
+      });
+    }
+    if (raw.microsystemsMode === 'living' || raw.microsystemsMode === 'subtract') {
+      out.microsystemsMode = raw.microsystemsMode;
+    } else if (raw.microsystemsSubtract) {
+      out.microsystemsMode = 'subtract';
+    }
+    return out;
+  };
+
+  const [basementConfig, setBasementConfig] = useState(() => normalizeBasementConfig(marketLandData?.basement_type_config));
+  const [basementSaving, setBasementSaving] = useState(false);
+  const [basementSaved, setBasementSaved] = useState(false);
+  const [basementSeedApplied, setBasementSeedApplied] = useState(false);
+
   // Get Type/Use options - CORRECTED based on actual codebase patterns
   const getTypeUseOptions = () => [
     { code: 'all', description: 'All Properties' },
@@ -4506,8 +4544,261 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (marketLandData.additional_cards_rollup) {
         setAdditionalResults(marketLandData.additional_cards_rollup);
       }
+      if (marketLandData.basement_type_config) {
+        setBasementConfig(normalizeBasementConfig(marketLandData.basement_type_config));
+      }
     }
   }, [marketLandData]);
+
+  // ============ BASEMENT TYPE CONFIG: BRT description lookup ============
+  // Walk parsed_code_definitions.sections.Residential to find the basement
+  // section (KEY === '30') and build a code -> description map. The shared
+  // interpretCodes.getBRTValue helper hardcodes only a few sections and does
+  // not include basement, so we do the walk locally.
+  const brtBasementCodeDescriptions = useMemo(() => {
+    if (vendorType !== 'BRT') return {};
+    const out = {};
+    const residential = parsedCodeDefinitions?.sections?.Residential;
+    if (!residential) return out;
+    let basementSection = null;
+    for (const sectionData of Object.values(residential)) {
+      if (sectionData?.KEY === '30') {
+        basementSection = sectionData;
+        break;
+      }
+    }
+    if (!basementSection?.MAP) return out;
+    Object.values(basementSection.MAP).forEach(mapItem => {
+      const code = (mapItem?.KEY || mapItem?.DATA?.KEY || '').toString().trim().toUpperCase();
+      const desc = mapItem?.DATA?.VALUE || mapItem?.VALUE;
+      if (code && desc) out[code] = desc;
+    });
+    return out;
+  }, [parsedCodeDefinitions, vendorType]);
+
+  // Pattern for codes/descriptions that should default to 'living' on first load.
+  // Includes the BRT-truncated forms (LIV / HEAT) since BRT label cells are narrow
+  // and code files routinely abbreviate (e.g. Cedar Grove: "LIV BSMT", or
+  // Franklin: "FIN B W/HEAT").
+  const isLivingBasementLabel = (code, description) => {
+    const haystack = `${code || ''} ${description || ''}`.toUpperCase();
+    if (/\bLIVING\b/.test(haystack)) return true;
+    if (/\bLIVABLE\b/.test(haystack)) return true;
+    if (/\bLIV\b/.test(haystack)) return true;            // BRT truncation: "LIV BSMT"
+    if (/\bHEATED\b/.test(haystack)) return true;
+    if (/W\/HEAT/.test(haystack)) return true;
+    if (/\bWITH\s+HEAT\b/.test(haystack)) return true;
+    if (/\bHEAT\b/.test(haystack)) return true;
+    return false;
+  };
+
+  // ============ BASEMENT TYPE CONFIG: aggregate distinct codes from properties ============
+  const basementCodeRows = useMemo(() => {
+    if (vendorType !== 'BRT') return [];
+    const map = new Map();
+    (properties || []).forEach(p => {
+      [
+        { code: p.fin_basement_code_1, area: p.fin_basement_area_1 },
+        { code: p.fin_basement_code_2, area: p.fin_basement_area_2 },
+      ].forEach(({ code, area }) => {
+        const raw = (code || '').toString().trim();
+        if (!raw) return;
+        const key = raw.toUpperCase();
+        if (!map.has(key)) {
+          const description = brtBasementCodeDescriptions[key] || null;
+          map.set(key, { code: key, raw, count: 0, totalArea: 0, description });
+        }
+        const row = map.get(key);
+        row.count += 1;
+        row.totalArea += Number(area) || 0;
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
+  }, [properties, vendorType, brtBasementCodeDescriptions]);
+
+  // Auto-seed defaults the first time we render the tab with codes available.
+  // Only seeds rows that don't already have a saved mode — never overwrites
+  // user choices. Doesn't write to DB; user still has to hit Save.
+  useEffect(() => {
+    if (basementSeedApplied) return;
+    if (vendorType !== 'BRT') return;
+    if (basementCodeRows.length === 0) return;
+    const additions = {};
+    basementCodeRows.forEach(row => {
+      if (basementConfig.codes?.[row.code]) return; // user-set or pre-saved
+      if (isLivingBasementLabel(row.code, row.description)) {
+        additions[row.code] = { mode: 'living' };
+      }
+    });
+    if (Object.keys(additions).length > 0) {
+      setBasementConfig(prev => ({
+        ...prev,
+        codes: { ...(prev.codes || {}), ...additions },
+      }));
+    }
+    setBasementSeedApplied(true);
+  }, [basementCodeRows, basementSeedApplied, vendorType, basementConfig.codes]);
+
+  const setBasementCodeMode = (code, mode) => {
+    setBasementConfig(prev => {
+      const codes = { ...(prev.codes || {}) };
+      if (mode === 'living' || mode === 'subtract') {
+        codes[code] = { mode };
+      } else {
+        delete codes[code];
+      }
+      return { ...prev, codes };
+    });
+    setBasementSaved(false);
+  };
+
+  const setMicrosystemsBasementMode = (mode) => {
+    setBasementConfig(prev => ({
+      ...prev,
+      microsystemsMode: mode === 'living' || mode === 'subtract' ? mode : undefined,
+    }));
+    setBasementSaved(false);
+  };
+
+  const saveBasementConfig = async () => {
+    if (!jobData?.id) return;
+    setBasementSaving(true);
+    setBasementSaved(false);
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .upsert({
+          job_id: jobData.id,
+          basement_type_config: basementConfig,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'job_id' });
+      if (error) throw error;
+      setBasementSaved(true);
+      if (onUpdateJobCache) onUpdateJobCache();
+    } catch (err) {
+      console.error('Error saving basement config:', err);
+      alert(`Failed to save basement config: ${err.message}`);
+    } finally {
+      setBasementSaving(false);
+    }
+  };
+
+  const renderBasementTypeConfig = () => {
+    return (
+      <div className="space-y-4">
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 text-sm text-gray-700 space-y-2">
+          <p className="font-medium text-blue-900">Basement Type Configuration</p>
+          <p>
+            Pick a treatment per basement code so SFLA and the CME{' '}
+            <em>Finished Basement = Yes</em> adjustment stay consistent.
+          </p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>
+              <strong>In SFLA (Living)</strong> — the SFLA total already includes this basement (heated /
+              living). The Liveable Area cell shows a <span className="text-amber-600 font-bold">*</span>
+              badge, and the <em>Finished Basement = Yes</em> CME adjustment is suppressed so the
+              property isn't counted twice.
+            </li>
+            <li>
+              <strong>Subtract from SFLA</strong> — strip the basement SF out of the displayed/used SFLA
+              (Franklin's behavior for code <code>02</code>). The <em>Finished Basement = Yes</em>
+              adjustment fires normally, treating the basement as its own amenity.
+            </li>
+            <li>
+              <strong>Off</strong> — leave the code alone. SFLA and finished-basement adjustment behave
+              as they always have.
+            </li>
+          </ul>
+          <p className="text-xs text-gray-600">
+            Codes whose description matches <em>Living</em>, <em>Heated</em>, or <em>W/Heat</em> are
+            pre-set to <strong>In SFLA (Living)</strong> on first load. You still have to hit Save.
+          </p>
+        </div>
+
+        {vendorType === 'BRT' ? (
+          basementCodeRows.length === 0 ? (
+            <div className="bg-gray-50 border border-gray-200 rounded p-4 text-sm text-gray-600">
+              No <code>fin_basement_code_*</code> values found on this job's properties yet. Once
+              the source file is loaded with finished/living basement codes, they'll appear here.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Code</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Description</th>
+                    <th className="border border-gray-300 px-3 py-2 text-right font-semibold"># Properties</th>
+                    <th className="border border-gray-300 px-3 py-2 text-right font-semibold">Total SF</th>
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Treatment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {basementCodeRows.map(row => {
+                    const cfg = basementConfig.codes?.[row.code];
+                    const mode = cfg?.mode || '';
+                    return (
+                      <tr key={row.code} className="border-t border-gray-200">
+                        <td className="border border-gray-300 px-3 py-2 font-mono">{row.code}</td>
+                        <td className="border border-gray-300 px-3 py-2 text-gray-700">
+                          {row.description ? row.description : <span className="text-gray-400">— (no description in code file)</span>}
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 text-right">{row.count.toLocaleString()}</td>
+                        <td className="border border-gray-300 px-3 py-2 text-right">{Math.round(row.totalArea).toLocaleString()}</td>
+                        <td className="border border-gray-300 px-3 py-2">
+                          <select
+                            value={mode}
+                            onChange={e => setBasementCodeMode(row.code, e.target.value)}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm w-56"
+                          >
+                            <option value="">Off</option>
+                            <option value="living">In SFLA (Living)</option>
+                            <option value="subtract">Subtract from SFLA</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          <div className="bg-white border border-gray-300 rounded p-4">
+            <p className="text-sm text-gray-700 mb-3">
+              Microsystems exposes living/heated basement directly via the <code>Bsmt Living Sf</code>
+              field (stored as <code>living_basement_area</code>). Pick how it should be treated:
+            </p>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <span>Treatment:</span>
+              <select
+                value={basementConfig.microsystemsMode || ''}
+                onChange={e => setMicrosystemsBasementMode(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-sm w-56"
+              >
+                <option value="">Off</option>
+                <option value="living">In SFLA (Living)</option>
+                <option value="subtract">Subtract from SFLA</option>
+              </select>
+            </label>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={saveBasementConfig}
+            disabled={basementSaving}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+          >
+            {basementSaving ? 'Saving…' : 'Save Basement Config'}
+          </button>
+          {basementSaved && (
+            <span className="text-sm text-green-700">✓ Saved</span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Persist state changes to localStorage
   useEffect(() => {
@@ -4586,14 +4877,23 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         >
           Custom Attribute Analysis
         </button>
-        <button 
-          onClick={() => setActive('additional')} 
+        <button
+          onClick={() => setActive('additional')}
           className={`mls-subtab-btn ${active === 'additional' ? 'mls-subtab-btn--active' : ''}`}
           role="tab"
           aria-selected={active === 'additional'}
           aria-controls="additional-panel"
         >
           Additional Card Analysis
+        </button>
+        <button
+          onClick={() => setActive('basement')}
+          className={`mls-subtab-btn ${active === 'basement' ? 'mls-subtab-btn--active' : ''}`}
+          role="tab"
+          aria-selected={active === 'basement'}
+          aria-controls="basement-panel"
+        >
+          Basement Type Config
         </button>
       </div>
 
@@ -4614,6 +4914,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         {active === 'additional' && (
           <section role="tabpanel" id="additional-panel" aria-labelledby="additional-tab">
             {renderAdditionalCardsAnalysis()}
+          </section>
+        )}
+
+        {active === 'basement' && (
+          <section role="tabpanel" id="basement-panel" aria-labelledby="basement-tab">
+            {renderBasementTypeConfig()}
           </section>
         )}
       </div>
