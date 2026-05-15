@@ -252,12 +252,16 @@ function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baseli
   for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
     if (attrId === attrUnderTest) continue;
     if (def.pending) continue; // can't strip what we can't extract; documented in footer
+    const grid = gridValueFor(gridRows, attrId, bracketIdx);
+    // If the grid carries no value here, this attribute can't change the
+    // residual either way — skip it without requiring the quantity. Otherwise
+    // a missing extractor on an attribute the grid doesn't even use would
+    // wrongly drop the sale.
+    if (grid == null || grid === 0) continue;
     const qty = def.extract(sale);
-    if (qty == null) return null; // complete-case
+    if (qty == null) return null; // complete-case ONLY when the grid relies on this attribute
     const base = baselines[attrId];
     if (base == null) continue;
-    const grid = gridValueFor(gridRows, attrId, bracketIdx);
-    if (grid == null || grid === 0) continue;
 
     const delta = qty - base;
     let dollars = 0;
