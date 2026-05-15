@@ -337,6 +337,27 @@ export function fitHedonicOLS(qualifiedSales, opts = {}) {
     };
   }
 
+  // Detect zero-variance variables — they're collinear with the intercept
+  // and would make X'X singular. Common cause: condition rank returns 0
+  // for every property because the job's Attribute Cards config doesn't
+  // map to the raw codes in this dataset.
+  const zeroVar = [];
+  for (let j = 0; j < variables.length; j++) {
+    const col = rows.map((r) => r.xs[j]);
+    const min = Math.min(...col);
+    const max = Math.max(...col);
+    if (min === max) zeroVar.push(variables[j]);
+  }
+  if (zeroVar.length > 0) {
+    const labels = zeroVar.map((v) => v.label).join(', ');
+    return {
+      ok: false,
+      error: `Zero variance in: ${labels}. Every qualified sale has the same value for ${zeroVar.length === 1 ? 'this variable' : 'these variables'}, so the regression can't estimate a coefficient. Uncheck ${zeroVar.length === 1 ? 'it' : 'them'} above and re-run. (For condition variables, this usually means the job's Attribute Cards baseline/better/worse arrays don't match the codes actually in the data.)`,
+      n,
+      zeroVarianceVariables: zeroVar.map((v) => v.id),
+    };
+  }
+
   const X = rows.map((r) => [1, ...r.xs]);
   const y = rows.map((r) => r.y);
 
@@ -346,7 +367,11 @@ export function fitHedonicOLS(qualifiedSales, opts = {}) {
   try {
     XtX_inv = invert(XtX);
   } catch (e) {
-    return { ok: false, error: e.message, n };
+    return {
+      ok: false,
+      error: `${e.message} Try unchecking one of the highly-correlated variables (e.g. interior + exterior condition often move together).`,
+      n,
+    };
   }
   const Xty = matVec(Xt, y);
   const beta = matVec(XtX_inv, Xty);
