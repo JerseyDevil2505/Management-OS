@@ -62,6 +62,18 @@ export function assignBracket(price) {
   return -1;
 }
 
+// Mode-aware price field. In vetted mode the entire pipeline (bracket
+// assignment AND residual) uses values_norm_time so the audit stays
+// internally consistent. In all-allowable mode we use raw sales_price.
+export function priceFieldFor(mode) {
+  return mode === 'vetted' ? 'values_norm_time' : 'sales_price';
+}
+
+function getSalePrice(sale, mode) {
+  const v = Number(sale[priceFieldFor(mode)]);
+  return Number.isFinite(v) ? v : null;
+}
+
 const NUM = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
@@ -245,9 +257,9 @@ export function computeBracketBaselines(salesInBracket) {
 // baseline. Returns null if any non-pending OTHER attribute is missing on
 // this sale (complete-case stripping — no imputation).
 // ---------------------------------------------------------------------------
-function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baselines) {
-  let residual = Number(sale.sales_price);
-  if (!Number.isFinite(residual)) return null;
+function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baselines, mode = 'vetted') {
+  let residual = getSalePrice(sale, mode);
+  if (residual == null) return null;
 
   for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
     if (attrId === attrUnderTest) continue;
@@ -340,7 +352,7 @@ function fitBinaryMeanDiff(xs, ys) {
 // Audit ONE bracket for ONE attribute. Returns a verdict object the UI can
 // render directly — no math knowledge required downstream.
 // ---------------------------------------------------------------------------
-export function auditBracket({ attrId, bracketIdx, allSales, gridRows }) {
+export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'vetted' }) {
   const def = GRID_ATTRIBUTE_MAP[attrId];
   const bracket = CME_BRACKETS[bracketIdx];
   const gridValue = gridValueFor(gridRows, attrId, bracketIdx);
@@ -358,8 +370,11 @@ export function auditBracket({ attrId, bracketIdx, allSales, gridRows }) {
     return { ...base, verdict: 'pending', message: `${def?.label || attrId} extractor not yet wired — audit can't run on this row.`, n: 0 };
   }
 
-  // Pull just the sales that landed in this bracket
-  const inBracket = allSales.filter((p) => assignBracket(p.sales_price) === bracketIdx);
+  // Pull just the sales that landed in this bracket — using the price field
+  // appropriate to the audit mode (values_norm_time for vetted, sales_price
+  // for all-allowable). Same field is used to compute the residual so the
+  // audit stays internally consistent.
+  const inBracket = allSales.filter((p) => assignBracket(getSalePrice(p, mode)) === bracketIdx);
   const baselines = computeBracketBaselines(inBracket);
   const baselineQty = baselines[attrId];
 
@@ -368,7 +383,7 @@ export function auditBracket({ attrId, bracketIdx, allSales, gridRows }) {
   for (const sale of inBracket) {
     const qty = def.extract(sale);
     if (qty == null) continue;
-    const residual = stripOtherAdjustments(sale, bracketIdx, attrId, gridRows, baselines);
+    const residual = stripOtherAdjustments(sale, bracketIdx, attrId, gridRows, baselines, mode);
     if (residual == null || !Number.isFinite(residual)) continue;
     pts.push({ x: qty, y: residual });
   }
@@ -475,8 +490,9 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
     return { ok: false, error: 'No qualified sales matched the current filters.', attrId };
   }
 
+  const mode = opts.mode || 'vetted';
   const perBracket = CME_BRACKETS.map((_, idx) =>
-    auditBracket({ attrId, bracketIdx: idx, allSales: qualified, gridRows })
+    auditBracket({ attrId, bracketIdx: idx, allSales: qualified, gridRows, mode })
   );
 
   // Anchor = most-populous verified; fallback = most-populous overall

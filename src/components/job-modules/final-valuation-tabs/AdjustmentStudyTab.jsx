@@ -190,21 +190,28 @@ const AdjustmentStudyTab = ({
       </div>
 
       {/* Mode toggle */}
-      <div className="mb-4 inline-flex rounded-md shadow-sm border border-gray-300 overflow-hidden text-sm">
+      <div className="mb-2 inline-flex rounded-md shadow-sm border border-gray-300 overflow-hidden text-sm">
         <button
           onClick={() => setMode('vetted')}
           className={`px-4 py-2 inline-flex items-center gap-2 ${mode === 'vetted' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-          title="Use only sales already vetted by the time-normalization workflow."
+          title="Use only sales already vetted by the time-normalization workflow. Bracket assignment + residual both use values_norm_time."
         >
           <ShieldCheck className="w-4 h-4" /> Vetted Sales (recommended)
         </button>
         <button
           onClick={() => setMode('all')}
           className={`px-4 py-2 inline-flex items-center gap-2 border-l border-gray-300 ${mode === 'all' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-          title="Use all sales matching the CME allowable codes + date window."
+          title="Use all sales matching the CME allowable codes + date window. Bracket assignment + residual both use raw sales_price."
         >
           <Database className="w-4 h-4" /> All Allowable Sales
         </button>
+      </div>
+      <div className="mb-4 text-xs text-gray-600">
+        {mode === 'vetted' ? (
+          <>Brackets and residuals both use <code className="px-1 bg-gray-100 rounded">values_norm_time</code> — the time-adjusted price from the normalization workflow.</>
+        ) : (
+          <>Brackets and residuals both use raw <code className="px-1 bg-gray-100 rounded">sales_price</code>. Best paired with a recent date window so untreated time-trend doesn't distort the audit.</>
+        )}
       </div>
 
       {/* Filters */}
