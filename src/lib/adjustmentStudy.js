@@ -133,7 +133,13 @@ export const STUDY_VARIABLES = [
     label: 'Lot Size',
     unit: '$ / SF',
     appliesTo: 'lot_size_sf',
-    extract: (p) => NUM(p.asset_lot_sf),
+    extract: (p) => {
+      const sf = NUM(p.asset_lot_sf);
+      if (sf && sf > 0) return sf;
+      const acre = NUM(p.asset_lot_acre);
+      if (acre && acre > 0) return acre * 43560;
+      return null;
+    },
   },
   {
     id: 'age',
@@ -158,7 +164,7 @@ export const STUDY_VARIABLES = [
     label: 'Fireplaces',
     unit: '$ / fireplace',
     appliesTo: 'fireplaces',
-    extract: (p) => NUM(p.asset_fireplaces),
+    extract: (p) => NUM(p.fireplace_count),
   },
   {
     id: 'condition_int',
@@ -325,7 +331,7 @@ export function fitHedonicOLS(qualifiedSales, opts = {}) {
   if (n < k * 5) {
     return {
       ok: false,
-      error: `Only ${n} sales have complete data for the ${variables.length} selected variables. Need ~${k * 5}+. Try unchecking sparse variables in the availability panel above.`,
+      error: `Only ${n} sales have complete data for all ${variables.length} selected variable(s). Need ~${k * 5}+ observations. Use the availability panel above to uncheck variables with low coverage and try again.`,
       n,
       droppedReasons,
     };

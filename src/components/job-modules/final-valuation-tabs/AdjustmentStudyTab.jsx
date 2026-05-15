@@ -110,9 +110,15 @@ const AdjustmentStudyTab = ({
   const [classFilter, setClassFilter] = useState(['2']);
   const [minPrice, setMinPrice] = useState(1000);
 
-  // Variable selection (for the pre-flight availability panel)
+  // Variable selection (for the pre-flight availability panel).
+  // Default-on: high-coverage core variables. Sparse ones (fireplaces,
+  // exterior condition) are opt-in so the first run isn't blocked by a
+  // single rarely-populated field.
+  const DEFAULT_ON_IDS = ['sfla', 'lot_sf', 'age', 'bedrooms', 'condition_int'];
   const [includeIds, setIncludeIds] = useState(
-    () => STUDY_VARIABLES.filter((v) => v.id !== 'time_months').map((v) => v.id)
+    () => STUDY_VARIABLES
+      .filter((v) => DEFAULT_ON_IDS.includes(v.id))
+      .map((v) => v.id)
   );
 
   // Build the condition ranker once per job — closes over jobData.attribute_condition_config
