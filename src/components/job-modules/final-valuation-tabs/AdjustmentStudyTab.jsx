@@ -1,71 +1,62 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { FlaskConical, Play, Info, TrendingUp, TrendingDown, CheckCircle2, MinusCircle, ShieldCheck, Database } from 'lucide-react';
 import {
-  runAdjustmentStudy,
-  reconcile,
-  STUDY_VARIABLES,
-  filterQualifiedSales,
-  variableAvailability,
-  salesPerYear,
-} from '../../../lib/adjustmentStudy';
-import { buildConditionRanker } from '../../../lib/conditionRanking';
+  ShieldCheck,
+  Database,
+  Play,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  HelpCircle,
+  Hourglass,
+  ClipboardCopy,
+  Anchor,
+} from 'lucide-react';
+import {
+  CME_BRACKETS,
+  GRID_ATTRIBUTE_MAP,
+  isAttributeReady,
+  runAudit,
+  buildDocumentationBlock,
+  VERIFY_FLOOR,
+  VERIFY_COMFORTABLE,
+} from '../../../lib/adjustmentAudit';
 import { STUDY_DEFAULT_SALES_CODES } from '../../../lib/salesCodes';
 
-const fmtUSD = (v, digits = 0) => {
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+const fmtMoney = (v) => {
   if (v == null || !Number.isFinite(v)) return '—';
-  const abs = Math.abs(v);
   const sign = v < 0 ? '-' : '';
-  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })}`;
+  const abs = Math.abs(v);
+  if (abs >= 1000) return `${sign}$${Math.round(abs).toLocaleString()}`;
+  return `${sign}$${abs.toFixed(2)}`;
 };
 
-const STATUS_STYLES = {
-  agree: { color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', Icon: CheckCircle2, label: 'Agrees with grid' },
-  low: { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', Icon: TrendingUp, label: 'Grid is conservative' },
-  high: { color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', Icon: TrendingDown, label: 'Grid is aggressive' },
-  weak: { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', Icon: MinusCircle, label: 'Weak signal (keep grid)' },
-  'no-grid': { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', Icon: Info, label: 'No grid value' },
+const VERDICT_STYLES = {
+  verified:    { color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-300', Icon: CheckCircle2,  label: 'Verified' },
+  limited:     { color: 'text-amber-800',   bg: 'bg-amber-50',   border: 'border-amber-300',   Icon: AlertTriangle, label: 'Limited support' },
+  cant_verify: { color: 'text-gray-700',    bg: 'bg-gray-50',    border: 'border-gray-300',    Icon: HelpCircle,    label: "Can't verify" },
+  pending:     { color: 'text-purple-800',  bg: 'bg-purple-50',  border: 'border-purple-300',  Icon: Hourglass,     label: 'Extractor pending' },
 };
 
-const significanceStars = (p) => {
-  if (p == null || !Number.isFinite(p)) return '';
-  if (p < 0.001) return '★★★';
-  if (p < 0.01) return '★★';
-  if (p < 0.05) return '★';
-  if (p < 0.10) return '·';
-  return '';
+const COMPARISON_BADGES = {
+  inside:  { label: 'Supported',    color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  below:   { label: 'Grid is low',  color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  above:   { label: 'Grid is high', color: 'bg-rose-100 text-rose-800 border-rose-300' },
+  no_grid: { label: 'No grid',      color: 'bg-gray-100 text-gray-700 border-gray-300' },
 };
 
-// Median of non-zero bracket values, used as a representative "current grid"
-// number to compare against the regression coefficient.
-function gridMidpoint(adjustmentRow) {
-  if (!adjustmentRow || !Array.isArray(adjustmentRow.values)) return null;
-  const nonZero = adjustmentRow.values.filter((v) => Number(v) !== 0).map(Number);
-  if (nonZero.length === 0) return null;
-  const sorted = [...nonZero].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-const APPLIES_TO_GRID_ID = {
-  living_area: 'living_area',
-  lot_size_sf: 'lot_size_sf',
-  bedrooms: 'bedrooms',
-  fireplaces: 'fireplaces',
-  interior_condition: 'interior_condition',
-  exterior_condition: 'exterior_condition',
-};
-
-// Year chips for the vetted-mode quick filter
 const YEAR_CHIPS = [
   { id: 'all', label: 'All Time', years: null },
-  { id: '5y', label: 'Last 5 yr', years: 5 },
-  { id: '3y', label: 'Last 3 yr', years: 3 },
-  { id: '2y', label: 'Last 2 yr', years: 2 },
-  { id: '1y', label: 'Last 1 yr', years: 1 },
+  { id: '5y',  label: 'Last 5 yr', years: 5 },
+  { id: '3y',  label: 'Last 3 yr', years: 3 },
+  { id: '2y',  label: 'Last 2 yr', years: 2 },
+  { id: '1y',  label: 'Last 1 yr', years: 1 },
 ];
 
 const CLASS_OPTIONS = [
-  { value: '2', label: '2 — Residential' },
+  { value: '2',  label: '2 — Residential' },
   { value: '3A', label: '3A — Farm Regular' },
   { value: '3B', label: '3B — Farm Qualified' },
   { value: '4A', label: '4A — Commercial' },
@@ -73,8 +64,6 @@ const CLASS_OPTIONS = [
   { value: '4C', label: '4C — Apartment' },
 ];
 
-// Lojik-aware reference year — same convention as
-// SalesComparisonTab.getCSPDateRange and CoordinatesSubTab.salesWindow.
 function getReferenceYear(jobData, tenantConfig) {
   const isLojik = tenantConfig?.orgType === 'assessor'
     || jobData?.organizations?.org_type === 'assessor'
@@ -85,6 +74,9 @@ function getReferenceYear(jobData, tenantConfig) {
   return isLojik ? raw - 1 : raw;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 const AdjustmentStudyTab = ({
   jobData = {},
   properties = [],
@@ -93,39 +85,21 @@ const AdjustmentStudyTab = ({
   tenantConfig,
 }) => {
   const [running, setRunning] = useState(false);
-  const [study, setStudy] = useState(null);
+  const [audit, setAudit] = useState(null);
   const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
-  // Mode: vetted (default) vs all-allowable
+  // Attribute selector — default to Living Area (almost always populated)
+  const [attrId, setAttrId] = useState('living_area');
+
+  // Filters
   const [mode, setMode] = useState('vetted');
-
-  // Vetted-mode date scoping: chip-driven
   const [yearChip, setYearChip] = useState('all');
-
-  // All-mode: explicit date pickers
   const [allDateStart, setAllDateStart] = useState(cspDateRange?.start || '');
   const [allDateEnd, setAllDateEnd] = useState(cspDateRange?.end || '');
-
-  // Class + min price
   const [classFilter, setClassFilter] = useState(['2']);
   const [minPrice, setMinPrice] = useState(1000);
 
-  // Variable selection (for the pre-flight availability panel).
-  // Default-on: high-coverage core variables. Sparse ones (fireplaces,
-  // exterior condition) are opt-in so the first run isn't blocked by a
-  // single rarely-populated field.
-  const DEFAULT_ON_IDS = ['sfla', 'lot_sf', 'age', 'bedrooms', 'condition_int'];
-  const [includeIds, setIncludeIds] = useState(
-    () => STUDY_VARIABLES
-      .filter((v) => DEFAULT_ON_IDS.includes(v.id))
-      .map((v) => v.id)
-  );
-
-  // Build the condition ranker once per job — closes over jobData.attribute_condition_config
-  const conditionRanker = useMemo(() => buildConditionRanker(jobData), [jobData]);
-
-  // Compose filter opts from current state. Pure derivation, used in three
-  // places: pre-flight availability, sales-per-year chart, and the run.
   const opts = useMemo(() => {
     const base = {
       mode,
@@ -133,16 +107,12 @@ const AdjustmentStudyTab = ({
       minPrice,
       excludeCondoChildren: true,
       salesCodes: STUDY_DEFAULT_SALES_CODES,
-      includeVariables: mode === 'vetted'
-        ? includeIds.filter((id) => id !== 'time_months')
-        : [...includeIds, 'time_months'],
-      ctx: { conditionRanker },
+      includeVariables: [],
     };
     if (mode === 'vetted') {
       const chip = YEAR_CHIPS.find((c) => c.id === yearChip);
       if (chip?.years != null) {
         const refYear = getReferenceYear(jobData, tenantConfig);
-        // Window = (refYear - years + 1, 1, 1) → (refYear, 12, 31)
         base.salesDateStart = `${refYear - chip.years + 1}-01-01`;
         base.salesDateEnd = `${refYear}-12-31`;
       }
@@ -151,60 +121,46 @@ const AdjustmentStudyTab = ({
       base.salesDateEnd = allDateEnd;
     }
     return base;
-  }, [mode, classFilter, minPrice, includeIds, yearChip, allDateStart, allDateEnd, conditionRanker, jobData, tenantConfig]);
-
-  // Pre-flight: qualified sales + per-variable availability + per-year counts.
-  // Recomputes whenever filters change. Cheap (linear in N).
-  const preflight = useMemo(() => {
-    const qualified = filterQualifiedSales(properties, opts);
-    const avail = variableAvailability(qualified, opts.ctx);
-    const perYear = salesPerYear(qualified);
-    // Estimated complete-case N for the currently-selected variables
-    const sel = new Set(opts.includeVariables.filter((id) => id !== 'time_months'));
-    let completeCase = 0;
-    for (const p of qualified) {
-      let ok = true;
-      for (const v of STUDY_VARIABLES) {
-        if (!sel.has(v.id) || v.id === 'time_months') continue;
-        const x = v.extract ? v.extract(p, opts.ctx) : null;
-        if (x == null) { ok = false; break; }
-      }
-      // Need a positive dependent variable too
-      const yField = mode === 'vetted' ? 'values_norm_time' : 'sales_price';
-      if (ok && (!Number(p[yField]) || Number(p[yField]) <= 0)) ok = false;
-      if (ok) completeCase += 1;
-    }
-    return { qualified, avail, perYear, completeCase };
-  }, [properties, opts, mode]);
+  }, [mode, classFilter, minPrice, yearChip, allDateStart, allDateEnd, jobData, tenantConfig]);
 
   const handleRun = useCallback(() => {
     setRunning(true);
     setError(null);
+    setCopied(false);
     requestAnimationFrame(() => {
       try {
-        const result = runAdjustmentStudy(properties, opts);
-        if (!result.ok) { setError(result.error); setStudy(null); }
-        else setStudy(result);
+        const result = runAudit({ attrId, properties, gridRows: adjustmentGrid, opts });
+        if (!result.ok) { setError(result.error); setAudit(null); }
+        else setAudit(result);
       } catch (e) {
         setError(e?.message || String(e));
-        setStudy(null);
+        setAudit(null);
       } finally {
         setRunning(false);
       }
     });
-  }, [properties, opts]);
+  }, [attrId, properties, adjustmentGrid, opts]);
 
-  const reconciledRows = useMemo(() => {
-    if (!study?.ok) return [];
-    return study.variables.map((v) => {
-      const gridId = APPLIES_TO_GRID_ID[v.appliesTo];
-      const gridRow = gridId ? adjustmentGrid.find((r) => r.id === gridId) : null;
-      const gridMid = gridRow ? gridMidpoint(gridRow) : null;
-      return reconcile(v, gridMid);
-    });
-  }, [study, adjustmentGrid]);
+  const handleCopy = useCallback(async () => {
+    if (!audit) return;
+    const block = buildDocumentationBlock(audit, jobData?.job_name || jobData?.name || '');
+    try {
+      await navigator.clipboard.writeText(block);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback: open prompt
+      window.prompt('Copy the documentation block:', block);
+    }
+  }, [audit, jobData]);
 
-  const conditionConfigured = !!jobData?.attribute_condition_config?.interior;
+  // ---- Attribute dropdown options. Pending entries are visually distinct. ----
+  const attrOptions = Object.entries(GRID_ATTRIBUTE_MAP).map(([id, def]) => ({
+    id, label: def.label, pending: !!def.pending,
+  }));
+
+  const selectedDef = GRID_ATTRIBUTE_MAP[attrId];
+  const selectedReady = isAttributeReady(attrId);
 
   return (
     <div className="adjustment-study-tab">
@@ -212,23 +168,24 @@ const AdjustmentStudyTab = ({
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-purple-600" />
-            Adjustment Study (Evidence-Based)
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            Adjustment Audit
           </h2>
           <p className="mt-1 text-sm text-gray-600 max-w-3xl">
-            Hedonic regression on your town&rsquo;s qualified sales. Coefficients are interpreted as
-            the marginal market value of one unit of each attribute, holding the others constant.
-            Compare against your current grid to decide whether the data supports keeping,
-            raising, or lowering each adjustment. <strong>The tool surfaces evidence; you make the call.</strong>
+            For one attribute at a time, the audit checks whether your grid value in each market
+            bracket is consistent with the actual sales in that bracket — after stripping the
+            other adjustments using each sale's own bracket column.
+            <strong> The grid value goes in as judgment; the data audits it. Nothing is auto-derived.</strong>
           </p>
         </div>
         <button
           onClick={handleRun}
-          disabled={running || properties.length === 0 || preflight.completeCase < 20}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          disabled={running || properties.length === 0 || !selectedReady}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          title={!selectedReady ? 'Selected attribute is not yet wired (extractor pending).' : ''}
         >
           <Play className="w-4 h-4" />
-          {running ? 'Running…' : study ? 'Re-run Study' : 'Run Study'}
+          {running ? 'Running…' : audit ? 'Re-run Audit' : 'Run Audit'}
         </button>
       </div>
 
@@ -236,44 +193,21 @@ const AdjustmentStudyTab = ({
       <div className="mb-4 inline-flex rounded-md shadow-sm border border-gray-300 overflow-hidden text-sm">
         <button
           onClick={() => setMode('vetted')}
-          className={`px-4 py-2 inline-flex items-center gap-2 ${mode === 'vetted' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 inline-flex items-center gap-2 ${mode === 'vetted' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
           title="Use only sales already vetted by the time-normalization workflow."
         >
-          <ShieldCheck className="w-4 h-4" />
-          Vetted Sales (recommended)
+          <ShieldCheck className="w-4 h-4" /> Vetted Sales (recommended)
         </button>
         <button
           onClick={() => setMode('all')}
-          className={`px-4 py-2 inline-flex items-center gap-2 border-l border-gray-300 ${mode === 'all' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 inline-flex items-center gap-2 border-l border-gray-300 ${mode === 'all' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
           title="Use all sales matching the CME allowable codes + date window."
         >
-          <Database className="w-4 h-4" />
-          All Allowable Sales
+          <Database className="w-4 h-4" /> All Allowable Sales
         </button>
       </div>
 
-      {/* Mode explainer */}
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
-        {mode === 'vetted' ? (
-          <>
-            <strong>Vetted mode:</strong> Dependent variable is <code className="px-1 bg-blue-100 rounded">values_norm_time</code>{' '}
-            — sales already vetted AND already time-adjusted to the valuation date by the
-            normalization workflow. Estate / short / sheriff sales never pass that vetting,
-            so they're excluded automatically. The time variable is dropped from the regression
-            because the dependent variable is already detrended.
-          </>
-        ) : (
-          <>
-            <strong>All-allowable mode:</strong> Dependent variable is raw <code className="px-1 bg-blue-100 rounded">sales_price</code>{' '}
-            filtered by the same NU code allowlist CME uses ({STUDY_DEFAULT_SALES_CODES.join(', ')})
-            and your date window. A time-trend variable is included so other coefficients are
-            net of market appreciation. Use this when you want to see ALL allowable sales
-            (e.g. to verify the vetted view), not as the defensible primary.
-          </>
-        )}
-      </div>
-
-      {/* Filter row */}
+      {/* Filters */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Property Class</label>
@@ -288,8 +222,34 @@ const AdjustmentStudyTab = ({
           </select>
         </div>
 
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Attribute to Audit</label>
+          <select
+            value={attrId}
+            onChange={(e) => setAttrId(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+          >
+            <optgroup label="Ready to audit">
+              {attrOptions.filter((a) => !a.pending).map((a) => (
+                <option key={a.id} value={a.id}>{a.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Extractor pending — coming soon">
+              {attrOptions.filter((a) => a.pending).map((a) => (
+                <option key={a.id} value={a.id}>{a.label} (pending)</option>
+              ))}
+            </optgroup>
+          </select>
+          {!selectedReady && (
+            <div className="mt-1 text-xs text-purple-700 flex items-center gap-1">
+              <Hourglass className="w-3 h-3" />
+              {selectedDef?.label} extractor is on the build list — pick a ready attribute to run the audit.
+            </div>
+          )}
+        </div>
+
         {mode === 'vetted' ? (
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Sales Window</label>
             <div className="flex flex-wrap gap-1.5">
               {YEAR_CHIPS.map((c) => (
@@ -298,7 +258,7 @@ const AdjustmentStudyTab = ({
                   onClick={() => setYearChip(c.id)}
                   className={`px-3 py-1.5 text-xs rounded-full border transition ${
                     yearChip === c.id
-                      ? 'bg-purple-600 text-white border-purple-600'
+                      ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                   }`}
                 >
@@ -308,113 +268,14 @@ const AdjustmentStudyTab = ({
             </div>
           </div>
         ) : (
-          <>
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Sales Date From</label>
-              <input
-                type="date"
-                value={allDateStart}
-                onChange={(e) => setAllDateStart(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-              />
+              <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
+              <input type="date" value={allDateStart} onChange={(e) => setAllDateStart(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Sales Date To</label>
-              <input
-                type="date"
-                value={allDateEnd}
-                onChange={(e) => setAllDateEnd(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Min Sale Price</label>
-              <input
-                type="number"
-                value={minPrice}
-                onChange={(e) => setMinPrice(Number(e.target.value) || 0)}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-              />
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Pre-flight: variable availability + complete-case N */}
-      <div className="mb-4 p-4 bg-white border border-gray-200 rounded-lg">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-900">Variable Availability</div>
-            <div className="text-xs text-gray-600">
-              Uncheck sparse variables to keep more sales in the model.
-              {!conditionConfigured && (
-                <span className="ml-2 text-amber-700">
-                  ⚠ Condition ranking not configured for this job — go to Market Analysis → Attribute Cards first.
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-gray-500">Qualified sales</div>
-            <div className="text-2xl font-bold text-gray-900">{preflight.qualified.length.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              <span className={preflight.completeCase < 50 ? 'text-amber-700 font-semibold' : 'text-green-700'}>
-                {preflight.completeCase.toLocaleString()}
-              </span>{' '}
-              with complete data for selected variables
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {preflight.avail.map((a) => {
-            const checked = includeIds.includes(a.id);
-            const sparse = a.pct < 0.5;
-            return (
-              <label
-                key={a.id}
-                className={`flex items-center gap-2 p-2 border rounded cursor-pointer text-sm ${
-                  checked ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-white'
-                } ${sparse ? 'opacity-75' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => {
-                    if (e.target.checked) setIncludeIds([...includeIds, a.id]);
-                    else setIncludeIds(includeIds.filter((id) => id !== a.id));
-                  }}
-                  className="rounded"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">{a.label}</div>
-                  <div className={`text-xs ${sparse ? 'text-amber-700' : 'text-gray-500'}`}>
-                    {a.count.toLocaleString()} / {preflight.qualified.length.toLocaleString()} ({(a.pct * 100).toFixed(0)}%)
-                    {sparse && ' — sparse'}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-
-        {/* Sales per year mini-chart */}
-        {preflight.perYear.length > 0 && (
-          <div className="mt-4">
-            <div className="text-xs text-gray-600 mb-1">Sales per year (qualified)</div>
-            <div className="flex items-end gap-1 h-16">
-              {(() => {
-                const maxCount = Math.max(...preflight.perYear.map((p) => p.count));
-                return preflight.perYear.map((p) => (
-                  <div key={p.year} className="flex-1 flex flex-col items-center min-w-[24px]" title={`${p.year}: ${p.count} sales`}>
-                    <div
-                      className="w-full bg-purple-400 rounded-t"
-                      style={{ height: `${(p.count / maxCount) * 100}%`, minHeight: '2px' }}
-                    />
-                    <div className="text-[10px] text-gray-600 mt-0.5">{String(p.year).slice(-2)}</div>
-                    <div className="text-[10px] text-gray-500">{p.count}</div>
-                  </div>
-                ));
-              })()}
+              <label className="block text-xs font-medium text-gray-700 mb-1">To</label>
+              <input type="date" value={allDateEnd} onChange={(e) => setAllDateEnd(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
             </div>
           </div>
         )}
@@ -423,91 +284,136 @@ const AdjustmentStudyTab = ({
       {/* Error */}
       {error && (
         <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded text-sm text-rose-800">
-          <strong>Could not run study:</strong> {error}
+          <strong>Could not run audit:</strong> {error}
         </div>
       )}
 
       {/* Empty state */}
-      {!study && !error && (
+      {!audit && !error && (
         <div className="p-6 bg-gray-50 border border-dashed border-gray-300 rounded text-center text-gray-500 text-sm">
-          Adjust filters above and click <strong>Run Study</strong>. Math runs entirely in your browser.
+          Pick an attribute and click <strong>Run Audit</strong>. Each market bracket is checked
+          independently against your grid value for that bracket.
         </div>
       )}
 
       {/* Results */}
-      {study?.ok && (
+      {audit?.ok && (
         <>
-          {/* Dataset summary */}
-          <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
-            <SummaryStat label="Mode" value={study.mode === 'vetted' ? 'Vetted' : 'All Allowable'} hint={study.diagnostics.dependentField} />
-            <SummaryStat label="Used in Model" value={study.dataset.nUsed.toLocaleString()} hint={`${study.dataset.n} qualified, ${study.dataset.n - study.dataset.nUsed} dropped`} />
-            <SummaryStat label="R²" value={study.diagnostics.rSquared.toFixed(3)} hint={`Adj R² ${study.diagnostics.adjRSquared.toFixed(3)}`} />
-            <SummaryStat label="Mean Price" value={fmtUSD(study.diagnostics.meanPrice)} />
-            <SummaryStat label="Residual Std Err" value={fmtUSD(study.diagnostics.residualStdError)} hint="Typical model error" />
+          {/* Summary bar */}
+          <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="text-sm text-gray-700">
+              Auditing <span className="font-semibold">{audit.attrLabel}</span> across{' '}
+              <span className="font-semibold">{audit.nQualifiedTotal.toLocaleString()}</span> qualified sales.
+              {audit.anchorIdx >= 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 text-emerald-700">
+                  <Anchor className="w-3.5 h-3.5" />
+                  Anchor: {CME_BRACKETS[audit.anchorIdx].shortLabel}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50"
+              title="Copy a clean prose summary you can paste into your write-up"
+            >
+              <ClipboardCopy className="w-4 h-4" />
+              {copied ? 'Copied!' : 'Copy Documentation'}
+            </button>
           </div>
 
-          {/* Reconciliation table */}
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Attribute</th>
-                  <th className="px-4 py-3 text-right font-semibold">Current Grid (mid)</th>
-                  <th className="px-4 py-3 text-right font-semibold">Regression Coef.</th>
-                  <th className="px-4 py-3 text-right font-semibold">95% CI</th>
-                  <th className="px-4 py-3 text-center font-semibold" title="★★★ p<.001  ★★ p<.01  ★ p<.05  · p<.10">Sig.</th>
-                  <th className="px-4 py-3 text-left font-semibold">Recommendation</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {reconciledRows.map((row) => {
-                  const style = STATUS_STYLES[row.status] || STATUS_STYLES['no-grid'];
-                  const Icon = style.Icon;
-                  return (
-                    <tr key={row.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{row.label}</div>
-                        <div className="text-xs text-gray-500">{row.unit}</div>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {row.currentGridValue == null ? <span className="text-gray-400">—</span> : fmtUSD(row.currentGridValue)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">
-                        {fmtUSD(row.coef)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-gray-600">
-                        {fmtUSD(row.ci95[0])} – {fmtUSD(row.ci95[1])}
-                      </td>
-                      <td className="px-4 py-3 text-center font-mono text-amber-600" title={`p = ${row.p?.toExponential(2) || 'n/a'}`}>
-                        {significanceStars(row.p)}
-                      </td>
-                      <td className={`px-4 py-3 ${style.bg} border-l ${style.border}`}>
-                        <div className={`flex items-start gap-2 text-xs ${style.color}`}>
-                          <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <div className="font-semibold">{style.label}</div>
-                            <div className="mt-0.5 text-gray-700">{row.message}</div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          {/* Per-bracket cards */}
+          <div className="space-y-2">
+            {audit.perBracket.map((b) => {
+              const style = VERDICT_STYLES[b.verdict] || VERDICT_STYLES.cant_verify;
+              const Icon = style.Icon;
+              const cmp = b.comparison ? COMPARISON_BADGES[b.comparison] : null;
+              const fitLo = b.fit ? b.fit.ci95[0] : null;
+              const fitHi = b.fit ? b.fit.ci95[1] : null;
+              return (
+                <div
+                  key={b.bracketIdx}
+                  className={`border rounded-lg p-3 ${style.bg} ${style.border} ${b.isAnchor ? 'ring-2 ring-emerald-400' : ''}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Icon className={`w-5 h-5 mt-0.5 ${style.color}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-semibold text-gray-900">{b.bracket.label}</div>
+                        {b.isAnchor && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                            <Anchor className="w-3 h-3" /> Anchor
+                          </span>
+                        )}
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${style.bg} ${style.color} ${style.border}`}>
+                          {style.label}
+                        </span>
+                        {cmp && b.verdict !== 'pending' && b.verdict !== 'cant_verify' && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${cmp.color}`}>{cmp.label}</span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-800">
+                        <span className="text-gray-600">Qualified sales: </span>
+                        <span className="font-semibold">{b.n}</span>
+                        <span className="ml-3 text-gray-600">Grid value: </span>
+                        <span className="font-semibold">{fmtMoney(b.gridValue)}</span>
+                        {b.fit && (
+                          <>
+                            <span className="ml-3 text-gray-600">Market range: </span>
+                            <span className="font-semibold">{fmtMoney(fitLo)} – {fmtMoney(fitHi)}</span>
+                          </>
+                        )}
+                      </div>
+                      {b.comparisonText && (
+                        <div className="mt-1 text-sm text-gray-700">{b.comparisonText}</div>
+                      )}
+                      {b.verdict === 'cant_verify' && (
+                        <div className="mt-1 text-sm text-gray-700">{b.message}</div>
+                      )}
+                      {b.verdict === 'pending' && (
+                        <div className="mt-1 text-sm text-gray-700">{b.message}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+
+          {/* Interpolation diagnostic */}
+          {audit.interpolation && audit.interpolation.checks.length > 0 && (
+            <div className="mt-6 p-4 border border-blue-200 bg-blue-50 rounded text-sm text-blue-900">
+              <div className="font-semibold mb-1">Interpolation Check</div>
+              <div className="text-xs mb-2">
+                With two verified brackets ({CME_BRACKETS[audit.interpolation.anchors[0]].shortLabel} and{' '}
+                {CME_BRACKETS[audit.interpolation.anchors[1]].shortLabel}), the brackets between them are
+                checked against the line those two define. Anything off-line warrants a closer look.
+              </div>
+              <ul className="list-disc ml-5 space-y-0.5">
+                {audit.interpolation.checks.map((c) => (
+                  <li key={c.bracketIdx}>
+                    {c.bracket.label}: grid {fmtMoney(c.gridValue)}, line implies {fmtMoney(c.expectedFromLine)}
+                    {c.within == null
+                      ? <span className="ml-2 text-gray-700">— (no model for this bracket)</span>
+                      : c.within
+                        ? <span className="ml-2 text-emerald-800 font-semibold">— consistent</span>
+                        : <span className="ml-2 text-amber-800 font-semibold">— off-line, review</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Methodology footer */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
+          <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded text-xs text-gray-700">
             <div className="font-semibold mb-1 flex items-center gap-1">
               <Info className="w-3.5 h-3.5" /> Methodology
             </div>
             <ul className="list-disc ml-5 space-y-0.5">
-              <li>Linear-additive hedonic OLS, IAAO standard form. Coefficients = $ contribution per unit of each attribute, holding the others constant.</li>
-              <li>Condition rank uses your job's <em>Attribute Cards</em> configuration (baseline / better / worse).</li>
-              <li>Condo qualifiers (C*) excluded — they share footprints with the mother lot.</li>
-              <li>Complete-case observations only — a sale missing any selected variable is dropped (no imputation).</li>
-              <li>P-values are normal approximations of two-sided t-tests. <strong>Apply professional judgment</strong> before overriding any grid value.</li>
+              <li>For each bracket, every other grid attribute is stripped from the sale price <strong>relative to that bracket's median baseline property</strong>, using the sale's own bracket column.</li>
+              <li>The remaining residual is regressed against the audited attribute's quantity (or compared as a presence/absence difference for binary attributes).</li>
+              <li>The resulting market range is the interval the data is comfortable with. Grid values inside the range are supported; values outside flag a review.</li>
+              <li><strong>Verified</strong> = {VERIFY_COMFORTABLE}+ qualified sales with adequate spread. <strong>Limited support</strong> = {VERIFY_FLOOR}–{VERIFY_COMFORTABLE - 1} sales (directional only). <strong>Below {VERIFY_FLOOR}</strong> = remains a judgment call.</li>
+              <li>Pending attributes are not yet wired to the audit — they are intentionally surfaced so you can see what's coming, never shown as zero.</li>
             </ul>
           </div>
         </>
@@ -515,13 +421,5 @@ const AdjustmentStudyTab = ({
     </div>
   );
 };
-
-const SummaryStat = ({ label, value, hint }) => (
-  <div className="p-3 bg-white border border-gray-200 rounded shadow-sm">
-    <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-    <div className="mt-1 text-xl font-bold text-gray-900">{value}</div>
-    {hint && <div className="mt-0.5 text-xs text-gray-500">{hint}</div>}
-  </div>
-);
 
 export default AdjustmentStudyTab;

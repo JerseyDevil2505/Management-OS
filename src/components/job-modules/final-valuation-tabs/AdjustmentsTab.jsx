@@ -1516,7 +1516,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             }`}
           >
             <FlaskConical className="w-4 h-4" />
-            Adjustment Study
+            Adjustment Audit
           </button>
           <button
             onClick={() => setActiveSubTab('mapping')}
