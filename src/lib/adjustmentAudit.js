@@ -491,6 +491,31 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
   }
 
   const mode = opts.mode || 'vetted';
+
+  // Diagnostic: count how many qualified sales actually landed in *any* bracket
+  // using the mode-aware price field. If 0 → the price field isn't populated
+  // the way bracket assignment expects, and EVERY bracket will report 0.
+  let landed = 0, missingPrice = 0, outOfRange = 0;
+  let minP = Infinity, maxP = -Infinity, sumP = 0;
+  for (const p of qualified) {
+    const px = getSalePrice(p, mode);
+    if (px == null || px <= 0) { missingPrice += 1; continue; }
+    minP = Math.min(minP, px);
+    maxP = Math.max(maxP, px);
+    sumP += px;
+    const idx = assignBracket(px);
+    if (idx < 0) outOfRange += 1; else landed += 1;
+  }
+  const priceDiagnostic = {
+    field: priceFieldFor(mode),
+    landed,
+    missingPrice,
+    outOfRange,
+    min: landed + outOfRange > 0 ? minP : null,
+    max: landed + outOfRange > 0 ? maxP : null,
+    mean: landed + outOfRange > 0 ? sumP / (landed + outOfRange) : null,
+  };
+
   const perBracket = CME_BRACKETS.map((_, idx) =>
     auditBracket({ attrId, bracketIdx: idx, allSales: qualified, gridRows, mode })
   );
@@ -545,6 +570,8 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
     perBracket,
     anchorIdx,
     interpolation,
+    priceDiagnostic,
+    mode,
   };
 }
 

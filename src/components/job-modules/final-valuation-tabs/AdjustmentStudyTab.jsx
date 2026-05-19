@@ -306,6 +306,25 @@ const AdjustmentStudyTab = ({
       {/* Results */}
       {audit?.ok && (
         <>
+          {/* Diagnostic: every qualified sale failed bracket assignment */}
+          {audit.priceDiagnostic && audit.priceDiagnostic.landed === 0 && audit.nQualifiedTotal > 0 && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded text-sm text-amber-900">
+              <div className="font-semibold mb-1">No sales landed in any bracket — price field looks off.</div>
+              <div className="text-xs">
+                Field used: <code className="px-1 bg-amber-100 rounded">{audit.priceDiagnostic.field}</code>{' '}
+                ({audit.mode === 'vetted' ? 'vetted mode uses time-normalized values' : 'all-allowable mode uses raw sale price'}).
+                Of {audit.nQualifiedTotal} qualified sales: <strong>{audit.priceDiagnostic.missingPrice}</strong> had no value in this field,{' '}
+                <strong>{audit.priceDiagnostic.outOfRange}</strong> had a value that didn't match any bracket range.
+                {audit.priceDiagnostic.min != null && (
+                  <> Observed range: <strong>{fmtMoney(audit.priceDiagnostic.min)} – {fmtMoney(audit.priceDiagnostic.max)}</strong> (mean {fmtMoney(audit.priceDiagnostic.mean)}).</>
+                )}
+                {audit.mode === 'vetted' && audit.priceDiagnostic.max != null && audit.priceDiagnostic.max < 1000 && (
+                  <div className="mt-2"><strong>Likely cause:</strong> <code>values_norm_time</code> is storing a ratio/multiplier instead of a dollar amount. Switch to <em>All Allowable Sales</em> mode and pick a recent date window, or re-run time normalization with a target year.</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Summary bar */}
           <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
             <div className="text-sm text-gray-700">
