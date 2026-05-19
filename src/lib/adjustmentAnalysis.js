@@ -69,19 +69,25 @@ export function assignBracket(price) {
   return -1;
 }
 
-// Mode-aware response price. Bracket assignment ALWAYS uses raw sales_price
-// (so the brackets mean the same thing regardless of mode); the regression-
-// like "actual" value used for hit testing follows mode:
-//   vetted → values_norm_time (time-adjusted to valuation date)
-//   all    → sales_price
-function getResponsePrice(p, mode) {
-  const field = mode === 'vetted' ? 'values_norm_time' : 'sales_price';
-  const v = Number(p[field]);
+// Mode-aware dependent variable. EVERYTHING downstream — baseline price,
+// predicted-vs-actual error, hit tolerance, drill-in card prose — uses
+// dependentValue(). Only assignBracket() uses bracketAssignmentPrice().
+//
+// Vetted mode: dependent = values_norm_time (time-adjusted). Required so
+// the hit test isn't fighting decade-old market drift the normalization
+// workflow specifically removed.
+// All-allowable mode: dependent = raw sales_price.
+//
+// Bracket assignment always uses raw sales_price in both modes — the
+// bracket question is "where did this house physically transact," which
+// is always the actual sale price, never a normalized number.
+function dependentValue(sale, mode) {
+  const v = mode === 'vetted' ? Number(sale.values_norm_time) : Number(sale.sales_price);
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-function getSalePrice(p) {
-  const v = Number(p.sales_price);
+function bracketAssignmentPrice(sale) {
+  const v = Number(sale.sales_price);
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
@@ -547,17 +553,17 @@ function splitErrorByAttributeDeviation(samples, attrId) {
 // ---------------------------------------------------------------------------
 function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
   const bracket = CME_BRACKETS[bracketIdx];
-  const inBracket = allSales.filter((p) => assignBracket(getSalePrice(p)) === bracketIdx);
+  const inBracket = allSales.filter((p) => assignBracket(bracketAssignmentPrice(p)) === bracketIdx);
   const baselines = computeBaselines(inBracket, ctx);
 
-  // Baseline price = median of the mode-aware response price
-  const responsePrices = inBracket
-    .map((p) => getResponsePrice(p, mode))
+  // Baseline price = median of the mode-aware dependent value.
+  // This is also the price denominator used for all drift coloring — same
+  // value space as the actual/predicted being compared.
+  const dependentVals = inBracket
+    .map((p) => dependentValue(p, mode))
     .filter((v) => v != null);
-  const baselinePrice = median(responsePrices);
-  const bracketMedianSalePrice = median(
-    inBracket.map((p) => getSalePrice(p)).filter((v) => v != null)
-  );
+  const baselinePrice = median(dependentVals);
+  const bracketMedianDependent = baselinePrice;
 
   if (inBracket.length < ANALYSIS_FLOOR || baselinePrice == null) {
     return {
@@ -570,20 +576,21 @@ function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
       message: `Only ${inBracket.length} qualified sales in this bracket — not enough to evaluate.`,
       baselines,
       baselinePrice,
-      bracketMedianSalePrice,
+      bracketMedianDependent,
       perAttribute: {},
     };
   }
 
-  // Apply grid to every sale → samples with predicted, actual, error
+  // Apply grid to every sale → samples with predicted, actual, error.
+  // Hit tolerance is ±10% of the mode-aware dependent value (not raw sale
+  // price) so vetted mode doesn't re-introduce time drift via the tolerance.
   const samples = [];
   for (const sale of inBracket) {
-    const actual = getResponsePrice(sale, mode);
-    const salePriceRaw = getSalePrice(sale);
-    if (actual == null || salePriceRaw == null) continue;
+    const actual = dependentValue(sale, mode);
+    if (actual == null) continue;
     const { predicted, contribs } = applyGridToSale(sale, bracketIdx, gridRows, baselines, baselinePrice, ctx);
     const error = actual - predicted;
-    const tolDollars = HIT_TOLERANCE * salePriceRaw;
+    const tolDollars = HIT_TOLERANCE * actual;
     const hit = Math.abs(error) <= tolDollars;
     // Per-attribute snapshot for the cell-drift analysis below
     const qtyByAttr = {};
@@ -601,7 +608,7 @@ function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
     return {
       bracketIdx, bracket, n: 0,
       verdict: { band: 'cant_verify', color: 'grey', label: "Can't verify" },
-      hitRate: null, hits: 0, baselines, baselinePrice, bracketMedianSalePrice,
+      hitRate: null, hits: 0, baselines, baselinePrice, bracketMedianDependent,
       perAttribute: {},
       message: 'No samples could be evaluated in this bracket.',
     };
@@ -611,7 +618,7 @@ function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
   const hitRate = hits / samples.length;
   const medianSignedError = median(samples.map((s) => s.error)) ?? 0;
   const meanSignedError = mean(samples.map((s) => s.error)) ?? 0;
-  const verdict = bracketVerdict(samples.length, hitRate, medianSignedError, bracketMedianSalePrice || baselinePrice);
+  const verdict = bracketVerdict(samples.length, hitRate, medianSignedError, bracketMedianDependent || baselinePrice);
 
   // Per-attribute drift cells
   const perAttribute = {};
@@ -632,7 +639,7 @@ function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
       continue;
     }
     const split = splitErrorByAttributeDeviation(samples, attrId);
-    const color = attributeCellColor(split, bracketMedianSalePrice || baselinePrice);
+    const color = attributeCellColor(split, bracketMedianDependent || baselinePrice);
     perAttribute[attrId] = {
       color,
       ...(split.hasSpread ? {
@@ -657,7 +664,7 @@ function analyzeBracket(bracketIdx, allSales, gridRows, mode, ctx) {
     meanSignedError,
     baselines,
     baselinePrice,
-    bracketMedianSalePrice,
+    bracketMedianDependent,
     perAttribute,
   };
 }
@@ -698,7 +705,7 @@ export function runAnalysis({ properties, gridRows, opts = {} }) {
   // lands in any bracket, so the UI can surface "no sales landed" cases.
   let landed = 0;
   for (const p of qualified) {
-    const px = getSalePrice(p);
+    const px = bracketAssignmentPrice(p);
     if (px == null) continue;
     if (assignBracket(px) >= 0) landed += 1;
   }
