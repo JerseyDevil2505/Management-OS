@@ -778,3 +778,148 @@ export function buildDocumentationBlock(analysis, jobName = '') {
 
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Structured export data for the PDF builder. Pure data; no rendering.
+// jobMeta is { jobName, county, analysisDate (Date), jobId }.
+// ---------------------------------------------------------------------------
+function describeTypicalMiss(medianSignedError) {
+  if (medianSignedError == null || !Number.isFinite(medianSignedError) || medianSignedError === 0) return '';
+  const dir = medianSignedError > 0 ? 'low' : 'high';
+  return `${fmtMoney(Math.abs(medianSignedError))} ${dir}`;
+}
+
+function formatBracketYears(salesPerYear) {
+  if (!Array.isArray(salesPerYear) || salesPerYear.length === 0) return '';
+  const ys = salesPerYear.map((s) => s.year).filter(Number.isFinite);
+  if (ys.length === 0) return '';
+  const lo = Math.min(...ys), hi = Math.max(...ys);
+  return lo === hi ? String(lo) : `${lo}–${hi}`;
+}
+
+export function buildAnalysisExportData(analysis, jobMeta = {}) {
+  if (!analysis?.ok) return null;
+  const today = jobMeta.analysisDate instanceof Date ? jobMeta.analysisDate : new Date();
+  const isoStamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const idShort = jobMeta.jobId ? String(jobMeta.jobId).split('-')[0] : 'job';
+  const runId = `${idShort}-${isoStamp}`;
+  const dateLabel = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const yearRange = formatBracketYears(analysis.salesPerYear);
+
+  // Per-bracket rows — only brackets that received any qualified sales.
+  const rows = analysis.perBracket
+    .filter((b) => (b.n || 0) > 0 || (b.nInBracket || 0) > 0)
+    .map((b) => {
+      const isAnchor = b.bracketIdx === analysis.anchorIdx;
+      const isCantVerify = b.verdict.band === 'cant_verify';
+      const verdictLabel = isAnchor
+        ? 'Anchor'
+        : (isCantVerify ? "Can't verify" : (b.verdict.band === 'limited' ? 'Limited' : 'Verified'));
+      return {
+        bracketIdx: b.bracketIdx,
+        bracketLabel: b.bracket.label + (isAnchor ? ' (Anchor)' : ''),
+        bracketLabelPlain: b.bracket.label,
+        isAnchor,
+        n: b.n || 0,
+        verdict: verdictLabel,
+        verdictBand: b.verdict.band,
+        verdictColor: b.verdict.color,
+        hitRate: isCantVerify ? null : b.hitRate,
+        hitRateText: isCantVerify ? '' : (b.hitRate != null ? `${Math.round(b.hitRate * 100)}%` : ''),
+        typicalMiss: isCantVerify ? '' : describeTypicalMiss(b.medianSignedError),
+      };
+    });
+
+  // Anchor summary
+  const anchor = analysis.anchorIdx >= 0 ? analysis.perBracket[analysis.anchorIdx] : null;
+
+  // Verified brackets for "ranged from" sentence
+  const verifiedBrackets = analysis.perBracket.filter((b) => b.verdict.band !== 'cant_verify' && b.hitRate != null);
+  const hitRates = verifiedBrackets.map((b) => b.hitRate);
+  const minHit = hitRates.length ? Math.min(...hitRates) : null;
+  const maxHit = hitRates.length ? Math.max(...hitRates) : null;
+
+  // Per-attribute observations — only attrs with yellow/red in any verified bracket.
+  const verifiedBracketIdxs = new Set(verifiedBrackets.map((b) => b.bracketIdx));
+  const attrFindings = [];
+  for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
+    if (def.pending) continue;
+    const flagged = [];
+    for (const b of analysis.perBracket) {
+      if (!verifiedBracketIdxs.has(b.bracketIdx)) continue;
+      const cell = b.perAttribute?.[attrId];
+      if (!cell) continue;
+      if (cell.color === 'yellow' || cell.color === 'red') {
+        flagged.push({
+          bracketLabel: b.bracket.label,
+          severity: cell.color === 'red' ? 'significant' : 'some',
+          isLimited: b.verdict.band === 'limited',
+        });
+      }
+    }
+    if (flagged.length > 0) {
+      attrFindings.push({ attrId, label: def.label, flagged });
+    }
+  }
+
+  // Compose summary paragraph
+  const summaryParts = [];
+  summaryParts.push(
+    `Analysis was conducted on ${analysis.nQualifiedTotal.toLocaleString()} qualified sales${yearRange ? ` from ${yearRange}` : ''}${jobMeta.jobName ? ` in ${jobMeta.jobName}` : ''}.`
+  );
+  if (anchor) {
+    const hitTxt = anchor.hitRate != null ? `${Math.round(anchor.hitRate * 100)}%` : '—';
+    summaryParts.push(
+      `The anchor bracket — the bracket with the most qualified sales available for evaluation — was ${anchor.bracket.label} with ${anchor.n} sales, where the assessor's adjustment grid produced predictions within ±10% of the actual sale price on ${hitTxt} of sales.`
+    );
+  }
+  if (verifiedBrackets.length >= 2) {
+    summaryParts.push(
+      `Across ${verifiedBrackets.length} verified brackets, hit rates ranged from ${Math.round(minHit * 100)}% to ${Math.round(maxHit * 100)}%.`
+    );
+  }
+  if (analysis.lotSize?.warning && analysis.lotSize?.active) {
+    const activeLabel = GRID_ATTRIBUTE_MAP[analysis.lotSize.active]?.label || analysis.lotSize.active;
+    summaryParts.push(
+      `Note: Multiple lot-size methods are priced in the grid — the active method for this analysis was ${activeLabel.replace(/^Lot Size \((.*)\)$/, '$1')}.`
+    );
+  }
+  const summaryParagraph = summaryParts.join(' ');
+
+  // Compose per-attribute observations block
+  let attributeBlock;
+  if (attrFindings.length === 0) {
+    attributeBlock = ['No notable per-attribute drift was observed in the verified brackets.'];
+  } else {
+    attributeBlock = attrFindings.map((f) => {
+      const first = f.flagged[0];
+      const severityWord = first.severity === 'significant' ? 'Significant' : 'Some';
+      const limitedTag = first.isLimited ? ' (limited)' : '';
+      let line = `${f.label}: ${severityWord} drift observed in the ${first.bracketLabel} bracket${limitedTag}.`;
+      if (f.flagged.length > 1) {
+        const extras = f.flagged.slice(1).map((x) => `the ${x.bracketLabel} bracket`).join(', ');
+        line += ` Also observed in ${extras}.`;
+      }
+      return line;
+    });
+  }
+
+  const methodology = [
+    "This analysis applies the assessor's existing adjustment grid to each qualified sale in a bracket to produce a predicted value.",
+    "A sale is counted as accurately predicted when the predicted value falls within ±10% of the actual sale price, consistent with USPAP guidance on individual adjustment tolerances.",
+    "The analysis evaluates grid performance against qualified sales — it does not derive or propose adjustment values. Brackets with fewer than 10 qualified sales are reported as judgment calls and excluded from numerical evaluation.",
+  ];
+
+  return {
+    runId,
+    dateLabel,
+    jobName: jobMeta.jobName || '',
+    county: jobMeta.county || '',
+    title: 'Adjustment Grid Performance Analysis',
+    summaryParagraph,
+    bracketRows: rows,
+    attributeBlock,
+    methodology,
+  };
+}

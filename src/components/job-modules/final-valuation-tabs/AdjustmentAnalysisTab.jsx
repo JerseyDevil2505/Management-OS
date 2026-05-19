@@ -4,7 +4,7 @@ import {
   Database,
   Play,
   Info,
-  ClipboardCopy,
+  Download,
   Anchor,
   Hourglass,
   X,
@@ -16,8 +16,8 @@ import {
   ANALYSIS_COMFORTABLE,
   HIT_TOLERANCE,
   runAnalysis,
-  buildDocumentationBlock,
 } from '../../../lib/adjustmentAnalysis';
+import { exportAdjustmentAnalysisPdf } from '../../../lib/adjustmentAnalysisPdf';
 import { STUDY_DEFAULT_SALES_CODES } from '../../../lib/salesCodes';
 
 // ---------------------------------------------------------------------------
@@ -215,17 +215,25 @@ const AdjustmentAnalysisTab = ({
     });
   }, [properties, adjustmentGrid, opts, jobData]);
 
-  const handleCopy = useCallback(async () => {
-    if (!analysis) return;
-    const block = buildDocumentationBlock(analysis, jobData?.job_name || jobData?.name || '');
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    if (!analysis || exporting) return;
+    setExporting(true);
     try {
-      await navigator.clipboard.writeText(block);
+      await exportAdjustmentAnalysisPdf(analysis, {
+        jobName: jobData?.job_name || jobData?.name || jobData?.municipality || '',
+        county: jobData?.county || jobData?.county_name || '',
+        jobId: jobData?.id || '',
+      });
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch {
-      window.prompt('Copy the documentation block:', block);
+    } catch (err) {
+      console.error('PDF export failed', err);
+      setError(err?.message || String(err));
+    } finally {
+      setExporting(false);
     }
-  }, [analysis, jobData]);
+  }, [analysis, jobData, exporting]);
 
   // Visible brackets in the grid = those that landed any sales at all. (We
   // still show "Can't verify" columns for ones in the schedule that have a
@@ -342,11 +350,12 @@ const AdjustmentAnalysisTab = ({
           </div>
           <SalesYearBars data={analysis.salesPerYear} />
           <button
-            onClick={handleCopy}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100"
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50"
           >
-            <ClipboardCopy className="w-4 h-4" />
-            {copied ? 'Copied!' : 'Export for Tax Board'}
+            <Download className="w-4 h-4" />
+            {exporting ? 'Generating…' : copied ? 'PDF downloaded' : 'Export for Tax Board'}
           </button>
         </div>
       )}
