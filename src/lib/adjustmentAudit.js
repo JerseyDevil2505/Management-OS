@@ -27,6 +27,7 @@
 // Count gets you in the door, spread is what's actually in the room.
 
 import { filterQualifiedSales } from './adjustmentStudy';
+import { buildConditionRanker } from './conditionRanking';
 
 // ---------------------------------------------------------------------------
 // Tunable constants — calibrate against real towns.
@@ -272,9 +273,26 @@ export const GRID_ATTRIBUTE_MAP = {
     extract: (p) => (NUM(p.pool_area) > 0 ? 1 : 0),
   },
 
-  // ---- Still pending: needs condition-ranker plumbing ----
-  interior_condition: { label: 'Interior Condition', kind: 'continuous', applyType: 'percent', pending: true },
-  exterior_condition: { label: 'Exterior Condition', kind: 'continuous', applyType: 'percent', pending: true },
+  interior_condition: {
+    label: 'Interior Condition',
+    kind: 'continuous',
+    applyType: 'percent',
+    quantityUnit: 'rank',
+    extract: (p, ctx) => {
+      if (!ctx?.conditionRanker) return null;
+      return ctx.conditionRanker(p.asset_int_cond, 'interior', { ncovrPct: p.net_condition_pct });
+    },
+  },
+  exterior_condition: {
+    label: 'Exterior Condition',
+    kind: 'continuous',
+    applyType: 'percent',
+    quantityUnit: 'rank',
+    extract: (p, ctx) => {
+      if (!ctx?.conditionRanker) return null;
+      return ctx.conditionRanker(p.asset_ext_cond, 'exterior', { ncovrPct: p.net_condition_pct });
+    },
+  },
 };
 
 export function isAttributeReady(attrId) {
@@ -306,11 +324,11 @@ function median(arr) {
   return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
 }
 
-export function computeBracketBaselines(salesInBracket) {
+export function computeBracketBaselines(salesInBracket, ctx = {}) {
   const baselines = {};
   for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
     if (!isAttributeReady(attrId)) continue;
-    const qs = salesInBracket.map((p) => def.extract(p)).filter((q) => q != null);
+    const qs = salesInBracket.map((p) => def.extract(p, ctx)).filter((q) => q != null);
     baselines[attrId] = median(qs);
   }
   return baselines;
@@ -329,7 +347,7 @@ function _bumpDropReason(attrId) {
   STRIP_DROP_REASONS.byAttr[attrId] = (STRIP_DROP_REASONS.byAttr[attrId] || 0) + 1;
 }
 
-function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baselines, mode = 'vetted') {
+function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baselines, mode = 'vetted', ctx = {}) {
   let residual = getSalePrice(sale, mode);
   if (residual == null) return null;
 
@@ -342,7 +360,7 @@ function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baseli
     // a missing extractor on an attribute the grid doesn't even use would
     // wrongly drop the sale.
     if (grid == null || grid === 0) continue;
-    const qty = def.extract(sale);
+    const qty = def.extract(sale, ctx);
     if (qty == null) { _bumpDropReason(attrId); return null; } // complete-case ONLY when the grid relies on this attribute
     const base = baselines[attrId];
     if (base == null) continue;
@@ -424,7 +442,7 @@ function fitBinaryMeanDiff(xs, ys) {
 // Audit ONE bracket for ONE attribute. Returns a verdict object the UI can
 // render directly — no math knowledge required downstream.
 // ---------------------------------------------------------------------------
-export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'vetted' }) {
+export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'vetted', ctx = {} }) {
   const def = GRID_ATTRIBUTE_MAP[attrId];
   const bracket = CME_BRACKETS[bracketIdx];
   const gridValue = gridValueFor(gridRows, attrId, bracketIdx);
@@ -447,16 +465,16 @@ export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'v
   // for all-allowable). Same field is used to compute the residual so the
   // audit stays internally consistent.
   const inBracket = allSales.filter((p) => assignBracket(getSalePrice(p, mode)) === bracketIdx);
-  const baselines = computeBracketBaselines(inBracket);
+  const baselines = computeBracketBaselines(inBracket, ctx);
   const baselineQty = baselines[attrId];
 
   // Build (x, y) pairs. Track WHY sales drop so the UI can explain it.
   const pts = [];
   let droppedNoQty = 0, droppedStrip = 0;
   for (const sale of inBracket) {
-    const qty = def.extract(sale);
+    const qty = def.extract(sale, ctx);
     if (qty == null) { droppedNoQty += 1; continue; }
-    const residual = stripOtherAdjustments(sale, bracketIdx, attrId, gridRows, baselines, mode);
+    const residual = stripOtherAdjustments(sale, bracketIdx, attrId, gridRows, baselines, mode, ctx);
     if (residual == null || !Number.isFinite(residual)) { droppedStrip += 1; continue; }
     pts.push({ x: qty, y: residual });
   }
@@ -567,6 +585,9 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
   }
 
   const mode = opts.mode || 'vetted';
+  const ctx = {
+    conditionRanker: opts.jobData ? buildConditionRanker(opts.jobData) : null,
+  };
 
   // Reset the strip-drop reason counter for this run
   STRIP_DROP_REASONS.byAttr = {};
@@ -596,7 +617,7 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
   };
 
   const perBracket = CME_BRACKETS.map((_, idx) =>
-    auditBracket({ attrId, bracketIdx: idx, allSales: qualified, gridRows, mode })
+    auditBracket({ attrId, bracketIdx: idx, allSales: qualified, gridRows, mode, ctx })
   );
 
   // Anchor = most-populous verified; fallback = most-populous overall

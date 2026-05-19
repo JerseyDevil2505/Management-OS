@@ -129,7 +129,7 @@ const AdjustmentStudyTab = ({
     setCopied(false);
     requestAnimationFrame(() => {
       try {
-        const result = runAudit({ attrId, properties, gridRows: adjustmentGrid, opts });
+        const result = runAudit({ attrId, properties, gridRows: adjustmentGrid, opts: { ...opts, jobData } });
         if (!result.ok) { setError(result.error); setAudit(null); }
         else setAudit(result);
       } catch (e) {
@@ -139,7 +139,7 @@ const AdjustmentStudyTab = ({
         setRunning(false);
       }
     });
-  }, [attrId, properties, adjustmentGrid, opts]);
+  }, [attrId, properties, adjustmentGrid, opts, jobData]);
 
   const handleCopy = useCallback(async () => {
     if (!audit) return;
