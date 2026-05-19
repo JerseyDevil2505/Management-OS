@@ -257,6 +257,14 @@ export function computeBracketBaselines(salesInBracket) {
 // baseline. Returns null if any non-pending OTHER attribute is missing on
 // this sale (complete-case stripping — no imputation).
 // ---------------------------------------------------------------------------
+// Module-level counter — UI can read it after a run to surface the
+// most common reason sales dropped during stripping. Reset at the start
+// of each runAudit().
+export const STRIP_DROP_REASONS = { byAttr: {} };
+function _bumpDropReason(attrId) {
+  STRIP_DROP_REASONS.byAttr[attrId] = (STRIP_DROP_REASONS.byAttr[attrId] || 0) + 1;
+}
+
 function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baselines, mode = 'vetted') {
   let residual = getSalePrice(sale, mode);
   if (residual == null) return null;
@@ -271,7 +279,7 @@ function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baseli
     // wrongly drop the sale.
     if (grid == null || grid === 0) continue;
     const qty = def.extract(sale);
-    if (qty == null) return null; // complete-case ONLY when the grid relies on this attribute
+    if (qty == null) { _bumpDropReason(attrId); return null; } // complete-case ONLY when the grid relies on this attribute
     const base = baselines[attrId];
     if (base == null) continue;
 
@@ -378,15 +386,19 @@ export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'v
   const baselines = computeBracketBaselines(inBracket);
   const baselineQty = baselines[attrId];
 
-  // Build (x, y) pairs
+  // Build (x, y) pairs. Track WHY sales drop so the UI can explain it.
   const pts = [];
+  let droppedNoQty = 0, droppedStrip = 0;
   for (const sale of inBracket) {
     const qty = def.extract(sale);
-    if (qty == null) continue;
+    if (qty == null) { droppedNoQty += 1; continue; }
     const residual = stripOtherAdjustments(sale, bracketIdx, attrId, gridRows, baselines, mode);
-    if (residual == null || !Number.isFinite(residual)) continue;
+    if (residual == null || !Number.isFinite(residual)) { droppedStrip += 1; continue; }
     pts.push({ x: qty, y: residual });
   }
+  base.nLanded = inBracket.length;
+  base.droppedNoQty = droppedNoQty;
+  base.droppedStrip = droppedStrip;
 
   const n = pts.length;
   if (n < VERIFY_FLOOR) {
@@ -492,6 +504,9 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
 
   const mode = opts.mode || 'vetted';
 
+  // Reset the strip-drop reason counter for this run
+  STRIP_DROP_REASONS.byAttr = {};
+
   // Diagnostic: count how many qualified sales actually landed in *any* bracket
   // using the mode-aware price field. If 0 → the price field isn't populated
   // the way bracket assignment expects, and EVERY bracket will report 0.
@@ -571,6 +586,7 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
     anchorIdx,
     interpolation,
     priceDiagnostic,
+    stripDropReasons: { ...STRIP_DROP_REASONS.byAttr },
     mode,
   };
 }

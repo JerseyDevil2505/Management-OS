@@ -306,7 +306,7 @@ const AdjustmentStudyTab = ({
       {/* Results */}
       {audit?.ok && (
         <>
-          {/* Diagnostic: every qualified sale failed bracket assignment */}
+          {/* Diagnostic: bracket-assignment failure (no sales landed) */}
           {audit.priceDiagnostic && audit.priceDiagnostic.landed === 0 && audit.nQualifiedTotal > 0 && (
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded text-sm text-yellow-900">
               <div className="font-semibold mb-1">No sales landed in any bracket — price field looks off.</div>
@@ -320,6 +320,36 @@ const AdjustmentStudyTab = ({
                 )}
                 {audit.mode === 'vetted' && audit.priceDiagnostic.max != null && audit.priceDiagnostic.max < 1000 && (
                   <div className="mt-2"><strong>Likely cause:</strong> <code>values_norm_time</code> is storing a ratio/multiplier instead of a dollar amount. Switch to <em>All Allowable Sales</em> mode and pick a recent date window, or re-run time normalization with a target year.</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Diagnostic: sales DID land in brackets but stripping dropped them all */}
+          {audit.priceDiagnostic && audit.priceDiagnostic.landed > 0 && audit.perBracket.every((b) => (b.n || 0) === 0) && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded text-sm text-yellow-900">
+              <div className="font-semibold mb-1">Sales landed in brackets, but every one was dropped during stripping.</div>
+              <div className="text-xs space-y-1">
+                <div>
+                  Field used: <code className="px-1 bg-yellow-100 rounded">{audit.priceDiagnostic.field}</code>.
+                  Landed in brackets: <strong>{audit.priceDiagnostic.landed}</strong> sales.
+                  Observed range: <strong>{fmtMoney(audit.priceDiagnostic.min)} – {fmtMoney(audit.priceDiagnostic.max)}</strong>.
+                </div>
+                {Object.keys(audit.stripDropReasons || {}).length > 0 ? (
+                  <div>
+                    <strong>Dropped because these grid attributes had non-zero values but no extractable data on the sales:</strong>
+                    <ul className="list-disc ml-5 mt-1">
+                      {Object.entries(audit.stripDropReasons)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([attr, n]) => (
+                          <li key={attr}>
+                            <code className="px-1 bg-yellow-100 rounded">{attr}</code> — {n} sale(s) missing this field. Set this row's bracket value to 0 in your grid, or fix the source data.
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div>No specific attribute caught the drop, which is unusual — likely the audited attribute itself ({audit.attrLabel}) is missing on every sale in every bracket.</div>
                 )}
               </div>
             </div>
