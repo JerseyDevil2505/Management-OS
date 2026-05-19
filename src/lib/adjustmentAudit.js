@@ -132,6 +132,15 @@ export const GRID_ATTRIBUTE_MAP = {
       if (acre && acre > 0) return acre;
       const sf = NUM(p.asset_lot_sf) ?? NUM(p.market_manual_lot_sf);
       if (sf && sf > 0) return sf / 43560;
+      if (typeof window !== 'undefined' && !window.__auditLotAcreDumped) {
+        window.__auditLotAcreDumped = true;
+        const lotKeys = Object.keys(p).filter((k) => /lot|acre|sf|land/i.test(k));
+        console.warn('[AdjustmentAudit] lot_size_acre extractor returned null. Dumping lot-related fields on this sale:', {
+          composite: p.property_composite_key,
+          fields: Object.fromEntries(lotKeys.map((k) => [k, p[k]])),
+          allKeys: Object.keys(p).sort(),
+        });
+      }
       return null;
     },
   },
