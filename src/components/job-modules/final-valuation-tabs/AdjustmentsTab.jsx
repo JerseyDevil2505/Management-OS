@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, getRawDataForJob, propertyService } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X, Map as MapIcon, ChevronDown, ChevronUp, Pencil, FlaskConical } from 'lucide-react';
-import AdjustmentStudyTab from './AdjustmentStudyTab';
+import AdjustmentAnalysisTab from './AdjustmentAnalysisTab';
 
 // Valid sales codes for CME averages (matches SalesComparisonTab defaults)
 const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
@@ -1516,7 +1516,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             }`}
           >
             <FlaskConical className="w-4 h-4" />
-            Adjustment Audit
+            Adjustment Analysis
           </button>
           <button
             onClick={() => setActiveSubTab('mapping')}
@@ -2370,9 +2370,9 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
         </div>
       )}
 
-      {/* Adjustment Study Tab */}
+      {/* Adjustment Analysis Tab */}
       {activeSubTab === 'study' && (
-        <AdjustmentStudyTab
+        <AdjustmentAnalysisTab
           jobData={jobData}
           properties={properties}
           adjustmentGrid={adjustmentGridProp}
