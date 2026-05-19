@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera, Lock, Unlock } from 'lucide-react';
 import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
@@ -636,6 +636,46 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     if (a > b) return multiplier;
     return 0;
   };
+
+  // ===== Top-scrollbar mirror plumbing =====
+  // Mirrors the table's horizontal scroll position so users can pan
+  // horizontally from the top of the table as well as the bottom.
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const tableRef = useRef(null);
+  const syncingScroll = useRef(false);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+  const onTopScroll = useCallback(() => {
+    if (syncingScroll.current) { syncingScroll.current = false; return; }
+    if (topScrollRef.current && tableScrollRef.current) {
+      syncingScroll.current = true;
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  }, []);
+  const onTableScroll = useCallback(() => {
+    if (syncingScroll.current) { syncingScroll.current = false; return; }
+    if (topScrollRef.current && tableScrollRef.current) {
+      syncingScroll.current = true;
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const w = tableRef.current?.scrollWidth || tableScrollRef.current?.scrollWidth || 0;
+      if (w !== tableScrollWidth) setTableScrollWidth(w);
+    };
+    measure();
+    const ro = (typeof ResizeObserver !== 'undefined' && tableRef.current)
+      ? new ResizeObserver(measure) : null;
+    if (ro && tableRef.current) ro.observe(tableRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      if (ro) ro.disconnect();
+    };
+  });
 
   // Helper: Render sortable column header
   const SortableHeader = ({ label, columnKey, sticky = false, left = '0', minWidth = null, maxWidth = null }) => {
@@ -4030,8 +4070,23 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
       {filteredAppeals.length > 0 && (
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
+      <>
+      {/* Top horizontal scrollbar mirror — scrolls the table below in sync so
+          users don't have to scroll to the bottom to pan horizontally. */}
+      <div
+        ref={topScrollRef}
+        onScroll={onTopScroll}
+        className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto overflow-y-hidden"
+        style={{ height: '14px' }}
+      >
+        <div style={{ width: tableScrollWidth, height: '1px' }} />
+      </div>
+      <div
+        ref={tableScrollRef}
+        onScroll={onTableScroll}
+        className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto mt-1"
+      >
+        <table ref={tableRef} className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-green-50 border-b border-gray-200">
               {/* CHECKBOX COLUMN */}
@@ -4297,6 +4352,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </tbody>
         </table>
       </div>
+      </>
       )}
 
       {/* POWERCOMP ROUND-TRIP ACTIONS (kept under the table to reduce toolbar crowding) */}

@@ -2714,7 +2714,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
             const farmMode = !!appealRow.farm_mode;
 
-            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Location', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const ppsfStr = (price, sfla) => {
+              const p = Number(price);
+              const s = Number(sfla);
+              if (!Number.isFinite(p) || !Number.isFinite(s) || p <= 0 || s <= 0) return '\u2014';
+              return `$${Math.round(p / s)}/SF`;
+            };
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Location', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size', 'PPSF']];
             const subjRow = [
               'SUBJ',
               subject.property_block || '',
@@ -2731,7 +2737,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               codeWithName(subject, 'asset_int_cond'),
               subject.asset_year_built || '\u2014',
               getAdjustedSFLA(subject) || subject.asset_sfla || '\u2014',
-              lotDisplay(subject)
+              lotDisplay(subject),
+              ppsfStr(subject.sales_price, getAdjustedSFLA(subject) || subject.asset_sfla)
             ];
             const evaluations = appellantComps.map(slot => {
               const compProp = findCompProperty(slot.block, slot.lot, slot.qualifier, slot.card);
@@ -2767,7 +2774,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   manualCodeWithName(slot.manual_condition, 'asset_int_cond'),
                   slot.manual_year_built || '\u2014',
                   slot.manual_sfla || '\u2014',
-                  lotSize
+                  lotSize,
+                  ppsfStr(slot.sales_price, slot.manual_sfla)
                 ];
               }
               return [
@@ -2786,7 +2794,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
                 compProp?.asset_year_built || '\u2014',
                 (compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla || '\u2014',
-                lotDisplay(compProp)
+                lotDisplay(compProp),
+                ppsfStr(slot.sales_price || compProp?.sales_price, (compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla)
               ];
             });
 
@@ -2810,7 +2819,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               'condition',  // 12
               'year_built', // 13
               'sfla',       // 14
-              'lot_size'    // 15
+              'lot_size',   // 15
+              null          // 16: PPSF (derived, no flag)
             ];
             // Same pastel hexes used in the panel UI (Tailwind {color}-100).
             const COLOR_FILL = {
