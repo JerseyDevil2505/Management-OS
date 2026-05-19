@@ -109,6 +109,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // carry the currently-selected code before a study is even run.
   const [codeCountCache, setCodeCountCache] = useState({});
   const [prefetchingCounts, setPrefetchingCounts] = useState(false);
+  // Persisted studies for this job (job_custom_attribute_studies)
+  const [savedStudies, setSavedStudies] = useState([]);
+  const [loadingStudies, setLoadingStudies] = useState(false);
+  const [activeStudyId, setActiveStudyId] = useState(null);
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
@@ -2741,14 +2745,122 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       };
 
       setCustomResults(results);
-      
-      // Save to database
-      await saveCustomResultsToDB(results);
-      
+
+      // Persist as a new row in job_custom_attribute_studies (one row per run).
+      // Also mirror to market_land_valuation.custom_attribute_rollup so the
+      // last run is still cached in the parent jobData (backwards compatible).
+      await Promise.all([
+        persistStudyRow(results),
+        saveCustomResultsToDB(results),
+      ]);
+      await loadSavedStudies();
+
     } catch (error) {
       console.error('Error running custom attribute analysis:', error);
     } finally {
       setCustomWorking(false);
+    }
+  };
+
+  // ---------- Saved-studies CRUD against job_custom_attribute_studies ----------
+  const persistStudyRow = async (results) => {
+    if (!jobData?.id || !results) return;
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_attribute_studies')
+        .insert({
+          job_id: jobData.id,
+          code: results.code,
+          category: results.category,
+          label: results.label,
+          name: results.label,
+          results,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      if (data?.id) setActiveStudyId(data.id);
+    } catch (err) {
+      console.error('Error saving study row:', err);
+    }
+  };
+
+  const loadSavedStudies = useCallback(async () => {
+    if (!jobData?.id) return;
+    setLoadingStudies(true);
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_attribute_studies')
+        .select('id, code, category, label, name, results, created_at, updated_at')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setSavedStudies(data || []);
+    } catch (err) {
+      console.error('Error loading saved studies:', err);
+      setSavedStudies([]);
+    } finally {
+      setLoadingStudies(false);
+    }
+  }, [jobData?.id]);
+
+  useEffect(() => {
+    if (active === 'custom' && jobData?.id) loadSavedStudies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, jobData?.id]);
+
+  const openStudy = (study) => {
+    if (!study?.results) return;
+    setCustomResults(study.results);
+    setActiveStudyId(study.id);
+    if (study.category === '15') setSelectedDetachedCode(study.code);
+    else setSelectedMiscCode(study.code);
+  };
+
+  const rerunStudy = async (study) => {
+    if (!study) return;
+    if (study.category === '15') {
+      setSelectedDetachedCode(study.code);
+      await runCustomAttributeAnalysis('15');
+    } else {
+      setSelectedMiscCode(study.code);
+      await runCustomAttributeAnalysis('39');
+    }
+  };
+
+  const renameStudy = async (study) => {
+    const next = window.prompt('Rename study', study.name || study.label || '');
+    if (next == null) return;
+    const trimmed = String(next).trim();
+    if (!trimmed) return;
+    try {
+      const { error } = await supabase
+        .from('job_custom_attribute_studies')
+        .update({ name: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', study.id);
+      if (error) throw error;
+      await loadSavedStudies();
+    } catch (err) {
+      console.error('Error renaming study:', err);
+    }
+  };
+
+  const deleteStudy = async (study) => {
+    if (!study?.id) return;
+    if (!window.confirm(`Delete saved study “${study.name || study.label}”?`)) return;
+    try {
+      const { error } = await supabase
+        .from('job_custom_attribute_studies')
+        .delete()
+        .eq('id', study.id);
+      if (error) throw error;
+      if (activeStudyId === study.id) {
+        setActiveStudyId(null);
+        setCustomResults(null);
+      }
+      await loadSavedStudies();
+    } catch (err) {
+      console.error('Error deleting study:', err);
     }
   };
 
@@ -2828,6 +2940,77 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           borderRadius: '6px',
           border: '1px solid #E5E7EB'
         }}>
+          {savedStudies.length > 0 && (
+            <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: 'white', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                  Saved Studies ({savedStudies.length})
+                </span>
+                {loadingStudies && (
+                  <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Refreshing…</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                {savedStudies.map(study => {
+                  const isActive = study.id === activeStudyId;
+                  const overall = study.results?.overall;
+                  const summary = overall?.insufficient
+                    ? `Insufficient sample (with: ${overall.withCount}, without: ${overall.withoutCount})`
+                    : overall
+                      ? `${overall.with?.n ?? 0} with · ${overall.without?.n ?? 0} without · ${overall.flat_adj != null ? formatCurrency(overall.flat_adj) : '-'} impact${
+                          study.category === '15'
+                            ? (overall.per_sf != null ? ` · ${formatCurrency(overall.per_sf)}/sf` : '')
+                            : (overall.per_item != null ? ` · ${formatCurrency(overall.per_item)}/item` : '')
+                        }`
+                      : '';
+                  return (
+                    <div key={study.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px',
+                      padding: '8px 10px', border: `1px solid ${isActive ? '#3B82F6' : '#E5E7EB'}`,
+                      borderRadius: '4px', backgroundColor: isActive ? '#EFF6FF' : '#F9FAFB',
+                    }}>
+                      <button
+                        onClick={() => openStudy(study)}
+                        style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
+                          {study.name || study.label || `${study.category}:${study.code}`}
+                          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>
+                            ({study.category === '15' ? 'Detached' : 'Misc'})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                          {summary} · {new Date(study.created_at).toLocaleString()}
+                        </div>
+                      </button>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => rerunStudy(study)}
+                          disabled={customWorking}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', background: 'white', cursor: customWorking ? 'not-allowed' : 'pointer' }}
+                        >
+                          Re-run
+                        </button>
+                        <button
+                          onClick={() => renameStudy(study)}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => deleteStudy(study)}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #FCA5A5', borderRadius: '4px', background: 'white', color: '#B91C1C', cursor: 'pointer' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: '12px' }}>
             <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
               Select Field and Value to Analyze
