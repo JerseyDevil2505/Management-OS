@@ -33,25 +33,23 @@ const fmtMoney = (v) => {
 
 const pct = (v) => (v == null || !Number.isFinite(v) ? '—' : `${Math.round(v * 100)}%`);
 
-// Color → Tailwind classes for the colored cells / chips.
+// Color → Tailwind classes for the colored cells / chips. Muted on purpose.
 const COLOR_CLASSES = {
-  green:    { bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300',  dot: 'bg-green-500' },
-  yellow:   { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300', dot: 'bg-yellow-500' },
-  red:      { bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-300',    dot: 'bg-red-500' },
-  grey:     { bg: 'bg-gray-100',   text: 'text-gray-600',   border: 'border-gray-300',   dot: 'bg-gray-400' },
-  pending:  { bg: 'bg-purple-50',  text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-400' },
-  inactive: { bg: 'bg-gray-50',    text: 'text-gray-400',   border: 'border-gray-200',   dot: 'bg-gray-300' },
-  unpriced: { bg: 'bg-gray-50',    text: 'text-gray-400',   border: 'border-gray-200',   dot: 'bg-gray-300' },
+  green:    { bg: 'bg-emerald-50/60', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-400' },
+  yellow:   { bg: 'bg-amber-50/60',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-400' },
+  red:      { bg: 'bg-rose-50/60',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-400' },
+  grey:     { bg: 'bg-gray-50',       text: 'text-gray-500',    border: 'border-gray-200',    dot: 'bg-gray-300' },
+  pending:  { bg: 'bg-violet-50',     text: 'text-violet-600',  border: 'border-violet-200',  dot: 'bg-violet-300' },
+  inactive: { bg: 'bg-white',         text: 'text-gray-300',    border: 'border-gray-100',    dot: 'bg-gray-200' },
+  unpriced: { bg: 'bg-white',         text: 'text-gray-300',    border: 'border-gray-100',    dot: 'bg-gray-200' },
 };
 
-const COLOR_DOT = {
-  green: '🟢',
-  yellow: '🟡',
-  red: '🔴',
-  grey: '⚪',
-  pending: '🟣',
-  inactive: '⬜',
-  unpriced: '⬜',
+// Small soft CSS dot — replaces the high-saturation emoji circles so the
+// grid reads as a heatmap, not a traffic light.
+const ColorDot = ({ color = 'grey', size = 'md' }) => {
+  const c = COLOR_CLASSES[color] || COLOR_CLASSES.grey;
+  const cls = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5';
+  return <span className={`inline-block rounded-full ${cls} ${c.dot}`} aria-hidden="true" />;
 };
 
 const YEAR_CHIPS = [
@@ -402,9 +400,9 @@ const AdjustmentAnalysisTab = ({
                         <div className={`inline-block text-[10px] px-1.5 py-0.5 rounded mt-1 border ${c.bg} ${c.text} ${c.border}`}>
                           {b.verdict.label}
                         </div>
-                        <div className="text-sm mt-1">
-                          {COLOR_DOT[b.verdict.color]}{' '}
-                          <span className="font-semibold">
+                        <div className="text-xs mt-1 inline-flex items-center gap-1.5 text-gray-700">
+                          <ColorDot color={b.verdict.color} />
+                          <span className="font-medium">
                             {b.hitRate != null ? `${pct(b.hitRate)} hit` : '—'}
                           </span>
                         </div>
@@ -429,14 +427,13 @@ const AdjustmentAnalysisTab = ({
                       const c = COLOR_CLASSES[cell.color] || COLOR_CLASSES.grey;
                       const interactable = !['inactive', 'pending'].includes(cell.color)
                         && b.verdict.band !== 'cant_verify';
-                      const dot = COLOR_DOT[cell.color] || '⚪';
                       return (
                         <td
                           key={b.bracketIdx}
                           onClick={() => interactable && setDrillIn({ kind: 'attr', bracketIdx: b.bracketIdx, attrId })}
                           className={`text-center px-2 py-2 border-b border-l border-gray-100 ${c.bg} ${interactable ? 'cursor-pointer hover:opacity-80' : ''}`}
                         >
-                          <span className="text-base">{dot}</span>
+                          <ColorDot color={cell.color} />
                         </td>
                       );
                     })}
@@ -483,8 +480,9 @@ const AdjustmentAnalysisTab = ({
                   <div className="text-base font-semibold text-gray-900">
                     {isAttr ? `${def?.label} — ${b.bracket.label}` : b.bracket.label}
                   </div>
-                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${colorClass.bg} ${colorClass.text} ${colorClass.border}`}>
-                    {COLOR_DOT[colorKey]} {isAttr
+                  <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${colorClass.bg} ${colorClass.text} ${colorClass.border}`}>
+                    <ColorDot color={colorKey} />
+                    {isAttr
                       ? (colorKey === 'green' ? 'Looks clean' : colorKey === 'yellow' ? 'Some drift' : colorKey === 'red' ? 'Drift detected' : 'No signal')
                       : b.verdict.label}
                   </span>
