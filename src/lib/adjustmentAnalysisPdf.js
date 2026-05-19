@@ -89,6 +89,14 @@ export async function exportAdjustmentAnalysisPdf(analysis, jobMeta = {}) {
   ]);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  doc.setProperties({
+    title: 'Adjustment Grid Performance Analysis',
+    subject: 'LOJIK Adjustment Analysis Report',
+    author: 'LOJIK',
+    creator: 'LOJIK',
+    producer: 'LOJIK',
+    keywords: 'assessment, adjustment, analysis, report',
+  });
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 54; // 0.75" @ 72dpi
 
