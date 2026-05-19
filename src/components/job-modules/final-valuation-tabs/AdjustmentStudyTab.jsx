@@ -385,10 +385,11 @@ const AdjustmentStudyTab = ({
               const cmp = b.comparison ? COMPARISON_BADGES[b.comparison] : null;
               const fitLo = b.fit ? b.fit.ci95[0] : null;
               const fitHi = b.fit ? b.fit.ci95[1] : null;
+              const bothNegative = b.fit && fitLo < 0 && fitHi < 0;
               return (
                 <div
                   key={b.bracketIdx}
-                  className={`border rounded-lg p-3 ${style.bg} ${style.border} ${b.isAnchor ? 'ring-2 ring-blue-400' : ''}`}
+                  className={`border rounded-lg p-3 bg-white ${b.isAnchor ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200'}`}
                 >
                   <div className="flex items-start gap-3">
                     <Icon className={`w-5 h-5 mt-0.5 ${style.color}`} />
@@ -406,6 +407,11 @@ const AdjustmentStudyTab = ({
                         {cmp && b.verdict !== 'pending' && b.verdict !== 'cant_verify' && (
                           <span className={`text-xs px-2 py-0.5 rounded-full border ${cmp.color}`}>{cmp.label}</span>
                         )}
+                        {bothNegative && (
+                          <span className="text-xs px-2 py-0.5 rounded-full border bg-orange-50 text-orange-800 border-orange-300">
+                            Inverse signal
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 text-sm text-gray-800">
                         <span className="text-gray-600">Qualified sales: </span>
@@ -419,6 +425,11 @@ const AdjustmentStudyTab = ({
                           </>
                         )}
                       </div>
+                      {bothNegative && (
+                        <div className="mt-1 text-xs text-orange-800">
+                          Range is entirely negative — in this bracket, more of this attribute correlates with a <em>lower</em> residual price, the opposite of a typical positive adjustment. Usually a sign of a confounded sample (e.g. larger lots here also have older homes), small N, or genuine market behavior worth investigating. Don't treat the negative number as a recommended adjustment.
+                        </div>
+                      )}
                       {b.comparisonText && (
                         <div className="mt-1 text-sm text-gray-700">{b.comparisonText}</div>
                       )}

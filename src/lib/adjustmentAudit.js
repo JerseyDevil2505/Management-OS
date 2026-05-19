@@ -207,17 +207,74 @@ export const GRID_ATTRIBUTE_MAP = {
     },
   },
 
-  // ---- Pending: known grid rows, extractor not built yet ----
-  finished_basement: { label: 'Finished Basement', kind: 'binary',     applyType: 'flat',  pending: true },
-  ac:                { label: 'AC',                kind: 'binary',     applyType: 'flat',  pending: true },
-  det_garage:        { label: 'Det Garage',        kind: 'count',      applyType: 'count', pending: true },
-  deck:              { label: 'Deck',              kind: 'binary',     applyType: 'flat',  pending: true },
-  patio:             { label: 'Patio',             kind: 'binary',     applyType: 'flat',  pending: true },
-  open_porch:        { label: 'Open Porch',        kind: 'binary',     applyType: 'flat',  pending: true },
-  enclosed_porch:    { label: 'Enclosed Porch',    kind: 'binary',     applyType: 'flat',  pending: true },
-  pool:              { label: 'Pool',              kind: 'binary',     applyType: 'flat',  pending: true },
-  interior_condition:{ label: 'Interior Condition',kind: 'continuous', applyType: 'percent', pending: true },
-  exterior_condition:{ label: 'Exterior Condition',kind: 'continuous', applyType: 'percent', pending: true },
+  finished_basement: {
+    label: 'Finished Basement',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.fin_basement_area) > 0 ? 1 : 0),
+  },
+  ac: {
+    label: 'AC',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.ac_area) > 0 ? 1 : 0),
+  },
+  det_garage: {
+    label: 'Det Garage',
+    kind: 'count',
+    applyType: 'count',
+    quantityUnit: 'cars',
+    extract: (p) => {
+      const a = NUM(p.det_garage_area);
+      if (a == null) return null;
+      if (a <= 0) return 0;
+      if (a <= 399) return 1;
+      if (a <= 799) return 2;
+      if (a <= 999) return 3;
+      return 4;
+    },
+  },
+  deck: {
+    label: 'Deck',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.deck_area) > 0 ? 1 : 0),
+  },
+  patio: {
+    label: 'Patio',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.patio_area) > 0 ? 1 : 0),
+  },
+  open_porch: {
+    label: 'Open Porch',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.open_porch_area) > 0 ? 1 : 0),
+  },
+  enclosed_porch: {
+    label: 'Enclosed Porch',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.enclosed_porch_area) > 0 ? 1 : 0),
+  },
+  pool: {
+    label: 'Pool',
+    kind: 'binary',
+    applyType: 'flat',
+    quantityUnit: 'present',
+    extract: (p) => (NUM(p.pool_area) > 0 ? 1 : 0),
+  },
+
+  // ---- Still pending: needs condition-ranker plumbing ----
+  interior_condition: { label: 'Interior Condition', kind: 'continuous', applyType: 'percent', pending: true },
+  exterior_condition: { label: 'Exterior Condition', kind: 'continuous', applyType: 'percent', pending: true },
 };
 
 export function isAttributeReady(attrId) {
