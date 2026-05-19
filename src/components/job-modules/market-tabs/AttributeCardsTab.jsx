@@ -94,9 +94,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [newEquivalentTo, setNewEquivalentTo] = useState(''); // For new mapping being added
 
   // ============ CUSTOM ATTRIBUTE STATE ============
-  const [rawFields, setRawFields] = useState([]);
-  const [selectedRawField, setSelectedRawField] = useState('');
-  const [matchValue, setMatchValue] = useState('');
+  // Dropdown options come from the same misc/detached code source used by
+  // AdjustmentsTab (categories '39' Miscellaneous + '15' Detached). Each
+  // option is { code, description, category }. We no longer scan raw_data
+  // columns, and we no longer ask for a Match Value — a property either has
+  // the selected code present in its misc/detached slots, or it doesn't.
+  const [codeOptions, setCodeOptions] = useState([]);
+  const [selectedCode, setSelectedCode] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
 
@@ -2385,57 +2389,114 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return () => document.head.removeChild(style);
   }, []);
   // ============ CUSTOM ATTRIBUTE ANALYSIS FUNCTIONS ============
-  const detectRawFields = useCallback(async () => {
+  // Mirror the loader in AdjustmentsTab: pull Cat 39 (Miscellaneous) and
+  // Cat 15 (Detached Items) codes from parsed_code_definitions for the
+  // current job. Vendor-aware:
+  //   - BRT: sections.Residential parent whose KEY === '39' / '15' -> MAP
+  //   - Microsystems: field_codes prefixes 590/591/592/593 (misc) and 680 (detached)
+  const loadCodeOptions = useCallback(() => {
+    const cat39 = [];
+    const cat15 = [];
+
     try {
-      const fields = new Set();
-      const sampleSize = Math.min(100, properties.length);
-      
-      // Sample some properties to detect available raw fields
-      for (let i = 0; i < sampleSize; i++) {
-        const prop = properties[i];
-        if (!prop.job_id || !prop.property_composite_key) continue;
-        
-        const rawData = await propertyService.getRawDataForProperty(
-          prop.job_id, 
-          prop.property_composite_key
-        );
-        
-        if (rawData) {
-          Object.keys(rawData).forEach(key => {
-            // Filter out obvious non-analysis fields
-            if (!key.startsWith('_') && 
-                !key.includes('DATE') && 
-                !key.includes('OWNER') &&
-                !key.includes('ADDRESS') &&
-                key !== 'job_id' &&
-                key !== 'property_composite_key') {
-              fields.add(key);
+      if (vendorType === 'Microsystems' && parsedCodeDefinitions?.field_codes) {
+        const fc = parsedCodeDefinitions.field_codes;
+        // Misc (590-593) — dedupe across prefixes
+        const miscSeen = new Set();
+        ['590', '591', '592', '593'].forEach(prefix => {
+          Object.entries(fc[prefix] || {}).forEach(([code, data]) => {
+            if (data?.description && !miscSeen.has(code)) {
+              miscSeen.add(code);
+              cat39.push({ code, description: String(data.description).trim(), category: '39' });
             }
           });
-        }
+        });
+        // Detached (680)
+        Object.entries(fc['680'] || {}).forEach(([code, data]) => {
+          if (data?.description) {
+            cat15.push({ code, description: String(data.description).trim(), category: '15' });
+          }
+        });
+      } else {
+        const sections = parsedCodeDefinitions?.sections || parsedCodeDefinitions || {};
+        const residential = sections.Residential || sections.residential || {};
+        Object.keys(residential).forEach(parentKey => {
+          const parent = residential[parentKey];
+          const categoryKey = parent?.KEY || parent?.key;
+          if (categoryKey !== '39' && categoryKey !== '15') return;
+          const map = parent?.MAP || parent?.map || {};
+          Object.keys(map).forEach(codeKey => {
+            if (codeKey === 'KEY' || codeKey === 'DATA' || codeKey === 'MAP') return;
+            const item = map[codeKey];
+            let description = '';
+            if (item?.DATA?.VALUE) description = item.DATA.VALUE;
+            else if (item?.VALUE) description = item.VALUE;
+            else if (typeof item === 'string') description = item;
+            if (!description) return;
+            const bucket = categoryKey === '39' ? cat39 : cat15;
+            bucket.push({ code: codeKey, description: String(description).trim(), category: categoryKey });
+          });
+        });
       }
-      
-      const sortedFields = Array.from(fields).sort();
-      setRawFields(sortedFields);
-      if (sortedFields.length > 0 && !selectedRawField) {
-        setSelectedRawField(sortedFields[0]);
-      }
-    } catch (error) {
-      console.error('Error detecting raw fields:', error);
-      setRawFields([]);
+    } catch (err) {
+      console.error('Error loading custom attribute code options:', err);
     }
-  }, [properties]);
 
-  // Load raw fields when switching to custom attribute tab
-  useEffect(() => {
-    if (active === 'custom' && rawFields.length === 0 && properties.length > 0) {
-      detectRawFields();
+    const sortByCode = (a, b) => a.code.localeCompare(b.code);
+    cat39.sort(sortByCode);
+    cat15.sort(sortByCode);
+    const merged = [...cat39, ...cat15];
+    setCodeOptions(merged);
+    if (merged.length > 0 && !selectedCode) {
+      setSelectedCode(`${merged[0].category}:${merged[0].code}`);
     }
-  }, [active, properties.length, detectRawFields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedCodeDefinitions, vendorType]);
+
+  // Load code options when switching to custom attribute tab
+  useEffect(() => {
+    if (active === 'custom' && codeOptions.length === 0) {
+      loadCodeOptions();
+    }
+  }, [active, codeOptions.length, loadCodeOptions]);
+
+  // Vendor-aware slot lists — these are the raw_data columns where a
+  // misc/detached code can appear for a property. Sourced from
+  // brt-processor.js and microsystems-processor.js so the predicate matches
+  // what the ingest pipeline actually stores.
+  const BRT_MISC_SLOTS = ['MISC_1', 'MISC_2', 'MISC_3', 'MISC_4', 'MISC_5'];
+  const BRT_DETACHED_SLOTS = [
+    'DETACHITEM_1', 'DETACHITEM_2', 'DETACHITEM_3', 'DETACHITEM_4', 'DETACHITEM_5',
+  ];
+  const MS_MISC_SLOTS = ['Misc Item 1', 'Misc Item 2', 'Misc Item 3'];
+  const MS_DETACHED_SLOTS = [
+    'Detached Item Code1', 'Detached Item Code2', 'Detached Item Code3', 'Detached Item Code4',
+    'Detachedbuilding1', 'Detachedbuilding2', 'Detachedbuilding3', 'Detachedbuilding4',
+  ];
+
+  const propertyHasCode = (rawData, code, category) => {
+    if (!rawData || !code) return false;
+    const target = String(code).trim().toUpperCase();
+    if (!target) return false;
+    let slots = [];
+    if (vendorType === 'Microsystems') {
+      slots = category === '15' ? MS_DETACHED_SLOTS : MS_MISC_SLOTS;
+    } else {
+      slots = category === '15' ? BRT_DETACHED_SLOTS : BRT_MISC_SLOTS;
+    }
+    for (const slot of slots) {
+      const v = rawData[slot];
+      if (v == null) continue;
+      if (String(v).trim().toUpperCase() === target) return true;
+    }
+    return false;
+  };
 
   // Run custom attribute analysis
   const runCustomAttributeAnalysis = async () => {
-    if (!selectedRawField) return;
+    if (!selectedCode) return;
+    const [selCategory, selCode] = selectedCode.split(':');
+    const selOption = codeOptions.find(o => o.code === selCode && o.category === selCategory);
     
     setCustomWorking(true);
     try {
@@ -2462,32 +2523,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         lookup.push(...results);
       }
 
-      // Helper to check if property has the attribute
-      const hasAttribute = (rawData) => {
-        if (!rawData || !rawData[selectedRawField]) return false;
-        const value = rawData[selectedRawField];
-        
-        if (matchValue === '') {
-          // Just check if field exists and has value
-          return value !== null && value !== undefined && String(value).trim() !== '';
-        } else {
-          // Check for specific match
-          const strValue = String(value).trim().toUpperCase();
-          const strMatch = String(matchValue).trim().toUpperCase();
-          
-          // Try exact match first
-          if (strValue === strMatch) return true;
-          
-          // Try numeric comparison if both are numbers
-          const numValue = Number(value);
-          const numMatch = Number(matchValue);
-          if (!isNaN(numValue) && !isNaN(numMatch)) {
-            return Math.abs(numValue - numMatch) < 0.0001;
-          }
-          
-          return false;
-        }
-      };
+      // Has-it predicate: look for the selected code in the vendor-specific
+      // misc or detached slots on the property's raw_data row.
+      const hasAttribute = (rawData) => propertyHasCode(rawData, selCode, selCategory);
 
       // Group properties with/without attribute
       const withAttr = [];
@@ -2587,8 +2625,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Build results
       const results = {
-        field: selectedRawField,
-        matchValue: matchValue || '(exists)',
+        code: selCode,
+        category: selCategory,
+        label: selOption ? `${selCode} — ${selOption.description}` : selCode,
+        field: selCode,
         overall: {
           with: withStats,
           without: withoutStats,
@@ -2696,11 +2736,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
             <div style={{ flex: '1' }}>
               <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Raw Data Field
+                Attribute Code (Misc + Detached)
               </label>
               <select
-                value={selectedRawField}
-                onChange={(e) => setSelectedRawField(e.target.value)}
+                value={selectedCode}
+                onChange={(e) => setSelectedCode(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '6px 10px',
@@ -2711,48 +2751,35 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 }}
                 disabled={customWorking}
               >
-                <option value="">Select a field...</option>
-                {rawFields.map(field => (
-                  <option key={field} value={field}>{field}</option>
-                ))}
+                <option value="">Select a code…</option>
+                <optgroup label="Miscellaneous (Cat 39)">
+                  {codeOptions.filter(o => o.category === '39').map(o => (
+                    <option key={`39:${o.code}`} value={`39:${o.code}`}>{o.code} — {o.description}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Detached Items (Cat 15)">
+                  {codeOptions.filter(o => o.category === '15').map(o => (
+                    <option key={`15:${o.code}`} value={`15:${o.code}`}>{o.code} — {o.description}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
-            
-            <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Match Value (leave empty = field exists)
-              </label>
-              <input
-                type="text"
-                value={matchValue}
-                onChange={(e) => setMatchValue(e.target.value)}
-                placeholder="e.g., Y, 1, POOL, etc."
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-                disabled={customWorking}
-              />
-            </div>
-            
+
             <button
               onClick={runCustomAttributeAnalysis}
-              disabled={customWorking || !selectedRawField}
+              disabled={customWorking || !selectedCode}
               style={{
                 padding: '6px 16px',
-                backgroundColor: customWorking || !selectedRawField ? '#E5E7EB' : '#3B82F6',
-                color: customWorking || !selectedRawField ? '#9CA3AF' : 'white',
+                backgroundColor: customWorking || !selectedCode ? '#E5E7EB' : '#3B82F6',
+                color: customWorking || !selectedCode ? '#9CA3AF' : 'white',
                 border: 'none',
                 borderRadius: '4px',
                 fontSize: '14px',
                 fontWeight: '500',
-                cursor: customWorking || !selectedRawField ? 'not-allowed' : 'pointer'
+                cursor: customWorking || !selectedCode ? 'not-allowed' : 'pointer'
               }}
             >
-              {customWorking ? 'Analyzing...' : 'Run Analysis'}
+              {customWorking ? 'Analyzing…' : 'Run Analysis'}
             </button>
             
             {customResults && (
@@ -2778,7 +2805,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               border: '1px solid #BFDBFE'
             }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1E40AF' }}>
-                Overall Analysis: {customResults.field} {customResults.matchValue !== '(exists)' && `= "${customResults.matchValue}"`}
+                Overall Analysis: {customResults.label || customResults.field}
               </h4>
               
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
