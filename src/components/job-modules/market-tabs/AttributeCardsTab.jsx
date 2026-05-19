@@ -104,6 +104,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [selectedDetachedCode, setSelectedDetachedCode] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
+  // codeCountCache: Map<"category:CODE", { totalProps, qualifiedSales }> populated
+  // on first run / on-demand prefetch so the banner can show how many properties
+  // carry the currently-selected code before a study is even run.
+  const [codeCountCache, setCodeCountCache] = useState({});
+  const [prefetchingCounts, setPrefetchingCounts] = useState(false);
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
@@ -2504,6 +2509,77 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return 0;
   };
 
+  // Walk every misc + detached slot on the given raw_data row and tally the
+  // codes present. Returns { '39': { CODE: n }, '15': { CODE: n } }.
+  const tallyCodesOnRow = (rawData) => {
+    const out = { '39': {}, '15': {} };
+    if (!rawData) return out;
+    [['39', slotsFor('39')], ['15', slotsFor('15')]].forEach(([cat, slots]) => {
+      slots.forEach(slot => {
+        const v = rawData[slot.codeCol];
+        if (v == null) return;
+        const code = String(v).trim().toUpperCase();
+        if (!code) return;
+        out[cat][code] = (out[cat][code] || 0) + 1;
+      });
+    });
+    return out;
+  };
+
+  // Build the code-count cache from a set of { p, raw, isQualified } rows.
+  const buildCodeCountCache = (rows) => {
+    const cache = {};
+    rows.forEach(({ raw, isQualified }) => {
+      const tally = tallyCodesOnRow(raw);
+      ['39', '15'].forEach(cat => {
+        Object.entries(tally[cat]).forEach(([code]) => {
+          const key = `${cat}:${code}`;
+          if (!cache[key]) cache[key] = { totalProps: 0, qualifiedSales: 0 };
+          cache[key].totalProps += 1;
+          if (isQualified) cache[key].qualifiedSales += 1;
+        });
+      });
+    });
+    return cache;
+  };
+
+  // Prefetch raw_data for all properties on first tab open so the dropdown
+  // banner can show "X properties have this code" before any study runs.
+  const prefetchCodeCounts = useCallback(async () => {
+    if (prefetchingCounts) return;
+    if (Object.keys(codeCountCache).length > 0) return;
+    if (!properties || properties.length === 0) return;
+    setPrefetchingCounts(true);
+    try {
+      const chunkSize = 100;
+      const rows = [];
+      for (let i = 0; i < properties.length; i += chunkSize) {
+        const chunk = properties.slice(i, i + chunkSize);
+        const fetched = await Promise.all(chunk.map(async p => {
+          if (!p.job_id || !p.property_composite_key) return null;
+          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
+          const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
+          return { p, raw, isQualified: Number(md?.values_norm_time) > 0 };
+        }));
+        fetched.forEach(r => { if (r) rows.push(r); });
+      }
+      setCodeCountCache(buildCodeCountCache(rows));
+    } catch (err) {
+      console.error('Error prefetching code counts:', err);
+    } finally {
+      setPrefetchingCounts(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, propertyMarketData, codeCountCache, prefetchingCounts]);
+
+  useEffect(() => {
+    if (active === 'custom' && properties.length > 0 && propertyMarketData.length > 0
+        && Object.keys(codeCountCache).length === 0 && !prefetchingCounts) {
+      prefetchCodeCounts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, properties.length, propertyMarketData.length]);
+
   // Count slots holding the code, and sum their area (detached only).
   const countAndArea = (rawData, code, category) => {
     if (!rawData || !code) return { count: 0, area: 0 };
@@ -2557,6 +2633,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const results = await Promise.all(rawDataPromises);
         lookup.push(...results);
       }
+
+      // Refresh code-count cache as a side-effect of this run (we just paid
+      // for the raw_data fetch; reuse it).
+      setCodeCountCache(buildCodeCountCache(lookup.map(({ p, raw }) => {
+        const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
+        return { p, raw, isQualified: Number(md?.values_norm_time) > 0 };
+      })));
 
       // Build sample rows enriched with normalizedTime + sfla + count/area
       const samples = lookup.map(({ p, raw }) => {
@@ -2750,14 +2833,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               Select Field and Value to Analyze
             </h4>
             <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '12px' }}>
-              Compare properties with vs without specific attributes to determine value impact
+              Compare properties with vs without specific attributes to determine value impact.
+              {prefetchingCounts && (
+                <span style={{ marginLeft: '8px', color: '#3B82F6' }}>Loading record counts…</span>
+              )}
+              {!prefetchingCounts && Object.keys(codeCountCache).length === 0 && (
+                <span style={{ marginLeft: '8px', color: '#9CA3AF' }}>
+                  (record counts appear once data is loaded)
+                </span>
+              )}
             </p>
           </div>
           
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
             <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Miscellaneous (Cat 39)
+              <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span>Miscellaneous (Cat 39)</span>
+                {selectedMiscCode && codeCountCache[`39:${selectedMiscCode.toUpperCase()}`] && (
+                  <span style={{ color: '#0F766E', fontWeight: 500 }}>
+                    {codeCountCache[`39:${selectedMiscCode.toUpperCase()}`].totalProps} properties
+                    {' '}· {codeCountCache[`39:${selectedMiscCode.toUpperCase()}`].qualifiedSales} qualified sales
+                  </span>
+                )}
               </label>
               <select
                 value={selectedMiscCode}
@@ -2796,8 +2893,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </button>
 
             <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Detached Items (Cat 15)
+              <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span>Detached Items (Cat 15)</span>
+                {selectedDetachedCode && codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`] && (
+                  <span style={{ color: '#0F766E', fontWeight: 500 }}>
+                    {codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`].totalProps} properties
+                    {' '}· {codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`].qualifiedSales} qualified sales
+                  </span>
+                )}
               </label>
               <select
                 value={selectedDetachedCode}
@@ -2996,6 +3099,38 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       </tr>
                     );
                   })}
+                  {!customResults.overall.insufficient && (
+                    <tr style={{ backgroundColor: '#EFF6FF', borderTop: '2px solid #BFDBFE' }}>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#1E40AF' }}>
+                        ALL VCS
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '600' }}>
+                        {customResults.overall.with.n}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '600' }}>
+                        {customResults.overall.with.adj_price ? formatCurrency(customResults.overall.with.adj_price) : '-'}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '600' }}>
+                        {customResults.overall.without.n}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '600' }}>
+                        {customResults.overall.without.adj_price ? formatCurrency(customResults.overall.without.adj_price) : '-'}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '700',
+                          color: customResults.overall.flat_adj > 0 ? '#059669' : customResults.overall.flat_adj < 0 ? '#DC2626' : '#6B7280' }}>
+                        {customResults.overall.flat_adj ? formatCurrency(customResults.overall.flat_adj) : '-'}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '700',
+                          color: customResults.overall.pct_adj > 0 ? '#059669' : customResults.overall.pct_adj < 0 ? '#DC2626' : '#6B7280' }}>
+                        {customResults.overall.pct_adj ? formatPercent(customResults.overall.pct_adj) : '-'}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', color: '#0F766E', fontWeight: '700' }}>
+                        {customResults.category === '15'
+                          ? (customResults.overall.per_sf != null ? `${formatCurrency(customResults.overall.per_sf)}/sf` : '-')
+                          : (customResults.overall.per_item != null ? formatCurrency(customResults.overall.per_item) : '-')}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
