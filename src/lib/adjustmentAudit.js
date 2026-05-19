@@ -109,9 +109,9 @@ export const GRID_ATTRIBUTE_MAP = {
     applyType: 'per_sqft',
     quantityUnit: 'sf',
     extract: (p) => {
-      const sf = NUM(p.asset_lot_sf);
+      const sf = NUM(p.asset_lot_sf) ?? NUM(p.market_manual_lot_sf);
       if (sf && sf > 0) return sf;
-      const acre = NUM(p.asset_lot_acre);
+      const acre = NUM(p.asset_lot_acre) ?? NUM(p.market_manual_lot_acre);
       if (acre && acre > 0) return acre * 43560;
       return null;
     },
@@ -122,9 +122,9 @@ export const GRID_ATTRIBUTE_MAP = {
     applyType: 'per_acre',
     quantityUnit: 'acre',
     extract: (p) => {
-      const acre = NUM(p.asset_lot_acre);
+      const acre = NUM(p.asset_lot_acre) ?? NUM(p.market_manual_lot_acre);
       if (acre && acre > 0) return acre;
-      const sf = NUM(p.asset_lot_sf);
+      const sf = NUM(p.asset_lot_sf) ?? NUM(p.market_manual_lot_sf);
       if (sf && sf > 0) return sf / 43560;
       return null;
     },
@@ -134,7 +134,7 @@ export const GRID_ATTRIBUTE_MAP = {
     kind: 'continuous',
     applyType: 'per_ff',
     quantityUnit: 'ft',
-    extract: (p) => NUM(p.asset_lot_frontage),
+    extract: (p) => NUM(p.asset_lot_frontage) ?? NUM(p.market_manual_lot_ff),
   },
   year_built: {
     label: 'Year Built (Effective Age)',
