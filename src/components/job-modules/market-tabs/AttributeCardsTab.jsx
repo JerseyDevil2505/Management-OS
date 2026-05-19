@@ -113,6 +113,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [savedStudies, setSavedStudies] = useState([]);
   const [loadingStudies, setLoadingStudies] = useState(false);
   const [activeStudyId, setActiveStudyId] = useState(null);
+  // Type/Use filter — same pattern as eco obs; prevents single-family from
+  // mixing with condo / multi-family in the same study.
+  const [customTypeUseFilter, setCustomTypeUseFilter] = useState('1');
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
@@ -2617,8 +2620,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     setCustomWorking(true);
     try {
-      // Qualified sales = properties with values_norm_time > 0
-      const validProps = properties.filter(p => {
+      // Apply type/use filter FIRST (mirrors eco-obs behavior) so we never
+      // mix single-family with condo / multi-family inside the same study.
+      const typeFilteredProps = filterPropertiesByType(properties, customTypeUseFilter);
+
+      // Qualified sales = type-filtered properties with values_norm_time > 0
+      const validProps = typeFilteredProps.filter(p => {
         const marketData = propertyMarketData.find(
           m => m.property_composite_key === p.property_composite_key
         );
@@ -2720,10 +2727,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         byVcs[vcs] = computeImpact(rows);
       });
 
+      const typeUseOpt = getTypeUseOptions().find(o => o.code === customTypeUseFilter);
       const results = {
         code: selCode,
         category: selCategory,
         label: selOption ? `${selCode} — ${selOption.description}` : selCode,
+        type_use: customTypeUseFilter,
+        type_use_label: typeUseOpt ? typeUseOpt.description : customTypeUseFilter,
         field: selCode,
         overall: overall.insufficient ? overall : {
           with: { n: overall.withCount, avg_price: overall.avgWithTime, avg_size: overall.avgWithSFLA, adj_price: overall.adjWith, avg_count: overall.avgCount, avg_area: overall.avgArea },
@@ -2815,6 +2825,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     setActiveStudyId(study.id);
     if (study.category === '15') setSelectedDetachedCode(study.code);
     else setSelectedMiscCode(study.code);
+    if (study.results?.type_use) setCustomTypeUseFilter(study.results.type_use);
   };
 
   const rerunStudy = async (study) => {
@@ -2891,6 +2902,198 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
+  // ---------- Excel export (single study + all studies) ----------
+  // Follows the formatting pattern in LandValuationTab.jsx: aoa_to_sheet,
+  // explicit !cols widths, bold header row, currency / percent number formats.
+  const buildStudySheetRows = (study) => {
+    const isDetached = study.category === '15';
+    const titleLine = `${isDetached ? 'Detached Items' : 'Miscellaneous'}: ${study.label || study.field || study.code} — Analysis by VCS`;
+    const meta = [
+      ['Job', jobData?.job_name || jobData?.municipality || ''],
+      ['Vendor', vendorType],
+      ['Type/Use', study.type_use_label || study.type_use || 'All Properties'],
+      ['Methodology', isDetached ? '$/sq ft (Jim formula)' : 'Per item (Jim formula)'],
+      ['Generated', study.generated_at ? new Date(study.generated_at).toLocaleString() : ''],
+    ];
+
+    const header = [
+      'VCS', 'With (n)', 'With Adj Sale', 'Without (n)', 'Without Adj Sale',
+      '$ Impact', '% Impact', isDetached ? 'Per Sq Ft' : 'Per Item',
+      'Avg With SFLA', 'Avg Without SFLA', isDetached ? 'Avg Item Area' : 'Avg Count',
+    ];
+
+    const dataRow = (label, d) => {
+      if (!d || d.insufficient) {
+        return [
+          label, d?.withCount ?? '', '', d?.withoutCount ?? '', '',
+          '', '', '', '', '', '',
+        ];
+      }
+      return [
+        label,
+        d.with?.n ?? '',
+        d.with?.adj_price ?? '',
+        d.without?.n ?? '',
+        d.without?.adj_price ?? '',
+        d.flat_adj ?? '',
+        d.pct_adj != null ? d.pct_adj / 100 : '',
+        (isDetached ? d.per_sf : d.per_item) ?? '',
+        d.with?.avg_size ?? '',
+        d.without?.avg_size ?? '',
+        isDetached ? (d.with?.avg_area ?? '') : (d.with?.avg_count ?? ''),
+      ];
+    };
+
+    const rows = [
+      [titleLine],
+      [],
+      ...meta,
+      [],
+      header,
+    ];
+
+    Object.entries(study.results?.byVCS || study.byVCS || {}).forEach(([vcs, d]) => {
+      rows.push(dataRow(vcs, d));
+    });
+    rows.push(dataRow('ALL VCS', study.results?.overall || study.overall));
+    return { rows, header, isDetached, titleLine };
+  };
+
+  const applyStudySheetFormatting = (ws, built) => {
+    const { rows, header, isDetached } = built;
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
+      { wch: 14 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+    ];
+    // Title row merge
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];
+    const titleCell = ws['A1'];
+    if (titleCell) {
+      titleCell.s = { font: { bold: true, sz: 14 }, alignment: { horizontal: 'left' } };
+    }
+    // Header row (row index = number of preamble rows; preamble = 1 title + 1 blank + 5 meta + 1 blank = 8)
+    const headerRowIdx = 8;
+    for (let c = 0; c < header.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: headerRowIdx, c });
+      if (ws[addr]) {
+        ws[addr].s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { patternType: 'solid', fgColor: { rgb: '1E40AF' } },
+          alignment: { horizontal: 'center' },
+        };
+      }
+    }
+    // Currency / percent formats on data rows
+    const dataStart = headerRowIdx + 1;
+    const dataEnd = rows.length - 1;
+    const currencyCols = [2, 4, 5, 7]; // With Adj, Without Adj, $ Impact, Per ($)
+    const percentCols = [6];
+    const sfCols = isDetached ? [8, 9, 10] : [8, 9];
+    for (let r = dataStart; r <= dataEnd; r++) {
+      currencyCols.forEach(c => {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '"$"#,##0';
+      });
+      percentCols.forEach(c => {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '0.0%';
+      });
+      sfCols.forEach(c => {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '#,##0';
+      });
+    }
+    // Bold the ALL VCS total row
+    const totalRow = dataEnd;
+    for (let c = 0; c < header.length; c++) {
+      const a = XLSX.utils.encode_cell({ r: totalRow, c });
+      if (ws[a]) {
+        ws[a].s = { ...(ws[a].s || {}), font: { bold: true }, fill: { patternType: 'solid', fgColor: { rgb: 'EFF6FF' } } };
+      }
+    }
+    return ws;
+  };
+
+  const exportStudyToExcel = (study) => {
+    if (!study) return;
+    const wrapped = study.results ? study : { results: study, category: study.category, label: study.label, code: study.code, generated_at: study.generated_at, type_use: study.type_use, type_use_label: study.type_use_label };
+    const built = buildStudySheetRows(wrapped);
+    const ws = XLSX.utils.aoa_to_sheet(built.rows);
+    applyStudySheetFormatting(ws, built);
+    const wb = XLSX.utils.book_new();
+    const safeName = (wrapped.label || wrapped.code || 'study').toString().replace(/[^A-Za-z0-9]+/g, '_').slice(0, 25);
+    XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 28) || 'Study');
+    const fname = `${jobData?.job_name || 'job'}_${wrapped.category === '15' ? 'detached' : 'misc'}_${safeName}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
+  const exportAllStudiesToExcel = (studies) => {
+    if (!studies || studies.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    // Index sheet
+    const indexHeader = ['Study Name', 'Category', 'Code', 'Type/Use', 'With (n)', 'Without (n)', '$ Impact', '% Impact', 'Per Unit', 'Created'];
+    const indexRows = [['Custom Attribute Studies — Index'], [], indexHeader];
+    studies.forEach(s => {
+      const o = s.results?.overall || s.overall;
+      const isDet = (s.category || s.results?.category) === '15';
+      indexRows.push([
+        s.name || s.label || s.results?.label || '',
+        isDet ? 'Detached' : 'Miscellaneous',
+        s.code || s.results?.code || '',
+        s.results?.type_use_label || s.results?.type_use || '',
+        o?.with?.n ?? o?.withCount ?? '',
+        o?.without?.n ?? o?.withoutCount ?? '',
+        o?.flat_adj ?? '',
+        o?.pct_adj != null ? o.pct_adj / 100 : '',
+        (isDet ? o?.per_sf : o?.per_item) ?? '',
+        s.created_at ? new Date(s.created_at).toLocaleString() : '',
+      ]);
+    });
+    const indexWs = XLSX.utils.aoa_to_sheet(indexRows);
+    indexWs['!cols'] = [
+      { wch: 32 }, { wch: 14 }, { wch: 10 }, { wch: 22 },
+      { wch: 9 }, { wch: 11 }, { wch: 13 }, { wch: 10 }, { wch: 13 }, { wch: 22 },
+    ];
+    indexWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: indexHeader.length - 1 } }];
+    if (indexWs['A1']) indexWs['A1'].s = { font: { bold: true, sz: 14 } };
+    for (let c = 0; c < indexHeader.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 2, c });
+      if (indexWs[addr]) {
+        indexWs[addr].s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { patternType: 'solid', fgColor: { rgb: '1E40AF' } },
+          alignment: { horizontal: 'center' },
+        };
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, indexWs, 'Index');
+
+    // One sheet per study
+    const usedNames = new Set(['Index']);
+    studies.forEach((s, idx) => {
+      const wrapped = s.results ? s : { results: s };
+      const built = buildStudySheetRows({
+        category: s.category || s.results?.category,
+        label: s.label || s.results?.label,
+        field: s.code,
+        type_use: s.results?.type_use,
+        type_use_label: s.results?.type_use_label,
+        results: wrapped.results,
+        generated_at: s.created_at || s.results?.generated_at,
+      });
+      const ws = XLSX.utils.aoa_to_sheet(built.rows);
+      applyStudySheetFormatting(ws, built);
+      let name = (s.name || s.label || s.results?.label || `Study ${idx + 1}`).toString().replace(/[^A-Za-z0-9 _-]+/g, '').slice(0, 28) || `Study ${idx + 1}`;
+      let unique = name; let dedup = 2;
+      while (usedNames.has(unique)) { unique = `${name.slice(0, 25)} ${dedup++}`; }
+      usedNames.add(unique);
+      XLSX.utils.book_append_sheet(wb, ws, unique);
+    });
+
+    const fname = `${jobData?.job_name || 'job'}_custom_attribute_studies.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
   // Export custom results to CSV
   const exportCustomResultsToCSV = () => {
     if (!customResults) return;
@@ -2946,9 +3149,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
                   Saved Studies ({savedStudies.length})
                 </span>
-                {loadingStudies && (
-                  <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Refreshing…</span>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {loadingStudies && (
+                    <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Refreshing…</span>
+                  )}
+                  <button
+                    onClick={() => exportAllStudiesToExcel(savedStudies)}
+                    className={CSV_BUTTON_CLASS}
+                  >
+                    <FileText size={14} /> Export All
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
                 {savedStudies.map(study => {
@@ -3026,6 +3237,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </span>
               )}
             </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>Type/Use:</label>
+              <select
+                value={customTypeUseFilter}
+                onChange={(e) => setCustomTypeUseFilter(e.target.value)}
+                style={{ padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '12px', backgroundColor: 'white' }}
+                disabled={customWorking}
+              >
+                {getTypeUseOptions().map(o => (
+                  <option key={o.code} value={o.code}>{o.description}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                (filters both groups so single-family doesn't mix with condo / multi-family)
+              </span>
+            </div>
           </div>
           
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
@@ -3135,83 +3362,43 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         {/* Results */}
         {customResults && (
           <div>
-            {/* Overall Results */}
-            <div style={{ 
-              marginBottom: '20px',
-              padding: '15px',
-              backgroundColor: '#EFF6FF',
-              borderRadius: '6px',
-              border: '1px solid #BFDBFE'
-            }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1E40AF' }}>
-                Overall Analysis: {customResults.label || customResults.field}
-                <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '500', color: '#64748B' }}>
-                  ({customResults.category === '15' ? 'Detached — $/sf rate' : 'Miscellaneous — per-item adjustment'})
-                </span>
-              </h4>
+            {customResults.overall?.insufficient && (
+              <div style={{ marginBottom: '14px', fontSize: '13px', color: '#92400E', backgroundColor: '#FEF3C7', padding: '10px 12px', borderRadius: '4px', border: '1px solid #FDE68A' }}>
+                Not enough qualified sales to compare — with: {customResults.overall.withCount}, without: {customResults.overall.withoutCount}.
+              </div>
+            )}
 
-              {customResults.overall.insufficient ? (
-                <div style={{ fontSize: '13px', color: '#92400E', backgroundColor: '#FEF3C7', padding: '10px 12px', borderRadius: '4px' }}>
-                  Not enough qualified sales to compare — with: {customResults.overall.withCount}, without: {customResults.overall.withoutCount}.
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '12px' }}>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>With Attribute</div>
-                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>{customResults.overall.with.n}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Avg sale: {formatCurrency(customResults.overall.with.avg_price)}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Adj sale: {formatCurrency(customResults.overall.with.adj_price)}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Avg SFLA: {customResults.overall.with.avg_size?.toLocaleString() || '-'} sf</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Without Attribute</div>
-                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>{customResults.overall.without.n}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Avg sale: {formatCurrency(customResults.overall.without.avg_price)}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Adj sale: {formatCurrency(customResults.overall.without.adj_price)}</div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>Avg SFLA: {customResults.overall.without.avg_size?.toLocaleString() || '-'} sf</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Dollar Impact</div>
-                      <div style={{ fontSize: '20px', fontWeight: '600', color: customResults.overall.flat_adj > 0 ? '#059669' : customResults.overall.flat_adj < 0 ? '#DC2626' : '#6B7280' }}>
-                        {customResults.overall.flat_adj ? formatCurrency(customResults.overall.flat_adj) : '-'}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>{formatPercent(customResults.overall.pct_adj)}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>
-                        {customResults.category === '15' ? 'Per Sq Ft' : 'Per Item'}
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: '600', color: '#0F766E' }}>
-                        {customResults.category === '15'
-                          ? (customResults.overall.per_sf != null ? `${formatCurrency(customResults.overall.per_sf)}/sf` : '-')
-                          : (customResults.overall.per_item != null ? formatCurrency(customResults.overall.per_item) : '-')}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748B' }}>
-                        {customResults.category === '15'
-                          ? `Avg area: ${customResults.overall.with.avg_area?.toLocaleString() || '-'} sf`
-                          : `Avg count: ${customResults.overall.with.avg_count ?? '-'}/property`}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* VCS Breakdown */}
-            <div style={{ 
+            {/* VCS Breakdown — per-study header */}
+            <div style={{
               border: '1px solid #E5E7EB',
               borderRadius: '6px',
               overflow: 'hidden'
             }}>
-              <div style={{ 
+              <div style={{
                 padding: '12px 15px',
                 backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
+                borderBottom: '1px solid #E5E7EB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
               }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Analysis by VCS
-                </h4>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: '#111827' }}>
+                    {customResults.category === '15' ? 'Detached Items' : 'Miscellaneous'}: {customResults.label || customResults.field} — Analysis by VCS
+                  </h4>
+                  <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                    Type/Use: {customResults.type_use_label || customResults.type_use || 'All Properties'}
+                    {' · '}
+                    {customResults.category === '15' ? '$/sf rate methodology' : 'per-item adjustment methodology'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => exportStudyToExcel(customResults)}
+                  className={CSV_BUTTON_CLASS}
+                >
+                  <FileText size={14} /> Export Excel
+                </button>
               </div>
               
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
