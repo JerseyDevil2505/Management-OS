@@ -33,15 +33,17 @@ const fmtMoney = (v) => {
 
 const pct = (v) => (v == null || !Number.isFinite(v) ? '—' : `${Math.round(v * 100)}%`);
 
-// Color → Tailwind classes for the colored cells / chips. Muted on purpose.
+// Color → Tailwind classes for the colored cells / chips. Stays within the
+// app's already-compiled palette (green/yellow/red/gray/purple) so JIT
+// actually emits these. Muted via -50 backgrounds and -400 dots.
 const COLOR_CLASSES = {
-  green:    { bg: 'bg-emerald-50/60', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-400' },
-  yellow:   { bg: 'bg-amber-50/60',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-400' },
-  red:      { bg: 'bg-rose-50/60',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-400' },
-  grey:     { bg: 'bg-gray-50',       text: 'text-gray-500',    border: 'border-gray-200',    dot: 'bg-gray-300' },
-  pending:  { bg: 'bg-violet-50',     text: 'text-violet-600',  border: 'border-violet-200',  dot: 'bg-violet-300' },
-  inactive: { bg: 'bg-white',         text: 'text-gray-300',    border: 'border-gray-100',    dot: 'bg-gray-200' },
-  unpriced: { bg: 'bg-white',         text: 'text-gray-300',    border: 'border-gray-100',    dot: 'bg-gray-200' },
+  green:    { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200',  dot: 'bg-green-400' },
+  yellow:   { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-400' },
+  red:      { bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200',    dot: 'bg-red-400' },
+  grey:     { bg: 'bg-gray-50',   text: 'text-gray-500',   border: 'border-gray-200',   dot: 'bg-gray-300' },
+  pending:  { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200', dot: 'bg-purple-300' },
+  inactive: { bg: 'bg-white',     text: 'text-gray-300',   border: 'border-gray-100',   dot: 'bg-gray-200' },
+  unpriced: { bg: 'bg-white',     text: 'text-gray-300',   border: 'border-gray-100',   dot: 'bg-gray-200' },
 };
 
 // Small soft CSS dot — replaces the high-saturation emoji circles so the
