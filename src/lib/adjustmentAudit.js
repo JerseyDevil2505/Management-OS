@@ -111,7 +111,10 @@ export const GRID_ATTRIBUTE_MAP = {
     extract: (p) => {
       const sf = NUM(p.asset_lot_sf) ?? NUM(p.market_manual_lot_sf);
       if (sf && sf > 0) return sf;
-      const acre = NUM(p.asset_lot_acre) ?? NUM(p.market_manual_lot_acre);
+      const acre = NUM(p.asset_lot_acre)
+        ?? NUM(p.market_manual_lot_acre)
+        ?? NUM(p.market_manual_acre)
+        ?? NUM(p.calculated_lot_acre);
       if (acre && acre > 0) return acre * 43560;
       return null;
     },
@@ -122,7 +125,10 @@ export const GRID_ATTRIBUTE_MAP = {
     applyType: 'per_acre',
     quantityUnit: 'acre',
     extract: (p) => {
-      const acre = NUM(p.asset_lot_acre) ?? NUM(p.market_manual_lot_acre);
+      const acre = NUM(p.asset_lot_acre)
+        ?? NUM(p.market_manual_lot_acre)
+        ?? NUM(p.market_manual_acre)
+        ?? NUM(p.calculated_lot_acre);
       if (acre && acre > 0) return acre;
       const sf = NUM(p.asset_lot_sf) ?? NUM(p.market_manual_lot_sf);
       if (sf && sf > 0) return sf / 43560;
