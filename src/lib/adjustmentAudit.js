@@ -134,12 +134,12 @@ export const GRID_ATTRIBUTE_MAP = {
       if (sf && sf > 0) return sf / 43560;
       if (typeof window !== 'undefined' && !window.__auditLotAcreDumped) {
         window.__auditLotAcreDumped = true;
-        const lotKeys = Object.keys(p).filter((k) => /lot|acre|sf|land/i.test(k));
-        console.warn('[AdjustmentAudit] lot_size_acre extractor returned null. Dumping lot-related fields on this sale:', {
-          composite: p.property_composite_key,
-          fields: Object.fromEntries(lotKeys.map((k) => [k, p[k]])),
-          allKeys: Object.keys(p).sort(),
-        });
+        const lotKeys = Object.keys(p).filter((k) => /lot|acre|sf|land|manual/i.test(k));
+        const lotFields = Object.fromEntries(lotKeys.map((k) => [k, p[k]]));
+        console.warn('[AdjustmentAudit] lot_size_acre extractor returned null for', p.property_composite_key);
+        console.warn('[AdjustmentAudit] Lot/land/manual fields (JSON):', JSON.stringify(lotFields, null, 2));
+        const marketKeys = Object.keys(p).filter((k) => k.startsWith('market_'));
+        console.warn('[AdjustmentAudit] All market_* keys present:', marketKeys);
       }
       return null;
     },
