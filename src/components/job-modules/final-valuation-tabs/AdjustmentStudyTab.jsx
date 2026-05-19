@@ -34,16 +34,16 @@ const fmtMoney = (v) => {
 };
 
 const VERDICT_STYLES = {
-  verified:    { color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-300', Icon: CheckCircle2,  label: 'Verified' },
-  limited:     { color: 'text-amber-800',   bg: 'bg-amber-50',   border: 'border-amber-300',   Icon: AlertTriangle, label: 'Limited support' },
-  cant_verify: { color: 'text-gray-700',    bg: 'bg-gray-50',    border: 'border-gray-300',    Icon: HelpCircle,    label: "Can't verify" },
-  pending:     { color: 'text-purple-800',  bg: 'bg-purple-50',  border: 'border-purple-300',  Icon: Hourglass,     label: 'Extractor pending' },
+  verified:    { color: 'text-green-800',  bg: 'bg-green-50',  border: 'border-green-300',  Icon: CheckCircle2,  label: 'Verified' },
+  limited:     { color: 'text-yellow-800', bg: 'bg-yellow-50', border: 'border-yellow-300', Icon: AlertTriangle, label: 'Limited support' },
+  cant_verify: { color: 'text-gray-700',   bg: 'bg-gray-50',   border: 'border-gray-300',   Icon: HelpCircle,    label: "Can't verify" },
+  pending:     { color: 'text-purple-800', bg: 'bg-purple-50', border: 'border-purple-300', Icon: Hourglass,     label: 'Extractor pending' },
 };
 
 const COMPARISON_BADGES = {
-  inside:  { label: 'Supported',    color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  below:   { label: 'Grid is low',  color: 'bg-amber-100 text-amber-800 border-amber-300' },
-  above:   { label: 'Grid is high', color: 'bg-rose-100 text-rose-800 border-rose-300' },
+  inside:  { label: 'Supported',    color: 'bg-green-100 text-green-800 border-green-300' },
+  below:   { label: 'Grid is low',  color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  above:   { label: 'Grid is high', color: 'bg-red-100 text-red-800 border-red-300' },
   no_grid: { label: 'No grid',      color: 'bg-gray-100 text-gray-700 border-gray-300' },
 };
 
@@ -168,7 +168,7 @@ const AdjustmentStudyTab = ({
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <ShieldCheck className="w-5 h-5 text-blue-600" />
             Adjustment Audit
           </h2>
           <p className="mt-1 text-sm text-gray-600 max-w-3xl">
@@ -181,7 +181,7 @@ const AdjustmentStudyTab = ({
         <button
           onClick={handleRun}
           disabled={running || properties.length === 0 || !selectedReady}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           title={!selectedReady ? 'Selected attribute is not yet wired (extractor pending).' : ''}
         >
           <Play className="w-4 h-4" />
@@ -193,14 +193,14 @@ const AdjustmentStudyTab = ({
       <div className="mb-2 inline-flex rounded-md shadow-sm border border-gray-300 overflow-hidden text-sm">
         <button
           onClick={() => setMode('vetted')}
-          className={`px-4 py-2 inline-flex items-center gap-2 ${mode === 'vetted' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 inline-flex items-center gap-2 ${mode === 'vetted' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
           title="Use only sales already vetted by the time-normalization workflow. Bracket assignment + residual both use values_norm_time."
         >
           <ShieldCheck className="w-4 h-4" /> Vetted Sales (recommended)
         </button>
         <button
           onClick={() => setMode('all')}
-          className={`px-4 py-2 inline-flex items-center gap-2 border-l border-gray-300 ${mode === 'all' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+          className={`px-4 py-2 inline-flex items-center gap-2 border-l border-gray-300 ${mode === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
           title="Use all sales matching the CME allowable codes + date window. Bracket assignment + residual both use raw sales_price."
         >
           <Database className="w-4 h-4" /> All Allowable Sales
@@ -265,7 +265,7 @@ const AdjustmentStudyTab = ({
                   onClick={() => setYearChip(c.id)}
                   className={`px-3 py-1.5 text-xs rounded-full border transition ${
                     yearChip === c.id
-                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                   }`}
                 >
@@ -308,10 +308,10 @@ const AdjustmentStudyTab = ({
         <>
           {/* Diagnostic: every qualified sale failed bracket assignment */}
           {audit.priceDiagnostic && audit.priceDiagnostic.landed === 0 && audit.nQualifiedTotal > 0 && (
-            <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded text-sm text-amber-900">
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded text-sm text-yellow-900">
               <div className="font-semibold mb-1">No sales landed in any bracket — price field looks off.</div>
               <div className="text-xs">
-                Field used: <code className="px-1 bg-amber-100 rounded">{audit.priceDiagnostic.field}</code>{' '}
+                Field used: <code className="px-1 bg-yellow-100 rounded">{audit.priceDiagnostic.field}</code>{' '}
                 ({audit.mode === 'vetted' ? 'vetted mode uses time-normalized values' : 'all-allowable mode uses raw sale price'}).
                 Of {audit.nQualifiedTotal} qualified sales: <strong>{audit.priceDiagnostic.missingPrice}</strong> had no value in this field,{' '}
                 <strong>{audit.priceDiagnostic.outOfRange}</strong> had a value that didn't match any bracket range.
@@ -331,7 +331,7 @@ const AdjustmentStudyTab = ({
               Auditing <span className="font-semibold">{audit.attrLabel}</span> across{' '}
               <span className="font-semibold">{audit.nQualifiedTotal.toLocaleString()}</span> qualified sales.
               {audit.anchorIdx >= 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-emerald-700">
+                <span className="ml-2 inline-flex items-center gap-1 text-blue-700">
                   <Anchor className="w-3.5 h-3.5" />
                   Anchor: {CME_BRACKETS[audit.anchorIdx].shortLabel}
                 </span>
@@ -358,7 +358,7 @@ const AdjustmentStudyTab = ({
               return (
                 <div
                   key={b.bracketIdx}
-                  className={`border rounded-lg p-3 ${style.bg} ${style.border} ${b.isAnchor ? 'ring-2 ring-emerald-400' : ''}`}
+                  className={`border rounded-lg p-3 ${style.bg} ${style.border} ${b.isAnchor ? 'ring-2 ring-blue-400' : ''}`}
                 >
                   <div className="flex items-start gap-3">
                     <Icon className={`w-5 h-5 mt-0.5 ${style.color}`} />
@@ -366,7 +366,7 @@ const AdjustmentStudyTab = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="font-semibold text-gray-900">{b.bracket.label}</div>
                         {b.isAnchor && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white">
                             <Anchor className="w-3 h-3" /> Anchor
                           </span>
                         )}
@@ -421,8 +421,8 @@ const AdjustmentStudyTab = ({
                     {c.within == null
                       ? <span className="ml-2 text-gray-700">— (no model for this bracket)</span>
                       : c.within
-                        ? <span className="ml-2 text-emerald-800 font-semibold">— consistent</span>
-                        : <span className="ml-2 text-amber-800 font-semibold">— off-line, review</span>}
+                        ? <span className="ml-2 text-blue-800 font-semibold">— consistent</span>
+                        : <span className="ml-2 text-yellow-800 font-semibold">— off-line, review</span>}
                   </li>
                 ))}
               </ul>
