@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import './sharedTabNav.css';
-import { supabase, propertyService, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, propertyService, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const CSV_BUTTON_CLASS = 'inline-flex items-center gap-2 px-3 py-1.5 border rounded bg-white text-sm text-gray-700 hover:bg-gray-50';
@@ -2558,18 +2558,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (!properties || properties.length === 0) return;
     setPrefetchingCounts(true);
     try {
-      const chunkSize = 100;
-      const rows = [];
-      for (let i = 0; i < properties.length; i += chunkSize) {
-        const chunk = properties.slice(i, i + chunkSize);
-        const fetched = await Promise.all(chunk.map(async p => {
-          if (!p.job_id || !p.property_composite_key) return null;
-          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
-          const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
-          return { p, raw, isQualified: Number(md?.values_norm_time) > 0 };
-        }));
-        fetched.forEach(r => { if (r) rows.push(r); });
-      }
+      // ONE bulk fetch of the whole job's raw_data (cached server-side via
+      // getRawDataForJob). Then everything is a local Map lookup \u2014 N=1
+      // instead of N=propertyCount RPC round-trips.
+      const jobId = properties[0]?.job_id;
+      const bulk = jobId ? await getRawDataForJob(jobId) : null;
+      const propertyMap = bulk?.propertyMap || new Map();
+      const mdByKey = new Map(propertyMarketData.map(m => [m.property_composite_key, m]));
+
+      const rows = properties.map(p => ({
+        p,
+        raw: p.property_composite_key ? propertyMap.get(p.property_composite_key) : null,
+        isQualified: Number(mdByKey.get(p.property_composite_key)?.values_norm_time) > 0,
+      }));
       setCodeCountCache(buildCodeCountCache(rows));
     } catch (err) {
       console.error('Error prefetching code counts:', err);
@@ -2632,18 +2633,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return marketData?.values_norm_time > 0;
       });
 
-      // Hydrate raw_data in batches
-      const lookup = [];
-      const chunkSize = 100;
-      for (let i = 0; i < validProps.length; i += chunkSize) {
-        const chunk = validProps.slice(i, i + chunkSize);
-        const rawDataPromises = chunk.map(async p => {
-          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
-          return { p, raw };
-        });
-        const results = await Promise.all(rawDataPromises);
-        lookup.push(...results);
-      }
+      // ONE bulk fetch of the whole job's raw_data (cached server-side).
+      // Local Map lookup per property instead of N RPC round-trips.
+      const jobId = validProps[0]?.job_id || jobData?.id;
+      const bulk = jobId ? await getRawDataForJob(jobId) : null;
+      const propertyMap = bulk?.propertyMap || new Map();
+      const lookup = validProps.map(p => ({
+        p,
+        raw: p.property_composite_key ? propertyMap.get(p.property_composite_key) : null,
+      }));
 
       // Refresh code-count cache as a side-effect of this run (we just paid
       // for the raw_data fetch; reuse it).
