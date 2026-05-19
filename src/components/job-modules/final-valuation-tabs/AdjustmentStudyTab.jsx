@@ -306,6 +306,14 @@ const AdjustmentStudyTab = ({
       {/* Results */}
       {audit?.ok && (
         <>
+          {/* Diagnostic: multiple lot-size methods priced in the grid */}
+          {audit.lotSize?.warning && (
+            <div className="mb-4 p-4 bg-orange-50 border border-orange-300 rounded text-sm text-orange-900">
+              <div className="font-semibold mb-1">Multiple lot-size methods have values in the grid.</div>
+              <div className="text-xs">{audit.lotSize.warning}</div>
+            </div>
+          )}
+
           {/* Diagnostic: bracket-assignment failure (no sales landed) */}
           {audit.priceDiagnostic && audit.priceDiagnostic.landed === 0 && audit.nQualifiedTotal > 0 && (
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded text-sm text-yellow-900">

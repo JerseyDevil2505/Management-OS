@@ -144,17 +144,53 @@ export const GRID_ATTRIBUTE_MAP = {
     quantityUnit: 'ft',
     extract: (p) => NUM(p.asset_lot_frontage) ?? NUM(p.market_manual_lot_ff),
   },
+  // ---------------------------------------------------------------------------
+  // Effective Age (NOT chronological age, NOT asset_year_built).
+  //
+  // The grid's "Year Built" row is priced against EFFECTIVE age, which lives
+  // in asset_effective_age. A 1920 house gut-renovated in 2018 has chrono age
+  // ~100 but effective age ~7 — those are different numbers and using the
+  // wrong one corrupts the strip for every other attribute.
+  //
+  // Per Copilot OS guide §5 (the EFA conversion chain):
+  //   BRT          → asset_effective_age is stored as a calendar year (e.g. 2015)
+  //   Microsystems → asset_effective_age is stored as (yearPrior − age), which
+  //                  also looks like a year. Conversion back to age is the
+  //                  same operation: age = referenceYear − asset_effective_age.
+  // Source-of-truth: MarketDataTab.jsx `getCalculatedValues` / `getCurrentEFA`.
+  // DO NOT "simplify" this to asset_year_built — that breaks effective-age
+  // adjustments on every renovated property in the job.
+  //
+  // We keep the GRID_ATTRIBUTE_MAP key as `year_built` because the
+  // adjustment_grid row's adjustment_id is `year_built`. The label and the
+  // math reflect effective age.
+  // ---------------------------------------------------------------------------
   year_built: {
-    label: 'Year Built (Effective Age)',
+    label: 'Effective Age',
     kind: 'continuous',
     applyType: 'flat_per_year',
     quantityUnit: 'yrs',
-    extract: (p) => {
-      const yb = NUM(p.asset_year_built);
-      if (!yb || yb < 1700 || yb > 2100) return null;
-      return new Date().getFullYear() - yb;
+    extract: (p, ctx) => {
+      const stored = NUM(p.asset_effective_age);
+      if (stored == null) return null;
+      const vendor = ctx?.vendorType || 'BRT';
+      const ref = ctx?.referenceYear || new Date().getFullYear();
+      // Both vendors normalize to year-shaped values in property_records,
+      // so the conversion is the same arithmetic — branch is preserved so
+      // future vendor changes are explicit, not implicit.
+      let age;
+      if (vendor === 'Microsystems') {
+        age = ref - stored;
+      } else {
+        age = ref - stored;
+      }
+      if (!Number.isFinite(age) || age < 0 || age > 200) return null;
+      return age;
     },
   },
+  // Bedrooms — both vendors are normalized into asset_bedrooms by the
+  // data pipelines (BRT BEDTOT, Microsystems "Total Bedrms" → asset_bedrooms).
+  // Verified via src/lib/data-pipeline/{brt,microsystems}-processor.js.
   bedrooms: {
     label: 'Bedrooms',
     kind: 'count',
@@ -162,6 +198,11 @@ export const GRID_ATTRIBUTE_MAP = {
     quantityUnit: 'beds',
     extract: (p) => NUM(p.asset_bedrooms),
   },
+  // Bathrooms — both vendors are normalized into total_baths_calculated by
+  // the data pipelines via calculateTotalBaths() (BATHTOT for BRT, the
+  // Microsystems plumbing fields for Micro). This is the authoritative
+  // weighted count; asset_bathrooms is kept as a fallback only.
+  // Verified via src/lib/data-pipeline/{brt,microsystems}-{processor,updater}.js.
   bathrooms: {
     label: 'Bathrooms',
     kind: 'count',
@@ -301,6 +342,62 @@ export function isAttributeReady(attrId) {
 }
 
 // ---------------------------------------------------------------------------
+// Active lot-size method detection.
+//
+// The grid has three lot-size rows (lot_size_sf, lot_size_acre, lot_size_ff),
+// but any one town uses only ONE. If a secondary row has any non-zero bracket
+// value, the strip step would deduct land twice (once as SF, once as Acre)
+// and destroy the residual for every sale. Today this is masked by the
+// `grid === 0` short-circuit, but the moment a stray non-zero value lands
+// in an inactive row the latent bug fires.
+//
+// This helper inspects all three rows and returns:
+//   { active: 'lot_size_sf' | 'lot_size_acre' | 'lot_size_ff' | null,
+//     allWithValues: [...attrIds with non-zero brackets],
+//     warning: string | null }
+// ---------------------------------------------------------------------------
+export const LOT_SIZE_METHOD_IDS = ['lot_size_sf', 'lot_size_acre', 'lot_size_ff'];
+
+export function detectActiveLotSizeMethod(gridRows = []) {
+  const totals = {};
+  for (const id of LOT_SIZE_METHOD_IDS) {
+    const row = gridRows.find((r) => r.adjustment_id === id);
+    if (!row) { totals[id] = 0; continue; }
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+      const v = Number(row[`bracket_${i}`]);
+      if (Number.isFinite(v)) sum += Math.abs(v);
+    }
+    totals[id] = sum;
+  }
+  const withValues = LOT_SIZE_METHOD_IDS.filter((id) => totals[id] > 0);
+  if (withValues.length === 0) {
+    return { active: null, allWithValues: [], warning: null };
+  }
+  if (withValues.length === 1) {
+    return { active: withValues[0], allWithValues: withValues, warning: null };
+  }
+  // More than one populated — pick the largest, warn loudly.
+  const winner = withValues.slice().sort((a, b) => totals[b] - totals[a])[0];
+  const warning =
+    `Multiple lot-size methods have non-zero values (${withValues.join(', ')}). ` +
+    `Treating "${winner}" as active (largest bracket totals). Review your grid — ` +
+    `only one lot-size method should be priced.`;
+  // eslint-disable-next-line no-console
+  console.warn('[AdjustmentAudit] ' + warning);
+  return { active: winner, allWithValues: withValues, warning };
+}
+
+function isInactiveLotMethod(attrId, ctx) {
+  if (!LOT_SIZE_METHOD_IDS.includes(attrId)) return false;
+  const active = ctx?.activeLotSizeMethod;
+  // If we have no active method (no land row priced at all), treat all three
+  // as inactive — they can't be stripped without grid values anyway.
+  if (!active) return true;
+  return attrId !== active;
+}
+
+// ---------------------------------------------------------------------------
 // Grid lookup helpers — `gridRows` are the rows from `job_adjustment_grid`
 // (one row per attribute, columns bracket_0..bracket_9).
 // ---------------------------------------------------------------------------
@@ -328,6 +425,7 @@ export function computeBracketBaselines(salesInBracket, ctx = {}) {
   const baselines = {};
   for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
     if (!isAttributeReady(attrId)) continue;
+    if (isInactiveLotMethod(attrId, ctx)) continue; // skip lot methods not used by this town
     const qs = salesInBracket.map((p) => def.extract(p, ctx)).filter((q) => q != null);
     baselines[attrId] = median(qs);
   }
@@ -354,6 +452,9 @@ function stripOtherAdjustments(sale, bracketIdx, attrUnderTest, gridRows, baseli
   for (const [attrId, def] of Object.entries(GRID_ATTRIBUTE_MAP)) {
     if (attrId === attrUnderTest) continue;
     if (def.pending) continue; // can't strip what we can't extract; documented in footer
+    // Skip inactive lot-size methods BEFORE the grid === 0 short-circuit so
+    // a stray non-zero value in an inactive row can't double-strip the land.
+    if (isInactiveLotMethod(attrId, ctx)) continue;
     const grid = gridValueFor(gridRows, attrId, bracketIdx);
     // If the grid carries no value here, this attribute can't change the
     // residual either way — skip it without requiring the quantity. Otherwise
@@ -445,6 +546,24 @@ function fitBinaryMeanDiff(xs, ys) {
 export function auditBracket({ attrId, bracketIdx, allSales, gridRows, mode = 'vetted', ctx = {} }) {
   const def = GRID_ATTRIBUTE_MAP[attrId];
   const bracket = CME_BRACKETS[bracketIdx];
+
+  // If the user picked a lot-size method that isn't active for this job,
+  // short-circuit with an explicit verdict instead of running a degenerate fit.
+  if (isInactiveLotMethod(attrId, ctx)) {
+    const active = ctx?.activeLotSizeMethod;
+    const activeLabel = active ? (GRID_ATTRIBUTE_MAP[active]?.label || active) : 'none priced';
+    return {
+      bracketIdx,
+      bracket,
+      gridValue: gridValueFor(gridRows, attrId, bracketIdx),
+      attrId,
+      attrLabel: def?.label || attrId,
+      isAnchor: false,
+      verdict: 'cant_verify',
+      n: 0,
+      message: `This lot-size method is not active for this job (active method: ${activeLabel}). Audit skipped to avoid double-stripping land.`,
+    };
+  }
   const gridValue = gridValueFor(gridRows, attrId, bracketIdx);
 
   const base = {
@@ -585,8 +704,25 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
   }
 
   const mode = opts.mode || 'vetted';
+
+  // Detect the active lot-size method ONCE per run and pass it through ctx
+  // so baselines, strip, and per-bracket audits all agree.
+  const lotSize = detectActiveLotSizeMethod(gridRows);
+
+  const vendorType = opts.jobData?.vendor_type
+    || opts.jobData?.vendor_source
+    || opts.vendorType
+    || 'BRT';
+  const endDate = opts.jobData?.end_date ? new Date(opts.jobData.end_date) : null;
+  const referenceYear = (endDate && Number.isFinite(endDate.getTime()))
+    ? endDate.getFullYear() - 1   // matches MarketDataTab's yearPriorToDueYear
+    : new Date().getFullYear();
+
   const ctx = {
     conditionRanker: opts.jobData ? buildConditionRanker(opts.jobData) : null,
+    activeLotSizeMethod: lotSize.active,
+    vendorType,
+    referenceYear,
   };
 
   // Reset the strip-drop reason counter for this run
@@ -673,6 +809,9 @@ export function runAudit({ attrId, properties, gridRows, opts = {} }) {
     priceDiagnostic,
     stripDropReasons: { ...STRIP_DROP_REASONS.byAttr },
     mode,
+    lotSize, // { active, allWithValues, warning }
+    vendorType,
+    referenceYear,
   };
 }
 
