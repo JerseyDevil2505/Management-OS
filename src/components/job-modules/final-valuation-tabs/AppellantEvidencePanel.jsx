@@ -898,10 +898,12 @@ const AppellantEvidencePanel = ({
                   <td className={cellCls('card')} title={cellTitle('card')}>
                     <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
-                  <td className="px-2 py-1 text-gray-700 whitespace-nowrap" title={slot.is_manual ? (slot.manual_address || '') : (compProp?.property_location || '')}>
-                    {slot.is_manual
-                      ? (slot.manual_address || '\u2014')
-                      : (compProp?.property_location || '\u2014')}
+                  <td className="px-1 py-1 text-gray-700 text-[10px] leading-tight" style={{ maxWidth: '120px' }} title={slot.is_manual ? (slot.manual_address || '') : (compProp?.property_location || '')}>
+                    <div className="truncate">
+                      {slot.is_manual
+                        ? (slot.manual_address || '\u2014')
+                        : (compProp?.property_location || '\u2014')}
+                    </div>
                   </td>
                   <td className={cellCls('sale_date')} title={cellTitle('sale_date')}>
                     <input type="date" value={slot.sales_date || (compProp ? fmtCompDate(compProp.sales_date) : '')} onChange={e => updateSlot(idx, 'sales_date', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
