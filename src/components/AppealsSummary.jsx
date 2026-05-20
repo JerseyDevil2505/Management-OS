@@ -2,11 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { supabase, formatDateLocalYMD } from '../lib/supabaseClient';
 import { AlertCircle, Calendar, FileText, TrendingUp, FileDown } from 'lucide-react';
 
+const BILLED_JOBS_STORAGE_KEY = 'appealsSummaryBilledJobs';
+
 const AppealsSummary = ({ jobs = [], onJobSelect }) => {
   const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
+  // Click-to-mark-billed state \u2014 persisted per-user via localStorage.
+  // Toggle is forward/reverse: Completed -> Billed -> Completed.
+  const [billedJobIds, setBilledJobIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(BILLED_JOBS_STORAGE_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch { return new Set(); }
+  });
+  const toggleBilled = (jobId) => {
+    setBilledJobIds(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      try { localStorage.setItem(BILLED_JOBS_STORAGE_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (jobs && jobs.length > 0) {
@@ -344,7 +362,7 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       row.proSeCount,
       row.attorneyCount,
       row.isCompleted
-        ? 'Completed'
+        ? (billedJobIds.has(row.jobId) ? 'Billed' : 'Completed')
         : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')
     ]));
 
@@ -405,11 +423,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
 
         const summaryRow = jobAppealsSummary[rowIndex];
 
-        // Completed (final hearing past) — blue lock takes precedence over CME green
+        // Completed (final hearing past) — blue lock; Billed — emerald lock (takes precedence over CME green)
         if (summaryRow && summaryRow.isCompleted) {
-          data.cell.styles.fillColor = [219, 234, 254]; // bg-blue-50
+          const isBilledRow = billedJobIds.has(summaryRow.jobId);
+          data.cell.styles.fillColor = isBilledRow ? [236, 253, 245] : [219, 234, 254]; // emerald-50 vs blue-50
           if (data.column.index === 14) {
-            data.cell.styles.textColor = [30, 64, 175]; // text-blue-800
+            data.cell.styles.textColor = isBilledRow ? [4, 120, 87] : [30, 64, 175]; // emerald-700 vs blue-800
             data.cell.styles.fontStyle = 'bold';
           }
           return;
@@ -562,9 +581,12 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             <tbody>
               {jobAppealsSummary.map((row, idx) => {
                 const cmeMatchesTotal = row.totalAppeals > 0 && row.statusBreakdown.hasCME === row.totalAppeals;
-                const rowClass = row.isCompleted
-                  ? 'bg-blue-50 hover:bg-blue-100'
-                  : (cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50');
+                const isBilled = row.isCompleted && billedJobIds.has(row.jobId);
+                const rowClass = isBilled
+                  ? 'bg-emerald-50 hover:bg-emerald-100'
+                  : row.isCompleted
+                    ? 'bg-blue-50 hover:bg-blue-100'
+                    : (cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50');
                 return (
                 <tr
                   key={row.jobId}
@@ -584,7 +606,21 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                   <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
                   <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
-                  <td className={`px-4 py-3 text-sm text-center ${row.isCompleted ? 'text-blue-800 font-semibold' : 'text-gray-700'}`}>{row.isCompleted ? 'Completed' : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')}</td>
+                  <td
+                    className={`px-4 py-3 text-sm text-center ${
+                      row.isCompleted
+                        ? (billedJobIds.has(row.jobId)
+                          ? 'text-emerald-700 font-semibold cursor-pointer hover:underline'
+                          : 'text-blue-800 font-semibold cursor-pointer hover:underline')
+                        : 'text-gray-700'
+                    }`}
+                    onClick={row.isCompleted ? () => toggleBilled(row.jobId) : undefined}
+                    title={row.isCompleted ? (billedJobIds.has(row.jobId) ? 'Click to revert to Completed' : 'Click to mark as Billed') : undefined}
+                  >
+                    {row.isCompleted
+                      ? (billedJobIds.has(row.jobId) ? 'Billed' : 'Completed')
+                      : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')}
+                  </td>
                 </tr>
                 );
               })}
