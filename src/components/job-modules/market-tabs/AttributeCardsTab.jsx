@@ -2650,14 +2650,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return { p, raw, isQualified: Number(md?.values_norm_time) > 0 };
       })));
 
-      // Build sample rows enriched with normalizedTime + sfla + count/area
+      // Build sample rows enriched with normalizedTime + sfla + count/area + yearBuilt
       const samples = lookup.map(({ p, raw }) => {
         const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
         const normTime = Number(md?.values_norm_time) || 0;
         const sfla = Number(p.asset_sfla || p.sfla || p.property_sfla) || 0;
+        const yearBuilt = Number(p.asset_year_built || p.year_built || p.property_year_built) || 0;
         const { count, area } = countAndArea(raw, selCode, selCategory);
         const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
-        return { p, vcs, normTime, sfla, count, area, has: count > 0 };
+        return { p, vcs, normTime, sfla, yearBuilt, count, area, has: count > 0 };
       }).filter(s => s.normTime > 0);
 
       const avg = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
@@ -2677,6 +2678,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const avgWithSFLA = avg(withFactor.filter(r => r.sfla > 0).map(r => r.sfla));
         const avgWithoutSFLA = avg(withoutFactor.filter(r => r.sfla > 0).map(r => r.sfla));
         const averageSize = (avgWithSFLA + avgWithoutSFLA) / 2;
+        const avgWithYear = avg(withFactor.filter(r => r.yearBuilt > 0).map(r => r.yearBuilt));
+        const avgWithoutYear = avg(withoutFactor.filter(r => r.yearBuilt > 0).map(r => r.yearBuilt));
 
         // Jim's formula
         const adjWith = avgWithSFLA > 0
@@ -2701,6 +2704,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           avgWithoutTime: Math.round(avgWithoutTime),
           avgWithSFLA: Math.round(avgWithSFLA),
           avgWithoutSFLA: Math.round(avgWithoutSFLA),
+          avgWithYear: avgWithYear ? Math.round(avgWithYear) : null,
+          avgWithoutYear: avgWithoutYear ? Math.round(avgWithoutYear) : null,
           adjWith,
           adjWithout,
           dollarImpact,
@@ -2734,16 +2739,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         type_use_label: typeUseOpt ? typeUseOpt.description : customTypeUseFilter,
         field: selCode,
         overall: overall.insufficient ? overall : {
-          with: { n: overall.withCount, avg_price: overall.avgWithTime, avg_size: overall.avgWithSFLA, adj_price: overall.adjWith, avg_count: overall.avgCount, avg_area: overall.avgArea },
-          without: { n: overall.withoutCount, avg_price: overall.avgWithoutTime, avg_size: overall.avgWithoutSFLA, adj_price: overall.adjWithout },
+          with: { n: overall.withCount, avg_price: overall.avgWithTime, avg_size: overall.avgWithSFLA, avg_year_built: overall.avgWithYear, adj_price: overall.adjWith, avg_count: overall.avgCount, avg_area: overall.avgArea },
+          without: { n: overall.withoutCount, avg_price: overall.avgWithoutTime, avg_size: overall.avgWithoutSFLA, avg_year_built: overall.avgWithoutYear, adj_price: overall.adjWithout },
           flat_adj: overall.dollarImpact,
           pct_adj: overall.pctImpact,
           per_item: overall.perItem,
           per_sf: overall.perSf,
         },
         byVCS: Object.fromEntries(Object.entries(byVcs).map(([vcs, x]) => [vcs, x.insufficient ? x : {
-          with: { n: x.withCount, avg_price: x.avgWithTime, avg_size: x.avgWithSFLA, adj_price: x.adjWith, avg_count: x.avgCount, avg_area: x.avgArea },
-          without: { n: x.withoutCount, avg_price: x.avgWithoutTime, avg_size: x.avgWithoutSFLA, adj_price: x.adjWithout },
+          with: { n: x.withCount, avg_price: x.avgWithTime, avg_size: x.avgWithSFLA, avg_year_built: x.avgWithYear, adj_price: x.adjWith, avg_count: x.avgCount, avg_area: x.avgArea },
+          without: { n: x.withoutCount, avg_price: x.avgWithoutTime, avg_size: x.avgWithoutSFLA, avg_year_built: x.avgWithoutYear, adj_price: x.adjWithout },
           flat_adj: x.dollarImpact,
           pct_adj: x.pctImpact,
           per_item: x.perItem,
@@ -2903,112 +2908,140 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ---------- Excel export (single study + all studies) ----------
   // Follows the formatting pattern in LandValuationTab.jsx: aoa_to_sheet,
   // explicit !cols widths, bold header row, currency / percent number formats.
+  // Column order (1-indexed letters used in formulas):
+  //  A  VCS
+  //  B  With (n)
+  //  C  Avg Item Area (detached) | Avg Count (misc)
+  //  D  Avg Year Built (With)
+  //  E  Avg SFLA (With)
+  //  F  Avg Sale (With)         — values_norm_time
+  //  G  Without (n)
+  //  H  Avg Year Built (Without)
+  //  I  Avg SFLA (Without)
+  //  J  Avg Sale (Without)      — values_norm_time
+  //  K  Adj Sale (With)         = F + (((E+I)/2 - E) * (F/E) * 0.5)
+  //  L  Adj Sale (Without)      = J + (((E+I)/2 - I) * (J/I) * 0.5)
+  //  M  $ Impact                = K - L
+  //  N  % Impact                = (K - L) / L
+  //  O  Per Sq Ft | Per Item    = M / C
   const buildStudySheetRows = (study) => {
     const isDetached = study.category === '15';
     const titleLine = `${isDetached ? 'Detached Items' : 'Miscellaneous'}: ${study.label || study.field || study.code} — Analysis by VCS`;
-    const meta = [
-      ['Job', jobData?.job_name || jobData?.municipality || ''],
-      ['Vendor', vendorType],
-      ['Type/Use', study.type_use_label || study.type_use || 'All Properties'],
-      ['Methodology', isDetached ? '$/sq ft (Jim formula)' : 'Per item (Jim formula)'],
-      ['Generated', study.generated_at ? new Date(study.generated_at).toLocaleString() : ''],
-    ];
 
     const header = [
-      'VCS', 'With (n)', 'With Adj Sale', 'Without (n)', 'Without Adj Sale',
-      '$ Impact', '% Impact', isDetached ? 'Per Sq Ft' : 'Per Item',
-      'Avg With SFLA', 'Avg Without SFLA', isDetached ? 'Avg Item Area' : 'Avg Count',
+      'VCS',
+      'With (n)',
+      isDetached ? 'Avg Item Area' : 'Avg Count',
+      'Avg Year Built (With)',
+      'Avg SFLA (With)',
+      'Avg Sale (With)',
+      'Without (n)',
+      'Avg Year Built (Without)',
+      'Avg SFLA (Without)',
+      'Avg Sale (Without)',
+      'Adj Sale (With)',
+      'Adj Sale (Without)',
+      '$ Impact',
+      '% Impact',
+      isDetached ? 'Per Sq Ft' : 'Per Item',
     ];
 
-    const dataRow = (label, d) => {
+    // Live formula generator for a given 1-indexed row number
+    const formulaCells = (r) => ({
+      K: { t: 'n', f: `IFERROR(F${r}+(((E${r}+I${r})/2-E${r})*(F${r}/E${r})*0.5),"")` },
+      L: { t: 'n', f: `IFERROR(J${r}+(((E${r}+I${r})/2-I${r})*(J${r}/I${r})*0.5),"")` },
+      M: { t: 'n', f: `IFERROR(K${r}-L${r},"")` },
+      N: { t: 'n', f: `IFERROR((K${r}-L${r})/L${r},"")` },
+      O: { t: 'n', f: `IFERROR(M${r}/C${r},"")` },
+    });
+
+    const dataRow = (label, d, rowNum) => {
       if (!d || d.insufficient) {
-        return [
-          label, d?.withCount ?? '', '', d?.withoutCount ?? '', '',
-          '', '', '', '', '', '',
-        ];
+        return [label, d?.withCount ?? '', '', '', '', '', d?.withoutCount ?? '', '', '', '', '', '', '', '', ''];
       }
+      const f = formulaCells(rowNum);
       return [
         label,
         d.with?.n ?? '',
-        d.with?.adj_price ?? '',
-        d.without?.n ?? '',
-        d.without?.adj_price ?? '',
-        d.flat_adj ?? '',
-        d.pct_adj != null ? d.pct_adj / 100 : '',
-        (isDetached ? d.per_sf : d.per_item) ?? '',
+        (isDetached ? d.with?.avg_area : d.with?.avg_count) ?? '',
+        d.with?.avg_year_built ?? '',
         d.with?.avg_size ?? '',
+        d.with?.avg_price ?? '',
+        d.without?.n ?? '',
+        d.without?.avg_year_built ?? '',
         d.without?.avg_size ?? '',
-        isDetached ? (d.with?.avg_area ?? '') : (d.with?.avg_count ?? ''),
+        d.without?.avg_price ?? '',
+        f.K, f.L, f.M, f.N, f.O,
       ];
     };
 
-    const rows = [
-      [titleLine],
-      [],
-      ...meta,
-      [],
-      header,
-    ];
-
+    // Header is row 1 (no preamble — straight into the table)
+    const rows = [header];
+    let r = 2;
     Object.entries(study.results?.byVCS || study.byVCS || {}).forEach(([vcs, d]) => {
-      rows.push(dataRow(vcs, d));
+      rows.push(dataRow(vcs, d, r));
+      r += 1;
     });
-    rows.push(dataRow('ALL VCS', study.results?.overall || study.overall));
+    rows.push(dataRow('ALL VCS', study.results?.overall || study.overall, r));
     return { rows, header, isDetached, titleLine };
   };
 
   const applyStudySheetFormatting = (ws, built) => {
-    const { rows, header, isDetached } = built;
+    const { rows, header } = built;
     ws['!cols'] = [
-      { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 18 },
-      { wch: 14 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+      { wch: 10 },  // VCS
+      { wch: 10 },  // With (n)
+      { wch: 14 },  // Avg Item Area / Avg Count
+      { wch: 14 },  // Avg YB With
+      { wch: 14 },  // Avg SFLA With
+      { wch: 14 },  // Avg Sale With
+      { wch: 12 },  // Without (n)
+      { wch: 14 },  // Avg YB Without
+      { wch: 14 },  // Avg SFLA Without
+      { wch: 16 },  // Avg Sale Without
+      { wch: 14 },  // Adj Sale With
+      { wch: 16 },  // Adj Sale Without
+      { wch: 12 },  // $ Impact
+      { wch: 10 },  // % Impact
+      { wch: 12 },  // Per Sq Ft / Per Item
     ];
-    // Title row merge
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];
-    const titleCell = ws['A1'];
-    if (titleCell) {
-      titleCell.s = { font: { bold: true, sz: 14 }, alignment: { horizontal: 'left' } };
-    }
-    // Header row (row index = number of preamble rows; preamble = 1 title + 1 blank + 5 meta + 1 blank = 8)
-    const headerRowIdx = 8;
+
+    const baseFont = { name: 'Leelawadee', sz: 10 };
+    const centered = { horizontal: 'center', vertical: 'center', wrapText: true };
+    const headerStyle = { font: { ...baseFont, bold: true }, alignment: centered };
+    const baseStyle = { font: baseFont, alignment: centered };
+
+    const dataStart = 1;                  // row index 1 (0-based) — first VCS row
+    const dataEnd = rows.length - 1;      // last row is ALL VCS total
+    const totalRowIdx = dataEnd;
+
+    // Header row
     for (let c = 0; c < header.length; c++) {
-      const addr = XLSX.utils.encode_cell({ r: headerRowIdx, c });
-      if (ws[addr]) {
-        ws[addr].s = {
-          font: { bold: true, color: { rgb: 'FFFFFF' } },
-          fill: { patternType: 'solid', fgColor: { rgb: '1E40AF' } },
-          alignment: { horizontal: 'center' },
-        };
-      }
+      const a = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[a]) ws[a].s = headerStyle;
     }
-    // Currency / percent formats on data rows
-    const dataStart = headerRowIdx + 1;
-    const dataEnd = rows.length - 1;
-    const currencyCols = [2, 4, 5, 7]; // With Adj, Without Adj, $ Impact, Per ($)
-    const percentCols = [6];
-    const sfCols = isDetached ? [8, 9, 10] : [8, 9];
+
+    // Data rows
+    const currencyCols = [5, 9, 10, 11, 12, 14]; // F J K L M O — sales / adj / impact / per
+    const percentCols = [13];                    // N
+    const intCommaCols = [1, 2, 3, 4, 6, 7, 8];  // B C D E G H I
     for (let r = dataStart; r <= dataEnd; r++) {
-      currencyCols.forEach(c => {
+      for (let c = 0; c < header.length; c++) {
         const a = XLSX.utils.encode_cell({ r, c });
-        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '"$"#,##0';
-      });
-      percentCols.forEach(c => {
-        const a = XLSX.utils.encode_cell({ r, c });
-        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '0.0%';
-      });
-      sfCols.forEach(c => {
-        const a = XLSX.utils.encode_cell({ r, c });
-        if (ws[a] && typeof ws[a].v === 'number') ws[a].z = '#,##0';
-      });
-    }
-    // Bold the ALL VCS total row
-    const totalRow = dataEnd;
-    for (let c = 0; c < header.length; c++) {
-      const a = XLSX.utils.encode_cell({ r: totalRow, c });
-      if (ws[a]) {
-        ws[a].s = { ...(ws[a].s || {}), font: { bold: true }, fill: { patternType: 'solid', fgColor: { rgb: 'EFF6FF' } } };
+        if (!ws[a]) continue;
+        const isTotal = r === totalRowIdx;
+        const style = {
+          font: { ...baseFont, bold: isTotal },
+          alignment: centered,
+        };
+        if (currencyCols.includes(c)) style.numFmt = '"$"#,##0';
+        else if (percentCols.includes(c)) style.numFmt = '0.0%';
+        else if (intCommaCols.includes(c) && (c === 3 || c === 7)) style.numFmt = '0'; // year built — no commas
+        else if (intCommaCols.includes(c)) style.numFmt = '#,##0';
+        ws[a].s = style;
       }
     }
+
     return ws;
   };
 
@@ -3028,9 +3061,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const exportAllStudiesToExcel = (studies) => {
     if (!studies || studies.length === 0) return;
     const wb = XLSX.utils.book_new();
-    // Index sheet
+
+    // Index sheet — same B&W Leelawadee style as study sheets
     const indexHeader = ['Study Name', 'Category', 'Code', 'Type/Use', 'With (n)', 'Without (n)', '$ Impact', '% Impact', 'Per Unit', 'Created'];
-    const indexRows = [['Custom Attribute Studies — Index'], [], indexHeader];
+    const indexRows = [indexHeader];
     studies.forEach(s => {
       const o = s.results?.overall || s.overall;
       const isDet = (s.category || s.results?.category) === '15';
@@ -3052,16 +3086,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       { wch: 32 }, { wch: 14 }, { wch: 10 }, { wch: 22 },
       { wch: 9 }, { wch: 11 }, { wch: 13 }, { wch: 10 }, { wch: 13 }, { wch: 22 },
     ];
-    indexWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: indexHeader.length - 1 } }];
-    if (indexWs['A1']) indexWs['A1'].s = { font: { bold: true, sz: 14 } };
+    const idxBaseFont = { name: 'Leelawadee', sz: 10 };
+    const idxCenter = { horizontal: 'center', vertical: 'center', wrapText: true };
     for (let c = 0; c < indexHeader.length; c++) {
-      const addr = XLSX.utils.encode_cell({ r: 2, c });
-      if (indexWs[addr]) {
-        indexWs[addr].s = {
-          font: { bold: true, color: { rgb: 'FFFFFF' } },
-          fill: { patternType: 'solid', fgColor: { rgb: '1E40AF' } },
-          alignment: { horizontal: 'center' },
-        };
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (indexWs[addr]) indexWs[addr].s = { font: { ...idxBaseFont, bold: true }, alignment: idxCenter };
+    }
+    for (let r = 1; r < indexRows.length; r++) {
+      for (let c = 0; c < indexHeader.length; c++) {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (!indexWs[a]) continue;
+        const style = { font: idxBaseFont, alignment: idxCenter };
+        if (c === 6) style.numFmt = '"$"#,##0';
+        else if (c === 7) style.numFmt = '0.0%';
+        else if (c === 8) style.numFmt = '"$"#,##0';
+        else if (c === 4 || c === 5) style.numFmt = '#,##0';
+        indexWs[a].s = style;
       }
     }
     XLSX.utils.book_append_sheet(wb, indexWs, 'Index');
@@ -3399,108 +3439,86 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </button>
               </div>
               
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
-                      VCS
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      With (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      With Adj Sale
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      Without (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Without Adj Sale
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      $ Impact
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      % Impact
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      {customResults.category === '15' ? 'Per Sq Ft' : 'Per Item'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(customResults.byVCS || {}).map(([vcs, data], idx) => {
-                    if (data.insufficient) {
-                      return (
-                        <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                          <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
-                          <td colSpan={6} style={{ padding: '8px 12px', fontSize: '12px', color: '#92400E' }}>
-                            Not enough sales to compare (with: {data.withCount}, without: {data.withoutCount})
-                          </td>
-                        </tr>
-                      );
-                    }
+              {(() => {
+                const isDet = customResults.category === '15';
+                const th = { padding: '8px 10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' };
+                const td = { padding: '8px 10px', textAlign: 'center', fontSize: '13px' };
+                const fmtNum = (v) => (v == null || v === '' ? '-' : Number(v).toLocaleString());
+                const fmtYear = (v) => (v == null || v === '' ? '-' : String(v));
+                const fmtCurr = (v) => (v == null || v === '' ? '-' : formatCurrency(v));
+                const renderRow = (label, data, isTotal) => {
+                  if (data.insufficient) {
                     return (
-                      <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                        <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.with.n}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                          {data.with.adj_price ? formatCurrency(data.with.adj_price) : '-'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.without.n}</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                          {data.without.adj_price ? formatCurrency(data.without.adj_price) : '-'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px',
-                            color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280' }}>
-                          {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px',
-                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280' }}>
-                          {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px', color: '#0F766E', fontWeight: '500' }}>
-                          {customResults.category === '15'
-                            ? (data.per_sf != null ? `${formatCurrency(data.per_sf)}/sf` : '-')
-                            : (data.per_item != null ? formatCurrency(data.per_item) : '-')}
+                      <tr key={label} style={{ backgroundColor: isTotal ? '#EFF6FF' : '#F9FAFB' }}>
+                        <td style={{ ...td, fontWeight: '500' }}>{label}</td>
+                        <td colSpan={14} style={{ ...td, color: '#92400E' }}>
+                          Not enough sales to compare (with: {data.withCount}, without: {data.withoutCount})
                         </td>
                       </tr>
                     );
-                  })}
-                  {!customResults.overall.insufficient && (
-                    <tr style={{ backgroundColor: '#EFF6FF', borderTop: '2px solid #BFDBFE' }}>
-                      <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '700', color: '#1E40AF' }}>
-                        ALL VCS
+                  }
+                  const rowStyle = isTotal
+                    ? { backgroundColor: '#EFF6FF', borderTop: '2px solid #BFDBFE', fontWeight: 700 }
+                    : {};
+                  const tdT = { ...td, fontWeight: isTotal ? 700 : 400 };
+                  return (
+                    <tr key={label} style={rowStyle}>
+                      <td style={{ ...tdT, color: isTotal ? '#1E40AF' : 'inherit' }}>{label}</td>
+                      <td style={tdT}>{fmtNum(data.with.n)}</td>
+                      <td style={tdT}>{isDet ? fmtNum(data.with.avg_area) : fmtNum(data.with.avg_count)}</td>
+                      <td style={tdT}>{fmtYear(data.with.avg_year_built)}</td>
+                      <td style={tdT}>{fmtNum(data.with.avg_size)}</td>
+                      <td style={tdT}>{fmtCurr(data.with.avg_price)}</td>
+                      <td style={tdT}>{fmtNum(data.without.n)}</td>
+                      <td style={tdT}>{fmtYear(data.without.avg_year_built)}</td>
+                      <td style={tdT}>{fmtNum(data.without.avg_size)}</td>
+                      <td style={tdT}>{fmtCurr(data.without.avg_price)}</td>
+                      <td style={tdT}>{fmtCurr(data.with.adj_price)}</td>
+                      <td style={tdT}>{fmtCurr(data.without.adj_price)}</td>
+                      <td style={{ ...tdT, color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : 'inherit' }}>
+                        {fmtCurr(data.flat_adj)}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '600' }}>
-                        {customResults.overall.with.n}
+                      <td style={{ ...tdT, color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : 'inherit' }}>
+                        {data.pct_adj == null ? '-' : formatPercent(data.pct_adj)}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '600' }}>
-                        {customResults.overall.with.adj_price ? formatCurrency(customResults.overall.with.adj_price) : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '600' }}>
-                        {customResults.overall.without.n}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '600' }}>
-                        {customResults.overall.without.adj_price ? formatCurrency(customResults.overall.without.adj_price) : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '700',
-                          color: customResults.overall.flat_adj > 0 ? '#059669' : customResults.overall.flat_adj < 0 ? '#DC2626' : '#6B7280' }}>
-                        {customResults.overall.flat_adj ? formatCurrency(customResults.overall.flat_adj) : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '700',
-                          color: customResults.overall.pct_adj > 0 ? '#059669' : customResults.overall.pct_adj < 0 ? '#DC2626' : '#6B7280' }}>
-                        {customResults.overall.pct_adj ? formatPercent(customResults.overall.pct_adj) : '-'}
-                      </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '13px', color: '#0F766E', fontWeight: '700' }}>
-                        {customResults.category === '15'
-                          ? (customResults.overall.per_sf != null ? `${formatCurrency(customResults.overall.per_sf)}/sf` : '-')
-                          : (customResults.overall.per_item != null ? formatCurrency(customResults.overall.per_item) : '-')}
+                      <td style={{ ...tdT, color: '#0F766E' }}>
+                        {isDet
+                          ? (data.per_sf != null ? `${formatCurrency(data.per_sf)}/sf` : '-')
+                          : (data.per_item != null ? formatCurrency(data.per_item) : '-')}
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  );
+                };
+                return (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F3F4F6' }}>
+                          <th style={th}>VCS</th>
+                          <th style={th}>With (n)</th>
+                          <th style={th}>{isDet ? 'Avg Item Area' : 'Avg Count'}</th>
+                          <th style={th}>Avg Year Built (With)</th>
+                          <th style={th}>Avg SFLA (With)</th>
+                          <th style={th}>Avg Sale (With)</th>
+                          <th style={th}>Without (n)</th>
+                          <th style={th}>Avg Year Built (Without)</th>
+                          <th style={th}>Avg SFLA (Without)</th>
+                          <th style={th}>Avg Sale (Without)</th>
+                          <th style={th}>Adj Sale (With)</th>
+                          <th style={th}>Adj Sale (Without)</th>
+                          <th style={th}>$ Impact</th>
+                          <th style={th}>% Impact</th>
+                          <th style={th}>{isDet ? 'Per Sq Ft' : 'Per Item'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(customResults.byVCS || {}).map(([vcs, data]) => renderRow(vcs, data, false))}
+                        {customResults.overall && renderRow('ALL VCS', customResults.overall, true)}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
