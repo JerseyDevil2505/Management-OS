@@ -5534,6 +5534,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         </th>
                         {/* Appellant Evidence indicator */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold" title="Click to open Detailed and review appellant evidence">App Evidence</th>
+                        {/* Sent-to-Appeal-Log tracer — green check once the user has
+                            pushed a snapshot for this subject from THIS result set. */}
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold" title="Tracer for which rows have been sent to the Appeal Log from this result set">Sent</th>
                         {/* Subject Property Info */}
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
@@ -5691,6 +5694,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                   </div>
                                 );
                               })()}
+                            </td>
+                            {/* Sent-to-Appeal-Log tracer cell. Reads sent_to_appeal_log_at
+                                directly off the in-memory result row so the badge updates
+                                instantly after the Detailed export modal completes a send. */}
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">
+                              {result.sent_to_appeal_log_at ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-300 text-[11px] font-semibold"
+                                  title={`Sent to Appeal Log on ${formatResultSetTimestamp(new Date(result.sent_to_appeal_log_at))}`}
+                                >
+                                  &#x2713; Sent
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">&mdash;</span>
+                              )}
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
@@ -6366,6 +6384,49 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   allProperties={properties}
                   marketLandData={marketLandData}
                   tenantConfig={tenantConfig}
+                  activeResultSetId={activeResultSetId}
+                  onSentToAppealLog={async (subject) => {
+                    // Rich's "did I do this one yet?" tracer. When the user
+                    // successfully sends a Detailed snapshot to Appeal Log,
+                    // stamp the matching result row in evaluationResults so
+                    // Search & Results shows a green Sent badge, and persist
+                    // back to the active result set so the badge survives
+                    // reloads. Scoped to the active set on purpose so a later
+                    // fresh chip starts clean (e.g., fall added-assessment run).
+                    if (!subject) return;
+                    const ts = new Date().toISOString();
+                    const key = subject.property_composite_key
+                      || `${subject.property_block}|${subject.property_lot}|${subject.property_qualifier || ''}`;
+                    let nextResults = null;
+                    setEvaluationResults((prev) => {
+                      if (!prev) return prev;
+                      nextResults = prev.map((r) => {
+                        const rKey = r.subject?.property_composite_key
+                          || `${r.subject?.property_block}|${r.subject?.property_lot}|${r.subject?.property_qualifier || ''}`;
+                        if (rKey === key) {
+                          return { ...r, sent_to_appeal_log_at: ts };
+                        }
+                        return r;
+                      });
+                      return nextResults;
+                    });
+                    if (activeResultSetId && nextResults) {
+                      try {
+                        const serialized = nextResults.map(r => ({
+                          ...r,
+                          subject: r.subject || null,
+                          comps: r.comps || []
+                        }));
+                        await supabase
+                          .from('job_cme_result_sets')
+                          .update({ results: serialized, updated_at: ts })
+                          .eq('id', activeResultSetId);
+                        await loadSavedResultSets();
+                      } catch (err) {
+                        console.warn('Failed to persist Sent-to-Appeal-Log tracer:', err);
+                      }
+                    }
+                  }}
                   onSalesSwapped={(compositeKey, patch) => {
                     // Patch the in-memory properties array so the next
                     // handleManualEvaluate run sees the swapped sale fields.

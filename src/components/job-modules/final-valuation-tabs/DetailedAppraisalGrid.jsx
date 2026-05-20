@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -3529,6 +3529,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         }
 
         setAppealUploadStatus({ status: 'done', message: 'Sent to Appeal Log' });
+        // Notify Search & Results so it can paint a green "Sent" tracer on
+        // the matching row in the active result set. Fire-and-forget.
+        try {
+          if (typeof onSentToAppealLog === 'function') {
+            await onSentToAppealLog(subject);
+          }
+        } catch (notifyErr) {
+          console.warn('onSentToAppealLog notify failed (non-fatal):', notifyErr);
+        }
       } catch (e) {
         console.error('appeal-reports upload failed', e);
         setAppealUploadStatus({ status: 'error', message: e.message || 'Upload failed' });
