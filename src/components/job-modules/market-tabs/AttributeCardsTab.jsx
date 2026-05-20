@@ -168,9 +168,29 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // `runUnfiltered` is the escape hatch that restores pre-gate behavior.
   // `include3A` runs a parallel study against Class 3A (Farm Reg.) and stores it
   // under results.class_3a; skipped silently when the 3A pool is too thin.
-  const [customRunUnfiltered, setCustomRunUnfiltered] = useState(false);
-  const [customInclude3A, setCustomInclude3A] = useState(false);
+  const customFilterStorageKey = `customAttrFilters:${jobData?.id || 'global'}`;
+  const [customRunUnfiltered, setCustomRunUnfiltered] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`customAttrFilters:${jobData?.id || 'global'}`);
+      return raw ? !!JSON.parse(raw).run_unfiltered : false;
+    } catch { return false; }
+  });
+  const [customInclude3A, setCustomInclude3A] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`customAttrFilters:${jobData?.id || 'global'}`);
+      return raw ? !!JSON.parse(raw).include_3a : false;
+    } catch { return false; }
+  });
   const [customFiltersOpen, setCustomFiltersOpen] = useState(false);
+  // Persist filter toggles per job so reloads don't blow them away.
+  useEffect(() => {
+    try {
+      localStorage.setItem(customFilterStorageKey, JSON.stringify({
+        run_unfiltered: customRunUnfiltered,
+        include_3a: customInclude3A,
+      }));
+    } catch { /* ignore quota / privacy-mode errors */ }
+  }, [customFilterStorageKey, customRunUnfiltered, customInclude3A]);
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
@@ -2589,6 +2609,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return 0;
   };
 
+  // Normalize a code value for comparison. BRT zero-pads numeric codes in
+  // raw_data (e.g. "08") but the parsed_code_definitions key the same code as
+  // "8" — strip leading zeros on pure-numeric codes so both sides match.
+  const normCode = (v) => {
+    const t = String(v ?? '').trim().toUpperCase();
+    if (!t) return '';
+    if (/^0+\d+$/.test(t)) return t.replace(/^0+/, '');
+    return t;
+  };
+
   // Walk every misc + detached + foundation slot on the given raw_data row and tally
   // the codes present. Returns { '39': { CODE: n }, '15': { CODE: n }, '27': { CODE: n } }.
   const tallyCodesOnRow = (rawData) => {
@@ -2596,9 +2626,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (!rawData) return out;
     [['39', slotsFor('39')], ['15', slotsFor('15')], ['27', slotsFor('27')]].forEach(([cat, slots]) => {
       slots.forEach(slot => {
-        const v = rawData[slot.codeCol];
-        if (v == null) return;
-        const code = String(v).trim().toUpperCase();
+        const code = normCode(rawData[slot.codeCol]);
         if (!code) return;
         out[cat][code] = (out[cat][code] || 0) + 1;
       });
@@ -2666,15 +2694,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const countAndArea = (rawData, codes, category) => {
     if (!rawData || !codes) return { count: 0, area: 0 };
     const list = Array.isArray(codes) ? codes : [codes];
-    const targets = new Set(list.map(c => String(c).trim().toUpperCase()).filter(Boolean));
+    const targets = new Set(list.map(normCode).filter(Boolean));
     if (targets.size === 0) return { count: 0, area: 0 };
     const slots = slotsFor(category);
     let count = 0;
     let area = 0;
     for (const slot of slots) {
-      const v = rawData[slot.codeCol];
-      if (v == null) continue;
-      if (!targets.has(String(v).trim().toUpperCase())) continue;
+      const code = normCode(rawData[slot.codeCol]);
+      if (!code || !targets.has(code)) continue;
       count += 1;
       if (category === '15') area += slotArea(rawData, slot);
     }
