@@ -5668,6 +5668,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 );
                               })()}
                             </td>
+                            {/* Sent-to-Appeal-Log tracer cell. Reads sent_to_appeal_log_at
+                                directly off the in-memory result row so the badge updates
+                                instantly after the Detailed export modal completes a send. */}
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">
+                              {result.sent_to_appeal_log_at ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-300 text-[11px] font-semibold"
+                                  title={`Sent to Appeal Log on ${formatResultSetTimestamp(new Date(result.sent_to_appeal_log_at))}`}
+                                >
+                                  &#x2713; Sent
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">&mdash;</span>
+                              )}
+                            </td>
                             {/* Subject Property Info */}
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">
                               {result.subject.property_vcs}
@@ -5694,21 +5709,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                   </div>
                                 );
                               })()}
-                            </td>
-                            {/* Sent-to-Appeal-Log tracer cell. Reads sent_to_appeal_log_at
-                                directly off the in-memory result row so the badge updates
-                                instantly after the Detailed export modal completes a send. */}
-                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">
-                              {result.sent_to_appeal_log_at ? (
-                                <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-300 text-[11px] font-semibold"
-                                  title={`Sent to Appeal Log on ${formatResultSetTimestamp(new Date(result.sent_to_appeal_log_at))}`}
-                                >
-                                  &#x2713; Sent
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">&mdash;</span>
-                              )}
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
