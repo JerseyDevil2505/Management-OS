@@ -4,6 +4,47 @@ import './sharedTabNav.css';
 import { supabase, propertyService, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
+// Wraps a wide child element with synced top + bottom horizontal scrollbars.
+// The top scrollbar is a thin proxy whose scrollLeft mirrors the bottom container.
+function TwinScroll({ minWidth = 1200, children }) {
+  const topRef = useRef(null);
+  const bottomRef = useRef(null);
+  const syncingRef = useRef(false);
+  useEffect(() => {
+    const top = topRef.current;
+    const bottom = bottomRef.current;
+    if (!top || !bottom) return;
+    const onTop = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      bottom.scrollLeft = top.scrollLeft;
+      syncingRef.current = false;
+    };
+    const onBottom = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      top.scrollLeft = bottom.scrollLeft;
+      syncingRef.current = false;
+    };
+    top.addEventListener('scroll', onTop);
+    bottom.addEventListener('scroll', onBottom);
+    return () => {
+      top.removeEventListener('scroll', onTop);
+      bottom.removeEventListener('scroll', onBottom);
+    };
+  }, []);
+  return (
+    <div>
+      <div ref={topRef} style={{ overflowX: 'auto', overflowY: 'hidden', height: '14px' }}>
+        <div style={{ width: `${minWidth}px`, height: '1px' }} />
+      </div>
+      <div ref={bottomRef} style={{ overflowX: 'auto' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const CSV_BUTTON_CLASS = 'inline-flex items-center gap-2 px-3 py-1.5 border rounded bg-white text-sm text-gray-700 hover:bg-gray-50';
 
 // Jim's size normalization formula
@@ -102,6 +143,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [codeOptions, setCodeOptions] = useState([]);
   const [selectedMiscCode, setSelectedMiscCode] = useState('');
   const [selectedDetachedCode, setSelectedDetachedCode] = useState('');
+  // Multi-code selection (chips) — runs the study against the union of codes.
+  const [selectedMiscCodes, setSelectedMiscCodes] = useState([]);
+  const [selectedDetachedCodes, setSelectedDetachedCodes] = useState([]);
+  // Optional user-supplied group label; auto-derived from descriptions when blank.
+  const [customGroupLabel, setCustomGroupLabel] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
   // codeCountCache: Map<"category:CODE", { totalProps, qualifiedSales }> populated
@@ -2588,21 +2634,43 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, properties.length, propertyMarketData.length]);
 
-  // Count slots holding the code, and sum their area (detached only).
-  const countAndArea = (rawData, code, category) => {
-    if (!rawData || !code) return { count: 0, area: 0 };
-    const target = String(code).trim().toUpperCase();
+  // Count slots holding any of the selected codes, and sum their area (detached only).
+  // `codes` may be a single string or an array of code strings; matching is case-insensitive.
+  const countAndArea = (rawData, codes, category) => {
+    if (!rawData || !codes) return { count: 0, area: 0 };
+    const list = Array.isArray(codes) ? codes : [codes];
+    const targets = new Set(list.map(c => String(c).trim().toUpperCase()).filter(Boolean));
+    if (targets.size === 0) return { count: 0, area: 0 };
     const slots = slotsFor(category);
     let count = 0;
     let area = 0;
     for (const slot of slots) {
       const v = rawData[slot.codeCol];
       if (v == null) continue;
-      if (String(v).trim().toUpperCase() !== target) continue;
+      if (!targets.has(String(v).trim().toUpperCase())) continue;
       count += 1;
       if (category === '15') area += slotArea(rawData, slot);
     }
     return { count, area };
+  };
+
+  // Derive a "combined" group label from selected code descriptions.
+  // Intersection of tokenized descriptions (case-insensitive, order from first).
+  // Falls back to comma-joined descriptions.
+  const deriveCombinedLabel = (codes, category) => {
+    if (!codes || codes.length === 0) return '';
+    const opts = codes.map(c => codeOptions.find(o => o.code === c && o.category === category)).filter(Boolean);
+    if (opts.length === 0) return codes.join(', ');
+    if (opts.length === 1) return opts[0].description || codes[0];
+    const tokenize = (s) => String(s || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    const firstTokens = tokenize(opts[0].description);
+    const otherSets = opts.slice(1).map(o => new Set(tokenize(o.description)));
+    const common = firstTokens.filter(t => otherSets.every(s => s.has(t)));
+    if (common.length > 0) {
+      const titled = common.map(t => t.charAt(0) + t.slice(1).toLowerCase()).join(' ');
+      return `${titled} (Combined)`;
+    }
+    return `${opts.map(o => o.description).join(', ')} (Combined)`;
   };
 
   // Run custom attribute analysis using the eco-obs methodology:
@@ -2615,9 +2683,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   //   - Detached: per-sf rate     = dollarImpact / avgArea(with)
   const runCustomAttributeAnalysis = async (mode /* '39' | '15' */) => {
     const selCategory = mode;
-    const selCode = (mode === '15' ? selectedDetachedCode : selectedMiscCode);
-    if (!selCode) return;
+    // Prefer multi-code chip selection; fall back to legacy single-code state.
+    const chipCodes = mode === '15' ? selectedDetachedCodes : selectedMiscCodes;
+    const legacyCode = mode === '15' ? selectedDetachedCode : selectedMiscCode;
+    const selCodes = (chipCodes && chipCodes.length > 0)
+      ? chipCodes
+      : (legacyCode ? [legacyCode] : []);
+    if (selCodes.length === 0) return;
+    const selCode = selCodes[0]; // representative code (for legacy fields)
     const selOption = codeOptions.find(o => o.code === selCode && o.category === selCategory);
+    const groupLabel = customGroupLabel.trim() || deriveCombinedLabel(selCodes, selCategory);
 
     setCustomWorking(true);
     try {
@@ -2656,7 +2731,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const normTime = Number(md?.values_norm_time) || 0;
         const sfla = Number(p.asset_sfla || p.sfla || p.property_sfla) || 0;
         const yearBuilt = Number(p.asset_year_built || p.year_built || p.property_year_built) || 0;
-        const { count, area } = countAndArea(raw, selCode, selCategory);
+        const { count, area } = countAndArea(raw, selCodes, selCategory);
         const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
         return { p, vcs, normTime, sfla, yearBuilt, count, area, has: count > 0 };
       }).filter(s => s.normTime > 0);
@@ -2731,13 +2806,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       const typeUseOpt = getTypeUseOptions().find(o => o.code === customTypeUseFilter);
+      const isMulti = selCodes.length > 1;
+      const headerLabel = isMulti
+        ? `${selCodes.join(', ')} — ${groupLabel}`
+        : (selOption ? `${selCode} — ${selOption.description}` : selCode);
       const results = {
         code: selCode,
+        codes: selCodes,
+        group_label: isMulti ? groupLabel : (selOption?.description || selCode),
         category: selCategory,
-        label: selOption ? `${selCode} — ${selOption.description}` : selCode,
+        label: headerLabel,
         type_use: customTypeUseFilter,
         type_use_label: typeUseOpt ? typeUseOpt.description : customTypeUseFilter,
-        field: selCode,
+        field: isMulti ? selCodes.join('+') : selCode,
         overall: overall.insufficient ? overall : {
           with: { n: overall.withCount, avg_price: overall.avgWithTime, avg_size: overall.avgWithSFLA, avg_year_built: overall.avgWithYear, adj_price: overall.adjWith, avg_count: overall.avgCount, avg_area: overall.avgArea },
           without: { n: overall.withoutCount, avg_price: overall.avgWithoutTime, avg_size: overall.avgWithoutSFLA, avg_year_built: overall.avgWithoutYear, adj_price: overall.adjWithout },
@@ -2826,18 +2907,36 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (!study?.results) return;
     setCustomResults(study.results);
     setActiveStudyId(study.id);
-    if (study.category === '15') setSelectedDetachedCode(study.code);
-    else setSelectedMiscCode(study.code);
+    const codes = study.results?.codes && study.results.codes.length > 0
+      ? study.results.codes
+      : (study.code ? [study.code] : []);
+    if (study.category === '15') {
+      setSelectedDetachedCode(codes[0] || '');
+      setSelectedDetachedCodes(codes);
+    } else {
+      setSelectedMiscCode(codes[0] || '');
+      setSelectedMiscCodes(codes);
+    }
+    if (codes.length > 1 && study.results?.group_label) {
+      setCustomGroupLabel(study.results.group_label.replace(/\s*\(Combined\)\s*$/, ''));
+    } else {
+      setCustomGroupLabel('');
+    }
     if (study.results?.type_use) setCustomTypeUseFilter(study.results.type_use);
   };
 
   const rerunStudy = async (study) => {
     if (!study) return;
+    const codes = study.results?.codes && study.results.codes.length > 0
+      ? study.results.codes
+      : (study.code ? [study.code] : []);
     if (study.category === '15') {
-      setSelectedDetachedCode(study.code);
+      setSelectedDetachedCode(codes[0] || '');
+      setSelectedDetachedCodes(codes);
       await runCustomAttributeAnalysis('15');
     } else {
-      setSelectedMiscCode(study.code);
+      setSelectedMiscCode(codes[0] || '');
+      setSelectedMiscCodes(codes);
       await runCustomAttributeAnalysis('39');
     }
   };
@@ -3293,108 +3392,138 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Miscellaneous (Cat 39)</span>
-                {selectedMiscCode && codeCountCache[`39:${selectedMiscCode.toUpperCase()}`] && (
-                  <span style={{ color: '#0F766E', fontWeight: 500 }}>
-                    {codeCountCache[`39:${selectedMiscCode.toUpperCase()}`].totalProps} properties
-                    {' '}· {codeCountCache[`39:${selectedMiscCode.toUpperCase()}`].qualifiedSales} qualified sales
-                  </span>
+          {(() => {
+            const renderPicker = (category, codes, setCodes, legacySingle, setLegacySingle, runMode, runLabel) => {
+              const opts = codeOptions.filter(o => o.category === category);
+              const available = opts.filter(o => !codes.includes(o.code));
+              const addCode = (code) => {
+                if (!code || codes.includes(code)) return;
+                const next = [...codes, code];
+                setCodes(next);
+                setLegacySingle(next[0]);
+              };
+              const removeCode = (code) => {
+                const next = codes.filter(c => c !== code);
+                setCodes(next);
+                setLegacySingle(next[0] || '');
+              };
+              const totalProps = codes.reduce((sum, c) => sum + (codeCountCache[`${category}:${c.toUpperCase()}`]?.totalProps || 0), 0);
+              const totalSales = codes.reduce((sum, c) => sum + (codeCountCache[`${category}:${c.toUpperCase()}`]?.qualifiedSales || 0), 0);
+              const previewLabel = codes.length > 1
+                ? (customGroupLabel.trim() || deriveCombinedLabel(codes, category))
+                : '';
+              const canRun = codes.length > 0 && !customWorking;
+              return (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>{category === '15' ? 'Detached Items (Cat 15)' : 'Miscellaneous (Cat 39)'}</span>
+                    {codes.length > 0 && (
+                      <span style={{ color: '#0F766E', fontWeight: 500 }}>
+                        {totalProps} properties · {totalSales} qualified sales
+                        {codes.length > 1 && ' (combined)'}
+                      </span>
+                    )}
+                  </label>
+                  {codes.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                      {codes.map(c => {
+                        const o = opts.find(x => x.code === c);
+                        return (
+                          <span
+                            key={`${category}-chip-${c}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '6px',
+                              padding: '4px 8px', borderRadius: '999px',
+                              backgroundColor: category === '15' ? '#DBEAFE' : '#DCFCE7',
+                              color: category === '15' ? '#1E40AF' : '#166534',
+                              fontSize: '12px', fontWeight: 500,
+                            }}
+                          >
+                            {c}{o?.description ? ` — ${o.description}` : ''}
+                            <button
+                              type="button"
+                              onClick={() => removeCode(c)}
+                              disabled={customWorking}
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 700, padding: 0, lineHeight: 1 }}
+                              aria-label={`Remove ${c}`}
+                            >×</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <select
+                      value=""
+                      onChange={(e) => { addCode(e.target.value); e.target.value = ''; }}
+                      style={{ flex: 1, padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '14px', backgroundColor: 'white' }}
+                      disabled={customWorking || available.length === 0}
+                    >
+                      <option value="">
+                        {codes.length === 0
+                          ? (category === '15' ? 'Select a detached code…' : 'Select a misc code…')
+                          : (available.length === 0 ? 'All codes added' : '+ Add another code…')}
+                      </option>
+                      {available.map(o => (
+                        <option key={`${category}:${o.code}`} value={o.code}>{o.code} — {o.description}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => runCustomAttributeAnalysis(runMode)}
+                      disabled={!canRun}
+                      style={{
+                        padding: '6px 14px',
+                        backgroundColor: !canRun ? '#E5E7EB' : '#3B82F6',
+                        color: !canRun ? '#9CA3AF' : 'white',
+                        border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: 500,
+                        cursor: !canRun ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {customWorking ? 'Analyzing…' : runLabel}
+                    </button>
+                  </div>
+                  {previewLabel && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#6B7280' }}>
+                      Group name: <span style={{ color: '#111827', fontWeight: 500 }}>{previewLabel}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+            return (
+              <div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  {renderPicker('39', selectedMiscCodes, setSelectedMiscCodes, setSelectedMiscCode, setSelectedMiscCode, '39', 'Run Misc')}
+                  {renderPicker('15', selectedDetachedCodes, setSelectedDetachedCodes, setSelectedDetachedCode, setSelectedDetachedCode, '15', 'Run Detached')}
+                </div>
+                {(selectedMiscCodes.length > 1 || selectedDetachedCodes.length > 1) && (
+                  <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>Group label (optional):</label>
+                    <input
+                      type="text"
+                      value={customGroupLabel}
+                      onChange={(e) => setCustomGroupLabel(e.target.value)}
+                      placeholder="auto: common word + (Combined)"
+                      style={{ flex: 1, maxWidth: '320px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '12px' }}
+                      disabled={customWorking}
+                    />
+                    {customResults && (
+                      <button onClick={exportCustomResultsToCSV} className={CSV_BUTTON_CLASS}>
+                        <FileText size={14} /> Export CSV
+                      </button>
+                    )}
+                  </div>
                 )}
-              </label>
-              <select
-                value={selectedMiscCode}
-                onChange={(e) => setSelectedMiscCode(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '4px',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                }}
-                disabled={customWorking}
-              >
-                <option value="">Select a misc code…</option>
-                {codeOptions.filter(o => o.category === '39').map(o => (
-                  <option key={`39:${o.code}`} value={o.code}>{o.code} — {o.description}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={() => runCustomAttributeAnalysis('39')}
-              disabled={customWorking || !selectedMiscCode}
-              style={{
-                padding: '6px 14px',
-                backgroundColor: customWorking || !selectedMiscCode ? '#E5E7EB' : '#3B82F6',
-                color: customWorking || !selectedMiscCode ? '#9CA3AF' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: customWorking || !selectedMiscCode ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {customWorking ? 'Analyzing…' : 'Run Misc'}
-            </button>
-
-            <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span>Detached Items (Cat 15)</span>
-                {selectedDetachedCode && codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`] && (
-                  <span style={{ color: '#0F766E', fontWeight: 500 }}>
-                    {codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`].totalProps} properties
-                    {' '}· {codeCountCache[`15:${selectedDetachedCode.toUpperCase()}`].qualifiedSales} qualified sales
-                  </span>
+                {customResults && selectedMiscCodes.length <= 1 && selectedDetachedCodes.length <= 1 && (
+                  <div style={{ marginTop: '10px' }}>
+                    <button onClick={exportCustomResultsToCSV} className={CSV_BUTTON_CLASS}>
+                      <FileText size={14} /> Export CSV
+                    </button>
+                  </div>
                 )}
-              </label>
-              <select
-                value={selectedDetachedCode}
-                onChange={(e) => setSelectedDetachedCode(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '4px',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                }}
-                disabled={customWorking}
-              >
-                <option value="">Select a detached code…</option>
-                {codeOptions.filter(o => o.category === '15').map(o => (
-                  <option key={`15:${o.code}`} value={o.code}>{o.code} — {o.description}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={() => runCustomAttributeAnalysis('15')}
-              disabled={customWorking || !selectedDetachedCode}
-              style={{
-                padding: '6px 14px',
-                backgroundColor: customWorking || !selectedDetachedCode ? '#E5E7EB' : '#3B82F6',
-                color: customWorking || !selectedDetachedCode ? '#9CA3AF' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: customWorking || !selectedDetachedCode ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {customWorking ? 'Analyzing…' : 'Run Detached'}
-            </button>
-            
-            {customResults && (
-              <button
-                onClick={exportCustomResultsToCSV}
-                className={CSV_BUTTON_CLASS}
-              >
-                <FileText size={14} /> Export CSV
-              </button>
-            )}
-          </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Results */}
@@ -3490,7 +3619,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   );
                 };
                 return (
-                  <div style={{ overflowX: 'auto' }}>
+                  <TwinScroll minWidth={1200}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1200px' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#F3F4F6' }}>
@@ -3516,7 +3645,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         {customResults.overall && renderRow('ALL VCS', customResults.overall, true)}
                       </tbody>
                     </table>
-                  </div>
+                  </TwinScroll>
                 );
               })()}
             </div>
