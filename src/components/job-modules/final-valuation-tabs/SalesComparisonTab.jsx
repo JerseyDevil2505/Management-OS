@@ -2923,22 +2923,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       setEvaluationResults(mergedResults);
-      // Fresh evaluation run \u2014 detach from any previously-loaded saved set
-      // first, then auto-create a brand-new saved row so the user never
-      // loses work to a forgotten "Save Result Set." The auto-create flips
-      // activeResultSetId to the new row inside autoCreateResultSet().
-      setActiveResultSetId(null);
-      setActiveResultSetName(null);
+      // Capture the active set BEFORE we clear it so we can decide whether to
+      // update-in-place (Keep Saved Results with an already-loaded chip) or
+      // detach + spawn a new auto-saved row (Fresh mode, or Keep with nothing
+      // loaded yet).
+      const prevActiveSetId = activeResultSetId;
+      const updateInPlace = evaluationMode === 'keep' && !!prevActiveSetId;
+      if (!updateInPlace) {
+        setActiveResultSetId(null);
+        setActiveResultSetName(null);
+      }
       try {
         const totalResidentialCount = properties.filter(p => {
           const bc = parseInt(p.asset_building_class) || 0;
           return bc > 10;
         }).length;
-        // Scope the smart-name off the evaluated subjects (not merged set-aside restores).
         const scopeSubjects = (results || []).map(r => r.subject);
-        await autoCreateResultSet(mergedResults, scopeSubjects, totalResidentialCount);
+        if (updateInPlace) {
+          // Keep Saved Results + active chip: write the new evaluation back
+          // onto the same row instead of creating a new chip. Preserve name.
+          const serialized = mergedResults.map(r => ({
+            ...r,
+            subject: r.subject || null,
+            comps: r.comps || []
+          }));
+          const { error: updateError } = await supabase
+            .from('job_cme_result_sets')
+            .update({ results: serialized, updated_at: new Date().toISOString() })
+            .eq('id', prevActiveSetId);
+          if (updateError) throw updateError;
+          await loadSavedResultSets();
+        } else {
+          await autoCreateResultSet(mergedResults, scopeSubjects, totalResidentialCount);
+        }
       } catch (autoErr) {
-        console.warn('Auto-create result set after Evaluate failed (non-fatal):', autoErr);
+        console.warn('Auto-save result set after Evaluate failed (non-fatal):', autoErr);
       }
       // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
       const allIds = new Set(
