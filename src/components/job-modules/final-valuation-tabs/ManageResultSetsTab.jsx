@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Archive, ArchiveRestore, RefreshCw, Tag, Trash2, AlertCircle } from 'lucide-react';
+import { Archive, ArchiveRestore, RefreshCw, Tag, Trash2, AlertCircle, Pencil } from 'lucide-react';
 
 const ARCHIVE_CATEGORIES = [
   { value: 'appeals', label: 'Appeals' },
@@ -35,6 +35,43 @@ const ManageResultSetsTab = ({ jobData }) => {
   const [archiveCategory, setArchiveCategory] = useState('valuation');
   const [archiveYear, setArchiveYear] = useState(new Date().getFullYear());
   const [busy, setBusy] = useState(false);
+
+  // Inline rename state
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editingRowName, setEditingRowName] = useState('');
+
+  const handleRenameRow = async (rs) => {
+    const trimmed = editingRowName.trim();
+    setEditingRowId(null);
+    setEditingRowName('');
+    if (!trimmed || trimmed === rs.name) return;
+    // Dedupe: fetch all names for this job, find unique candidate
+    try {
+      const { data } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name')
+        .eq('job_id', jobData.id);
+      const existing = new Set(
+        (data || []).filter(r => r.id !== rs.id).map(r => (r.name || '').trim())
+      );
+      let candidate = trimmed;
+      if (existing.has(candidate)) {
+        for (let i = 2; i < 1000; i++) {
+          const c = `${trimmed} (${i})`;
+          if (!existing.has(c)) { candidate = c; break; }
+        }
+      }
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .update({ name: candidate })
+        .eq('id', rs.id);
+      if (error) throw error;
+      await loadResultSets();
+    } catch (err) {
+      console.error('Rename failed:', err);
+      alert(`Rename failed: ${err.message}`);
+    }
+  };
 
   useEffect(() => {
     if (jobData?.id) loadResultSets();
@@ -411,7 +448,34 @@ const ManageResultSetsTab = ({ jobData }) => {
                               className="rounded border-gray-300"
                             />
                           </td>
-                          <td className="td-name px-3 py-2 font-medium text-gray-900">{rs.name}</td>
+                          <td className="td-name px-3 py-2 font-medium text-gray-900">
+                            {editingRowId === rs.id ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingRowName}
+                                onChange={e => setEditingRowName(e.target.value)}
+                                onBlur={() => handleRenameRow(rs)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); handleRenameRow(rs); }
+                                  else if (e.key === 'Escape') { e.preventDefault(); setEditingRowId(null); setEditingRowName(''); }
+                                }}
+                                className="border border-blue-300 rounded px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-blue-400 min-w-[180px]"
+                              />
+                            ) : (
+                              <span className="group/name inline-flex items-center gap-1">
+                                {rs.name}
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingRowId(rs.id); setEditingRowName(rs.name || ''); }}
+                                  className="text-gray-400 hover:text-gray-700 opacity-0 group-hover/name:opacity-100 transition-opacity"
+                                  title="Rename"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </span>
+                            )}
+                          </td>
                           <td className="td-bracket px-3 py-2 text-gray-700">{rs.adjustment_bracket || '—'}</td>
                           <td className="td-subjects px-3 py-2 text-center text-gray-700">{subjectCount}</td>
                           <td className="td-created px-3 py-2 text-gray-600">{formatDate(rs.created_at)}</td>
