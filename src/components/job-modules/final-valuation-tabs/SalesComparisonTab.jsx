@@ -1482,6 +1482,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           rank: c.rank,
           adjustedPrice: c.adjustedPrice,
           adjustmentPercent: c.adjustmentPercent,
+          // Per-attribute breakdown — needed by DetailedAppraisalGrid.getAdjustment()
+          // so restored set-aside rows render the same adjustment cells the user
+          // approved at save time, without forcing a re-Evaluate.
+          adjustments: c.adjustments || [],
         })),
         projected_assessment: r.projectedAssessment,
         confidence_score: r.confidenceScore,
@@ -2665,6 +2669,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 rank: c.rank,
                 adjustedPrice: c.adjustedPrice,
                 adjustmentPercent: c.adjustmentPercent,
+                adjustments: c.adjustments || [],
               } : {
                 id: c.property_id,
                 property_composite_key: c.pams_id,
@@ -2672,6 +2677,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 rank: c.rank,
                 adjustedPrice: c.adjustedPrice,
                 adjustmentPercent: c.adjustmentPercent,
+                adjustments: c.adjustments || [],
               };
             });
             return {
@@ -3651,7 +3657,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       <div className="tab-content">
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
-          <AdjustmentsTab jobData={jobData} properties={properties} />
+          <AdjustmentsTab
+            jobData={jobData}
+            properties={properties}
+            adjustmentGrid={adjustmentGrid}
+            cspDateRange={cspDateRange}
+            tenantConfig={tenantConfig}
+          />
         )}
 
         {/* SALES POOL TAB */}

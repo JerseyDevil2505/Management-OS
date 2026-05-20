@@ -328,6 +328,14 @@ const AppellantEvidencePanel = ({
     return `${code} \u00b7 ${decoded}`;
   };
 
+  // PPSF — sale price per square foot, rounded, no decimals. e.g. "$85/SF".
+  const ppsfDisplay = (price, sfla) => {
+    const p = Number(price);
+    const s = Number(sfla);
+    if (!Number.isFinite(p) || !Number.isFinite(s) || p <= 0 || s <= 0) return '\u2014';
+    return `$${Math.round(p / s)}/SF`;
+  };
+
   const compLotDisplay = (property) => {
     if (!property) return '\u2014';
     // Farm-package summation — mirrors SalesComparisonTab `lot_size_acre` rule
@@ -801,6 +809,7 @@ const AppellantEvidencePanel = ({
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Year Built</div><div className="font-semibold">{fmtSubjectVal(subject.asset_year_built)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">SFLA</div><div className="font-semibold">{fmtSubjectVal(getAdjustedSFLA(subject) || subject.asset_sfla)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Lot Size</div><div className="font-semibold">{compLotDisplay(subject)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-gray-500">PPSF</div><div className="font-semibold">{ppsfDisplay(subject?.sales_price, getAdjustedSFLA(subject) || subject?.asset_sfla)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Date</div><div className="font-semibold">{fmtSubjectVal(fmtCompDate(subject.sales_date))}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">Sale Price</div><div className="font-semibold">{subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014'}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-gray-500">NU</div><div className="font-semibold" title={getNuShortForm(subject.sales_nu) || ''}>{fmtSubjectVal(subject.sales_nu)}</div></div>
@@ -834,6 +843,7 @@ const AppellantEvidencePanel = ({
               <th className="px-2 py-2 text-left font-semibold">Year Built</th>
               <th className="px-2 py-2 text-left font-semibold">SFLA</th>
               <th className="px-2 py-2 text-left font-semibold">Lot Size</th>
+              <th className="px-2 py-2 text-left font-semibold">PPSF</th>
               {onPromoteComp && <th className="px-2 py-2 text-left font-semibold">Action</th>}
             </tr>
           </thead>
@@ -888,10 +898,12 @@ const AppellantEvidencePanel = ({
                   <td className={cellCls('card')} title={cellTitle('card')}>
                     <input type="text" value={slot.card} onChange={e => updateSlot(idx, 'card', e.target.value)} placeholder={compProp ? String(compProp.property_addl_card || compProp.property_card || '') : ''} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                   </td>
-                  <td className="px-2 py-1 text-gray-700 whitespace-nowrap" title={slot.is_manual ? (slot.manual_address || '') : (compProp?.property_location || '')}>
-                    {slot.is_manual
-                      ? (slot.manual_address || '\u2014')
-                      : (compProp?.property_location || '\u2014')}
+                  <td className="px-1 py-1 text-gray-700 text-[10px] leading-tight" style={{ maxWidth: '120px' }} title={slot.is_manual ? (slot.manual_address || '') : (compProp?.property_location || '')}>
+                    <div className="truncate">
+                      {slot.is_manual
+                        ? (slot.manual_address || '\u2014')
+                        : (compProp?.property_location || '\u2014')}
+                    </div>
                   </td>
                   <td className={cellCls('sale_date')} title={cellTitle('sale_date')}>
                     <input type="date" value={slot.sales_date || (compProp ? fmtCompDate(compProp.sales_date) : '')} onChange={e => updateSlot(idx, 'sales_date', e.target.value)} className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
@@ -945,6 +957,15 @@ const AppellantEvidencePanel = ({
                     {slot.is_manual
                       ? <input type="text" value={slot.manual_lot_size || ''} onChange={e => updateSlot(idx, 'manual_lot_size', e.target.value)} placeholder="0.5 ac" className="w-20 px-1 py-0.5 border border-gray-300 rounded text-xs bg-white" />
                       : compLotDisplay(compProp)}
+                  </td>
+                  <td className="px-2 py-1 text-gray-900 whitespace-nowrap">
+                    {(() => {
+                      const price = Number(slot.is_manual ? slot.sales_price : (slot.sales_price || compProp?.sales_price));
+                      const sfla = slot.is_manual
+                        ? Number(slot.manual_sfla)
+                        : Number((compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla);
+                      return ppsfDisplay(price, sfla);
+                    })()}
                   </td>
                   {onPromoteComp && (
                     <td className="px-2 py-1">
