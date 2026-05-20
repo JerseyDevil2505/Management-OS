@@ -3452,12 +3452,35 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // the user can see it in the Appeal Log without having to re-run CME.
     const wantUpload = opts.uploadToAppealLog ?? false;
     if (wantUpload && jobData?.id) {
+      // Before overwriting, check whether a prior report already exists for
+      // this subject. If so, confirm the user wants to replace it.
+      const compositeKeyForCheck =
+        subject.property_composite_key ||
+        `${block}-${lot}-${qualifier}`;
+      try {
+        const { data: existingReport } = await supabase
+          .from('appeal_reports')
+          .select('uploaded_at, source_filename')
+          .eq('job_id', jobData.id)
+          .eq('property_composite_key', compositeKeyForCheck)
+          .maybeSingle();
+        if (existingReport) {
+          const prevDate = existingReport.uploaded_at
+            ? new Date(existingReport.uploaded_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+            : 'unknown date';
+          const confirmed = window.confirm(
+            `This subject already has an Appeal Log report from ${prevDate}. Replace with this version?`
+          );
+          if (!confirmed) return;
+        }
+      } catch (checkErr) {
+        // Non-fatal — if we can't check, proceed with the upload.
+        console.warn('appeal_reports pre-check failed (proceeding):', checkErr);
+      }
       try {
         setAppealUploadStatus({ status: 'uploading' });
         const pdfBytes = doc.output('arraybuffer');
-        const compositeKey =
-          subject.property_composite_key ||
-          `${block}-${lot}-${qualifier}`;
+        const compositeKey = compositeKeyForCheck;
         const path = `${jobData.id}/${compositeKey}.pdf`;
         const { error: upErr } = await supabase
           .storage

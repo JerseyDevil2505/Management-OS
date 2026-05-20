@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -200,6 +200,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [activeResultSetId, setActiveResultSetId] = useState(null);
   const [activeResultSetName, setActiveResultSetName] = useState(null);
 
+  // Inline rename state for saved-result-set chips.
+  // editingChipId === rs.id while the user is editing that chip's name.
+  const [editingChipId, setEditingChipId] = useState(null);
+  const [editingChipName, setEditingChipName] = useState('');
+
+  // crossSetDupes: Map<composite_key, Array<{ id, name, created_at }>>
+  // Computed whenever the active result set changes. Lets the UI annotate
+  // subjects that also appear in OTHER saved result sets for this job.
+  const [crossSetDupes, setCrossSetDupes] = useState(new Map());
+
   // Appellant evidence panel state for the Detailed sub-tab.
   // Fetched fresh from appeal_log whenever the evaluated subject changes,
   // so saves done in AppealLog show up here and vice versa.
@@ -254,6 +264,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       });
     return () => { cancelled = true; };
   }, [manualEvaluationResult?.subject?.property_composite_key, jobData?.id]);
+
+  // Cross-set duplicate map loader. Whenever the active result set changes,
+  // fetch every OTHER saved set's subject composite_keys and build:
+  //   Map<composite_key, [{ id, name, created_at }, ...]>
+  // sorted most-recent-first. Purely informational — the UI uses it to
+  // render a small note next to subjects that also appear elsewhere.
+  React.useEffect(() => {
+    if (!jobData?.id || !activeResultSetId) {
+      setCrossSetDupes(new Map());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('job_cme_result_sets')
+          .select('id, name, created_at, results')
+          .eq('job_id', jobData.id)
+          .neq('id', activeResultSetId)
+          .is('archived_at', null);
+        if (error) throw error;
+        if (cancelled) return;
+        const map = new Map();
+        (data || []).forEach(row => {
+          const rs = { id: row.id, name: row.name, created_at: row.created_at };
+          (row.results || []).forEach(r => {
+            const key = r?.subject?.property_composite_key;
+            if (!key) return;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(rs);
+          });
+        });
+        // Sort each bucket by created_at desc so [0] is the most recent.
+        map.forEach(arr => {
+          arr.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+        });
+        setCrossSetDupes(map);
+      } catch (err) {
+        console.warn('Cross-set dupes load failed:', err?.message);
+        if (!cancelled) setCrossSetDupes(new Map());
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.id, activeResultSetId, savedResultSets.length]);
 
   // Vacant land appraisal state
   const [vacantLandSubject, setVacantLandSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -665,6 +719,164 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
     } catch (error) {
       console.warn('⚠️ Error loading saved evaluations:', error.message);
+    }
+  };
+
+  // ==================== RESULT SET HELPERS ====================
+  // Locale-agnostic timestamp like "5/20 2:14p". Lower-case am/pm, no leading
+  // zero on month/day to keep chip names short.
+  const formatResultSetTimestamp = (date = new Date()) => {
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    let h = date.getHours();
+    const min = date.getMinutes();
+    const ampm = h >= 12 ? 'p' : 'a';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${m}/${d} ${h}:${String(min).padStart(2, '0')}${ampm}`;
+  };
+
+  // Smart default name based on cohort scope. `subjectsArr` is the array of
+  // subjects that were just evaluated. `totalResidentialCount` (optional) is
+  // used to decide whether to call the cohort "Full town".
+  const buildDefaultResultSetName = (subjectsArr, totalResidentialCount = 0) => {
+    const stamp = formatResultSetTimestamp(new Date());
+    const n = subjectsArr?.length || 0;
+    if (n === 0) return `${stamp} \u00b7 Empty cohort`;
+    if (n === 1) {
+      const s = subjectsArr[0] || {};
+      const b = s.property_block || '';
+      const l = s.property_lot || '';
+      const q = (s.property_qualifier || '').trim();
+      return `${stamp} \u00b7 Block ${b} Lot ${l}${q ? '/' + q : ''} (1 subject)`;
+    }
+    const vcsSet = new Set(subjectsArr.map(s => s?.property_vcs).filter(v => v != null && v !== ''));
+    const blockSet = new Set(subjectsArr.map(s => s?.property_block).filter(v => v != null && v !== ''));
+    if (vcsSet.size === 1) {
+      return `${stamp} \u00b7 VCS ${[...vcsSet][0]} (${n} subjects)`;
+    }
+    if (blockSet.size === 1) {
+      return `${stamp} \u00b7 Block ${[...blockSet][0]} (${n} subjects)`;
+    }
+    if (totalResidentialCount > 0 && n >= Math.floor(totalResidentialCount * 0.95)) {
+      return `${stamp} \u00b7 Full town (${n} subjects)`;
+    }
+    return `${stamp} \u00b7 Mixed cohort (${n} subjects)`;
+  };
+
+  // Serialize a results array for job_cme_result_sets.results. Mirrors the
+  // payload used by handleSaveResultSet so loaded sets keep full attribute
+  // data for the Detailed grid.
+  const serializeResultsForSave = (results) => {
+    return (results || []).map(r => ({
+      subject: { ...r.subject },
+      comparables: (r.comparables || []).map(c => ({
+        ...c,
+        isSubjectSale: c.isSubjectSale || false,
+        weight: c.weight || 0,
+      })),
+      totalFound: r.totalFound,
+      totalValid: r.totalValid,
+      projectedAssessment: r.projectedAssessment,
+      confidenceScore: r.confidenceScore,
+      hasSubjectSale: r.hasSubjectSale,
+    }));
+  };
+
+  // Build the same search_criteria payload handleSaveResultSet writes, so
+  // auto-created rows can be re-opened and re-Evaluated without losing the
+  // subject-selection chips or comp filters.
+  const buildSearchCriteriaPayload = () => ({
+    ...compFilters,
+    subject_selection: {
+      manualProperties,
+      subjectVCS,
+      subjectTypeUse,
+    },
+  });
+
+  // Find a unique name within this job by appending " (2)", " (3)", ... if
+  // the desired name already exists. Optionally ignore a row (used when
+  // renaming an existing chip to its own name with case changes).
+  const findUniqueResultSetName = async (desiredName, ignoreId = null) => {
+    const trimmed = String(desiredName || '').trim();
+    if (!trimmed) return trimmed;
+    try {
+      const { data } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name')
+        .eq('job_id', jobData.id);
+      const existing = new Set(
+        (data || [])
+          .filter(r => r.id !== ignoreId)
+          .map(r => (r.name || '').trim())
+      );
+      if (!existing.has(trimmed)) return trimmed;
+      for (let i = 2; i < 1000; i++) {
+        const candidate = `${trimmed} (${i})`;
+        if (!existing.has(candidate)) return candidate;
+      }
+      return `${trimmed} (${Date.now()})`;
+    } catch (_) {
+      return trimmed;
+    }
+  };
+
+  // Auto-create a result set row for a fresh Evaluate. Returns the new row's
+  // id (or null on failure). Sets activeResultSetId/Name as a side effect so
+  // subsequent "Evaluate and update" calls in Detailed update in place.
+  const autoCreateResultSet = async (resultsArr, scopeSubjects, totalResidentialCount = 0) => {
+    if (!jobData?.id || !resultsArr || resultsArr.length === 0) return null;
+    try {
+      const desired = buildDefaultResultSetName(scopeSubjects || resultsArr.map(r => r.subject), totalResidentialCount);
+      const uniqueName = await findUniqueResultSetName(desired);
+      const { data: inserted, error: insertError } = await supabase
+        .from('job_cme_result_sets')
+        .insert({
+          job_id: jobData.id,
+          name: uniqueName,
+          adjustment_bracket: compFilters.adjustmentBracket,
+          search_criteria: buildSearchCriteriaPayload(),
+          results: serializeResultsForSave(resultsArr),
+        })
+        .select('id, name')
+        .single();
+      if (insertError) throw insertError;
+      if (inserted?.id) {
+        setActiveResultSetId(inserted.id);
+        setActiveResultSetName(inserted.name);
+        await loadSavedResultSets();
+        return inserted.id;
+      }
+      return null;
+    } catch (err) {
+      console.error('Auto-create result set failed:', err);
+      return null;
+    }
+  };
+
+  // Rename a saved result set in place. Silently dedupes against other rows
+  // in the same job. Reloads the list on success.
+  const handleRenameResultSet = async (setId, newName) => {
+    const trimmed = String(newName || '').trim();
+    if (!trimmed || !setId) return false;
+    try {
+      const uniqueName = await findUniqueResultSetName(trimmed, setId);
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .update({ name: uniqueName })
+        .eq('id', setId);
+      if (error) throw error;
+      // If renaming the active set, keep the active name in sync.
+      if (setId === activeResultSetId) {
+        setActiveResultSetName(uniqueName);
+      }
+      await loadSavedResultSets();
+      return true;
+    } catch (err) {
+      console.error('Rename result set failed:', err);
+      alert(`Failed to rename: ${err.message}`);
+      return false;
     }
   };
 
@@ -1833,6 +2045,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       setManualEvaluationResult(updatedResult);
 
+      // Detailed "Evaluate and update" without an active set and without an
+      // editingResultIndex: auto-create a fresh single-subject result set so
+      // the work is persisted immediately. The user can rename inline later.
+      if (syncToResults && editingResultIndex === null && !activeResultSetId) {
+        const newResultsArr = [updatedResult];
+        setEvaluationResults(newResultsArr);
+        try {
+          await autoCreateResultSet(newResultsArr, [subject], 0);
+        } catch (autoErr) {
+          console.warn('Auto-create result set after Detailed Evaluate failed (non-fatal):', autoErr);
+        }
+      }
+
       // ✅ Sync changes back to evaluationResults ONLY if syncToResults flag is true and we're editing
       if (syncToResults && editingResultIndex !== null && evaluationResults && evaluationResults.length > editingResultIndex) {
         const updatedResults = [...evaluationResults];
@@ -2699,9 +2924,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       setEvaluationResults(mergedResults);
       // Fresh evaluation run \u2014 detach from any previously-loaded saved set
-      // so Evaluate and update doesn't silently overwrite an unrelated set.
+      // first, then auto-create a brand-new saved row so the user never
+      // loses work to a forgotten "Save Result Set." The auto-create flips
+      // activeResultSetId to the new row inside autoCreateResultSet().
       setActiveResultSetId(null);
       setActiveResultSetName(null);
+      try {
+        const totalResidentialCount = properties.filter(p => {
+          const bc = parseInt(p.asset_building_class) || 0;
+          return bc > 10;
+        }).length;
+        // Scope the smart-name off the evaluated subjects (not merged set-aside restores).
+        const scopeSubjects = (results || []).map(r => r.subject);
+        await autoCreateResultSet(mergedResults, scopeSubjects, totalResidentialCount);
+      } catch (autoErr) {
+        console.warn('Auto-create result set after Evaluate failed (non-fatal):', autoErr);
+      }
       // Pre-select all non-set-aside rows for set-aside checkbox (all checked by default)
       const allIds = new Set(
         mergedResults
@@ -5068,24 +5306,77 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="mt-4">
                   <div className="text-sm font-medium text-gray-700 text-center mb-2">Saved Result Sets</div>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {savedResultSets.map(rs => (
-                      <div key={rs.id} className="flex items-center gap-1 bg-gray-100 border border-gray-300 rounded px-3 py-1.5">
-                        <button
-                          onClick={() => handleLoadResultSet(rs.id)}
-                          className="text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                    {savedResultSets.map(rs => {
+                      const isEditingThis = editingChipId === rs.id;
+                      const isActive = rs.id === activeResultSetId;
+                      const commitEdit = async () => {
+                        const next = (editingChipName || '').trim();
+                        if (!next || next === rs.name) {
+                          // Empty or unchanged → silently revert.
+                          setEditingChipId(null);
+                          setEditingChipName('');
+                          return;
+                        }
+                        await handleRenameResultSet(rs.id, next);
+                        setEditingChipId(null);
+                        setEditingChipName('');
+                      };
+                      const cancelEdit = () => {
+                        setEditingChipId(null);
+                        setEditingChipName('');
+                      };
+                      return (
+                        <div
+                          key={rs.id}
+                          className={`group flex items-center gap-1 border rounded px-3 py-1.5 ${isActive ? 'bg-blue-50 border-blue-400' : 'bg-gray-100 border-gray-300'}`}
                         >
-                          {rs.name}
-                        </button>
-                        <span className="text-xs text-gray-500 ml-1">({new Date(rs.created_at).toLocaleDateString()})</span>
-                        <button
-                          onClick={() => handleDeleteResultSet(rs.id, rs.name)}
-                          className="ml-2 text-red-400 hover:text-red-600 text-sm font-bold"
-                          title="Delete this result set"
-                        >
-                          x
-                        </button>
-                      </div>
-                    ))}
+                          {isEditingThis ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editingChipName}
+                              onChange={e => setEditingChipName(e.target.value)}
+                              onBlur={commitEdit}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                                else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+                              }}
+                              className="text-sm font-medium text-blue-700 bg-white border border-blue-300 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-blue-400 min-w-[140px]"
+                            />
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleLoadResultSet(rs.id)}
+                                className="text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                                title={isActive ? 'Active set' : 'Load this result set'}
+                              >
+                                {rs.name}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingChipId(rs.id);
+                                  setEditingChipName(rs.name || '');
+                                }}
+                                className="ml-1 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Rename"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
+                          <span className="text-xs text-gray-500 ml-1">({new Date(rs.created_at).toLocaleDateString()})</span>
+                          <button
+                            onClick={() => handleDeleteResultSet(rs.id, rs.name)}
+                            className="ml-2 text-red-400 hover:text-red-600 text-sm font-bold"
+                            title="Delete this result set"
+                          >
+                            x
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -5362,7 +5653,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_lot}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_qualifier || ''}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs">
+                              <div className="truncate">{result.subject.property_location || ''}</div>
+                              {(() => {
+                                const ck = result.subject?.property_composite_key;
+                                const dupes = ck ? crossSetDupes.get(ck) : null;
+                                if (!dupes || dupes.length === 0) return null;
+                                const mr = dupes[0];
+                                const dateStr = mr.created_at ? formatResultSetTimestamp(new Date(mr.created_at)) : '';
+                                return (
+                                  <div
+                                    className="mt-0.5 text-[10px] text-blue-600 flex items-center gap-0.5 justify-center cursor-pointer hover:text-blue-800"
+                                    title={`Also in ${dupes.length} other result set${dupes.length > 1 ? 's' : ''}. Most recent: "${mr.name}" on ${dateStr}. Click to load that set.`}
+                                    onClick={() => handleLoadResultSet(mr.id)}
+                                  >
+                                    <Info className="w-3 h-3 flex-shrink-0" />
+                                    <span>Also in {dupes.length} other set{dupes.length > 1 ? 's' : ''} — “{mr.name}” {dateStr}</span>
+                                  </div>
+                                );
+                              })()}
+                            </td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50" title={`Source: values_${assmtSource}_total`}>
@@ -5775,6 +6085,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   ? 'Modify the subject and comparables below, then click "Evaluate and Update" to save your changes.'
                   : 'Enter BLQ (Block/Lot/Qualifier) info below to fetch properties and run an appraisal evaluation without using the Search tab.'}
               </p>
+              {(() => {
+                const ck = manualEvaluationResult?.subject?.property_composite_key;
+                const dupes = ck ? crossSetDupes.get(ck) : null;
+                if (!dupes || dupes.length === 0) return null;
+                const mr = dupes[0];
+                const dateStr = mr.created_at ? formatResultSetTimestamp(new Date(mr.created_at)) : '';
+                return (
+                  <div className="mt-2 flex items-start gap-1.5 text-xs text-blue-700">
+                    <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Also in {dupes.length} other result set{dupes.length > 1 ? 's' : ''} — most recent:{' '}
+                      <button
+                        type="button"
+                        className="underline hover:text-blue-900 font-medium"
+                        onClick={() => { handleLoadResultSet(mr.id); setActiveSubTab('search'); }}
+                      >
+                        &ldquo;{mr.name}&rdquo; on {dateStr}
+                      </button>
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Adjustment Bracket - mirrors Search & Results selection (shared compFilters state).
