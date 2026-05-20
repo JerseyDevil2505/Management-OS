@@ -1,6 +1,6 @@
 /* eslint-disable */
 const XLSX = require('xlsx');
-const wb = XLSX.readFile('/tmp/dl/king.xlsx');
+const wb = XLSX.readFile('/tmp/dl/pool.xlsx');
 wb.SheetNames.forEach(name => {
   console.log('\n=== Sheet:', name, '===');
   const ws = wb.Sheets[name];
