@@ -143,9 +143,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [codeOptions, setCodeOptions] = useState([]);
   const [selectedMiscCode, setSelectedMiscCode] = useState('');
   const [selectedDetachedCode, setSelectedDetachedCode] = useState('');
+  const [selectedFoundationCode, setSelectedFoundationCode] = useState('');
   // Multi-code selection (chips) — runs the study against the union of codes.
   const [selectedMiscCodes, setSelectedMiscCodes] = useState([]);
   const [selectedDetachedCodes, setSelectedDetachedCodes] = useState([]);
+  const [selectedFoundationCodes, setSelectedFoundationCodes] = useState([]);
   // Optional user-supplied group label; auto-derived from descriptions when blank.
   const [customGroupLabel, setCustomGroupLabel] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
@@ -2452,10 +2454,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Cat 15 (Detached Items) codes from parsed_code_definitions for the
   // current job. Vendor-aware:
   //   - BRT: sections.Residential parent whose KEY === '39' / '15' -> MAP
-  //   - Microsystems: field_codes prefixes 590/591/592/593 (misc) and 680 (detached)
+  //   - Microsystems: field_codes prefixes 590/591/592/593 (misc), 680 (detached), 550 (foundation)
   const loadCodeOptions = useCallback(() => {
     const cat39 = [];
     const cat15 = [];
+    const cat27 = [];
 
     try {
       if (vendorType === 'Microsystems' && parsedCodeDefinitions?.field_codes) {
@@ -2476,13 +2479,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             cat15.push({ code, description: String(data.description).trim(), category: '15' });
           }
         });
+        // Foundation (550)
+        Object.entries(fc['550'] || {}).forEach(([code, data]) => {
+          if (data?.description) {
+            cat27.push({ code, description: String(data.description).trim(), category: '27' });
+          }
+        });
       } else {
         const sections = parsedCodeDefinitions?.sections || parsedCodeDefinitions || {};
         const residential = sections.Residential || sections.residential || {};
         Object.keys(residential).forEach(parentKey => {
           const parent = residential[parentKey];
           const categoryKey = parent?.KEY || parent?.key;
-          if (categoryKey !== '39' && categoryKey !== '15') return;
+          if (categoryKey !== '39' && categoryKey !== '15' && categoryKey !== '27') return;
           const map = parent?.MAP || parent?.map || {};
           Object.keys(map).forEach(codeKey => {
             if (codeKey === 'KEY' || codeKey === 'DATA' || codeKey === 'MAP') return;
@@ -2492,7 +2501,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             else if (item?.VALUE) description = item.VALUE;
             else if (typeof item === 'string') description = item;
             if (!description) return;
-            const bucket = categoryKey === '39' ? cat39 : cat15;
+            const bucket = categoryKey === '39' ? cat39 : categoryKey === '15' ? cat15 : cat27;
             bucket.push({ code: codeKey, description: String(description).trim(), category: categoryKey });
           });
         });
@@ -2504,10 +2513,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const sortByCode = (a, b) => a.code.localeCompare(b.code);
     cat39.sort(sortByCode);
     cat15.sort(sortByCode);
-    const merged = [...cat39, ...cat15];
+    cat27.sort(sortByCode);
+    const merged = [...cat39, ...cat15, ...cat27];
     setCodeOptions(merged);
     if (cat39.length > 0 && !selectedMiscCode) setSelectedMiscCode(cat39[0].code);
     if (cat15.length > 0 && !selectedDetachedCode) setSelectedDetachedCode(cat15[0].code);
+    if (cat27.length > 0 && !selectedFoundationCode) setSelectedFoundationCode(cat27[0].code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsedCodeDefinitions, vendorType]);
 
@@ -2540,10 +2551,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { codeCol: 'Detachedbuilding3', sizeCols: ['Sq Ft3'], wCol: 'Widthn3', dCol: 'Depthn3' },
     { codeCol: 'Detachedbuilding4', sizeCols: ['Sq Ft4'], wCol: 'Widthn4', dCol: 'Depthn4' },
   ];
+  // Foundation slots — single-code fields, no area. BRT carries up to two; MS has one.
+  const BRT_FOUNDATION_SLOTS = [{ codeCol: 'FOUNDATION_1' }, { codeCol: 'FOUNDATION_2' }];
+  const MS_FOUNDATION_SLOTS = [{ codeCol: 'Foundation' }];
 
   const slotsFor = (category) => {
-    if (vendorType === 'Microsystems') return category === '15' ? MS_DETACHED_SLOTS : MS_MISC_SLOTS;
-    return category === '15' ? BRT_DETACHED_SLOTS : BRT_MISC_SLOTS;
+    if (vendorType === 'Microsystems') {
+      if (category === '15') return MS_DETACHED_SLOTS;
+      if (category === '27') return MS_FOUNDATION_SLOTS;
+      return MS_MISC_SLOTS;
+    }
+    if (category === '15') return BRT_DETACHED_SLOTS;
+    if (category === '27') return BRT_FOUNDATION_SLOTS;
+    return BRT_MISC_SLOTS;
   };
 
   // For a given slot, compute the area (sf) of the detached item. Prefer an
@@ -2562,12 +2582,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return 0;
   };
 
-  // Walk every misc + detached slot on the given raw_data row and tally the
-  // codes present. Returns { '39': { CODE: n }, '15': { CODE: n } }.
+  // Walk every misc + detached + foundation slot on the given raw_data row and tally
+  // the codes present. Returns { '39': { CODE: n }, '15': { CODE: n }, '27': { CODE: n } }.
   const tallyCodesOnRow = (rawData) => {
-    const out = { '39': {}, '15': {} };
+    const out = { '39': {}, '15': {}, '27': {} };
     if (!rawData) return out;
-    [['39', slotsFor('39')], ['15', slotsFor('15')]].forEach(([cat, slots]) => {
+    [['39', slotsFor('39')], ['15', slotsFor('15')], ['27', slotsFor('27')]].forEach(([cat, slots]) => {
       slots.forEach(slot => {
         const v = rawData[slot.codeCol];
         if (v == null) return;
@@ -2584,7 +2604,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const cache = {};
     rows.forEach(({ raw, isQualified }) => {
       const tally = tallyCodesOnRow(raw);
-      ['39', '15'].forEach(cat => {
+      ['39', '15', '27'].forEach(cat => {
         Object.entries(tally[cat]).forEach(([code]) => {
           const key = `${cat}:${code}`;
           if (!cache[key]) cache[key] = { totalProps: 0, qualifiedSales: 0 };
@@ -2684,8 +2704,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const runCustomAttributeAnalysis = async (mode /* '39' | '15' */) => {
     const selCategory = mode;
     // Prefer multi-code chip selection; fall back to legacy single-code state.
-    const chipCodes = mode === '15' ? selectedDetachedCodes : selectedMiscCodes;
-    const legacyCode = mode === '15' ? selectedDetachedCode : selectedMiscCode;
+    const chipCodes = mode === '15' ? selectedDetachedCodes
+      : mode === '27' ? selectedFoundationCodes
+      : selectedMiscCodes;
+    const legacyCode = mode === '15' ? selectedDetachedCode
+      : mode === '27' ? selectedFoundationCode
+      : selectedMiscCode;
     const selCodes = (chipCodes && chipCodes.length > 0)
       ? chipCodes
       : (legacyCode ? [legacyCode] : []);
@@ -2913,6 +2937,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (study.category === '15') {
       setSelectedDetachedCode(codes[0] || '');
       setSelectedDetachedCodes(codes);
+    } else if (study.category === '27') {
+      setSelectedFoundationCode(codes[0] || '');
+      setSelectedFoundationCodes(codes);
     } else {
       setSelectedMiscCode(codes[0] || '');
       setSelectedMiscCodes(codes);
@@ -2934,6 +2961,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       setSelectedDetachedCode(codes[0] || '');
       setSelectedDetachedCodes(codes);
       await runCustomAttributeAnalysis('15');
+    } else if (study.category === '27') {
+      setSelectedFoundationCode(codes[0] || '');
+      setSelectedFoundationCodes(codes);
+      await runCustomAttributeAnalysis('27');
     } else {
       setSelectedMiscCode(codes[0] || '');
       setSelectedMiscCodes(codes);
@@ -3025,7 +3056,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   //  O  Per Sq Ft | Per Item    = M / C
   const buildStudySheetRows = (study) => {
     const isDetached = study.category === '15';
-    const titleLine = `${isDetached ? 'Detached Items' : 'Miscellaneous'}: ${study.label || study.field || study.code} — Analysis by VCS`;
+    const isFoundation = study.category === '27';
+    const categoryLabel = isDetached ? 'Detached Items' : isFoundation ? 'Foundation' : 'Miscellaneous';
+    const titleLine = `${categoryLabel}: ${study.label || study.field || study.code} — Analysis by VCS`;
 
     const header = [
       'VCS',
@@ -3153,7 +3186,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const wb = XLSX.utils.book_new();
     const safeName = (wrapped.label || wrapped.code || 'study').toString().replace(/[^A-Za-z0-9]+/g, '_').slice(0, 25);
     XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 28) || 'Study');
-    const fname = `${jobData?.job_name || 'job'}_${wrapped.category === '15' ? 'detached' : 'misc'}_${safeName}.xlsx`;
+    const categorySlug = wrapped.category === '15' ? 'detached' : wrapped.category === '27' ? 'foundation' : 'misc';
+    const fname = `${jobData?.job_name || 'job'}_${categorySlug}_${safeName}.xlsx`;
     XLSX.writeFile(wb, fname);
   };
 
@@ -3166,10 +3200,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const indexRows = [indexHeader];
     studies.forEach(s => {
       const o = s.results?.overall || s.overall;
-      const isDet = (s.category || s.results?.category) === '15';
+      const cat = (s.category || s.results?.category);
+      const isDet = cat === '15';
+      const isFnd = cat === '27';
       indexRows.push([
         s.name || s.label || s.results?.label || '',
-        isDet ? 'Detached' : 'Miscellaneous',
+        isDet ? 'Detached' : isFnd ? 'Foundation' : 'Miscellaneous',
         s.code || s.results?.code || '',
         s.results?.type_use_label || s.results?.type_use || '',
         o?.with?.n ?? o?.withCount ?? '',
@@ -3324,7 +3360,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
                           {study.name || study.label || `${study.category}:${study.code}`}
                           <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>
-                            ({study.category === '15' ? 'Detached' : 'Misc'})
+                            ({study.category === '15' ? 'Detached' : study.category === '27' ? 'Foundation' : 'Misc'})
                           </span>
                         </div>
                         <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
@@ -3416,7 +3452,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               return (
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span>{category === '15' ? 'Detached Items (Cat 15)' : 'Miscellaneous (Cat 39)'}</span>
+                    <span>{category === '15' ? 'Detached Items (Cat 15)' : category === '27' ? 'Foundation (Cat 27)' : 'Miscellaneous (Cat 39)'}</span>
                     {codes.length > 0 && (
                       <span style={{ color: '#0F766E', fontWeight: 500 }}>
                         {totalProps} properties · {totalSales} qualified sales
@@ -3434,8 +3470,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: '6px',
                               padding: '4px 8px', borderRadius: '999px',
-                              backgroundColor: category === '15' ? '#DBEAFE' : '#DCFCE7',
-                              color: category === '15' ? '#1E40AF' : '#166534',
+                              backgroundColor: category === '15' ? '#DBEAFE' : category === '27' ? '#F3E8FF' : '#DCFCE7',
+                              color: category === '15' ? '#1E40AF' : category === '27' ? '#6B21A8' : '#166534',
                               fontSize: '12px', fontWeight: 500,
                             }}
                           >
@@ -3461,7 +3497,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     >
                       <option value="">
                         {codes.length === 0
-                          ? (category === '15' ? 'Select a detached code…' : 'Select a misc code…')
+                          ? (category === '15' ? 'Select a detached code…' : category === '27' ? 'Select a foundation code…' : 'Select a misc code…')
                           : (available.length === 0 ? 'All codes added' : '+ Add another code…')}
                       </option>
                       {available.map(o => (
@@ -3495,8 +3531,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   {renderPicker('39', selectedMiscCodes, setSelectedMiscCodes, setSelectedMiscCode, setSelectedMiscCode, '39', 'Run Misc')}
                   {renderPicker('15', selectedDetachedCodes, setSelectedDetachedCodes, setSelectedDetachedCode, setSelectedDetachedCode, '15', 'Run Detached')}
+                  {codeOptions.some(o => o.category === '27') &&
+                    renderPicker('27', selectedFoundationCodes, setSelectedFoundationCodes, setSelectedFoundationCode, setSelectedFoundationCode, '27', 'Run Foundation')}
                 </div>
-                {(selectedMiscCodes.length > 1 || selectedDetachedCodes.length > 1) && (
+                {(selectedMiscCodes.length > 1 || selectedDetachedCodes.length > 1 || selectedFoundationCodes.length > 1) && (
                   <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>Group label (optional):</label>
                     <input
@@ -3514,7 +3552,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     )}
                   </div>
                 )}
-                {customResults && selectedMiscCodes.length <= 1 && selectedDetachedCodes.length <= 1 && (
+                {customResults && selectedMiscCodes.length <= 1 && selectedDetachedCodes.length <= 1 && selectedFoundationCodes.length <= 1 && (
                   <div style={{ marginTop: '10px' }}>
                     <button onClick={exportCustomResultsToCSV} className={CSV_BUTTON_CLASS}>
                       <FileText size={14} /> Export CSV
@@ -3552,7 +3590,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               }}>
                 <div>
                   <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: '#111827' }}>
-                    {customResults.category === '15' ? 'Detached Items' : 'Miscellaneous'}: {customResults.label || customResults.field} — Analysis by VCS
+                    {customResults.category === '15' ? 'Detached Items' : customResults.category === '27' ? 'Foundation' : 'Miscellaneous'}: {customResults.label || customResults.field} — Analysis by VCS
                   </h4>
                   <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
                     Type/Use: {customResults.type_use_label || customResults.type_use || 'All Properties'}
