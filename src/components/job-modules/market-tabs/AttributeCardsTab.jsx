@@ -1,8 +1,49 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import './sharedTabNav.css';
-import { supabase, propertyService, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, propertyService, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
+
+// Wraps a wide child element with synced top + bottom horizontal scrollbars.
+// The top scrollbar is a thin proxy whose scrollLeft mirrors the bottom container.
+function TwinScroll({ minWidth = 1200, children }) {
+  const topRef = useRef(null);
+  const bottomRef = useRef(null);
+  const syncingRef = useRef(false);
+  useEffect(() => {
+    const top = topRef.current;
+    const bottom = bottomRef.current;
+    if (!top || !bottom) return;
+    const onTop = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      bottom.scrollLeft = top.scrollLeft;
+      syncingRef.current = false;
+    };
+    const onBottom = () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      top.scrollLeft = bottom.scrollLeft;
+      syncingRef.current = false;
+    };
+    top.addEventListener('scroll', onTop);
+    bottom.addEventListener('scroll', onBottom);
+    return () => {
+      top.removeEventListener('scroll', onTop);
+      bottom.removeEventListener('scroll', onBottom);
+    };
+  }, []);
+  return (
+    <div>
+      <div ref={topRef} style={{ overflowX: 'auto', overflowY: 'hidden', height: '14px' }}>
+        <div style={{ width: `${minWidth}px`, height: '1px' }} />
+      </div>
+      <div ref={bottomRef} style={{ overflowX: 'auto' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 const CSV_BUTTON_CLASS = 'inline-flex items-center gap-2 px-3 py-1.5 border rounded bg-white text-sm text-gray-700 hover:bg-gray-50';
 
@@ -94,11 +135,62 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [newEquivalentTo, setNewEquivalentTo] = useState(''); // For new mapping being added
 
   // ============ CUSTOM ATTRIBUTE STATE ============
-  const [rawFields, setRawFields] = useState([]);
-  const [selectedRawField, setSelectedRawField] = useState('');
-  const [matchValue, setMatchValue] = useState('');
+  // Dropdown options come from the same misc/detached code source used by
+  // AdjustmentsTab (categories '39' Miscellaneous + '15' Detached). Each
+  // option is { code, description, category }. Two independent selects so
+  // assessors can study a Misc code OR a Detached code without scrolling
+  // through a combined list.
+  const [codeOptions, setCodeOptions] = useState([]);
+  const [selectedMiscCode, setSelectedMiscCode] = useState('');
+  const [selectedDetachedCode, setSelectedDetachedCode] = useState('');
+  const [selectedFoundationCode, setSelectedFoundationCode] = useState('');
+  // Multi-code selection (chips) — runs the study against the union of codes.
+  const [selectedMiscCodes, setSelectedMiscCodes] = useState([]);
+  const [selectedDetachedCodes, setSelectedDetachedCodes] = useState([]);
+  const [selectedFoundationCodes, setSelectedFoundationCodes] = useState([]);
+  // Optional user-supplied group label; auto-derived from descriptions when blank.
+  const [customGroupLabel, setCustomGroupLabel] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
+  // codeCountCache: Map<"category:CODE", { totalProps, qualifiedSales }> populated
+  // on first run / on-demand prefetch so the banner can show how many properties
+  // carry the currently-selected code before a study is even run.
+  const [codeCountCache, setCodeCountCache] = useState({});
+  const [prefetchingCounts, setPrefetchingCounts] = useState(false);
+  // Persisted studies for this job (job_custom_attribute_studies)
+  const [savedStudies, setSavedStudies] = useState([]);
+  const [loadingStudies, setLoadingStudies] = useState(false);
+  const [activeStudyId, setActiveStudyId] = useState(null);
+  // Type/Use filter — same pattern as eco obs; prevents single-family from
+  // mixing with condo / multi-family in the same study.
+  const [customTypeUseFilter, setCustomTypeUseFilter] = useState('1');
+  // Sale-gating filters. Defaults: residential Class 2 only with building class > 10.
+  // `runUnfiltered` is the escape hatch that restores pre-gate behavior.
+  // `include3A` runs a parallel study against Class 3A (Farm Reg.) and stores it
+  // under results.class_3a; skipped silently when the 3A pool is too thin.
+  const customFilterStorageKey = `customAttrFilters:${jobData?.id || 'global'}`;
+  const [customRunUnfiltered, setCustomRunUnfiltered] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`customAttrFilters:${jobData?.id || 'global'}`);
+      return raw ? !!JSON.parse(raw).run_unfiltered : false;
+    } catch { return false; }
+  });
+  const [customInclude3A, setCustomInclude3A] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`customAttrFilters:${jobData?.id || 'global'}`);
+      return raw ? !!JSON.parse(raw).include_3a : false;
+    } catch { return false; }
+  });
+  const [customFiltersOpen, setCustomFiltersOpen] = useState(false);
+  // Persist filter toggles per job so reloads don't blow them away.
+  useEffect(() => {
+    try {
+      localStorage.setItem(customFilterStorageKey, JSON.stringify({
+        run_unfiltered: customRunUnfiltered,
+        include_3a: customInclude3A,
+      }));
+    } catch { /* ignore quota / privacy-mode errors */ }
+  }, [customFilterStorageKey, customRunUnfiltered, customInclude3A]);
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
@@ -2385,229 +2477,655 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return () => document.head.removeChild(style);
   }, []);
   // ============ CUSTOM ATTRIBUTE ANALYSIS FUNCTIONS ============
-  const detectRawFields = useCallback(async () => {
+  // Mirror the loader in AdjustmentsTab: pull Cat 39 (Miscellaneous) and
+  // Cat 15 (Detached Items) codes from parsed_code_definitions for the
+  // current job. Vendor-aware:
+  //   - BRT: sections.Residential parent whose KEY === '39' / '15' -> MAP
+  //   - Microsystems: field_codes prefixes 590/591/592/593 (misc), 680 (detached), 550 (foundation)
+  const loadCodeOptions = useCallback(() => {
+    const cat39 = [];
+    const cat15 = [];
+    const cat27 = [];
+
     try {
-      const fields = new Set();
-      const sampleSize = Math.min(100, properties.length);
-      
-      // Sample some properties to detect available raw fields
-      for (let i = 0; i < sampleSize; i++) {
-        const prop = properties[i];
-        if (!prop.job_id || !prop.property_composite_key) continue;
-        
-        const rawData = await propertyService.getRawDataForProperty(
-          prop.job_id, 
-          prop.property_composite_key
-        );
-        
-        if (rawData) {
-          Object.keys(rawData).forEach(key => {
-            // Filter out obvious non-analysis fields
-            if (!key.startsWith('_') && 
-                !key.includes('DATE') && 
-                !key.includes('OWNER') &&
-                !key.includes('ADDRESS') &&
-                key !== 'job_id' &&
-                key !== 'property_composite_key') {
-              fields.add(key);
+      if (vendorType === 'Microsystems' && parsedCodeDefinitions?.field_codes) {
+        const fc = parsedCodeDefinitions.field_codes;
+        // Misc (590-593) — dedupe across prefixes
+        const miscSeen = new Set();
+        ['590', '591', '592', '593'].forEach(prefix => {
+          Object.entries(fc[prefix] || {}).forEach(([code, data]) => {
+            if (data?.description && !miscSeen.has(code)) {
+              miscSeen.add(code);
+              cat39.push({ code, description: String(data.description).trim(), category: '39' });
             }
           });
-        }
+        });
+        // Detached (680)
+        Object.entries(fc['680'] || {}).forEach(([code, data]) => {
+          if (data?.description) {
+            cat15.push({ code, description: String(data.description).trim(), category: '15' });
+          }
+        });
+        // Foundation (550)
+        Object.entries(fc['550'] || {}).forEach(([code, data]) => {
+          if (data?.description) {
+            cat27.push({ code, description: String(data.description).trim(), category: '27' });
+          }
+        });
+      } else {
+        const sections = parsedCodeDefinitions?.sections || parsedCodeDefinitions || {};
+        const residential = sections.Residential || sections.residential || {};
+        Object.keys(residential).forEach(parentKey => {
+          const parent = residential[parentKey];
+          const categoryKey = parent?.KEY || parent?.key;
+          if (categoryKey !== '39' && categoryKey !== '15' && categoryKey !== '27') return;
+          const map = parent?.MAP || parent?.map || {};
+          Object.keys(map).forEach(codeKey => {
+            if (codeKey === 'KEY' || codeKey === 'DATA' || codeKey === 'MAP') return;
+            const item = map[codeKey];
+            let description = '';
+            if (item?.DATA?.VALUE) description = item.DATA.VALUE;
+            else if (item?.VALUE) description = item.VALUE;
+            else if (typeof item === 'string') description = item;
+            if (!description) return;
+            const bucket = categoryKey === '39' ? cat39 : categoryKey === '15' ? cat15 : cat27;
+            bucket.push({ code: codeKey, description: String(description).trim(), category: categoryKey });
+          });
+        });
       }
-      
-      const sortedFields = Array.from(fields).sort();
-      setRawFields(sortedFields);
-      if (sortedFields.length > 0 && !selectedRawField) {
-        setSelectedRawField(sortedFields[0]);
-      }
-    } catch (error) {
-      console.error('Error detecting raw fields:', error);
-      setRawFields([]);
+    } catch (err) {
+      console.error('Error loading custom attribute code options:', err);
     }
-  }, [properties]);
 
-  // Load raw fields when switching to custom attribute tab
+    const sortByCode = (a, b) => a.code.localeCompare(b.code);
+    cat39.sort(sortByCode);
+    cat15.sort(sortByCode);
+    cat27.sort(sortByCode);
+    const merged = [...cat39, ...cat15, ...cat27];
+    setCodeOptions(merged);
+    if (cat39.length > 0 && !selectedMiscCode) setSelectedMiscCode(cat39[0].code);
+    if (cat15.length > 0 && !selectedDetachedCode) setSelectedDetachedCode(cat15[0].code);
+    if (cat27.length > 0 && !selectedFoundationCode) setSelectedFoundationCode(cat27[0].code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsedCodeDefinitions, vendorType]);
+
+  // Load code options when switching to custom attribute tab
   useEffect(() => {
-    if (active === 'custom' && rawFields.length === 0 && properties.length > 0) {
-      detectRawFields();
+    if (active === 'custom' && codeOptions.length === 0) {
+      loadCodeOptions();
     }
-  }, [active, properties.length, detectRawFields]);
+  }, [active, codeOptions.length, loadCodeOptions]);
 
-  // Run custom attribute analysis
-  const runCustomAttributeAnalysis = async () => {
-    if (!selectedRawField) return;
-    
+  // Vendor-aware slot definitions — sourced from brt-processor.js and
+  // microsystems-processor.js so the predicate matches what ingest stores.
+  //   misc:     [ { codeCol } ]              (no area concept)
+  //   detached: [ { codeCol, sizeCols[] } ]  (sizeCols sum / multiply to sf)
+  const BRT_MISC_SLOTS = ['MISC_1', 'MISC_2', 'MISC_3', 'MISC_4', 'MISC_5']
+    .map(c => ({ codeCol: c }));
+  const BRT_DETACHED_SLOTS = Array.from({ length: 11 }, (_, i) => ({
+    codeCol: `DETACHEDCODE_${i + 1}`,
+    sizeCols: [`DETACHEDDCSIZE_${i + 1}`],
+  }));
+  const MS_MISC_SLOTS = ['Misc Item 1', 'Misc Item 2', 'Misc Item 3']
+    .map(c => ({ codeCol: c }));
+  const MS_DETACHED_SLOTS = [
+    { codeCol: 'Detached Item Code1', sizeCols: ['Sq Ft1'], wCol: 'Width1', dCol: 'Depth1' },
+    { codeCol: 'Detached Item Code2', sizeCols: ['Sq Ft2'], wCol: 'Width2', dCol: 'Depth2' },
+    { codeCol: 'Detached Item Code3', sizeCols: ['Sq Ft3'], wCol: 'Width3', dCol: 'Depth3' },
+    { codeCol: 'Detached Item Code4', sizeCols: ['Sq Ft4'], wCol: 'Width4', dCol: 'Depth4' },
+    { codeCol: 'Detachedbuilding1', sizeCols: ['Sq Ft1'], wCol: 'Widthn1', dCol: 'Depthn1' },
+    { codeCol: 'Detachedbuilding2', sizeCols: ['Sq Ft2'], wCol: 'Widthn2', dCol: 'Depthn2' },
+    { codeCol: 'Detachedbuilding3', sizeCols: ['Sq Ft3'], wCol: 'Widthn3', dCol: 'Depthn3' },
+    { codeCol: 'Detachedbuilding4', sizeCols: ['Sq Ft4'], wCol: 'Widthn4', dCol: 'Depthn4' },
+  ];
+  // Foundation slots — single-code fields, no area. BRT carries up to two; MS has one.
+  const BRT_FOUNDATION_SLOTS = [{ codeCol: 'FOUNDATION_1' }, { codeCol: 'FOUNDATION_2' }];
+  const MS_FOUNDATION_SLOTS = [{ codeCol: 'Foundation' }];
+
+  const slotsFor = (category) => {
+    if (vendorType === 'Microsystems') {
+      if (category === '15') return MS_DETACHED_SLOTS;
+      if (category === '27') return MS_FOUNDATION_SLOTS;
+      return MS_MISC_SLOTS;
+    }
+    if (category === '15') return BRT_DETACHED_SLOTS;
+    if (category === '27') return BRT_FOUNDATION_SLOTS;
+    return BRT_MISC_SLOTS;
+  };
+
+  // For a given slot, compute the area (sf) of the detached item. Prefer an
+  // explicit Sq Ft column; fall back to width × depth for Microsystems.
+  const slotArea = (rawData, slot) => {
+    if (!slot.sizeCols) return 0;
+    for (const c of slot.sizeCols) {
+      const v = Number(rawData?.[c]);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    if (slot.wCol && slot.dCol) {
+      const w = Number(rawData?.[slot.wCol]);
+      const d = Number(rawData?.[slot.dCol]);
+      if (Number.isFinite(w) && Number.isFinite(d) && w > 0 && d > 0) return w * d;
+    }
+    return 0;
+  };
+
+  // Normalize a code value for comparison. BRT zero-pads numeric codes in
+  // raw_data (e.g. "08") but the parsed_code_definitions key the same code as
+  // "8" — strip leading zeros on pure-numeric codes so both sides match.
+  const normCode = (v) => {
+    const t = String(v ?? '').trim().toUpperCase();
+    if (!t) return '';
+    if (/^0+\d+$/.test(t)) return t.replace(/^0+/, '');
+    return t;
+  };
+
+  // Walk every misc + detached + foundation slot on the given raw_data row and tally
+  // the codes present. Returns { '39': { CODE: n }, '15': { CODE: n }, '27': { CODE: n } }.
+  const tallyCodesOnRow = (rawData) => {
+    const out = { '39': {}, '15': {}, '27': {} };
+    if (!rawData) return out;
+    [['39', slotsFor('39')], ['15', slotsFor('15')], ['27', slotsFor('27')]].forEach(([cat, slots]) => {
+      slots.forEach(slot => {
+        const code = normCode(rawData[slot.codeCol]);
+        if (!code) return;
+        out[cat][code] = (out[cat][code] || 0) + 1;
+      });
+    });
+    return out;
+  };
+
+  // Build the code-count cache from a set of { p, raw, isQualified } rows.
+  const buildCodeCountCache = (rows) => {
+    const cache = {};
+    rows.forEach(({ raw, isQualified }) => {
+      const tally = tallyCodesOnRow(raw);
+      ['39', '15', '27'].forEach(cat => {
+        Object.entries(tally[cat]).forEach(([code]) => {
+          const key = `${cat}:${code}`;
+          if (!cache[key]) cache[key] = { totalProps: 0, qualifiedSales: 0 };
+          cache[key].totalProps += 1;
+          if (isQualified) cache[key].qualifiedSales += 1;
+        });
+      });
+    });
+    return cache;
+  };
+
+  // Prefetch raw_data for all properties on first tab open so the dropdown
+  // banner can show "X properties have this code" before any study runs.
+  const prefetchCodeCounts = useCallback(async () => {
+    if (prefetchingCounts) return;
+    if (Object.keys(codeCountCache).length > 0) return;
+    if (!properties || properties.length === 0) return;
+    setPrefetchingCounts(true);
+    try {
+      // ONE bulk fetch of the whole job's raw_data (cached server-side via
+      // getRawDataForJob). Then everything is a local Map lookup \u2014 N=1
+      // instead of N=propertyCount RPC round-trips.
+      const jobId = properties[0]?.job_id;
+      const bulk = jobId ? await getRawDataForJob(jobId) : null;
+      const propertyMap = bulk?.propertyMap || new Map();
+      const mdByKey = new Map(propertyMarketData.map(m => [m.property_composite_key, m]));
+
+      const rows = properties.map(p => ({
+        p,
+        raw: p.property_composite_key ? propertyMap.get(p.property_composite_key) : null,
+        isQualified: Number(mdByKey.get(p.property_composite_key)?.values_norm_time) > 0,
+      }));
+      setCodeCountCache(buildCodeCountCache(rows));
+    } catch (err) {
+      console.error('Error prefetching code counts:', err);
+    } finally {
+      setPrefetchingCounts(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, propertyMarketData, codeCountCache, prefetchingCounts]);
+
+  useEffect(() => {
+    if (active === 'custom' && properties.length > 0 && propertyMarketData.length > 0
+        && Object.keys(codeCountCache).length === 0 && !prefetchingCounts) {
+      prefetchCodeCounts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, properties.length, propertyMarketData.length]);
+
+  // Count slots holding any of the selected codes, and sum their area (detached only).
+  // `codes` may be a single string or an array of code strings; matching is case-insensitive.
+  const countAndArea = (rawData, codes, category) => {
+    if (!rawData || !codes) return { count: 0, area: 0 };
+    const list = Array.isArray(codes) ? codes : [codes];
+    const targets = new Set(list.map(normCode).filter(Boolean));
+    if (targets.size === 0) return { count: 0, area: 0 };
+    const slots = slotsFor(category);
+    let count = 0;
+    let area = 0;
+    for (const slot of slots) {
+      const code = normCode(rawData[slot.codeCol]);
+      if (!code || !targets.has(code)) continue;
+      count += 1;
+      if (category === '15') area += slotArea(rawData, slot);
+    }
+    return { count, area };
+  };
+
+  // Derive a "combined" group label from selected code descriptions.
+  // Intersection of tokenized descriptions (case-insensitive, order from first).
+  // Falls back to comma-joined descriptions.
+  const deriveCombinedLabel = (codes, category) => {
+    if (!codes || codes.length === 0) return '';
+    const opts = codes.map(c => codeOptions.find(o => o.code === c && o.category === category)).filter(Boolean);
+    if (opts.length === 0) return codes.join(', ');
+    if (opts.length === 1) return opts[0].description || codes[0];
+    const tokenize = (s) => String(s || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    const firstTokens = tokenize(opts[0].description);
+    const otherSets = opts.slice(1).map(o => new Set(tokenize(o.description)));
+    const common = firstTokens.filter(t => otherSets.every(s => s.has(t)));
+    if (common.length > 0) {
+      const titled = common.map(t => t.charAt(0) + t.slice(1).toLowerCase()).join(' ');
+      return `${titled} (Combined)`;
+    }
+    return `${opts.map(o => o.description).join(', ')} (Combined)`;
+  };
+
+  // Run custom attribute analysis using the eco-obs methodology:
+  //   - WITH = qualified sales whose raw_data contains the selected code
+  //   - WITHOUT = qualified sales that don't
+  //   - Jim's size-normalization on values_norm_time using the AVG SFLA of
+  //     both groups as the target size (same as calculateEcoObsImpact)
+  //   - dollarImpact = adjWith - adjWithout
+  //   - Misc: per-item adjustment = dollarImpact / avgCount(with)
+  //   - Detached: per-sf rate     = dollarImpact / avgArea(with)
+  const runCustomAttributeAnalysis = async (mode /* '39' | '15' */) => {
+    const selCategory = mode;
+    // Prefer multi-code chip selection; fall back to legacy single-code state.
+    const chipCodes = mode === '15' ? selectedDetachedCodes
+      : mode === '27' ? selectedFoundationCodes
+      : selectedMiscCodes;
+    const legacyCode = mode === '15' ? selectedDetachedCode
+      : mode === '27' ? selectedFoundationCode
+      : selectedMiscCode;
+    const selCodes = (chipCodes && chipCodes.length > 0)
+      ? chipCodes
+      : (legacyCode ? [legacyCode] : []);
+    if (selCodes.length === 0) return;
+    const selCode = selCodes[0]; // representative code (for legacy fields)
+    const selOption = codeOptions.find(o => o.code === selCode && o.category === selCategory);
+    const groupLabel = customGroupLabel.trim() || deriveCombinedLabel(selCodes, selCategory);
+
     setCustomWorking(true);
     try {
-      // Get properties with normalized values
-      const validProps = properties.filter(p => {
+      // Apply type/use filter FIRST (mirrors eco-obs behavior) so we never
+      // mix single-family with condo / multi-family inside the same study.
+      const typeFilteredProps = filterPropertiesByType(properties, customTypeUseFilter);
+
+      // Sale gates (default ON, escape hatch via runUnfiltered):
+      //   - building class numeric AND > 10
+      // Class gate is applied per study pass below (Class 2 default; Class 3A
+      // is a separate pass when include3A is on).
+      const passesBuildingClassGate = (p) => {
+        if (customRunUnfiltered) return true;
+        const bc = parseInt(p.asset_building_class, 10);
+        return Number.isFinite(bc) && bc > 10;
+      };
+      const matchesClass = (p, cls) => {
+        if (customRunUnfiltered) return true;
+        return String(p.property_m4_class || '').trim().toUpperCase() === cls;
+      };
+
+      // Qualified sales = type-filtered properties with values_norm_time > 0
+      // (class filtering happens per-pass below)
+      const validProps = typeFilteredProps.filter(p => {
+        if (!passesBuildingClassGate(p)) return false;
         const marketData = propertyMarketData.find(
           m => m.property_composite_key === p.property_composite_key
         );
         return marketData?.values_norm_time > 0;
       });
 
-      // Build lookup with raw data
-      const lookup = [];
-      const chunkSize = 100;
-      
-      for (let i = 0; i < validProps.length; i += chunkSize) {
-        const chunk = validProps.slice(i, i + chunkSize);
-        const rawDataPromises = chunk.map(async p => {
-          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
-          return { p, raw };
-        });
-        
-        const results = await Promise.all(rawDataPromises);
-        lookup.push(...results);
-      }
+      // ONE bulk fetch of the whole job's raw_data (cached server-side).
+      // Local Map lookup per property instead of N RPC round-trips.
+      const jobId = validProps[0]?.job_id || jobData?.id;
+      const bulk = jobId ? await getRawDataForJob(jobId) : null;
+      const propertyMap = bulk?.propertyMap || new Map();
+      const lookup = validProps.map(p => ({
+        p,
+        raw: p.property_composite_key ? propertyMap.get(p.property_composite_key) : null,
+      }));
 
-      // Helper to check if property has the attribute
-      const hasAttribute = (rawData) => {
-        if (!rawData || !rawData[selectedRawField]) return false;
-        const value = rawData[selectedRawField];
-        
-        if (matchValue === '') {
-          // Just check if field exists and has value
-          return value !== null && value !== undefined && String(value).trim() !== '';
-        } else {
-          // Check for specific match
-          const strValue = String(value).trim().toUpperCase();
-          const strMatch = String(matchValue).trim().toUpperCase();
-          
-          // Try exact match first
-          if (strValue === strMatch) return true;
-          
-          // Try numeric comparison if both are numbers
-          const numValue = Number(value);
-          const numMatch = Number(matchValue);
-          if (!isNaN(numValue) && !isNaN(numMatch)) {
-            return Math.abs(numValue - numMatch) < 0.0001;
-          }
-          
-          return false;
-        }
-      };
+      // Refresh code-count cache as a side-effect of this run (we just paid
+      // for the raw_data fetch; reuse it).
+      setCodeCountCache(buildCodeCountCache(lookup.map(({ p, raw }) => {
+        const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
+        return { p, raw, isQualified: Number(md?.values_norm_time) > 0 };
+      })));
 
-      // Group properties with/without attribute
-      const withAttr = [];
-      const withoutAttr = [];
-      
-      lookup.forEach(({ p, raw }) => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        if (marketData?.values_norm_time > 0) {
-          const propData = {
-            ...p,
-            values_norm_time: marketData.values_norm_time
-          };
-          
-          if (hasAttribute(raw)) {
-            withAttr.push(propData);
-          } else {
-            withoutAttr.push(propData);
-          }
-        }
-      });
-
-      // Calculate overall statistics
-      const calculateStats = (props) => {
-        if (props.length === 0) return { n: 0, avg_price: null, avg_size: null };
-        
-        const avgPrice = props.reduce((sum, p) => sum + p.values_norm_time, 0) / props.length;
-        const validSizes = props.filter(p => (p.sfla || p.property_sfla) > 0);
-        const avgSize = validSizes.length > 0 ?
-          validSizes.reduce((sum, p) => sum + (p.sfla || p.property_sfla || 0), 0) / validSizes.length : null;
-        
-        return {
-          n: props.length,
-          avg_price: Math.round(avgPrice),
-          avg_size: avgSize ? Math.round(avgSize) : null
-        };
-      };
-
-      const withStats = calculateStats(withAttr);
-      const withoutStats = calculateStats(withoutAttr);
-      
-      // Calculate adjustments
-      let flatAdj = null;
-      let pctAdj = null;
-      
-      if (withStats.avg_price && withoutStats.avg_price) {
-        flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
-        pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
-      }
-
-      // Group by VCS
-      const byVCS = {};
-      lookup.forEach(({ p, raw }) => {
+      // Build sample rows enriched with normalizedTime + sfla + count/area + yearBuilt
+      const allSamples = lookup.map(({ p, raw }) => {
+        const md = propertyMarketData.find(m => m.property_composite_key === p.property_composite_key);
+        const normTime = Number(md?.values_norm_time) || 0;
+        const sfla = Number(p.asset_sfla || p.sfla || p.property_sfla) || 0;
+        const yearBuilt = Number(p.asset_year_built || p.year_built || p.property_year_built) || 0;
+        const { count, area } = countAndArea(raw, selCodes, selCategory);
         const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
-        if (!byVCS[vcs]) byVCS[vcs] = { with: [], without: [] };
-        
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        
-        if (marketData?.values_norm_time > 0) {
-          const propData = {
-            ...p,
-            values_norm_time: marketData.values_norm_time
-          };
-          
-          if (hasAttribute(raw)) {
-            byVCS[vcs].with.push(propData);
-          } else {
-            byVCS[vcs].without.push(propData);
-          }
-        }
-      });
+        const m4 = String(p.property_m4_class || '').trim().toUpperCase();
+        return { p, vcs, m4, normTime, sfla, yearBuilt, count, area, has: count > 0 };
+      }).filter(s => s.normTime > 0);
 
-      // Calculate VCS-level statistics
-      const byVCSResults = {};
-      Object.entries(byVCS).forEach(([vcs, data]) => {
-        const vcsWithStats = calculateStats(data.with);
-        const vcsWithoutStats = calculateStats(data.without);
-        
-        let vcsFlat = null;
-        let vcsPct = null;
-        
-        if (vcsWithStats.avg_price && vcsWithoutStats.avg_price) {
-          vcsFlat = Math.round(vcsWithStats.avg_price - vcsWithoutStats.avg_price);
-          vcsPct = ((vcsWithStats.avg_price - vcsWithoutStats.avg_price) / vcsWithoutStats.avg_price) * 100;
+      const avg = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+      const median = (xs) => {
+        if (!xs.length) return null;
+        const s = [...xs].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+
+      // Pair-scan: for each WITH sale find WITHOUT sales in SAME VCS within
+      // ±15% SFLA and ±10 years built; per-unit delta is medianed across pairs.
+      const computePairScan = (rows) => {
+        const withRows = rows.filter(r => r.has && r.sfla > 0 && r.yearBuilt > 0);
+        const withoutRows = rows.filter(r => !r.has && r.sfla > 0 && r.yearBuilt > 0);
+        if (withRows.length === 0 || withoutRows.length === 0) {
+          return { pair_n: 0, pair_median_unit: null };
         }
-        
-        byVCSResults[vcs] = {
-          with: vcsWithStats,
-          without: vcsWithoutStats,
-          flat_adj: vcsFlat,
-          pct_adj: vcsPct
+        const units = [];
+        withRows.forEach(w => {
+          const matches = withoutRows.filter(wo =>
+            wo.vcs === w.vcs
+            && Math.abs(wo.sfla - w.sfla) / w.sfla <= 0.15
+            && Math.abs(wo.yearBuilt - w.yearBuilt) <= 10
+          );
+          if (matches.length === 0) return;
+          const woMedian = median(matches.map(m => m.normTime));
+          if (woMedian == null) return;
+          const delta = w.normTime - woMedian;
+          const unit = selCategory === '15'
+            ? (w.area > 0 ? delta / w.area : null)
+            : (w.count > 0 ? delta / w.count : null);
+          if (unit != null && Number.isFinite(unit)) units.push(unit);
+        });
+        return {
+          pair_n: units.length,
+          pair_median_unit: units.length ? Math.round(median(units)) : null,
         };
-      });
+      };
 
-      // Build results
+      const computeImpact = (rows) => {
+        const withFactor = rows.filter(r => r.has);
+        const withoutFactor = rows.filter(r => !r.has);
+        if (withFactor.length === 0 || withoutFactor.length === 0) {
+          return {
+            withCount: withFactor.length,
+            withoutCount: withoutFactor.length,
+            insufficient: true,
+          };
+        }
+        const avgWithTime = avg(withFactor.map(r => r.normTime));
+        const avgWithoutTime = avg(withoutFactor.map(r => r.normTime));
+        const avgWithSFLA = avg(withFactor.filter(r => r.sfla > 0).map(r => r.sfla));
+        const avgWithoutSFLA = avg(withoutFactor.filter(r => r.sfla > 0).map(r => r.sfla));
+        const averageSize = (avgWithSFLA + avgWithoutSFLA) / 2;
+        const avgWithYear = avg(withFactor.filter(r => r.yearBuilt > 0).map(r => r.yearBuilt));
+        const avgWithoutYear = avg(withoutFactor.filter(r => r.yearBuilt > 0).map(r => r.yearBuilt));
+
+        // Jim's formula
+        const adjWith = avgWithSFLA > 0
+          ? Math.round(avgWithTime + ((averageSize - avgWithSFLA) * (avgWithTime / avgWithSFLA) * 0.5))
+          : Math.round(avgWithTime);
+        const adjWithout = avgWithoutSFLA > 0
+          ? Math.round(avgWithoutTime + ((averageSize - avgWithoutSFLA) * (avgWithoutTime / avgWithoutSFLA) * 0.5))
+          : Math.round(avgWithoutTime);
+
+        const dollarImpact = adjWith - adjWithout;
+        const pctImpact = adjWithout > 0 ? ((adjWith - adjWithout) / adjWithout) * 100 : 0;
+
+        const avgCount = avg(withFactor.map(r => r.count));
+        const avgArea = avg(withFactor.filter(r => r.area > 0).map(r => r.area));
+        const perItem = avgCount > 0 ? Math.round(dollarImpact / avgCount) : null;
+        const perSf = selCategory === '15' && avgArea > 0 ? Math.round(dollarImpact / avgArea) : null;
+
+        return {
+          withCount: withFactor.length,
+          withoutCount: withoutFactor.length,
+          avgWithTime: Math.round(avgWithTime),
+          avgWithoutTime: Math.round(avgWithoutTime),
+          avgWithSFLA: Math.round(avgWithSFLA),
+          avgWithoutSFLA: Math.round(avgWithoutSFLA),
+          avgWithYear: avgWithYear ? Math.round(avgWithYear) : null,
+          avgWithoutYear: avgWithoutYear ? Math.round(avgWithoutYear) : null,
+          adjWith,
+          adjWithout,
+          dollarImpact,
+          pctImpact: Number(pctImpact.toFixed(1)),
+          avgCount: Number(avgCount.toFixed(2)),
+          avgArea: Math.round(avgArea),
+          perItem,
+          perSf,
+        };
+      };
+
+      const wrapImpact = (x, pair) => x.insufficient
+        ? { ...x, pair_n: pair?.pair_n || 0, pair_median_unit: pair?.pair_median_unit ?? null }
+        : {
+            with: { n: x.withCount, avg_price: x.avgWithTime, avg_size: x.avgWithSFLA, avg_year_built: x.avgWithYear, adj_price: x.adjWith, avg_count: x.avgCount, avg_area: x.avgArea },
+            without: { n: x.withoutCount, avg_price: x.avgWithoutTime, avg_size: x.avgWithoutSFLA, avg_year_built: x.avgWithoutYear, adj_price: x.adjWithout },
+            flat_adj: x.dollarImpact,
+            pct_adj: x.pctImpact,
+            per_item: x.perItem,
+            per_sf: x.perSf,
+            pair_n: pair?.pair_n || 0,
+            pair_median_unit: pair?.pair_median_unit ?? null,
+          };
+
+      // Build one full study tree (overall + per-VCS) from a sample subset.
+      // Used for the Class-2 (default) pass and the optional Class-3A pass.
+      const buildStudyTree = (rows) => {
+        if (rows.length === 0) return null;
+        const overall = computeImpact(rows);
+        const overallPair = computePairScan(rows);
+
+        const vcsBuckets = {};
+        rows.forEach(s => {
+          if (!vcsBuckets[s.vcs]) vcsBuckets[s.vcs] = [];
+          vcsBuckets[s.vcs].push(s);
+        });
+        const byVCS = {};
+        Object.entries(vcsBuckets).forEach(([vcs, vcsRows]) => {
+          byVCS[vcs] = wrapImpact(computeImpact(vcsRows), computePairScan(vcsRows));
+        });
+
+        return {
+          overall: wrapImpact(overall, overallPair),
+          byVCS,
+          sample_n: rows.length,
+        };
+      };
+
+      // Class 2 pass (or unfiltered if escape hatch is on)
+      const class2Samples = allSamples.filter(s => matchesClass(s.p, '2'));
+      const class2Tree = buildStudyTree(class2Samples);
+
+      // Optional Class 3A pass — only when toggle is on AND we have enough sample
+      let class3aTree = null;
+      if (customInclude3A && !customRunUnfiltered) {
+        const class3aSamples = allSamples.filter(s => matchesClass(s.p, '3A'));
+        if (class3aSamples.length >= 5) {
+          class3aTree = buildStudyTree(class3aSamples);
+        } else {
+          class3aTree = { insufficient_sample: true, sample_n: class3aSamples.length };
+        }
+      }
+
+      const typeUseOpt = getTypeUseOptions().find(o => o.code === customTypeUseFilter);
+      const isMulti = selCodes.length > 1;
+      const headerLabel = isMulti
+        ? `${selCodes.join(', ')} — ${groupLabel}`
+        : (selOption ? `${selCode} — ${selOption.description}` : selCode);
+
+      const safeTree = class2Tree || { overall: { insufficient: true, withCount: 0, withoutCount: 0 }, byVCS: {}, sample_n: 0 };
       const results = {
-        field: selectedRawField,
-        matchValue: matchValue || '(exists)',
-        overall: {
-          with: withStats,
-          without: withoutStats,
-          flat_adj: flatAdj,
-          pct_adj: pctAdj
+        code: selCode,
+        codes: selCodes,
+        group_label: isMulti ? groupLabel : (selOption?.description || selCode),
+        category: selCategory,
+        label: headerLabel,
+        type_use: customTypeUseFilter,
+        type_use_label: typeUseOpt ? typeUseOpt.description : customTypeUseFilter,
+        field: isMulti ? selCodes.join('+') : selCode,
+        filters: {
+          run_unfiltered: customRunUnfiltered,
+          include_3a: customInclude3A,
+          class: customRunUnfiltered ? 'all' : '2',
+          building_class_gt: customRunUnfiltered ? null : 10,
         },
-        byVCS: byVCSResults,
-        generated_at: new Date().toISOString()
+        overall: safeTree.overall,
+        byVCS: safeTree.byVCS,
+        class_3a: class3aTree,
+        generated_at: new Date().toISOString(),
       };
 
       setCustomResults(results);
-      
-      // Save to database
-      await saveCustomResultsToDB(results);
-      
+
+      // Persist as a new row in job_custom_attribute_studies (one row per run).
+      // Also mirror to market_land_valuation.custom_attribute_rollup so the
+      // last run is still cached in the parent jobData (backwards compatible).
+      await Promise.all([
+        persistStudyRow(results),
+        saveCustomResultsToDB(results),
+      ]);
+      await loadSavedStudies();
+
     } catch (error) {
       console.error('Error running custom attribute analysis:', error);
     } finally {
       setCustomWorking(false);
+    }
+  };
+
+  // ---------- Saved-studies CRUD against job_custom_attribute_studies ----------
+  const persistStudyRow = async (results) => {
+    if (!jobData?.id || !results) return;
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_attribute_studies')
+        .insert({
+          job_id: jobData.id,
+          code: results.code,
+          category: results.category,
+          label: results.label,
+          name: results.label,
+          results,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      if (data?.id) setActiveStudyId(data.id);
+    } catch (err) {
+      console.error('Error saving study row:', err);
+    }
+  };
+
+  const loadSavedStudies = useCallback(async () => {
+    if (!jobData?.id) return;
+    setLoadingStudies(true);
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_attribute_studies')
+        .select('id, code, category, label, name, results, created_at, updated_at')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setSavedStudies(data || []);
+    } catch (err) {
+      console.error('Error loading saved studies:', err);
+      setSavedStudies([]);
+    } finally {
+      setLoadingStudies(false);
+    }
+  }, [jobData?.id]);
+
+  useEffect(() => {
+    if (active === 'custom' && jobData?.id) loadSavedStudies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, jobData?.id]);
+
+  const openStudy = (study) => {
+    if (!study?.results) return;
+    setCustomResults(study.results);
+    setActiveStudyId(study.id);
+    const codes = study.results?.codes && study.results.codes.length > 0
+      ? study.results.codes
+      : (study.code ? [study.code] : []);
+    if (study.category === '15') {
+      setSelectedDetachedCode(codes[0] || '');
+      setSelectedDetachedCodes(codes);
+    } else if (study.category === '27') {
+      setSelectedFoundationCode(codes[0] || '');
+      setSelectedFoundationCodes(codes);
+    } else {
+      setSelectedMiscCode(codes[0] || '');
+      setSelectedMiscCodes(codes);
+    }
+    if (codes.length > 1 && study.results?.group_label) {
+      setCustomGroupLabel(study.results.group_label.replace(/\s*\(Combined\)\s*$/, ''));
+    } else {
+      setCustomGroupLabel('');
+    }
+    if (study.results?.type_use) setCustomTypeUseFilter(study.results.type_use);
+  };
+
+  const rerunStudy = async (study) => {
+    if (!study) return;
+    const codes = study.results?.codes && study.results.codes.length > 0
+      ? study.results.codes
+      : (study.code ? [study.code] : []);
+    if (study.category === '15') {
+      setSelectedDetachedCode(codes[0] || '');
+      setSelectedDetachedCodes(codes);
+      await runCustomAttributeAnalysis('15');
+    } else if (study.category === '27') {
+      setSelectedFoundationCode(codes[0] || '');
+      setSelectedFoundationCodes(codes);
+      await runCustomAttributeAnalysis('27');
+    } else {
+      setSelectedMiscCode(codes[0] || '');
+      setSelectedMiscCodes(codes);
+      await runCustomAttributeAnalysis('39');
+    }
+  };
+
+  const renameStudy = async (study) => {
+    const next = window.prompt('Rename study', study.name || study.label || '');
+    if (next == null) return;
+    const trimmed = String(next).trim();
+    if (!trimmed) return;
+    try {
+      const { error } = await supabase
+        .from('job_custom_attribute_studies')
+        .update({ name: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', study.id);
+      if (error) throw error;
+      await loadSavedStudies();
+    } catch (err) {
+      console.error('Error renaming study:', err);
+    }
+  };
+
+  const deleteStudy = async (study) => {
+    if (!study?.id) return;
+    if (!window.confirm(`Delete saved study “${study.name || study.label}”?`)) return;
+    try {
+      const { error } = await supabase
+        .from('job_custom_attribute_studies')
+        .delete()
+        .eq('id', study.id);
+      if (error) throw error;
+      if (activeStudyId === study.id) {
+        setActiveStudyId(null);
+        setCustomResults(null);
+      }
+      await loadSavedStudies();
+    } catch (err) {
+      console.error('Error deleting study:', err);
     }
   };
 
@@ -2638,35 +3156,289 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
+  // ---------- Excel export (single study + all studies) ----------
+  // Follows the formatting pattern in LandValuationTab.jsx: aoa_to_sheet,
+  // explicit !cols widths, bold header row, currency / percent number formats.
+  // Column order (1-indexed letters used in formulas):
+  //  A  VCS
+  //  B  With (n)
+  //  C  Avg Item Area (detached) | Avg Count (misc)
+  //  D  Avg Year Built (With)
+  //  E  Avg SFLA (With)
+  //  F  Avg Sale (With)         — values_norm_time
+  //  G  Without (n)
+  //  H  Avg Year Built (Without)
+  //  I  Avg SFLA (Without)
+  //  J  Avg Sale (Without)      — values_norm_time
+  //  K  Adj Sale (With)         = F + (((E+I)/2 - E) * (F/E) * 0.5)
+  //  L  Adj Sale (Without)      = J + (((E+I)/2 - I) * (J/I) * 0.5)
+  //  M  $ Impact                = K - L
+  //  N  % Impact                = (K - L) / L
+  //  O  Per Sq Ft | Per Item    = M / C
+  const buildStudySheetRows = (study) => {
+    const isDetached = study.category === '15';
+    const isFoundation = study.category === '27';
+    const categoryLabel = isDetached ? 'Detached Items' : isFoundation ? 'Foundation' : 'Miscellaneous';
+    const titleLine = `${categoryLabel}: ${study.label || study.field || study.code} — Analysis by VCS`;
+
+    const header = [
+      'VCS',
+      'With (n)',
+      isDetached ? 'Avg Item Area' : 'Avg Count',
+      'Avg Year Built (With)',
+      'Avg SFLA (With)',
+      'Avg Sale (With)',
+      'Without (n)',
+      'Avg Year Built (Without)',
+      'Avg SFLA (Without)',
+      'Avg Sale (Without)',
+      'Adj Sale (With)',
+      'Adj Sale (Without)',
+      '$ Impact',
+      '% Impact',
+      isDetached ? 'Per Sq Ft' : 'Per Item',
+      'Pair n',
+      isDetached ? 'Pair Median $/sf' : 'Pair Median $/item',
+    ];
+
+    // Live formula generator for a given 1-indexed row number
+    const formulaCells = (r) => ({
+      K: { t: 'n', f: `IFERROR(F${r}+(((E${r}+I${r})/2-E${r})*(F${r}/E${r})*0.5),"")` },
+      L: { t: 'n', f: `IFERROR(J${r}+(((E${r}+I${r})/2-I${r})*(J${r}/I${r})*0.5),"")` },
+      M: { t: 'n', f: `IFERROR(K${r}-L${r},"")` },
+      N: { t: 'n', f: `IFERROR((K${r}-L${r})/L${r},"")` },
+      O: { t: 'n', f: `IFERROR(M${r}/C${r},"")` },
+    });
+
+    const dataRow = (label, d, rowNum) => {
+      if (!d || d.insufficient) {
+        return [label, d?.withCount ?? '', '', '', '', '', d?.withoutCount ?? '', '', '', '', '', '', '', '', '', '', ''];
+      }
+      const f = formulaCells(rowNum);
+      return [
+        label,
+        d.with?.n ?? '',
+        (isDetached ? d.with?.avg_area : d.with?.avg_count) ?? '',
+        d.with?.avg_year_built ?? '',
+        d.with?.avg_size ?? '',
+        d.with?.avg_price ?? '',
+        d.without?.n ?? '',
+        d.without?.avg_year_built ?? '',
+        d.without?.avg_size ?? '',
+        d.without?.avg_price ?? '',
+        f.K, f.L, f.M, f.N, f.O,
+        d.pair_n ?? 0,
+        d.pair_median_unit ?? '',
+      ];
+    };
+
+    // Header is row 1 (no preamble — straight into the table)
+    const rows = [header];
+    let r = 2;
+    Object.entries(study.results?.byVCS || study.byVCS || {}).forEach(([vcs, d]) => {
+      rows.push(dataRow(vcs, d, r));
+      r += 1;
+    });
+    rows.push(dataRow('ALL VCS', study.results?.overall || study.overall, r));
+    return { rows, header, isDetached, titleLine };
+  };
+
+  const applyStudySheetFormatting = (ws, built) => {
+    const { rows, header } = built;
+    ws['!cols'] = [
+      { wch: 10 },  // VCS
+      { wch: 10 },  // With (n)
+      { wch: 14 },  // Avg Item Area / Avg Count
+      { wch: 14 },  // Avg YB With
+      { wch: 14 },  // Avg SFLA With
+      { wch: 14 },  // Avg Sale With
+      { wch: 12 },  // Without (n)
+      { wch: 14 },  // Avg YB Without
+      { wch: 14 },  // Avg SFLA Without
+      { wch: 16 },  // Avg Sale Without
+      { wch: 14 },  // Adj Sale With
+      { wch: 16 },  // Adj Sale Without
+      { wch: 12 },  // $ Impact
+      { wch: 10 },  // % Impact
+      { wch: 12 },  // Per Sq Ft / Per Item
+      { wch: 8 },   // Pair n
+      { wch: 16 },  // Pair Median $/unit
+    ];
+
+    const baseFont = { name: 'Leelawadee', sz: 10 };
+    const centered = { horizontal: 'center', vertical: 'center', wrapText: true };
+    const headerStyle = { font: { ...baseFont, bold: true }, alignment: centered };
+    const baseStyle = { font: baseFont, alignment: centered };
+
+    const dataStart = 1;                  // row index 1 (0-based) — first VCS row
+    const dataEnd = rows.length - 1;      // last row is ALL VCS total
+    const totalRowIdx = dataEnd;
+
+    // Header row
+    for (let c = 0; c < header.length; c++) {
+      const a = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[a]) ws[a].s = headerStyle;
+    }
+
+    // Data rows
+    const currencyCols = [5, 9, 10, 11, 12, 14, 16]; // F J K L M O Q — sales / adj / impact / per / pair median
+    const percentCols = [13];                        // N
+    const intCommaCols = [1, 2, 3, 4, 6, 7, 8, 15];  // B C D E G H I P (pair n)
+    for (let r = dataStart; r <= dataEnd; r++) {
+      for (let c = 0; c < header.length; c++) {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (!ws[a]) continue;
+        const isTotal = r === totalRowIdx;
+        const style = {
+          font: { ...baseFont, bold: isTotal },
+          alignment: centered,
+        };
+        if (currencyCols.includes(c)) style.numFmt = '"$"#,##0';
+        else if (percentCols.includes(c)) style.numFmt = '0.0%';
+        else if (intCommaCols.includes(c) && (c === 3 || c === 7)) style.numFmt = '0'; // year built — no commas
+        else if (intCommaCols.includes(c)) style.numFmt = '#,##0';
+        ws[a].s = style;
+      }
+    }
+
+    return ws;
+  };
+
+  const exportStudyToExcel = (study) => {
+    if (!study) return;
+    const wrapped = study.results ? study : { results: study, category: study.category, label: study.label, code: study.code, generated_at: study.generated_at, type_use: study.type_use, type_use_label: study.type_use_label };
+    const built = buildStudySheetRows(wrapped);
+    const ws = XLSX.utils.aoa_to_sheet(built.rows);
+    applyStudySheetFormatting(ws, built);
+    const wb = XLSX.utils.book_new();
+    const safeName = (wrapped.label || wrapped.code || 'study').toString().replace(/[^A-Za-z0-9]+/g, '_').slice(0, 25);
+    XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 28) || 'Study');
+
+    // Optional Class 3A pass — same shape, written to its own sheet.
+    const class3a = wrapped.results?.class_3a || wrapped.class_3a;
+    if (class3a && !class3a.insufficient_sample) {
+      const built3a = buildStudySheetRows({
+        ...wrapped,
+        results: { ...wrapped.results, overall: class3a.overall, byVCS: class3a.byVCS },
+      });
+      const ws3a = XLSX.utils.aoa_to_sheet(built3a.rows);
+      applyStudySheetFormatting(ws3a, built3a);
+      XLSX.utils.book_append_sheet(wb, ws3a, `${safeName.slice(0, 24) || 'Study'}_3A`);
+    }
+
+    const categorySlug = wrapped.category === '15' ? 'detached' : wrapped.category === '27' ? 'foundation' : 'misc';
+    const fname = `${jobData?.job_name || 'job'}_${categorySlug}_${safeName}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
+  const exportAllStudiesToExcel = (studies) => {
+    if (!studies || studies.length === 0) return;
+    const wb = XLSX.utils.book_new();
+
+    // Index sheet — same B&W Leelawadee style as study sheets
+    const indexHeader = ['Study Name', 'Category', 'Code', 'Type/Use', 'With (n)', 'Without (n)', '$ Impact', '% Impact', 'Per Unit', 'Created'];
+    const indexRows = [indexHeader];
+    studies.forEach(s => {
+      const o = s.results?.overall || s.overall;
+      const cat = (s.category || s.results?.category);
+      const isDet = cat === '15';
+      const isFnd = cat === '27';
+      indexRows.push([
+        s.name || s.label || s.results?.label || '',
+        isDet ? 'Detached' : isFnd ? 'Foundation' : 'Miscellaneous',
+        s.code || s.results?.code || '',
+        s.results?.type_use_label || s.results?.type_use || '',
+        o?.with?.n ?? o?.withCount ?? '',
+        o?.without?.n ?? o?.withoutCount ?? '',
+        o?.flat_adj ?? '',
+        o?.pct_adj != null ? o.pct_adj / 100 : '',
+        (isDet ? o?.per_sf : o?.per_item) ?? '',
+        s.created_at ? new Date(s.created_at).toLocaleString() : '',
+      ]);
+    });
+    const indexWs = XLSX.utils.aoa_to_sheet(indexRows);
+    indexWs['!cols'] = [
+      { wch: 32 }, { wch: 14 }, { wch: 10 }, { wch: 22 },
+      { wch: 9 }, { wch: 11 }, { wch: 13 }, { wch: 10 }, { wch: 13 }, { wch: 22 },
+    ];
+    const idxBaseFont = { name: 'Leelawadee', sz: 10 };
+    const idxCenter = { horizontal: 'center', vertical: 'center', wrapText: true };
+    for (let c = 0; c < indexHeader.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      if (indexWs[addr]) indexWs[addr].s = { font: { ...idxBaseFont, bold: true }, alignment: idxCenter };
+    }
+    for (let r = 1; r < indexRows.length; r++) {
+      for (let c = 0; c < indexHeader.length; c++) {
+        const a = XLSX.utils.encode_cell({ r, c });
+        if (!indexWs[a]) continue;
+        const style = { font: idxBaseFont, alignment: idxCenter };
+        if (c === 6) style.numFmt = '"$"#,##0';
+        else if (c === 7) style.numFmt = '0.0%';
+        else if (c === 8) style.numFmt = '"$"#,##0';
+        else if (c === 4 || c === 5) style.numFmt = '#,##0';
+        indexWs[a].s = style;
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, indexWs, 'Index');
+
+    // One sheet per study
+    const usedNames = new Set(['Index']);
+    studies.forEach((s, idx) => {
+      const wrapped = s.results ? s : { results: s };
+      const built = buildStudySheetRows({
+        category: s.category || s.results?.category,
+        label: s.label || s.results?.label,
+        field: s.code,
+        type_use: s.results?.type_use,
+        type_use_label: s.results?.type_use_label,
+        results: wrapped.results,
+        generated_at: s.created_at || s.results?.generated_at,
+      });
+      const ws = XLSX.utils.aoa_to_sheet(built.rows);
+      applyStudySheetFormatting(ws, built);
+      let name = (s.name || s.label || s.results?.label || `Study ${idx + 1}`).toString().replace(/[^A-Za-z0-9 _-]+/g, '').slice(0, 28) || `Study ${idx + 1}`;
+      let unique = name; let dedup = 2;
+      while (usedNames.has(unique)) { unique = `${name.slice(0, 25)} ${dedup++}`; }
+      usedNames.add(unique);
+      XLSX.utils.book_append_sheet(wb, ws, unique);
+    });
+
+    const fname = `${jobData?.job_name || 'job'}_custom_attribute_studies.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
   // Export custom results to CSV
   const exportCustomResultsToCSV = () => {
     if (!customResults) return;
     
-    const headers = ['Group', 'With_Count', 'With_Avg', 'Without_Count', 'Without_Avg', 'Flat_Adj', 'Pct_Adj'];
+    const isDetached = customResults.category === '15';
+    const headers = [
+      'Group', 'With_Count', 'With_Avg', 'With_Adj', 'Without_Count', 'Without_Avg', 'Without_Adj',
+      'Flat_Adj', 'Pct_Adj', isDetached ? 'Per_Sf' : 'Per_Item',
+    ];
     const rows = [];
-    
-    // Add overall row
-    rows.push([
-      'OVERALL',
-      customResults.overall.with.n,
-      customResults.overall.with.avg_price || '',
-      customResults.overall.without.n,
-      customResults.overall.without.avg_price || '',
-      customResults.overall.flat_adj || '',
-      customResults.overall.pct_adj ? customResults.overall.pct_adj.toFixed(1) : ''
-    ]);
-    
-    // Add VCS rows
+
+    const rowFromGroup = (label, data) => {
+      if (!data || data.insufficient) {
+        return [label, data?.withCount ?? '', '', '', data?.withoutCount ?? '', '', '', '', '', ''];
+      }
+      return [
+        label,
+        data.with?.n ?? '',
+        data.with?.avg_price ?? '',
+        data.with?.adj_price ?? '',
+        data.without?.n ?? '',
+        data.without?.avg_price ?? '',
+        data.without?.adj_price ?? '',
+        data.flat_adj ?? '',
+        data.pct_adj != null ? Number(data.pct_adj).toFixed(1) : '',
+        (isDetached ? data.per_sf : data.per_item) ?? '',
+      ];
+    };
+
+    rows.push(rowFromGroup('OVERALL', customResults.overall));
     Object.entries(customResults.byVCS || {}).forEach(([vcs, data]) => {
-      rows.push([
-        vcs,
-        data.with.n,
-        data.with.avg_price || '',
-        data.without.n,
-        data.without.avg_price || '',
-        data.flat_adj || '',
-        data.pct_adj ? data.pct_adj.toFixed(1) : ''
-      ]);
+      rows.push(rowFromGroup(vcs, data));
     });
     
     const filename = `${jobData.job_name || 'job'}_custom_attribute_${customResults.field}.csv`;
@@ -2684,235 +3456,436 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           borderRadius: '6px',
           border: '1px solid #E5E7EB'
         }}>
+          {savedStudies.length > 0 && (
+            <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: 'white', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                  Saved Studies ({savedStudies.length})
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {loadingStudies && (
+                    <span style={{ fontSize: '11px', color: '#9CA3AF' }}>Refreshing…</span>
+                  )}
+                  <button
+                    onClick={() => exportAllStudiesToExcel(savedStudies)}
+                    className={CSV_BUTTON_CLASS}
+                  >
+                    <FileText size={14} /> Export All
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                {savedStudies.map(study => {
+                  const isActive = study.id === activeStudyId;
+                  const overall = study.results?.overall;
+                  const summary = overall?.insufficient
+                    ? `Insufficient sample (with: ${overall.withCount}, without: ${overall.withoutCount})`
+                    : overall
+                      ? `${overall.with?.n ?? 0} with · ${overall.without?.n ?? 0} without · ${overall.flat_adj != null ? formatCurrency(overall.flat_adj) : '-'} impact${
+                          study.category === '15'
+                            ? (overall.per_sf != null ? ` · ${formatCurrency(overall.per_sf)}/sf` : '')
+                            : (overall.per_item != null ? ` · ${formatCurrency(overall.per_item)}/item` : '')
+                        }`
+                      : '';
+                  return (
+                    <div key={study.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px',
+                      padding: '8px 10px', border: `1px solid ${isActive ? '#3B82F6' : '#E5E7EB'}`,
+                      borderRadius: '4px', backgroundColor: isActive ? '#EFF6FF' : '#F9FAFB',
+                    }}>
+                      <button
+                        onClick={() => openStudy(study)}
+                        style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
+                          {study.name || study.label || `${study.category}:${study.code}`}
+                          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>
+                            ({study.category === '15' ? 'Detached' : study.category === '27' ? 'Foundation' : 'Misc'})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                          {summary} · {new Date(study.created_at).toLocaleString()}
+                        </div>
+                      </button>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => rerunStudy(study)}
+                          disabled={customWorking}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', background: 'white', cursor: customWorking ? 'not-allowed' : 'pointer' }}
+                        >
+                          Re-run
+                        </button>
+                        <button
+                          onClick={() => renameStudy(study)}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => deleteStudy(study)}
+                          style={{ fontSize: '11px', padding: '4px 8px', border: '1px solid #FCA5A5', borderRadius: '4px', background: 'white', color: '#B91C1C', cursor: 'pointer' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: '12px' }}>
             <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
               Select Field and Value to Analyze
             </h4>
             <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '12px' }}>
-              Compare properties with vs without specific attributes to determine value impact
+              Compare properties with vs without specific attributes to determine value impact.
+              {prefetchingCounts && (
+                <span style={{ marginLeft: '8px', color: '#3B82F6' }}>Loading record counts…</span>
+              )}
+              {!prefetchingCounts && Object.keys(codeCountCache).length === 0 && (
+                <span style={{ marginLeft: '8px', color: '#9CA3AF' }}>
+                  (record counts appear once data is loaded)
+                </span>
+              )}
             </p>
-          </div>
-          
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Raw Data Field
-              </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>Type/Use:</label>
               <select
-                value={selectedRawField}
-                onChange={(e) => setSelectedRawField(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '4px',
-                  fontSize: '14px',
-                  backgroundColor: 'white'
-                }}
+                value={customTypeUseFilter}
+                onChange={(e) => setCustomTypeUseFilter(e.target.value)}
+                style={{ padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '12px', backgroundColor: 'white' }}
                 disabled={customWorking}
               >
-                <option value="">Select a field...</option>
-                {rawFields.map(field => (
-                  <option key={field} value={field}>{field}</option>
+                {getTypeUseOptions().map(o => (
+                  <option key={o.code} value={o.code}>{o.description}</option>
                 ))}
               </select>
+              <span style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                (filters both groups so single-family doesn't mix with condo / multi-family)
+              </span>
             </div>
-            
-            <div style={{ flex: '1' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                Match Value (leave empty = field exists)
-              </label>
-              <input
-                type="text"
-                value={matchValue}
-                onChange={(e) => setMatchValue(e.target.value)}
-                placeholder="e.g., Y, 1, POOL, etc."
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-                disabled={customWorking}
-              />
-            </div>
-            
-            <button
-              onClick={runCustomAttributeAnalysis}
-              disabled={customWorking || !selectedRawField}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: customWorking || !selectedRawField ? '#E5E7EB' : '#3B82F6',
-                color: customWorking || !selectedRawField ? '#9CA3AF' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: customWorking || !selectedRawField ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {customWorking ? 'Analyzing...' : 'Run Analysis'}
-            </button>
-            
-            {customResults && (
+
+            {/* Sale-gate filters — defaults: Class 2, building class > 10 */}
+            <div style={{ marginTop: '10px', padding: '8px 10px', border: '1px solid #E5E7EB', borderRadius: '4px', backgroundColor: 'white' }}>
               <button
-                onClick={exportCustomResultsToCSV}
-                className={CSV_BUTTON_CLASS}
+                type="button"
+                onClick={() => setCustomFiltersOpen(o => !o)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
               >
-                <FileText size={14} /> Export CSV
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>
+                  Filters: {customRunUnfiltered
+                    ? 'Unfiltered (all sales)'
+                    : `Class 2${customInclude3A ? ' + 3A (separate)' : ''} · Bldg Class >10`}
+                </span>
+                <span style={{ fontSize: '11px', color: '#6B7280' }}>{customFiltersOpen ? '▾' : '▸'}</span>
               </button>
-            )}
+              {customFiltersOpen && (
+                <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#374151' }}>
+                    <input
+                      type="checkbox"
+                      checked={customInclude3A}
+                      onChange={(e) => setCustomInclude3A(e.target.checked)}
+                      disabled={customWorking || customRunUnfiltered}
+                    />
+                    Include Class 3A as separate study
+                    <span style={{ color: '#9CA3AF' }}>(skipped if fewer than 5 sales)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#374151' }}>
+                    <input
+                      type="checkbox"
+                      checked={customRunUnfiltered}
+                      onChange={(e) => setCustomRunUnfiltered(e.target.checked)}
+                      disabled={customWorking}
+                    />
+                    Run unfiltered (include all sales — no class or building-class gates)
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
+
+          {(() => {
+            const renderPicker = (category, codes, setCodes, legacySingle, setLegacySingle, runMode, runLabel) => {
+              const opts = codeOptions.filter(o => o.category === category);
+              const available = opts.filter(o => !codes.includes(o.code));
+              const addCode = (code) => {
+                if (!code || codes.includes(code)) return;
+                const next = [...codes, code];
+                setCodes(next);
+                setLegacySingle(next[0]);
+              };
+              const removeCode = (code) => {
+                const next = codes.filter(c => c !== code);
+                setCodes(next);
+                setLegacySingle(next[0] || '');
+              };
+              const totalProps = codes.reduce((sum, c) => sum + (codeCountCache[`${category}:${c.toUpperCase()}`]?.totalProps || 0), 0);
+              const totalSales = codes.reduce((sum, c) => sum + (codeCountCache[`${category}:${c.toUpperCase()}`]?.qualifiedSales || 0), 0);
+              const previewLabel = codes.length > 1
+                ? (customGroupLabel.trim() || deriveCombinedLabel(codes, category))
+                : '';
+              const canRun = codes.length > 0 && !customWorking;
+              return (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: '12px', color: '#6B7280', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>{category === '15' ? 'Detached Items (Cat 15)' : category === '27' ? 'Foundation (Cat 27)' : 'Miscellaneous (Cat 39)'}</span>
+                    {codes.length > 0 && (
+                      <span style={{ color: '#0F766E', fontWeight: 500 }}>
+                        {totalProps} properties · {totalSales} qualified sales
+                        {codes.length > 1 && ' (combined)'}
+                      </span>
+                    )}
+                  </label>
+                  {codes.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                      {codes.map(c => {
+                        const o = opts.find(x => x.code === c);
+                        return (
+                          <span
+                            key={`${category}-chip-${c}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '6px',
+                              padding: '4px 8px', borderRadius: '999px',
+                              backgroundColor: category === '15' ? '#DBEAFE' : category === '27' ? '#F3E8FF' : '#DCFCE7',
+                              color: category === '15' ? '#1E40AF' : category === '27' ? '#6B21A8' : '#166534',
+                              fontSize: '12px', fontWeight: 500,
+                            }}
+                          >
+                            {c}{o?.description ? ` — ${o.description}` : ''}
+                            <button
+                              type="button"
+                              onClick={() => removeCode(c)}
+                              disabled={customWorking}
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 700, padding: 0, lineHeight: 1 }}
+                              aria-label={`Remove ${c}`}
+                            >×</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <select
+                      value=""
+                      onChange={(e) => { addCode(e.target.value); e.target.value = ''; }}
+                      style={{ flex: 1, padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '14px', backgroundColor: 'white' }}
+                      disabled={customWorking || available.length === 0}
+                    >
+                      <option value="">
+                        {codes.length === 0
+                          ? (category === '15' ? 'Select a detached code…' : category === '27' ? 'Select a foundation code…' : 'Select a misc code…')
+                          : (available.length === 0 ? 'All codes added' : '+ Add another code…')}
+                      </option>
+                      {available.map(o => (
+                        <option key={`${category}:${o.code}`} value={o.code}>{o.code} — {o.description}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => runCustomAttributeAnalysis(runMode)}
+                      disabled={!canRun}
+                      style={{
+                        padding: '6px 14px',
+                        backgroundColor: !canRun ? '#E5E7EB' : '#3B82F6',
+                        color: !canRun ? '#9CA3AF' : 'white',
+                        border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: 500,
+                        cursor: !canRun ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {customWorking ? 'Analyzing…' : runLabel}
+                    </button>
+                  </div>
+                  {previewLabel && (
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#6B7280' }}>
+                      Group name: <span style={{ color: '#111827', fontWeight: 500 }}>{previewLabel}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+            return (
+              <div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  {renderPicker('39', selectedMiscCodes, setSelectedMiscCodes, setSelectedMiscCode, setSelectedMiscCode, '39', 'Run Misc')}
+                  {renderPicker('15', selectedDetachedCodes, setSelectedDetachedCodes, setSelectedDetachedCode, setSelectedDetachedCode, '15', 'Run Detached')}
+                  {codeOptions.some(o => o.category === '27') &&
+                    renderPicker('27', selectedFoundationCodes, setSelectedFoundationCodes, setSelectedFoundationCode, setSelectedFoundationCode, '27', 'Run Foundation')}
+                </div>
+                {(selectedMiscCodes.length > 1 || selectedDetachedCodes.length > 1 || selectedFoundationCodes.length > 1) && (
+                  <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '12px', color: '#6B7280', fontWeight: 500 }}>Group label (optional):</label>
+                    <input
+                      type="text"
+                      value={customGroupLabel}
+                      onChange={(e) => setCustomGroupLabel(e.target.value)}
+                      placeholder="auto: common word + (Combined)"
+                      style={{ flex: 1, maxWidth: '320px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '12px' }}
+                      disabled={customWorking}
+                    />
+                    {customResults && (
+                      <button onClick={exportCustomResultsToCSV} className={CSV_BUTTON_CLASS}>
+                        <FileText size={14} /> Export CSV
+                      </button>
+                    )}
+                  </div>
+                )}
+                {customResults && selectedMiscCodes.length <= 1 && selectedDetachedCodes.length <= 1 && selectedFoundationCodes.length <= 1 && (
+                  <div style={{ marginTop: '10px' }}>
+                    <button onClick={exportCustomResultsToCSV} className={CSV_BUTTON_CLASS}>
+                      <FileText size={14} /> Export CSV
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Results */}
-        {customResults && (
-          <div>
-            {/* Overall Results */}
-            <div style={{ 
-              marginBottom: '20px',
-              padding: '15px',
-              backgroundColor: '#EFF6FF',
-              borderRadius: '6px',
-              border: '1px solid #BFDBFE'
-            }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1E40AF' }}>
-                Overall Analysis: {customResults.field} {customResults.matchValue !== '(exists)' && `= "${customResults.matchValue}"`}
-              </h4>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>With Attribute</div>
-                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>
-                    {customResults.overall.with.n}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#64748B' }}>
-                    {customResults.overall.with.avg_price ? formatCurrency(customResults.overall.with.avg_price) : '-'}
-                  </div>
-                </div>
-                
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Without Attribute</div>
-                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>
-                    {customResults.overall.without.n}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#64748B' }}>
-                    {customResults.overall.without.avg_price ? formatCurrency(customResults.overall.without.avg_price) : '-'}
-                  </div>
-                </div>
-                
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Dollar Impact</div>
-                  <div style={{ 
-                    fontSize: '20px', 
-                    fontWeight: '600',
-                    color: customResults.overall.flat_adj > 0 ? '#059669' : 
-                           customResults.overall.flat_adj < 0 ? '#DC2626' : '#6B7280'
-                  }}>
-                    {customResults.overall.flat_adj ? formatCurrency(customResults.overall.flat_adj) : '-'}
-                  </div>
-                </div>
-                
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Percent Impact</div>
-                  <div style={{ 
-                    fontSize: '20px', 
-                    fontWeight: '600',
-                    color: customResults.overall.pct_adj > 0 ? '#059669' : 
-                           customResults.overall.pct_adj < 0 ? '#DC2626' : '#6B7280'
-                  }}>
-                    {customResults.overall.pct_adj ? formatPercent(customResults.overall.pct_adj) : '-'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* VCS Breakdown */}
-            <div style={{ 
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              overflow: 'hidden'
-            }}>
-              <div style={{ 
-                padding: '12px 15px',
-                backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
-              }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Analysis by VCS
-                </h4>
-              </div>
-              
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        {customResults && (() => {
+          const isDet = customResults.category === '15';
+          const th = { padding: '8px 10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' };
+          const td = { padding: '8px 10px', textAlign: 'center', fontSize: '13px' };
+          const fmtNum = (v) => (v == null || v === '' ? '-' : Number(v).toLocaleString());
+          const fmtYear = (v) => (v == null || v === '' ? '-' : String(v));
+          const fmtCurr = (v) => (v == null || v === '' ? '-' : formatCurrency(v));
+          const perUnitLabel = isDet ? '$/sf' : '/item';
+          const renderRow = (label, data, isTotal) => {
+            if (data.insufficient) {
+              return (
+                <tr key={label} style={{ backgroundColor: isTotal ? '#EFF6FF' : '#F9FAFB' }}>
+                  <td style={{ ...td, fontWeight: '500' }}>{label}</td>
+                  <td colSpan={16} style={{ ...td, color: '#92400E' }}>
+                    Not enough sales to compare (with: {data.withCount}, without: {data.withoutCount})
+                  </td>
+                </tr>
+              );
+            }
+            const rowStyle = isTotal
+              ? { backgroundColor: '#EFF6FF', borderTop: '2px solid #BFDBFE', fontWeight: 700 }
+              : {};
+            const tdT = { ...td, fontWeight: isTotal ? 700 : 400 };
+            return (
+              <tr key={label} style={rowStyle}>
+                <td style={{ ...tdT, color: isTotal ? '#1E40AF' : 'inherit' }}>{label}</td>
+                <td style={tdT}>{fmtNum(data.with.n)}</td>
+                <td style={tdT}>{isDet ? fmtNum(data.with.avg_area) : fmtNum(data.with.avg_count)}</td>
+                <td style={tdT}>{fmtYear(data.with.avg_year_built)}</td>
+                <td style={tdT}>{fmtNum(data.with.avg_size)}</td>
+                <td style={tdT}>{fmtCurr(data.with.avg_price)}</td>
+                <td style={tdT}>{fmtNum(data.without.n)}</td>
+                <td style={tdT}>{fmtYear(data.without.avg_year_built)}</td>
+                <td style={tdT}>{fmtNum(data.without.avg_size)}</td>
+                <td style={tdT}>{fmtCurr(data.without.avg_price)}</td>
+                <td style={tdT}>{fmtCurr(data.with.adj_price)}</td>
+                <td style={tdT}>{fmtCurr(data.without.adj_price)}</td>
+                <td style={{ ...tdT, color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : 'inherit' }}>
+                  {fmtCurr(data.flat_adj)}
+                </td>
+                <td style={{ ...tdT, color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : 'inherit' }}>
+                  {data.pct_adj == null ? '-' : formatPercent(data.pct_adj)}
+                </td>
+                <td style={{ ...tdT, color: '#0F766E' }}>
+                  {isDet
+                    ? (data.per_sf != null ? `${formatCurrency(data.per_sf)}/sf` : '-')
+                    : (data.per_item != null ? formatCurrency(data.per_item) : '-')}
+                </td>
+                <td style={tdT}>{data.pair_n ?? 0}</td>
+                <td style={{ ...tdT, color: '#7C3AED' }}>
+                  {data.pair_median_unit != null
+                    ? `${formatCurrency(data.pair_median_unit)}${perUnitLabel}`
+                    : '-'}
+                </td>
+              </tr>
+            );
+          };
+          const renderTable = (tree) => (
+            <TwinScroll minWidth={1400}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1400px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
-                      VCS
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      With (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      With Avg
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      Without (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Without Avg
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      $ Impact
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      % Impact
-                    </th>
+                    <th style={th}>VCS</th>
+                    <th style={th}>With (n)</th>
+                    <th style={th}>{isDet ? 'Avg Item Area' : 'Avg Count'}</th>
+                    <th style={th}>Avg Year Built (With)</th>
+                    <th style={th}>Avg SFLA (With)</th>
+                    <th style={th}>Avg Sale (With)</th>
+                    <th style={th}>Without (n)</th>
+                    <th style={th}>Avg Year Built (Without)</th>
+                    <th style={th}>Avg SFLA (Without)</th>
+                    <th style={th}>Avg Sale (Without)</th>
+                    <th style={th}>Adj Sale (With)</th>
+                    <th style={th}>Adj Sale (Without)</th>
+                    <th style={th}>$ Impact</th>
+                    <th style={th}>% Impact</th>
+                    <th style={th}>{isDet ? 'Per Sq Ft' : 'Per Item'}</th>
+                    <th style={th}>Pair n</th>
+                    <th style={th}>{`Pair Median ${isDet ? '$/sf' : '$/item'}`}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(customResults.byVCS || {}).map(([vcs, data], idx) => (
-                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>
-                        {vcs}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.with.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.without.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
-                      </td>
-                      <td style={{ 
-                        padding: '8px 12px', 
-                        textAlign: 'right', 
-                        fontSize: '13px',
-                        color: data.flat_adj > 0 ? '#059669' : 
-                               data.flat_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
-                      </td>
-                      <td style={{ 
-                        padding: '8px 12px', 
-                        textAlign: 'right', 
-                        fontSize: '13px',
-                        color: data.pct_adj > 0 ? '#059669' : 
-                               data.pct_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
-                      </td>
-                    </tr>
-                  ))}
+                  {Object.entries(tree.byVCS || {}).map(([vcs, data]) => renderRow(vcs, data, false))}
+                  {tree.overall && renderRow('ALL VCS', tree.overall, true)}
                 </tbody>
               </table>
+            </TwinScroll>
+          );
+          const categoryLabel = isDet ? 'Detached Items' : customResults.category === '27' ? 'Foundation' : 'Miscellaneous';
+          const filtersLabel = customResults.filters?.run_unfiltered
+            ? 'Unfiltered (all sales)'
+            : `Class 2 · Bldg Class >10`;
+          return (
+            <div>
+              {customResults.overall?.insufficient && (
+                <div style={{ marginBottom: '14px', fontSize: '13px', color: '#92400E', backgroundColor: '#FEF3C7', padding: '10px 12px', borderRadius: '4px', border: '1px solid #FDE68A' }}>
+                  Not enough qualified sales to compare — with: {customResults.overall.withCount}, without: {customResults.overall.withoutCount}.
+                </div>
+              )}
+
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 15px', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: '#111827' }}>
+                      {categoryLabel}: {customResults.label || customResults.field} — Analysis by VCS
+                    </h4>
+                    <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                      Type/Use: {customResults.type_use_label || customResults.type_use || 'All Properties'}
+                      {' · '}{filtersLabel}
+                      {' · '}{isDet ? '$/sf rate methodology' : 'per-item adjustment methodology'}
+                    </div>
+                  </div>
+                  <button onClick={() => exportStudyToExcel(customResults)} className={CSV_BUTTON_CLASS}>
+                    <FileText size={14} /> Export Excel
+                  </button>
+                </div>
+                {renderTable(customResults)}
+              </div>
+
+              {/* Optional Class 3A pass — stacked beneath when toggle is on */}
+              {customResults.class_3a && (
+                <div style={{ marginTop: '16px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 15px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FDE68A' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0', color: '#92400E' }}>
+                      Class 3A (Farm Reg.): {customResults.label || customResults.field}
+                    </h4>
+                    <div style={{ fontSize: '11px', color: '#92400E', marginTop: '2px' }}>
+                      Run separately so farm sales don't skew the Class 2 result.
+                    </div>
+                  </div>
+                  {customResults.class_3a.insufficient_sample
+                    ? (
+                      <div style={{ padding: '14px 16px', fontSize: '13px', color: '#92400E' }}>
+                        3A: insufficient sample ({customResults.class_3a.sample_n || 0} qualified sales). Need at least 5 to run.
+                      </div>
+                    )
+                    : renderTable(customResults.class_3a)}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* No Results Yet */}
         {!customResults && !customWorking && (

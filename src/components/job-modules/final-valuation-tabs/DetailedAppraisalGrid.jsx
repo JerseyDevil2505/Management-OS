@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -230,6 +230,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [includeMap, setIncludeMap] = useState(() => readToggle('detailedExport_includeMap', true)); // Embed subject+comps map in PDF
   const [hideAppellantEvidence, setHideAppellantEvidence] = useState(() => readToggle('detailedExport_hideAppellantEvidence', false));
   const [hideDirectorsRatio, setHideDirectorsRatio] = useState(() => readToggle('detailedExport_hideDirectorsRatio', false));
+  const [hideWeightedValuation, setHideWeightedValuation] = useState(() => readToggle('detailedExport_hideWeightedValuation', false));
   const [includePhotos, setIncludePhotos] = useState(() => readToggle('detailedExport_includePhotos', true));
   // Map preview defaults to expanded — easier to confirm the auto-zoom and
   // marker placement at a glance before exporting. Persisted toggle still
@@ -241,6 +242,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   useEffect(() => { try { localStorage.setItem('detailedExport_includeMap', String(includeMap)); } catch (e) {} }, [includeMap]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideAppellantEvidence', String(hideAppellantEvidence)); } catch (e) {} }, [hideAppellantEvidence]);
   useEffect(() => { try { localStorage.setItem('detailedExport_hideDirectorsRatio', String(hideDirectorsRatio)); } catch (e) {} }, [hideDirectorsRatio]);
+  useEffect(() => { try { localStorage.setItem('detailedExport_hideWeightedValuation', String(hideWeightedValuation)); } catch (e) {} }, [hideWeightedValuation]);
   useEffect(() => { try { localStorage.setItem('detailedExport_includePhotos', String(includePhotos)); } catch (e) {} }, [includePhotos]);
   useEffect(() => { try { localStorage.setItem('detailedExport_mapExpanded', String(mapExpanded)); } catch (e) {} }, [mapExpanded]);
   const mapCaptureRef = useRef(null); // DOM ref for html2canvas capture
@@ -2261,7 +2263,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       const valRow = ['Adjusted Valuation'];
       // Subject gets projected assessment (use recalculated if available, otherwise original)
       const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
-      valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
+      valRow.push(hideWeightedValuation ? '-' : (projectedValue ? `$${projectedValue.toLocaleString()}` : '-'));
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
         const compKey = `comp_${i}`;
@@ -2466,7 +2468,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       if (showAdjustments && rowVisibility['adjusted_valuation']) {
         const valRow = ['Adjusted Valuation'];
         const projectedValue = recalculatedProjectedAssessment || result.projectedAssessment;
-        valRow.push(projectedValue ? `$${projectedValue.toLocaleString()}` : '-');
+        valRow.push(hideWeightedValuation ? '-' : (projectedValue ? `$${projectedValue.toLocaleString()}` : '-'));
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
           const compKey = `comp_${i}`;
@@ -2714,7 +2716,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             const landMethod = marketLandData?.land_method || marketLandData?.valuation_mode || marketLandData?.cascade_rates?.mode || 'ac';
             const farmMode = !!appealRow.farm_mode;
 
-            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Location', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size']];
+            const ppsfStr = (price, sfla) => {
+              const p = Number(price);
+              const s = Number(sfla);
+              if (!Number.isFinite(p) || !Number.isFinite(s) || p <= 0 || s <= 0) return '\u2014';
+              return `$${Math.round(p / s)}/SF`;
+            };
+            const evalHeader = [['#', 'Block', 'Lot', 'Qual', 'Card', 'Location', 'Sale Date', 'Sale Price', 'NU', 'VCS', 'Design', 'T&U', 'Cond', 'YrBuilt', 'SFLA', 'Lot Size', 'PPSF']];
             const subjRow = [
               'SUBJ',
               subject.property_block || '',
@@ -2731,7 +2739,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               codeWithName(subject, 'asset_int_cond'),
               subject.asset_year_built || '\u2014',
               getAdjustedSFLA(subject) || subject.asset_sfla || '\u2014',
-              lotDisplay(subject)
+              lotDisplay(subject),
+              ppsfStr(subject.sales_price, getAdjustedSFLA(subject) || subject.asset_sfla)
             ];
             const evaluations = appellantComps.map(slot => {
               const compProp = findCompProperty(slot.block, slot.lot, slot.qualifier, slot.card);
@@ -2767,7 +2776,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   manualCodeWithName(slot.manual_condition, 'asset_int_cond'),
                   slot.manual_year_built || '\u2014',
                   slot.manual_sfla || '\u2014',
-                  lotSize
+                  lotSize,
+                  ppsfStr(slot.sales_price, slot.manual_sfla)
                 ];
               }
               return [
@@ -2786,7 +2796,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 compProp ? codeWithName(compProp, 'asset_int_cond') : '\u2014',
                 compProp?.asset_year_built || '\u2014',
                 (compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla || '\u2014',
-                lotDisplay(compProp)
+                lotDisplay(compProp),
+                ppsfStr(slot.sales_price || compProp?.sales_price, (compProp ? getAdjustedSFLA(compProp) : null) || compProp?.asset_sfla)
               ];
             });
 
@@ -2810,7 +2821,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               'condition',  // 12
               'year_built', // 13
               'sfla',       // 14
-              'lot_size'    // 15
+              'lot_size',   // 15
+              null          // 16: PPSF (derived, no flag)
             ];
             // Same pastel hexes used in the panel UI (Tailwind {color}-100).
             const COLOR_FILL = {
@@ -3440,12 +3452,35 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // the user can see it in the Appeal Log without having to re-run CME.
     const wantUpload = opts.uploadToAppealLog ?? false;
     if (wantUpload && jobData?.id) {
+      // Before overwriting, check whether a prior report already exists for
+      // this subject. If so, confirm the user wants to replace it.
+      const compositeKeyForCheck =
+        subject.property_composite_key ||
+        `${block}-${lot}-${qualifier}`;
+      try {
+        const { data: existingReport } = await supabase
+          .from('appeal_reports')
+          .select('uploaded_at, source_filename')
+          .eq('job_id', jobData.id)
+          .eq('property_composite_key', compositeKeyForCheck)
+          .maybeSingle();
+        if (existingReport) {
+          const prevDate = existingReport.uploaded_at
+            ? new Date(existingReport.uploaded_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+            : 'unknown date';
+          const confirmed = window.confirm(
+            `This subject already has an Appeal Log report from ${prevDate}. Replace with this version?`
+          );
+          if (!confirmed) return;
+        }
+      } catch (checkErr) {
+        // Non-fatal — if we can't check, proceed with the upload.
+        console.warn('appeal_reports pre-check failed (proceeding):', checkErr);
+      }
       try {
         setAppealUploadStatus({ status: 'uploading' });
         const pdfBytes = doc.output('arraybuffer');
-        const compositeKey =
-          subject.property_composite_key ||
-          `${block}-${lot}-${qualifier}`;
+        const compositeKey = compositeKeyForCheck;
         const path = `${jobData.id}/${compositeKey}.pdf`;
         const { error: upErr } = await supabase
           .storage
@@ -3494,6 +3529,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         }
 
         setAppealUploadStatus({ status: 'done', message: 'Sent to Appeal Log' });
+        // Notify Search & Results so it can paint a green "Sent" tracer on
+        // the matching row in the active result set. Fire-and-forget.
+        try {
+          if (typeof onSentToAppealLog === 'function') {
+            await onSentToAppealLog(subject);
+          }
+        } catch (notifyErr) {
+          console.warn('onSentToAppealLog notify failed (non-fatal):', notifyErr);
+        }
       } catch (e) {
         console.error('appeal-reports upload failed', e);
         setAppealUploadStatus({ status: 'error', message: e.message || 'Upload failed' });
@@ -3516,7 +3560,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3923,6 +3967,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     Hide Director's Ratio
                   </span>
                 </label>
+                {/* Hide Weighted Adjusted Valuation Toggle - some boards latch onto
+                    the subject's weighted projected value and ignore the individual
+                    comp adjusted prices. This hides only the subject cell on the
+                    Adjusted Valuation row while keeping per-comp values intact. */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={hideWeightedValuation}
+                    onChange={(e) => setHideWeightedValuation(e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {hideWeightedValuation ? <EyeOff size={14} /> : <Eye size={14} />}
+                    Hide Weighted Valuation
+                  </span>
+                </label>
                 <button
                   onClick={() => setShowExportModal(false)}
                   className="text-white hover:text-blue-200 transition-colors p-1"
@@ -4212,7 +4272,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
                       <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300 font-bold text-green-700">
-                        {(recalculatedProjectedAssessment || result.projectedAssessment) ? `$${(recalculatedProjectedAssessment || result.projectedAssessment).toLocaleString()}` : '-'}
+                        {hideWeightedValuation
+                          ? <span className="text-gray-400 font-normal italic">hidden</span>
+                          : ((recalculatedProjectedAssessment || result.projectedAssessment) ? `$${(recalculatedProjectedAssessment || result.projectedAssessment).toLocaleString()}` : '-')}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
