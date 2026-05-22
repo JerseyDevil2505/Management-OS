@@ -2,34 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { supabase, formatDateLocalYMD } from '../lib/supabaseClient';
 import { AlertCircle, Calendar, FileText, TrendingUp, FileDown } from 'lucide-react';
 
-const AppealsSummary = ({ jobs = [], onJobSelect }) => {
+const AppealsSummary = ({ jobs = [], onJobSelect, currentUser = null }) => {
   const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
-  // Personal "I already billed this job" tracker \u2014 per-user row in user_billed_jobs,
+  // Personal "I already billed this job" tracker — per-user row in user_billed_jobs,
   // keyed by (user_id, job_id, appeal_year). Independent of the BillingManagement module.
   const [billedJobIds, setBilledJobIds] = useState(new Set());
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const currentUserId = currentUser?.id || null;
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (cancelled) return;
-      setCurrentUserId(user?.id || null);
-      if (!user?.id) { setBilledJobIds(new Set()); return; }
+      if (!currentUserId) { setBilledJobIds(new Set()); return; }
       const { data, error } = await supabase
         .from('user_billed_jobs')
         .select('job_id')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .eq('appeal_year', selectedYear);
       if (cancelled) return;
       if (error) { console.error('Error loading billed jobs:', error); return; }
       setBilledJobIds(new Set((data || []).map(r => r.job_id)));
     })();
     return () => { cancelled = true; };
-  }, [selectedYear]);
+  }, [selectedYear, currentUserId]);
 
   const toggleBilled = async (jobId) => {
     if (!currentUserId) return;
