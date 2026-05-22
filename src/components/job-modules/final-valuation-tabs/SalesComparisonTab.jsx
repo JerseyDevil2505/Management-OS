@@ -4567,15 +4567,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 updated[idx] = { ...updated[idx], block: e.target.value };
                                 setPendingBlockLotRows(updated);
                               }}
-                              onBlur={() => {
-                                if (row.block && row.lot) {
-                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
-                                  if (!manualProperties.includes(key)) {
-                                    setManualProperties(prev => [...prev, key]);
-                                  }
-                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
-                                }
-                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && row.block && row.lot) {
                                   const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
@@ -4598,15 +4589,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 const updated = [...pendingBlockLotRows];
                                 updated[idx] = { ...updated[idx], lot: e.target.value };
                                 setPendingBlockLotRows(updated);
-                              }}
-                              onBlur={() => {
-                                if (row.block && row.lot) {
-                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
-                                  if (!manualProperties.includes(key)) {
-                                    setManualProperties(prev => [...prev, key]);
-                                  }
-                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
-                                }
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && row.block && row.lot) {
