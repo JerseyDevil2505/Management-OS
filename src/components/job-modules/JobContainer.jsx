@@ -265,11 +265,46 @@ const JobContainer = ({
         return Promise.race([promise, timeoutPromise]);
       };
 
-      // Get ALL job data in ONE comprehensive query FIRST with timeout
+      // Get ALL job data in ONE comprehensive query FIRST with timeout.
+      // Explicit column list EXCLUDES raw_file_content and code_file_content
+      // (multi-MB TEXT blobs that no consumer of jobData reads — they're only
+      // needed by the reprocessing flows, which fetch them directly).
       const { data: jobData, error: jobError } = await withTimeout(
         supabase
           .from('jobs')
-          .select('*')  // Get ALL fields for this job
+          .select(`
+            id, job_name, client_name, status, start_date, end_date, created_by,
+            created_at, updated_at, target_completion_date, priority, ccdd_code,
+            county, state, vendor_type, workflow_stats, vendor_detection,
+            source_file_status, code_file_status, municipality, percent_billed,
+            has_property_assignments, assigned_has_commercial, code_file_name,
+            code_file_uploaded_at, parsed_code_definitions, source_file_name,
+            source_file_version_id, source_file_uploaded_at, code_file_version,
+            infoby_category_config, total_properties, totalcommercial,
+            totalresidential, billing_setup_complete, job_type, payment_status,
+            assessor_email, external_inspectors, assessor_name, project_type,
+            validation_status, project_start_date, raw_file_size,
+            raw_file_rows_count, raw_file_parsed_at, unit_rate_config,
+            staged_unit_rate_config, source_file_version, archived_at, archived_by,
+            current_class_1_count, current_class_1_total, current_class_1_abatements,
+            current_class_2_count, current_class_2_total, current_class_2_abatements,
+            current_class_3a_count, current_class_3a_total,
+            current_class_3b_count, current_class_3b_total,
+            current_class_4_count, current_class_4_total, current_class_4_abatements,
+            current_class_6_count, current_class_6_total,
+            current_total_count, current_total_total, current_commercial_base_pct,
+            rate_calc_budget, rate_calc_current_rate, rate_calc_buffer_for_loss,
+            previous_projected_class_1_count, previous_projected_class_1_total,
+            previous_projected_class_2_count, previous_projected_class_2_total,
+            previous_projected_class_3a_count, previous_projected_class_3a_total,
+            previous_projected_class_3b_count, previous_projected_class_3b_total,
+            previous_projected_class_4_count, previous_projected_class_4_total,
+            previous_projected_class_6_count, previous_projected_class_6_total,
+            previous_projected_total_count, previous_projected_total_total,
+            attribute_condition_config, organization_id, turnover_date,
+            year_of_value, director_ratio, needs_reprocessing, story_height_config,
+            parent_job_id, appeal_summary_snapshot, type_use_normalization_map
+          `)
           .eq('id', selectedJob.id)
           .single(),
         10000,
