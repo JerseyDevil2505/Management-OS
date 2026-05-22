@@ -470,8 +470,8 @@ const AppealsSummary = ({ jobs = [], onJobSelect, currentUser = null }) => {
             data.cell.styles.textColor = [22, 101, 52]; // text-green-800
             data.cell.styles.fontStyle = 'bold';
           }
-          if (data.column.index === 15) {
-            data.cell.styles.textColor = [30, 64, 175];
+          if (data.column.index === 15 && summaryRow.isCompleted) {
+            data.cell.styles.textColor = [21, 128, 61]; // text-green-700
             data.cell.styles.fontStyle = 'bold';
           }
           return;
@@ -667,7 +667,9 @@ const AppealsSummary = ({ jobs = [], onJobSelect, currentUser = null }) => {
                   <td className="px-2 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
                   <td
                     className={`px-2 py-3 text-sm text-center whitespace-nowrap ${
-                      row.isCompleted ? 'text-blue-800 font-semibold' : 'text-gray-700'
+                      row.isCompleted
+                        ? (isBilled ? 'text-green-700 font-semibold' : 'text-blue-800 font-semibold')
+                        : 'text-gray-700'
                     }`}
                   >
                     {row.isCompleted
