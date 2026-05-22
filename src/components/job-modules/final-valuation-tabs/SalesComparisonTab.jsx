@@ -101,6 +101,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [evaluationMode, setEvaluationMode] = useState('fresh'); // 'fresh' or 'keep'
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
+  const cancelEvaluationRef = React.useRef(false);
   const [preEvalCheck, setPreEvalCheck] = useState(null); // { configMissing, adjustmentsMissing } | null
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
@@ -2177,6 +2178,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
     } catch (_) { /* non-critical */ }
 
+    cancelEvaluationRef.current = false;
     setIsEvaluating(true);
     setEvaluationProgress({ current: 0, total: 0 });
 
@@ -2325,6 +2327,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
 
       for (let i = 0; i < subjects.length; i++) {
+        if (cancelEvaluationRef.current) break;
         // Aggregate subject data across all cards (main + additional)
         const subject = aggregatePropertyData(subjects[i]);
 
@@ -2873,6 +2876,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           hasSubjectSale: !!priorityComp,
           mappedBracket: subjectMapping?.bracket || null
         });
+      }
+
+      // If the user stopped evaluation mid-run, bail out before doing any
+      // merging, display, or auto-save. Partial results are intentionally
+      // discarded so we don't persist an inconsistent set.
+      if (cancelEvaluationRef.current) {
+        console.log(`🛑 Evaluation stopped at ${results.length}/${subjects.length} — discarding partial results.`);
+        setIsEvaluating(false);
+        setEvaluationProgress({ current: 0, total: 0 });
+        return;
       }
 
       // Display results immediately - no DB save during evaluation
@@ -5280,23 +5293,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </label>
                   </div>
 
-                  <button
-                    onClick={handleEvaluate}
-                    disabled={isEvaluating}
-                    className="mt-3 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
-                  >
-                    {isEvaluating
-                      ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
-                      : 'Evaluate'
-                    }
-                  </button>
+                  <div className="mt-3 flex items-center justify-center gap-3">
+                    <button
+                      onClick={handleEvaluate}
+                      disabled={isEvaluating}
+                      className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
+                    >
+                      {isEvaluating
+                        ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
+                        : 'Evaluate'
+                      }
+                    </button>
+                    {isEvaluating && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Stop the evaluation now? Partial results will be discarded.')) {
+                            cancelEvaluationRef.current = true;
+                          }
+                        }}
+                        className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold text-lg"
+                        title="Stop the current evaluation and discard partial results"
+                      >
+                        Stop
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Progress Bar */}
                 {isEvaluating && evaluationProgress.total > 0 && (
                   <div className="mt-4 flex justify-center">
                     <span className="text-sm font-semibold text-blue-700 animate-pulse">
-                      Evaluating {evaluationProgress.current} of {evaluationProgress.total} properties...
+                      {cancelEvaluationRef.current
+                        ? `Stopping after current property (${evaluationProgress.current} of ${evaluationProgress.total})...`
+                        : `Evaluating ${evaluationProgress.current} of ${evaluationProgress.total} properties...`
+                      }
                     </span>
                   </div>
                 )}
