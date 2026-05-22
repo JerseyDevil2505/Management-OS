@@ -5306,11 +5306,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </button>
                     {isEvaluating && (
                       <button
-                        onClick={() => {
-                          if (window.confirm('Stop the evaluation now? Partial results will be discarded.')) {
-                            cancelEvaluationRef.current = true;
-                          }
-                        }}
+                        onClick={() => { cancelEvaluationRef.current = true; }}
                         className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold text-lg"
                         title="Stop the current evaluation and discard partial results"
                       >
