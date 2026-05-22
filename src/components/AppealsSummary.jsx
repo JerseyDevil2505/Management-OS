@@ -2,28 +2,60 @@ import React, { useState, useEffect } from 'react';
 import { supabase, formatDateLocalYMD } from '../lib/supabaseClient';
 import { AlertCircle, Calendar, FileText, TrendingUp, FileDown } from 'lucide-react';
 
-const BILLED_JOBS_STORAGE_KEY = 'appealsSummaryBilledJobs';
-
-const AppealsSummary = ({ jobs = [], onJobSelect }) => {
+const AppealsSummary = ({ jobs = [], onJobSelect, currentUser = null }) => {
   const [jobAppealsSummary, setJobAppealsSummary] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
-  // Click-to-mark-billed state \u2014 persisted per-user via localStorage.
-  // Toggle is forward/reverse: Completed -> Billed -> Completed.
-  const [billedJobIds, setBilledJobIds] = useState(() => {
-    try {
-      const raw = localStorage.getItem(BILLED_JOBS_STORAGE_KEY);
-      return new Set(raw ? JSON.parse(raw) : []);
-    } catch { return new Set(); }
-  });
-  const toggleBilled = (jobId) => {
+  // Personal "I already billed this job" tracker — per-user row in user_billed_jobs,
+  // keyed by (user_id, job_id, appeal_year). Independent of the BillingManagement module.
+  const [billedJobIds, setBilledJobIds] = useState(new Set());
+  const currentUserId = currentUser?.id || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!currentUserId) { setBilledJobIds(new Set()); return; }
+      const { data, error } = await supabase
+        .from('user_billed_jobs')
+        .select('job_id')
+        .eq('user_id', currentUserId)
+        .eq('appeal_year', selectedYear);
+      if (cancelled) return;
+      if (error) { console.error('Error loading billed jobs:', error); return; }
+      setBilledJobIds(new Set((data || []).map(r => r.job_id)));
+    })();
+    return () => { cancelled = true; };
+  }, [selectedYear, currentUserId]);
+
+  const toggleBilled = async (jobId) => {
+    if (!currentUserId) return;
+    const wasBilled = billedJobIds.has(jobId);
     setBilledJobIds(prev => {
       const next = new Set(prev);
-      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
-      try { localStorage.setItem(BILLED_JOBS_STORAGE_KEY, JSON.stringify([...next])); } catch {}
+      if (wasBilled) next.delete(jobId); else next.add(jobId);
       return next;
     });
+    if (wasBilled) {
+      const { error } = await supabase
+        .from('user_billed_jobs')
+        .delete()
+        .eq('user_id', currentUserId)
+        .eq('job_id', jobId)
+        .eq('appeal_year', selectedYear);
+      if (error) {
+        console.error('Error clearing billed flag:', error);
+        setBilledJobIds(prev => { const n = new Set(prev); n.add(jobId); return n; });
+      }
+    } else {
+      const { error } = await supabase
+        .from('user_billed_jobs')
+        .insert({ user_id: currentUserId, job_id: jobId, appeal_year: selectedYear });
+      if (error) {
+        console.error('Error setting billed flag:', error);
+        setBilledJobIds(prev => { const n = new Set(prev); n.delete(jobId); return n; });
+      }
+    }
   };
 
   useEffect(() => {
@@ -341,13 +373,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
 
     // Build rows. Track which rows are "all-CME" so we can tint them green to match the UI.
     const head = [[
-      'Job Name', 'Total', 'Residential', 'Commercial', 'Vacant Land',
+      'Job Name', 'Billed', 'Total', 'Residential', 'Commercial', 'Vacant Land',
       'Defend', 'Stipulated', 'Heard', 'Withdrawn', 'Assessor', 'Affirmed',
       'Has CME', 'Pro Se', 'Attorney', 'Hearing'
     ]];
 
     const body = jobAppealsSummary.map((row) => ([
       row.jobName,
+      billedJobIds.has(row.jobId) ? '\u2713' : '',
       row.totalAppeals,
       row.residential !== null ? row.residential : '—',
       row.commercial !== null ? row.commercial : '—',
@@ -362,13 +395,14 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       row.proSeCount,
       row.attorneyCount,
       row.isCompleted
-        ? (billedJobIds.has(row.jobId) ? 'Billed' : 'Completed')
+        ? 'Completed'
         : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')
     ]));
 
     // Totals row
     body.push([
       'TOTALS',
+      '',
       totals.totalAppeals,
       totals.residential, totals.commercial, totals.vacant,
       totals.defend, totals.stipulated, totals.heard, totals.withdrawn,
@@ -396,12 +430,13 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
       },
       columnStyles: {
         0: { halign: 'left', fontStyle: 'bold', cellWidth: 110 },
-        1: { halign: 'center', fontStyle: 'bold' },
-        2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' },
-        5: { halign: 'center' }, 6: { halign: 'center' }, 7: { halign: 'center' },
-        8: { halign: 'center' }, 9: { halign: 'center' }, 10: { halign: 'center' },
-        11: { halign: 'center' }, 12: { halign: 'center' }, 13: { halign: 'center' },
-        14: { halign: 'center', cellWidth: 60 }
+        1: { halign: 'center', fontStyle: 'bold', cellWidth: 30 },
+        2: { halign: 'center', fontStyle: 'bold' },
+        3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' },
+        6: { halign: 'center' }, 7: { halign: 'center' }, 8: { halign: 'center' },
+        9: { halign: 'center' }, 10: { halign: 'center' }, 11: { halign: 'center' },
+        12: { halign: 'center' }, 13: { halign: 'center' }, 14: { halign: 'center' },
+        15: { halign: 'center', cellWidth: 60 }
       },
       didParseCell: (data) => {
         // Only apply body-row tinting to body cells. Without this guard,
@@ -422,24 +457,37 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
         }
 
         const summaryRow = jobAppealsSummary[rowIndex];
+        if (!summaryRow) return;
 
-        // Completed (final hearing past) — blue lock; Billed — emerald lock (takes precedence over CME green)
-        if (summaryRow && summaryRow.isCompleted) {
-          const isBilledRow = billedJobIds.has(summaryRow.jobId);
-          data.cell.styles.fillColor = isBilledRow ? [236, 253, 245] : [219, 234, 254]; // emerald-50 vs blue-50
-          if (data.column.index === 14) {
-            data.cell.styles.textColor = isBilledRow ? [4, 120, 87] : [30, 64, 175]; // emerald-700 vs blue-800
+        const isBilledRow = billedJobIds.has(summaryRow.jobId);
+        const cmeMatchesTotal = summaryRow.totalAppeals > 0
+          && summaryRow.statusBreakdown.hasCME === summaryRow.totalAppeals;
+
+        // Billed wins, then Completed (blue), then CME-matches-total (yellow)
+        if (isBilledRow) {
+          data.cell.styles.fillColor = [220, 252, 231]; // bg-green-100
+          if (data.column.index === 1) {
+            data.cell.styles.textColor = [22, 101, 52]; // text-green-800
+            data.cell.styles.fontStyle = 'bold';
+          }
+          if (data.column.index === 15 && summaryRow.isCompleted) {
+            data.cell.styles.textColor = [21, 128, 61]; // text-green-700
             data.cell.styles.fontStyle = 'bold';
           }
           return;
         }
-
-        // Per-row green tint when Has CME equals Total Appeals (matches UI bg-green-50)
-        if (summaryRow && summaryRow.totalAppeals > 0
-            && summaryRow.statusBreakdown.hasCME === summaryRow.totalAppeals) {
-          data.cell.styles.fillColor = [240, 253, 244]; // bg-green-50
-          if (data.column.index === 11) {
-            data.cell.styles.textColor = [22, 101, 52]; // text-green-800
+        if (summaryRow.isCompleted) {
+          data.cell.styles.fillColor = [219, 234, 254]; // bg-blue-50
+          if (data.column.index === 15) {
+            data.cell.styles.textColor = [30, 64, 175];
+            data.cell.styles.fontStyle = 'bold';
+          }
+          return;
+        }
+        if (cmeMatchesTotal) {
+          data.cell.styles.fillColor = [254, 249, 195]; // bg-yellow-100
+          if (data.column.index === 12) {
+            data.cell.styles.textColor = [133, 77, 14]; // text-yellow-800
             data.cell.styles.fontStyle = 'bold';
           }
         }
@@ -562,63 +610,70 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Personal tracker — click the checkbox once you've billed this job">Billed</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Vacant Land</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Withdrawn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Assessor</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Affirmed</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Residential">Resi</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Commercial">Comm</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Vacant Land">Vcnt Lnd</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Stipulated">Stip</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Withdrawn">Wdrn</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Assessor">Asssr</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Affirmed">Affm</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Has CME">CME</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Attorney">Atty</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
               </tr>
             </thead>
             <tbody>
               {jobAppealsSummary.map((row, idx) => {
                 const cmeMatchesTotal = row.totalAppeals > 0 && row.statusBreakdown.hasCME === row.totalAppeals;
-                const isBilled = row.isCompleted && billedJobIds.has(row.jobId);
+                const isBilled = billedJobIds.has(row.jobId);
                 const rowClass = isBilled
-                  ? 'bg-emerald-50 hover:bg-emerald-100'
+                  ? 'bg-green-100 hover:bg-green-200'
                   : row.isCompleted
                     ? 'bg-blue-50 hover:bg-blue-100'
-                    : (cmeMatchesTotal ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50');
+                    : (cmeMatchesTotal ? 'bg-yellow-100 hover:bg-yellow-200' : 'hover:bg-gray-50');
                 return (
                 <tr
                   key={row.jobId}
                   className={`border-b border-gray-200 ${rowClass}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.jobName}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.vacant !== null ? row.vacant : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
-                  <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
+                  <td className="px-2 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isBilled}
+                      onChange={() => toggleBilled(row.jobId)}
+                      disabled={!currentUserId}
+                      title={isBilled ? 'Billed — click to clear' : 'Click to mark as billed'}
+                      className="w-4 h-4 accent-green-600 cursor-pointer"
+                    />
+                  </td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.vacant !== null ? row.vacant : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
+                  <td className={`px-2 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
                   <td
-                    className={`px-4 py-3 text-sm text-center ${
+                    className={`px-2 py-3 text-sm text-center whitespace-nowrap ${
                       row.isCompleted
-                        ? (billedJobIds.has(row.jobId)
-                          ? 'text-emerald-700 font-semibold cursor-pointer hover:underline'
-                          : 'text-blue-800 font-semibold cursor-pointer hover:underline')
+                        ? (isBilled ? 'text-green-700 font-semibold' : 'text-blue-800 font-semibold')
                         : 'text-gray-700'
                     }`}
-                    onClick={row.isCompleted ? () => toggleBilled(row.jobId) : undefined}
-                    title={row.isCompleted ? (billedJobIds.has(row.jobId) ? 'Click to revert to Completed' : 'Click to mark as Billed') : undefined}
                   >
                     {row.isCompleted
-                      ? (billedJobIds.has(row.jobId) ? 'Billed' : 'Completed')
+                      ? 'Completed'
                       : (row.hearingDate ? `${row.hearingDate}${row.hasMultipleHearings ? '*' : ''}` : '—')}
                   </td>
                 </tr>
@@ -627,20 +682,21 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               {/* Totals Row */}
               <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
                 <td className="px-4 py-3 text-sm text-gray-900">TOTALS</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">—</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{billedJobIds.size}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">—</td>
               </tr>
             </tbody>
           </table>

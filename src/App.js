@@ -1671,6 +1671,7 @@ const App = () => {
             <AppealsSummary
               jobs={[...filteredPpaJobs, ...specialJobs]}
               onJobSelect={handleJobSelect}
+              currentUser={user}
             />
           );
         })()}
