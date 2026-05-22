@@ -921,7 +921,7 @@ export const interpretCodes = {
 
       const { data: job, error } = await supabase
         .from('jobs')
-        .select('parsed_code_definitions, code_file_content, vendor_type')
+        .select('parsed_code_definitions, vendor_type')
         .eq('id', jobId)
         .single();
 
@@ -3242,7 +3242,36 @@ export const jobService = {
       const { data, error } = await supabase
         .from('jobs')
         .select(`
-          *,
+          id,
+          job_name,
+          ccdd_code,
+          municipality,
+          client_name,
+          job_number,
+          start_date,
+          county,
+          state,
+          vendor_type,
+          status,
+          end_date,
+          target_completion_date,
+          total_properties,
+          totalresidential,
+          totalcommercial,
+          source_file_status,
+          code_file_status,
+          vendor_detection,
+          workflow_stats,
+          percent_billed,
+          has_property_assignments,
+          assigned_has_commercial,
+          assigned_property_count,
+          created_at,
+          source_file_uploaded_at,
+          code_file_uploaded_at,
+          updated_at,
+          source_file_version,
+          code_file_version,
           job_assignments (
             id,
             role,
@@ -4438,7 +4467,7 @@ export const propertyService = {
     try {
       const { data: job, error: jobError } = await supabase
         .from('jobs')
-        .select('raw_file_content, raw_file_parsed_at, updated_at')
+        .select('raw_file_size, raw_file_parsed_at, updated_at')
         .eq('id', jobId)
         .single();
 
@@ -4453,7 +4482,7 @@ export const propertyService = {
       if (countError) throw countError;
 
       return {
-        hasSourceFile: !!job.raw_file_content,
+        hasSourceFile: !!(job.raw_file_size && job.raw_file_size > 0),
         sourceFileParsedAt: job.raw_file_parsed_at,
         lastUpdated: job.updated_at,
         recordsNeedingReprocessing: needsReprocessingCount || 0,
