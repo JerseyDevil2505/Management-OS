@@ -615,19 +615,19 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Job Name</th>
                 <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Personal tracker — click the checkbox once you've billed this job">Billed</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Total</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Residential</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Commercial</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Vacant Land</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Stipulated</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Withdrawn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Assessor</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Affirmed</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Has CME</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Attorney</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Residential">Resi</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Commercial">Comm</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Vacant Land">Vcnt Lnd</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Defend</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Stipulated">Stip</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Heard</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Withdrawn">Wdrn</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Assessor">Asssr</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Affirmed">Affm</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Has CME">CME</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Pro Se</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700" title="Attorney">Atty</th>
+                <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700">Hearing</th>
               </tr>
             </thead>
             <tbody>
@@ -655,21 +655,21 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
                       className="w-4 h-4 accent-green-600 cursor-pointer"
                     />
                   </td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.vacant !== null ? row.vacant : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
-                  <td className={`px-4 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
-                  <td className="px-4 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700 font-semibold">{row.totalAppeals}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.residential !== null ? row.residential : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.commercial !== null ? row.commercial : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.vacant !== null ? row.vacant : '—'}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.defend}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.stipulated}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.heard}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.withdrawn}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.assessor}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.statusBreakdown.affirmed}</td>
+                  <td className={`px-2 py-3 text-sm text-center ${cmeMatchesTotal && !row.isCompleted ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{row.statusBreakdown.hasCME}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.proSeCount}</td>
+                  <td className="px-2 py-3 text-sm text-center text-gray-700">{row.attorneyCount}</td>
                   <td
-                    className={`px-4 py-3 text-sm text-center ${
+                    className={`px-2 py-3 text-sm text-center whitespace-nowrap ${
                       row.isCompleted ? 'text-blue-800 font-semibold' : 'text-gray-700'
                     }`}
                   >
@@ -684,20 +684,20 @@ const AppealsSummary = ({ jobs = [], onJobSelect }) => {
               <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold">
                 <td className="px-4 py-3 text-sm text-gray-900">TOTALS</td>
                 <td className="px-2 py-3 text-sm text-center text-gray-900">{billedJobIds.size}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900">—</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.totalAppeals}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.residential}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.commercial}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.vacant}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.defend}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.stipulated}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.heard}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.withdrawn}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.assessor}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.affirmed}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.hasCME}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.proSe}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">{totals.attorney}</td>
+                <td className="px-2 py-3 text-sm text-center text-gray-900">—</td>
               </tr>
             </tbody>
           </table>
