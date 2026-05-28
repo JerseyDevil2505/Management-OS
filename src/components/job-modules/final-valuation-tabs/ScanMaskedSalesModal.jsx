@@ -133,8 +133,8 @@ const ScanMaskedSalesModal = ({
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US') : '—';
 
   return createPortal((
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+    <div className="csv-export-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+      <div className="csv-export-modal-box bg-white rounded-lg shadow-xl">
         {/* Header */}
         <div className="px-5 py-4 border-b flex items-start justify-between flex-shrink-0">
           <div>
@@ -151,7 +151,7 @@ const ScanMaskedSalesModal = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto p-5">
+        <div className="csv-export-modal-scroll p-5">
           {!hpiLoaded ? (
             <div className="text-center text-gray-500 py-12">Loading HPI data…</div>
           ) : candidates.length === 0 ? (
