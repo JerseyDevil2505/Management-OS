@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   detectMaskedCandidates,
   loadHpiMultiplier,
@@ -131,7 +132,7 @@ const ScanMaskedSalesModal = ({
   const fmt = (n) => (n || n === 0) ? `$${Math.round(Number(n)).toLocaleString()}` : '—';
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US') : '—';
 
-  return (
+  return createPortal((
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
         {/* Header */}
@@ -258,7 +259,7 @@ const ScanMaskedSalesModal = ({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 };
 
 export default ScanMaskedSalesModal;
