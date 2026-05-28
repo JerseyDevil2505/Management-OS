@@ -479,7 +479,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Helper: Get adjusted SFLA. Honors basement_type_config first; falls back
   // to the legacy Franklin hardcode only when no config is set.
   const getAdjustedSFLA = useCallback((prop) => {
-    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
+    if (!prop) return 0;
+    // Prefer the centrally derived effective SFLA from JobContainer when present
+    // — it already accounts for basement_type_config (living / subtract) AND
+    // additional_card_handling_config (combine / separate) so every surface
+    // stays in sync.
+    if (Number.isFinite(Number(prop._effectiveSfla)) && Number(prop._effectiveSfla) > 0) {
+      return Number(prop._effectiveSfla);
+    }
+    if (!prop.asset_sfla) return prop?.asset_sfla || 0;
 
     let sfla = Number(prop.asset_sfla) || 0;
 

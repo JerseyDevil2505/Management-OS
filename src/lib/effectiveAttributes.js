@@ -46,16 +46,17 @@ export const getBasementAdjustedSFLA = (prop, basementTypeConfig, vendorType) =>
     return codes[String(code).trim().toUpperCase()]?.mode || null;
   };
   if (vendorType === 'BRT') {
-    if (getMode(prop.fin_basement_code_1) === 'subtract') {
-      sfla -= Number(prop.fin_basement_area_1) || 0;
-    }
-    if (getMode(prop.fin_basement_code_2) === 'subtract') {
-      sfla -= Number(prop.fin_basement_area_2) || 0;
-    }
+    const m1 = getMode(prop.fin_basement_code_1);
+    const m2 = getMode(prop.fin_basement_code_2);
+    if (m1 === 'subtract') sfla -= Number(prop.fin_basement_area_1) || 0;
+    else if (m1 === 'living') sfla += Number(prop.fin_basement_area_1) || 0;
+    if (m2 === 'subtract') sfla -= Number(prop.fin_basement_area_2) || 0;
+    else if (m2 === 'living') sfla += Number(prop.fin_basement_area_2) || 0;
   } else if (vendorType === 'Microsystems') {
-    if (basementTypeConfig?.microsystemsMode === 'subtract' && prop.living_basement_area) {
-      sfla -= Number(prop.living_basement_area) || 0;
-    }
+    const mode = basementTypeConfig?.microsystemsMode;
+    const livingArea = Number(prop.living_basement_area) || 0;
+    if (mode === 'subtract' && livingArea) sfla -= livingArea;
+    else if (mode === 'living' && livingArea) sfla += livingArea;
   }
   return Math.max(0, sfla);
 };
@@ -80,7 +81,17 @@ export const deriveEffectiveAttributes = (properties, marketLandData, vendorType
 
   return properties.map((p) => {
     const baseKey = `${p.property_block || ''}|${p.property_lot || ''}|${p.property_qualifier || ''}`;
-    const siblings = groups.get(baseKey) || [p];
+    const rawSiblings = groups.get(baseKey) || [p];
+    // Dedupe siblings by property_addl_card so multi-snapshot rows in the DB
+    // don't double-count cards. Keep the first occurrence per card value.
+    const seenCards = new Set();
+    const siblings = [];
+    for (const s of rawSiblings) {
+      const cardKey = (s.property_addl_card || '').toString().trim().toUpperCase();
+      if (seenCards.has(cardKey)) continue;
+      seenCards.add(cardKey);
+      siblings.push(s);
+    }
     const isMain = isMainCard(p.property_addl_card, vendorType);
     const additionalCount = siblings.filter(
       (s) => !isMainCard(s.property_addl_card, vendorType)
