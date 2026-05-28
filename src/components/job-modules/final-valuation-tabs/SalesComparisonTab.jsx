@@ -6568,6 +6568,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 int_cond: (p) => p.asset_int_cond || '',
               };
               const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
+              // Block / lot / qualifier are stored as strings but should sort
+              // naturally (e.g. "2" before "10", "10" before "101") rather than
+              // lexicographically.
+              const naturalKeys = new Set(['block', 'lot', 'qual']);
               const sortKey = compBrowserSort.key;
               const sortDir = compBrowserSort.dir === 'asc' ? 1 : -1;
               const accessor = sortAccessors[sortKey] || sortAccessors.sales_date;
@@ -6579,6 +6583,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 if (aMissing && !bMissing) return 1;
                 if (!aMissing && bMissing) return -1;
                 if (numericKeys.has(sortKey)) return (av - bv) * sortDir;
+                if (naturalKeys.has(sortKey)) {
+                  return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * sortDir;
+                }
                 return String(av).localeCompare(String(bv)) * sortDir;
               });
 
