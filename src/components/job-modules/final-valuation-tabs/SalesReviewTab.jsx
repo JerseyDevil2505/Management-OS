@@ -222,7 +222,16 @@ const SalesReviewTab = ({
   // ==================== COMPUTED DATA ====================
   
   const enrichedProperties = useMemo(() => {
-    return properties.map(prop => {
+    // Dedupe to main cards only — additional cards used to render as their own
+    // rows here with the full sales price, producing wildly wrong $/SF for
+    // multi-card parcels. JobContainer's derivation stamps _isMainCard on every
+    // property; if the marker is absent (very early render before the memo lands)
+    // we fall back to keeping the row so the page isn't blank during that flash.
+    const mainCardProps = properties.filter(prop =>
+      prop._isMainCard === undefined ? true : prop._isMainCard
+    );
+
+    return mainCardProps.map(prop => {
       // Package detection using centralized _pkg (computed once in JobContainer)
       const pkgInfo = prop._pkg;
       const isPackage = !!pkgInfo;
@@ -233,14 +242,22 @@ const SalesReviewTab = ({
       if (isFarmSale && periodCode) {
         periodCode = 'FARM'; // Farm sales get their own category
       }
-      
-      // Calculated fields
-      const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
-        ? prop.sales_price / prop.asset_sfla
+
+      // Effective SFLA = basement-aware + (combine mode) sum of every sibling
+      // card's basement-adjusted SFLA. Derived once in JobContainer; here we
+      // just read the marker. Fallback to raw asset_sfla on first paint.
+      const effectiveSfla = Number(prop._effectiveSfla)
+        || Number(prop.asset_sfla)
+        || 0;
+
+      // Calculated fields — use effective SFLA so $/SF is consistent with
+      // Sales Pool, Detailed grid, and CME.
+      const pricePerSF = prop.sales_price && effectiveSfla > 0
+        ? prop.sales_price / effectiveSfla
         : null;
 
-      const normPricePerSF = prop.values_norm_time && prop.asset_sfla && prop.asset_sfla > 0
-        ? prop.values_norm_time / prop.asset_sfla
+      const normPricePerSF = prop.values_norm_time && effectiveSfla > 0
+        ? prop.values_norm_time / effectiveSfla
         : null;
 
       // Current/MOD sales ratio (uses values_mod_total)
@@ -506,7 +523,8 @@ const SalesReviewTab = ({
       groups[vcs].count++;
       if (prop.sales_price) groups[vcs].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[vcs].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[vcs].sflaSum += prop.asset_sfla;
+      const vcsEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (vcsEffSfla) groups[vcs].sflaSum += vcsEffSfla;
       if (prop.asset_year_built) {
         groups[vcs].yearBuiltSum += prop.asset_year_built;
         groups[vcs].yearBuiltCount++;
@@ -537,7 +555,7 @@ const SalesReviewTab = ({
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (vcsEffSfla) overallTotals.sflaSum += vcsEffSfla;
       if (prop.asset_year_built) {
         overallTotals.yearBuiltSum += prop.asset_year_built;
         overallTotals.yearBuiltCount++;
@@ -666,12 +684,13 @@ const SalesReviewTab = ({
       groups[style].count++;
       if (prop.sales_price) groups[style].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[style].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[style].sflaSum += prop.asset_sfla;
+      const styleEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (styleEffSfla) groups[style].sflaSum += styleEffSfla;
 
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (styleEffSfla) overallTotals.sflaSum += styleEffSfla;
     });
 
     const analytics = Object.entries(groups).map(([style, data]) => ({
@@ -718,12 +737,13 @@ const SalesReviewTab = ({
       groups[type].count++;
       if (prop.sales_price) groups[type].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[type].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[type].sflaSum += prop.asset_sfla;
+      const typeEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (typeEffSfla) groups[type].sflaSum += typeEffSfla;
 
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (typeEffSfla) overallTotals.sflaSum += typeEffSfla;
     });
 
     const analytics = Object.entries(groups).map(([type, data]) => ({
@@ -989,7 +1009,7 @@ const SalesReviewTab = ({
         showCodesNotMeanings ? (prop.asset_ext_cond || '') : (prop.exteriorCondName || prop.asset_ext_cond || ''),
         showCodesNotMeanings ? (prop.asset_int_cond || '') : (prop.interiorCondName || prop.asset_int_cond || ''),
         prop.asset_year_built || '',
-        prop.asset_sfla || '',
+        Math.round(Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0) || '',
         prop.sales_date ? formatDate(prop.sales_date) : '',
         prop.sales_nu || '',
         prop.sales_price || '',
@@ -1846,7 +1866,12 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_ext_cond || '-') : (prop.exteriorCondName || prop.asset_ext_cond || '-')}</td>
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_int_cond || '-') : (prop.interiorCondName || prop.asset_int_cond || '-')}</td>
                   <td className="px-3 py-2 text-right">{prop.asset_year_built || '-'}</td>
-                  <td className="px-3 py-2 text-right">{formatNumber(prop.asset_sfla)}</td>
+                  <td className="px-3 py-2 text-right" title={prop._additionalCardsCount > 0 ? `Combined across ${prop._cardCount} cards` : undefined}>
+                    {formatNumber(Math.round(Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0))}
+                    {prop._additionalCardsCount > 0 && prop._cardMode === 'combine' && (
+                      <span className="ml-1 text-xs text-purple-600">+{prop._additionalCardsCount}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{formatDate(prop.sales_date)}</td>
                   <td className="px-3 py-2">{prop.sales_nu || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.sales_price)}</td>

@@ -153,6 +153,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
 
+    // Honor additional_card_handling_config. In 'separate' mode the appraiser
+    // wants the main-card view only; the (+N cards) badge stays so they know to
+    // add a manual Misc Adjustment at PDF-export time. We still stamp the count
+    // so the badge and the header label render correctly.
+    if (prop._cardMode === 'separate') {
+      return { ...prop, _additionalCardsCount: allCards.length - 1 };
+    }
+
     // Aggregate data across all cards
     const aggregated = { ...prop };
 
@@ -451,6 +459,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [editedAdjustments, setEditedAdjustments] = useState({});
   const [hasEdits, setHasEdits] = useState(false);
   const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
+
+  // Miscellaneous Adjustment (PowerComp-style freeform row). Captured at PDF-
+  // export time only — not persisted, not shown in the Detailed grid behind the
+  // modal. One description label + a per-comp dollar value (signed). When the
+  // user clicks Recalculate, the misc $ is folded into each comp's
+  // totalAdjustment so adjustmentPercent (and therefore weight) reflects it.
+  // The Final Projected Assessment displayed in the modal + the row printed in
+  // the PDF + the value written to final_valuation_data on Send-to-Appeal-Log
+  // all use the misc-aware number.
+  const [miscAdjustment, setMiscAdjustment] = useState({ description: '', amounts: ['', '', '', '', ''] });
+  const miscIsActive = (
+    (miscAdjustment.description || '').trim() !== '' &&
+    miscAdjustment.amounts.some(a => Number(a) !== 0 && a !== '')
+  );
 
   // Appeal number for PDF export
   const [appealNumber, setAppealNumber] = useState('');
@@ -1868,6 +1890,41 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       };
     });
 
+    // Misc Adjustment post-pass. The freeform "Miscellaneous Adjustment" row in
+    // the Export modal (single description, per-comp $ amount) folds into each
+    // comp's totalAdjustment AFTER the regular grid math so the new
+    // adjustmentPercent (and therefore the weighting below) reflects it. This
+    // matches how every other adjustment row affects weight, per user spec.
+    const miscDesc = (miscAdjustment.description || '').trim();
+    const miscAnyAmount = miscAdjustment.amounts.some(a => Number(a) !== 0 && a !== '');
+    if (miscDesc !== '' && miscAnyAmount) {
+      comps.forEach((comp, idx) => {
+        if (!comp) return;
+        const miscAmount = Number(miscAdjustment.amounts[idx]) || 0;
+        if (miscAmount === 0) return;
+        const compKey = `comp_${idx}`;
+        const entry = newAdjustments[compKey] || {
+          adjustments: comp.adjustments || [],
+          totalAdjustment: comp.totalAdjustment || 0,
+          adjustedPrice: comp.adjustedPrice || (Number(comp.sales_price) || 0),
+          adjustmentPercent: comp.adjustmentPercent || 0,
+        };
+        const compSalesPrice = Number(comp.sales_price) || 0;
+        const nextTotal = (entry.totalAdjustment || 0) + miscAmount;
+        const nextAdjustedPrice = compSalesPrice + nextTotal;
+        const nextPercent = compSalesPrice > 0 ? (nextTotal / compSalesPrice) * 100 : 0;
+        newAdjustments[compKey] = {
+          adjustments: [
+            ...(entry.adjustments || []).filter(a => a?.name !== miscDesc),
+            { name: miscDesc, amount: miscAmount, isMisc: true },
+          ],
+          totalAdjustment: nextTotal,
+          adjustedPrice: nextAdjustedPrice,
+          adjustmentPercent: nextPercent,
+        };
+      });
+    }
+
     // Calculate weighted average projected assessment based on recalculated adjustments
     const validComps = comps.filter(c => c && newAdjustments[`comp_${comps.indexOf(c)}`]);
     if (validComps.length > 0) {
@@ -1893,13 +1950,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscAdjustment]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
     setEditedAdjustments({});
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
+    setMiscAdjustment({ description: '', amounts: ['', '', '', '', ''] });
     setAppellantCompsState([]);
     setAppealUploadStatus(null);
     setShowExportModal(true);
@@ -2258,6 +2316,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       staticRows.push(netRow);
     }
 
+    // Miscellaneous Adjustment row — rendered only when description is non-blank
+    // AND at least one per-comp amount is non-zero. The amounts are already folded
+    // into adjustedPrice via recalculateAdjustments, so this row is purely an
+    // explanatory line item in the report; the totals below it already reflect it.
+    if (showAdjustments && miscIsActive) {
+      const miscRow = [miscAdjustment.description.trim(), '-'];
+      for (let i = 0; i < 5; i++) {
+        const comp = comps[i];
+        const raw = comp ? Number(miscAdjustment.amounts[i]) : null;
+        if (comp && raw && raw !== 0) {
+          const sign = raw > 0 ? '+' : '-';
+          miscRow.push({ content: `${sign}$${Math.abs(Math.round(raw)).toLocaleString()}`, adjAmount: raw });
+        } else {
+          miscRow.push(comp ? '$0' : '-');
+        }
+      }
+      staticRows.push(miscRow);
+    }
+
     // Add Adjusted Valuation row if visible and showing adjustments
     if (showAdjustments && rowVisibility['adjusted_valuation']) {
       const valRow = ['Adjusted Valuation'];
@@ -2463,6 +2540,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           }
         }
         dynamicRows.push(netRow);
+      }
+
+      // Misc adjustment row on the dynamic page mirrors the static page.
+      if (showAdjustments && miscIsActive) {
+        const miscRow = [miscAdjustment.description.trim(), '-'];
+        for (let i = 0; i < 5; i++) {
+          const comp = comps[i];
+          const raw = comp ? Number(miscAdjustment.amounts[i]) : null;
+          if (comp && raw && raw !== 0) {
+            const sign = raw > 0 ? '+' : '-';
+            miscRow.push({ content: `${sign}$${Math.abs(Math.round(raw)).toLocaleString()}`, adjAmount: raw });
+          } else {
+            miscRow.push(comp ? '$0' : '-');
+          }
+        }
+        dynamicRows.push(miscRow);
       }
 
       if (showAdjustments && rowVisibility['adjusted_valuation']) {
@@ -3560,7 +3653,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscAdjustment, miscIsActive]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -4401,6 +4494,68 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 </div>
               </div>
             )}
+
+            {/* Miscellaneous Adjustment — freeform row applied at export time only.
+                Description + per-comp dollar value. Folds into each comp's totalAdjustment
+                on Recalculate, so adjustmentPercent and weights both reflect it. Not
+                persisted; resets when the modal closes. Row is omitted from the PDF if
+                description is blank OR all amounts are blank/0. */}
+            <div className="mx-4 my-3 bg-amber-50 border border-amber-200 rounded p-3 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-sm font-semibold text-amber-900">Miscellaneous Adjustment (optional)</div>
+                  <div className="text-xs text-amber-700">
+                    Freeform row for manual judgments — e.g. "Carriage House", "Detached Garage Apt".
+                    One label, a separate dollar value for each comp (negative = downward). Click
+                    Recalculate after entering to fold into the projected assessment.
+                  </div>
+                </div>
+                {miscIsActive && (
+                  <button
+                    type="button"
+                    onClick={() => { setMiscAdjustment({ description: '', amounts: ['', '', '', '', ''] }); setHasEdits(true); }}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={miscAdjustment.description}
+                  onChange={(e) => { setMiscAdjustment(prev => ({ ...prev, description: e.target.value })); setHasEdits(true); }}
+                  placeholder="Description (e.g. Carriage House)"
+                  className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 rounded"
+                  maxLength={60}
+                />
+                {[0, 1, 2, 3, 4].map((i) => {
+                  const compExists = !!comps[i];
+                  return (
+                    <div key={i} className="flex flex-col items-center">
+                      <span className="text-[10px] text-gray-500">Comp {i + 1}</span>
+                      <div className="flex items-center">
+                        <span className="text-xs text-gray-500 pr-0.5">$</span>
+                        <input
+                          type="number"
+                          value={miscAdjustment.amounts[i]}
+                          onChange={(e) => {
+                            const next = [...miscAdjustment.amounts];
+                            next[i] = e.target.value;
+                            setMiscAdjustment(prev => ({ ...prev, amounts: next }));
+                            setHasEdits(true);
+                          }}
+                          disabled={!compExists}
+                          placeholder="0"
+                          className="w-20 px-1 py-1 text-sm border border-gray-300 rounded text-right disabled:bg-gray-100 disabled:text-gray-400"
+                          step="100"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">

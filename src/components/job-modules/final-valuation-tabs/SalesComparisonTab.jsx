@@ -1404,11 +1404,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
-    // Only show main card properties (avoid duplicate cards)
+    // Dedupe to main card per parcel. We used to keep "first seen", which
+    // depended on load order and could silently land on an additional card —
+    // throwing off SFLA, $/SF, and the size-range filter. _isMainCard is
+    // stamped by JobContainer's derivation pass; fall back to a heuristic on
+    // the (very brief) initial paint where the marker hasn't landed yet.
     const seen = new Set();
     return properties.filter(p => {
       if (!p.sales_date) return false;
-      // Deduplicate by block-lot-qualifier
+      const isMain = p._isMainCard !== undefined
+        ? p._isMainCard
+        : (() => {
+            const card = (p.property_addl_card || '').toString().trim();
+            const n = parseInt(card, 10);
+            return n === 1 || card === '' || Number.isNaN(n) || card.toUpperCase() === 'M';
+          })();
+      if (!isMain) return false;
       const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
       if (seen.has(baseKey)) return false;
       seen.add(baseKey);
@@ -1855,6 +1866,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const aggregatePropertyData = (prop) => {
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    // Honor additional_card_handling_config. In 'separate' mode the user wants
+    // each parcel evaluated against the main card only — no SFLA / amenity sums.
+    // We still surface the additional-cards count so the (+N cards) badge stays
+    // visible everywhere it renders today.
+    if (prop._cardMode === 'separate') {
+      return {
+        ...prop,
+        _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
+      };
+    }
 
     const aggregated = { ...prop };
 

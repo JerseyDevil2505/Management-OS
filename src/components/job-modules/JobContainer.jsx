@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle, LineChart, Scale } from 'lucide-react';
 import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import { PPA_ORG_ID, getJobTenantConfig, getLabel } from '../../lib/tenantConfig';
@@ -11,6 +11,7 @@ import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
 import JobPhotoSourcePanel from './JobPhotoSourcePanel';
 import { JobPhotoSourceProvider } from '../../contexts/JobPhotoSourceContext';
+import { deriveEffectiveAttributes } from '../../lib/effectiveAttributes';
 
 // Centralized package detection - O(n) single pass
 // Attaches _pkg metadata to each property so child components avoid redundant O(n²) scans
@@ -1117,11 +1118,25 @@ const JobContainer = ({
     onUpdateWorkflowStats(transformedStats, true);
   };
 
+// Derive per-property effective attributes (basement-aware SFLA + main/additional
+  // card markers) once whenever properties or the relevant configs change. Every
+  // downstream surface reads `_effectiveSfla` / `_isMainCard` / `_cardCount` etc.
+  // so there's a single source of truth.
+  const enrichedProperties = useMemo(() => {
+    if (!properties || properties.length === 0) return properties;
+    return deriveEffectiveAttributes(properties, marketLandData, jobData?.vendor_type);
+  }, [
+    properties,
+    marketLandData?.basement_type_config,
+    marketLandData?.additional_card_handling_config,
+    jobData?.vendor_type,
+  ]);
+
 // Determine which props to pass based on active module
   const getModuleProps = () => {
     const baseProps = {
       jobData,
-      properties,  // Pass loaded properties
+      properties: enrichedProperties,  // Pass enriched properties (raw + _effectiveSfla / _isMainCard / _cardCount / _additionalCardsCount / _cardMode)
       inspectionData,  // NEW: Pass inspection data
       marketLandData,  // NEW: Pass market land valuation
       hpiData,  // NEW: Pass HPI data

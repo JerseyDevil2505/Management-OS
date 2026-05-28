@@ -239,6 +239,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [basementSaved, setBasementSaved] = useState(false);
   const [basementSeedApplied, setBasementSeedApplied] = useState(false);
 
+  // ============ ADDITIONAL CARD HANDLING CONFIG ============
+  // 'combine' (default)  -> main card's SFLA = sum of every sibling's basement-
+  //                          adjusted SFLA. Detailed grid + CME aggregate amenities
+  //                          across cards. Sales Review/Pool dedupe to main card.
+  // 'separate'           -> every card's SFLA = its own basement-adjusted SFLA, no
+  //                          sibling sum. Detailed grid shows main-card-only
+  //                          (+badge). User adds a manual "Misc Adjustment" row at
+  //                          PDF-export time to account for the additional card.
+  const [cardHandlingMode, setCardHandlingMode] = useState(
+    marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine'
+  );
+  const [cardHandlingSaving, setCardHandlingSaving] = useState(false);
+  const [cardHandlingSaved, setCardHandlingSaved] = useState(false);
+
   // Get Type/Use options - CORRECTED based on actual codebase patterns
   const getTypeUseOptions = () => [
     { code: 'all', description: 'All Properties' },
@@ -5121,6 +5135,70 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const renderAdditionalCardsAnalysis = () => {
     return (
       <div>
+        {/* Additional Card Handling Config — controls how multi-card parcels roll up
+            across Sales Review, Sales Pool, Detailed grid, and CME evaluate. */}
+        <div className="mb-6 bg-purple-50 border border-purple-200 rounded p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-purple-900 mb-2">Additional Card Handling</h3>
+              <p className="text-sm text-gray-700 mb-3">
+                Controls how a parcel with multiple cards (main + additional) is treated everywhere
+                attributes feed into comp math — Sales Review, Sales Pool, Detailed grid, and CME.
+              </p>
+              <div className="space-y-2 text-sm">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="card-handling-mode"
+                    value="combine"
+                    checked={cardHandlingMode === 'combine'}
+                    onChange={() => { setCardHandlingMode('combine'); setCardHandlingSaved(false); }}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">Combine (default)</div>
+                    <div className="text-xs text-gray-600">
+                      The main card carries the sum of every sibling's basement-adjusted SFLA, bathrooms,
+                      amenity areas, etc. Adjustments run against the combined totals. Sales Review and
+                      Sales Pool dedupe to the main card.
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="card-handling-mode"
+                    value="separate"
+                    checked={cardHandlingMode === 'separate'}
+                    onChange={() => { setCardHandlingMode('separate'); setCardHandlingSaved(false); }}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">Keep Separate</div>
+                    <div className="text-xs text-gray-600">
+                      Display the main card only — additional cards aren't folded into SFLA or amenity
+                      totals. The purple <span className="font-semibold">(+N cards)</span> badge stays
+                      visible so the appraiser knows to add a Miscellaneous Adjustment at PDF-export
+                      time (free-form description + per-comp $ amount) to account for the additional
+                      building.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <button
+                onClick={saveCardHandlingConfig}
+                disabled={cardHandlingSaving}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {cardHandlingSaving ? 'Saving…' : 'Save'}
+              </button>
+              {cardHandlingSaved && <span className="text-xs text-green-700">✓ Saved</span>}
+            </div>
+          </div>
+        </div>
+
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>
@@ -5520,8 +5598,38 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (marketLandData.basement_type_config) {
         setBasementConfig(normalizeBasementConfig(marketLandData.basement_type_config));
       }
+      if (marketLandData.additional_card_handling_config?.mode) {
+        setCardHandlingMode(
+          marketLandData.additional_card_handling_config.mode === 'separate' ? 'separate' : 'combine'
+        );
+      }
     }
   }, [marketLandData]);
+
+  const saveCardHandlingConfig = async () => {
+    if (!jobData?.id) return;
+    setCardHandlingSaving(true);
+    setCardHandlingSaved(false);
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .upsert({
+          job_id: jobData.id,
+          additional_card_handling_config: { mode: cardHandlingMode, updated_at: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'job_id' });
+      if (error) throw error;
+      setCardHandlingSaved(true);
+      // Surgical refresh propagates the new config back to JobContainer.marketLandData,
+      // which re-fires the deriveEffectiveAttributes memo and all consumers update live.
+      if (onUpdateJobCache) onUpdateJobCache();
+    } catch (err) {
+      console.error('Error saving additional card handling config:', err);
+      alert(`Failed to save additional card config: ${err.message}`);
+    } finally {
+      setCardHandlingSaving(false);
+    }
+  };
 
   // ============ BASEMENT TYPE CONFIG: BRT description lookup ============
   // Walk parsed_code_definitions.sections.Residential to find the basement
