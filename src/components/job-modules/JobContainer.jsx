@@ -420,6 +420,7 @@ const JobContainer = ({
                   values_norm_size,
                   values_norm_time,
                   sales_history,
+                  unmasked_sale,
                   market_manual_lot_acre,
                   market_manual_lot_sf
                 )
@@ -536,6 +537,7 @@ const JobContainer = ({
                   values_norm_size: marketAnalysis.values_norm_size || null,
                   values_norm_time: marketAnalysis.values_norm_time || null,
                   sales_history: marketAnalysis.sales_history || null,
+                  unmasked_sale: marketAnalysis.unmasked_sale || null,
                   // Ensure manual/calculated lot acreage and applied unit codes are available to UI
                   market_manual_lot_acre: marketAnalysis.market_manual_lot_acre ?? property.market_manual_lot_acre ?? null,
                   market_manual_lot_sf: marketAnalysis.market_manual_lot_sf ?? property.market_manual_lot_sf ?? null,

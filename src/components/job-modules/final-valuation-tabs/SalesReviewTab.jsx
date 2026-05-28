@@ -11,6 +11,7 @@ import {
   ArrowDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 
 // Helper functions
 function formatCurrency(value) {
@@ -163,6 +164,9 @@ const SalesReviewTab = ({
   const [savedSettings, setSavedSettings] = useState([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // Scan Masked Sales modal (BRT only)
+  const [showMaskedModal, setShowMaskedModal] = useState(false);
+
   // Load saved settings list on mount
   useEffect(() => {
     if (!jobData?.id) return;
@@ -231,7 +235,24 @@ const SalesReviewTab = ({
       prop._isMainCard === undefined ? true : prop._isMainCard
     );
 
-    return mainCardProps.map(prop => {
+    // Inject unmasked sales as their own synthetic rows. Each carries the
+    // unmasked prior sale's price/date/norm-time while keeping the parcel's
+    // physical attributes, so it sorts/filters alongside real sales. Flagged
+    // with _isUnmasked for badge rendering and a distinct id to avoid key
+    // collisions with the current-sale row.
+    const unmaskedRows = mainCardProps
+      .filter(prop => prop.unmasked_sale && prop.unmasked_sale.sales_price)
+      .map(prop => ({
+        ...prop,
+        id: `${prop.id}_unmasked`,
+        _isUnmasked: true,
+        sales_price: prop.unmasked_sale.sales_price,
+        sales_date: prop.unmasked_sale.sales_date,
+        sales_nu: prop.unmasked_sale.sales_nu || null,
+        values_norm_time: prop.unmasked_sale.values_norm_time || null,
+      }));
+
+    return [...mainCardProps, ...unmaskedRows].map(prop => {
       // Package detection using centralized _pkg (computed once in JobContainer)
       const pkgInfo = prop._pkg;
       const isPackage = !!pkgInfo;
@@ -1350,6 +1371,15 @@ const SalesReviewTab = ({
           </div>
 
           <div className="ml-auto flex gap-2">
+            {vendorType === 'BRT' && (
+              <button
+                onClick={() => setShowMaskedModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 border border-amber-300"
+                title="Scan BRT prior sales for masked good sales overwritten by later junk transactions"
+              >
+                Scan Masked Sales
+              </button>
+            )}
             <button
               onClick={() => setShowSettingsModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
@@ -1649,6 +1679,17 @@ const SalesReviewTab = ({
         </div>
       </div>
 
+      {/* Scan Masked Sales Modal — wide window (2012 → present) */}
+      <ScanMaskedSalesModal
+        isOpen={showMaskedModal}
+        onClose={() => setShowMaskedModal(false)}
+        properties={properties}
+        jobData={jobData}
+        dateRange={{ fromYear: 2012 }}
+        surfaceLabel="Sales Review"
+        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+      />
+
       {/* Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1831,8 +1872,8 @@ const SalesReviewTab = ({
             <tbody className="divide-y divide-gray-200">
               {sortedProperties.map((prop, idx) => (
                 <tr
-                  key={prop.property_composite_key || prop.id || idx}
-                  className="hover:bg-gray-50"
+                  key={prop.id || prop.property_composite_key || idx}
+                  className={prop._isUnmasked ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}
                 >
                   <td className="px-2 py-2 text-center">
                     {(prop.values_norm_time || prop.values_norm_size) ? (
@@ -1851,7 +1892,12 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{prop.property_lot || '-'}</td>
                   <td className="px-3 py-2">{prop.property_qualifier || '-'}</td>
                   <td className="px-3 py-2">{prop.isPackage ? 'Yes' : 'No'}</td>
-                  <td className="px-3 py-2 max-w-xs truncate">{prop.property_location || '-'}</td>
+                  <td className="px-3 py-2 max-w-xs truncate">
+                    {prop._isUnmasked && (
+                      <span className="mr-1 text-xs text-amber-700" title="Unmasked prior sale">🔓</span>
+                    )}
+                    {prop.property_location || '-'}
+                  </td>
                   <td className="px-3 py-2">{prop.property_m4_class || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
                   <td className="px-3 py-2 text-center">
