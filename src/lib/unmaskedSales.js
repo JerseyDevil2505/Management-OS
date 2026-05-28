@@ -22,9 +22,6 @@
 
 import { supabase, parseDateLocal } from './supabaseClient';
 
-// NU codes considered "junk" / non-usable (mirrors targetNormalization gating).
-const JUNK_NU_CODES = new Set(['25', '26', '07', '7', '32', '36', '10', '33']);
-
 // Default detection thresholds.
 export const MASKED_DEFAULTS = {
   priceThreshold: 50000, // a prior sale must clear this to be a candidate
@@ -37,12 +34,6 @@ const getYear = (dateStr) => {
   if (!dateStr) return null;
   const d = parseDateLocal(dateStr);
   return d ? d.getFullYear() : null;
-};
-
-const isJunkNu = (nu) => {
-  const code = (nu == null ? '' : String(nu)).trim();
-  if (code === '') return false;
-  return JUNK_NU_CODES.has(code);
 };
 
 /**
@@ -149,7 +140,18 @@ export function detectMaskedCandidates(properties, opts = {}) {
     if (candidates.length === 0) continue;
 
     const currentPrice = Number(p.sales_price) || 0;
-    const currentIsJunk = currentPrice <= junkPriceCeiling || isJunkNu(p.sales_nu);
+    // A sale is "masked" when the CURRENT sale is a junk dollar-sale (e.g. a $1
+    // deed-of-correction) sitting on top of a healthy older sale. We gate on
+    // price — BRT NU codes are unreliable/withheld, so a $600k sale with an NU
+    // flag is NOT what we're hunting here.
+    const currentIsJunk = currentPrice <= junkPriceCeiling;
+    const alreadyUnmasked = p.unmasked_sale
+      ? { sales_price: p.unmasked_sale.sales_price, sales_date: p.unmasked_sale.sales_date }
+      : null;
+
+    // Only surface true masked candidates (junk current sale) — plus any parcel
+    // already unmasked, so the user can review/clear that decision.
+    if (!currentIsJunk && !alreadyUnmasked) continue;
 
     out.push({
       property_composite_key: p.property_composite_key,
@@ -166,9 +168,7 @@ export function detectMaskedCandidates(properties, opts = {}) {
       best: candidates[0],
       currentIsJunk,
       autoSuggest: currentIsJunk, // pre-check rows where current sale is junk
-      alreadyUnmasked: p.unmasked_sale
-        ? { sales_price: p.unmasked_sale.sales_price, sales_date: p.unmasked_sale.sales_date }
-        : null,
+      alreadyUnmasked,
     });
   }
 

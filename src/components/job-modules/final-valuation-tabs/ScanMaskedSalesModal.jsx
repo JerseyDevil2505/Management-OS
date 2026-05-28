@@ -133,9 +133,9 @@ const ScanMaskedSalesModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b flex items-start justify-between">
+        <div className="px-5 py-4 border-b flex items-start justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Scan Masked Sales — {surfaceLabel}</h2>
             <p className="text-xs text-gray-500 mt-1">
@@ -160,14 +160,14 @@ const ScanMaskedSalesModal = ({
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500 border-b">
-                  <th className="px-2 py-2 w-10">Use</th>
-                  <th className="px-2 py-2">Parcel</th>
-                  <th className="px-2 py-2">Location</th>
-                  <th className="px-2 py-2 text-right">Current Sale</th>
-                  <th className="px-2 py-2">Unmask Sale</th>
-                  <th className="px-2 py-2 text-right">HPI Norm.</th>
-                  <th className="px-2 py-2">Status</th>
+                <tr className="text-left text-xs text-gray-500 border-b bg-white sticky top-0 z-10">
+                  <th className="px-2 py-2 w-10 bg-white">Use</th>
+                  <th className="px-2 py-2 bg-white">Parcel</th>
+                  <th className="px-2 py-2 bg-white">Location</th>
+                  <th className="px-2 py-2 text-right bg-white">Current (Masking) Sale</th>
+                  <th className="px-2 py-2 bg-white">Unmask Sale</th>
+                  <th className="px-2 py-2 text-right bg-white">HPI Norm.</th>
+                  <th className="px-2 py-2 bg-white">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,7 +233,7 @@ const ScanMaskedSalesModal = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t bg-gray-50 flex items-center justify-between rounded-b-lg">
+        <div className="px-5 py-3 border-t bg-gray-50 flex items-center justify-between rounded-b-lg flex-shrink-0">
           <div className="text-xs text-gray-500">
             {candidates.length} candidate{candidates.length === 1 ? '' : 's'} · {checkedCount} selected to unmask
             {saveResult && !saveResult.error && (
