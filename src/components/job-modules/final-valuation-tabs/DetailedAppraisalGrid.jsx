@@ -4540,9 +4540,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       type="text"
                       value={row.subjectLabel}
                       onChange={(e) => {
-                        const next = miscRows.map((r, i) => i === rIdx ? { ...r, subjectLabel: e.target.value } : r);
-                        setMiscRows(next);
-                        setHasEdits(true);
+                        const val = e.target.value;
+                        setMiscRows(prev => prev.map((r, i) => i === rIdx ? { ...r, subjectLabel: val } : r));
+                        if (!hasEdits) setHasEdits(true);
                       }}
                       placeholder={`Misc Adj ${rIdx + 1}`}
                       className="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 rounded"
@@ -4557,13 +4557,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             type="text"
                             value={cell.desc}
                             onChange={(e) => {
-                              const next = miscRows.map((r, ri) => {
+                              const val = e.target.value;
+                              setMiscRows(prev => prev.map((r, ri) => {
                                 if (ri !== rIdx) return r;
-                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, desc: e.target.value } : c);
+                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, desc: val } : c);
                                 return { ...r, comps: comps2 };
-                              });
-                              setMiscRows(next);
-                              setHasEdits(true);
+                              }));
+                              if (!hasEdits) setHasEdits(true);
                             }}
                             disabled={!compExists}
                             placeholder={`C${i + 1} desc`}
@@ -4575,13 +4575,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             type="number"
                             value={cell.amount}
                             onChange={(e) => {
-                              const next = miscRows.map((r, ri) => {
+                              const val = e.target.value;
+                              setMiscRows(prev => prev.map((r, ri) => {
                                 if (ri !== rIdx) return r;
-                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, amount: e.target.value } : c);
+                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, amount: val } : c);
                                 return { ...r, comps: comps2 };
-                              });
-                              setMiscRows(next);
-                              setHasEdits(true);
+                              }));
+                              if (!hasEdits) setHasEdits(true);
                             }}
                             disabled={!compExists}
                             placeholder="0"

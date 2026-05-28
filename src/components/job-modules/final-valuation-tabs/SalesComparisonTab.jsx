@@ -4394,6 +4394,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         if (['sales_price', 'asset_sfla', '_adjustedSfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
                           return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
                         }
+                        // Block / Lot / Qualifier are strings but should sort
+                        // numerically (1, 2, 10, 100 — not 1, 10, 100, 2).
+                        if (['property_block', 'property_lot', 'property_qualifier'].includes(field)) {
+                          return String(aVal || '').localeCompare(String(bVal || ''), undefined, { numeric: true, sensitivity: 'base' }) * dir;
+                        }
                         return String(aVal || '').localeCompare(String(bVal || '')) * dir;
                       });
 
