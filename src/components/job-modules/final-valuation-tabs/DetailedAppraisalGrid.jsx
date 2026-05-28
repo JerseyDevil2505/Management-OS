@@ -470,6 +470,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // all use the misc-aware number.
   const makeMiscRow = () => ({ subjectLabel: '', comps: [{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''}] });
   const [miscRows, setMiscRows] = useState([makeMiscRow(), makeMiscRow()]);
+  // Bump to force the uncontrolled misc inputs to remount (used by Clear).
+  const [miscFormKey, setMiscFormKey] = useState(0);
   const isMiscRowActive = (row) => row.comps.some(c => Number(c.amount) !== 0 && c.amount !== '');
   const activeMiscRows = useMemo(() => miscRows.filter(isMiscRowActive), [miscRows]);
   const miscIsActive = activeMiscRows.length > 0;
@@ -4526,21 +4528,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 {miscIsActive && (
                   <button
                     type="button"
-                    onClick={() => { setMiscRows([makeMiscRow(), makeMiscRow()]); setHasEdits(true); }}
+                    onClick={() => {
+                      setMiscRows([makeMiscRow(), makeMiscRow()]);
+                      setMiscFormKey(k => k + 1);
+                      if (!hasEdits) setHasEdits(true);
+                    }}
                     className="text-xs text-amber-700 hover:text-amber-900 underline"
                   >
                     Clear
                   </button>
                 )}
               </div>
+              {/* Uncontrolled inputs — defaultValue + onBlur commit so typing
+                  never re-renders the whole DetailedAppraisalGrid. The
+                  miscFormKey lets Clear force a remount with fresh defaults. */}
               <div className="space-y-1.5">
                 {miscRows.map((row, rIdx) => (
-                  <div key={rIdx} className="flex items-center gap-2">
+                  <div key={`${miscFormKey}-${rIdx}`} className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={row.subjectLabel}
-                      onChange={(e) => {
+                      defaultValue={row.subjectLabel}
+                      onBlur={(e) => {
                         const val = e.target.value;
+                        if (val === row.subjectLabel) return;
                         setMiscRows(prev => prev.map((r, i) => i === rIdx ? { ...r, subjectLabel: val } : r));
                         if (!hasEdits) setHasEdits(true);
                       }}
@@ -4555,9 +4565,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         <div key={i} className="flex items-center gap-1">
                           <input
                             type="text"
-                            value={cell.desc}
-                            onChange={(e) => {
+                            defaultValue={cell.desc}
+                            onBlur={(e) => {
                               const val = e.target.value;
+                              if (val === cell.desc) return;
                               setMiscRows(prev => prev.map((r, ri) => {
                                 if (ri !== rIdx) return r;
                                 const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, desc: val } : c);
@@ -4573,9 +4584,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                           <span className="text-xs text-gray-500">$</span>
                           <input
                             type="number"
-                            value={cell.amount}
-                            onChange={(e) => {
+                            defaultValue={cell.amount}
+                            onBlur={(e) => {
                               const val = e.target.value;
+                              if (val === cell.amount) return;
                               setMiscRows(prev => prev.map((r, ri) => {
                                 if (ri !== rIdx) return r;
                                 const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, amount: val } : c);
