@@ -11,6 +11,7 @@ import {
   ArrowDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 
 // Helper functions
 function formatCurrency(value) {
@@ -163,6 +164,9 @@ const SalesReviewTab = ({
   const [savedSettings, setSavedSettings] = useState([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // Scan Masked Sales modal (BRT only)
+  const [showMaskedModal, setShowMaskedModal] = useState(false);
+
   // Load saved settings list on mount
   useEffect(() => {
     if (!jobData?.id) return;
@@ -222,7 +226,33 @@ const SalesReviewTab = ({
   // ==================== COMPUTED DATA ====================
   
   const enrichedProperties = useMemo(() => {
-    return properties.map(prop => {
+    // Dedupe to main cards only — additional cards used to render as their own
+    // rows here with the full sales price, producing wildly wrong $/SF for
+    // multi-card parcels. JobContainer's derivation stamps _isMainCard on every
+    // property; if the marker is absent (very early render before the memo lands)
+    // we fall back to keeping the row so the page isn't blank during that flash.
+    const mainCardProps = properties.filter(prop =>
+      prop._isMainCard === undefined ? true : prop._isMainCard
+    );
+
+    // Inject unmasked sales as their own synthetic rows. Each carries the
+    // unmasked prior sale's price/date/norm-time while keeping the parcel's
+    // physical attributes, so it sorts/filters alongside real sales. Flagged
+    // with _isUnmasked for badge rendering and a distinct id to avoid key
+    // collisions with the current-sale row.
+    const unmaskedRows = mainCardProps
+      .filter(prop => prop.unmasked_sale && prop.unmasked_sale.sales_price)
+      .map(prop => ({
+        ...prop,
+        id: `${prop.id}_unmasked`,
+        _isUnmasked: true,
+        sales_price: prop.unmasked_sale.sales_price,
+        sales_date: prop.unmasked_sale.sales_date,
+        sales_nu: prop.unmasked_sale.sales_nu || null,
+        values_norm_time: prop.unmasked_sale.values_norm_time || null,
+      }));
+
+    return [...mainCardProps, ...unmaskedRows].map(prop => {
       // Package detection using centralized _pkg (computed once in JobContainer)
       const pkgInfo = prop._pkg;
       const isPackage = !!pkgInfo;
@@ -233,14 +263,22 @@ const SalesReviewTab = ({
       if (isFarmSale && periodCode) {
         periodCode = 'FARM'; // Farm sales get their own category
       }
-      
-      // Calculated fields
-      const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
-        ? prop.sales_price / prop.asset_sfla
+
+      // Effective SFLA = basement-aware + (combine mode) sum of every sibling
+      // card's basement-adjusted SFLA. Derived once in JobContainer; here we
+      // just read the marker. Fallback to raw asset_sfla on first paint.
+      const effectiveSfla = Number(prop._effectiveSfla)
+        || Number(prop.asset_sfla)
+        || 0;
+
+      // Calculated fields — use effective SFLA so $/SF is consistent with
+      // Sales Pool, Detailed grid, and CME.
+      const pricePerSF = prop.sales_price && effectiveSfla > 0
+        ? prop.sales_price / effectiveSfla
         : null;
 
-      const normPricePerSF = prop.values_norm_time && prop.asset_sfla && prop.asset_sfla > 0
-        ? prop.values_norm_time / prop.asset_sfla
+      const normPricePerSF = prop.values_norm_time && effectiveSfla > 0
+        ? prop.values_norm_time / effectiveSfla
         : null;
 
       // Current/MOD sales ratio (uses values_mod_total)
@@ -506,7 +544,8 @@ const SalesReviewTab = ({
       groups[vcs].count++;
       if (prop.sales_price) groups[vcs].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[vcs].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[vcs].sflaSum += prop.asset_sfla;
+      const vcsEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (vcsEffSfla) groups[vcs].sflaSum += vcsEffSfla;
       if (prop.asset_year_built) {
         groups[vcs].yearBuiltSum += prop.asset_year_built;
         groups[vcs].yearBuiltCount++;
@@ -537,7 +576,7 @@ const SalesReviewTab = ({
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (vcsEffSfla) overallTotals.sflaSum += vcsEffSfla;
       if (prop.asset_year_built) {
         overallTotals.yearBuiltSum += prop.asset_year_built;
         overallTotals.yearBuiltCount++;
@@ -666,12 +705,13 @@ const SalesReviewTab = ({
       groups[style].count++;
       if (prop.sales_price) groups[style].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[style].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[style].sflaSum += prop.asset_sfla;
+      const styleEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (styleEffSfla) groups[style].sflaSum += styleEffSfla;
 
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (styleEffSfla) overallTotals.sflaSum += styleEffSfla;
     });
 
     const analytics = Object.entries(groups).map(([style, data]) => ({
@@ -718,12 +758,13 @@ const SalesReviewTab = ({
       groups[type].count++;
       if (prop.sales_price) groups[type].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[type].totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) groups[type].sflaSum += prop.asset_sfla;
+      const typeEffSfla = Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0;
+      if (typeEffSfla) groups[type].sflaSum += typeEffSfla;
 
       overallTotals.count++;
       if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
-      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (typeEffSfla) overallTotals.sflaSum += typeEffSfla;
     });
 
     const analytics = Object.entries(groups).map(([type, data]) => ({
@@ -989,7 +1030,7 @@ const SalesReviewTab = ({
         showCodesNotMeanings ? (prop.asset_ext_cond || '') : (prop.exteriorCondName || prop.asset_ext_cond || ''),
         showCodesNotMeanings ? (prop.asset_int_cond || '') : (prop.interiorCondName || prop.asset_int_cond || ''),
         prop.asset_year_built || '',
-        prop.asset_sfla || '',
+        Math.round(Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0) || '',
         prop.sales_date ? formatDate(prop.sales_date) : '',
         prop.sales_nu || '',
         prop.sales_price || '',
@@ -1330,6 +1371,15 @@ const SalesReviewTab = ({
           </div>
 
           <div className="ml-auto flex gap-2">
+            {vendorType === 'BRT' && (
+              <button
+                onClick={() => setShowMaskedModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 border border-amber-300"
+                title="Scan BRT prior sales for masked good sales overwritten by later junk transactions"
+              >
+                Scan Masked Sales
+              </button>
+            )}
             <button
               onClick={() => setShowSettingsModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
@@ -1629,6 +1679,17 @@ const SalesReviewTab = ({
         </div>
       </div>
 
+      {/* Scan Masked Sales Modal — wide window (2012 → present) */}
+      <ScanMaskedSalesModal
+        isOpen={showMaskedModal}
+        onClose={() => setShowMaskedModal(false)}
+        properties={properties}
+        jobData={jobData}
+        dateRange={{ fromYear: 2012 }}
+        surfaceLabel="Sales Review"
+        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+      />
+
       {/* Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1811,8 +1872,8 @@ const SalesReviewTab = ({
             <tbody className="divide-y divide-gray-200">
               {sortedProperties.map((prop, idx) => (
                 <tr
-                  key={prop.property_composite_key || prop.id || idx}
-                  className="hover:bg-gray-50"
+                  key={prop.id || prop.property_composite_key || idx}
+                  className={prop._isUnmasked ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}
                 >
                   <td className="px-2 py-2 text-center">
                     {(prop.values_norm_time || prop.values_norm_size) ? (
@@ -1831,7 +1892,12 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{prop.property_lot || '-'}</td>
                   <td className="px-3 py-2">{prop.property_qualifier || '-'}</td>
                   <td className="px-3 py-2">{prop.isPackage ? 'Yes' : 'No'}</td>
-                  <td className="px-3 py-2 max-w-xs truncate">{prop.property_location || '-'}</td>
+                  <td className="px-3 py-2 max-w-xs truncate">
+                    {prop._isUnmasked && (
+                      <span className="mr-1 text-xs text-amber-700" title="Unmasked prior sale">🔓</span>
+                    )}
+                    {prop.property_location || '-'}
+                  </td>
                   <td className="px-3 py-2">{prop.property_m4_class || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
                   <td className="px-3 py-2 text-center">
@@ -1846,7 +1912,12 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_ext_cond || '-') : (prop.exteriorCondName || prop.asset_ext_cond || '-')}</td>
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_int_cond || '-') : (prop.interiorCondName || prop.asset_int_cond || '-')}</td>
                   <td className="px-3 py-2 text-right">{prop.asset_year_built || '-'}</td>
-                  <td className="px-3 py-2 text-right">{formatNumber(prop.asset_sfla)}</td>
+                  <td className="px-3 py-2 text-right" title={prop._additionalCardsCount > 0 ? `Combined across ${prop._cardCount} cards` : undefined}>
+                    {formatNumber(Math.round(Number(prop._effectiveSfla) || Number(prop.asset_sfla) || 0))}
+                    {prop._additionalCardsCount > 0 && prop._cardMode === 'combine' && (
+                      <span className="ml-1 text-xs text-purple-600">+{prop._additionalCardsCount}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{formatDate(prop.sales_date)}</td>
                   <td className="px-3 py-2">{prop.sales_nu || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.sales_price)}</td>
