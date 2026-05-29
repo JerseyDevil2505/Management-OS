@@ -229,3 +229,99 @@ export async function saveUnmaskedSales(jobId, decisions) {
 export async function clearUnmaskedSale(jobId, compositeKey) {
   return saveUnmaskedSales(jobId, [{ property_composite_key: compositeKey, sale: null }]);
 }
+
+// Resolve the effective current sale for a changed parcel given the user's
+// Keep Old / Keep New / Keep Both / Reject decision in the upload review.
+const effectiveCurrentFromChange = (change, decision) => {
+  const d = (decision || 'Keep New (default)').toString();
+  const oldPrice = Number(change?.differences?.sales_price?.old) || 0;
+  const newPrice = Number(change?.differences?.sales_price?.new) || 0;
+  // "Keep Old" and "Reject" leave (or revert to) the old sale as current.
+  if (d.startsWith('Keep Old') || d.startsWith('Reject')) return oldPrice;
+  // Keep New / Keep New (default) / Keep Both → the new sale is current.
+  return newPrice;
+};
+
+/**
+ * Post-upload masked-sale re-check (BRT only). Runs inside the file-upload flow
+ * (before the job loads) off this upload's own sales changes — no expensive
+ * prev_sales scan. Classifies two directions:
+ *
+ *   stale   — a parcel that has an unmasked_sale but whose effective current
+ *             sale is now valid (> junk ceiling). The recent real sale makes the
+ *             recovered prior unnecessary → clear it.
+ *   newMasks — a parcel where the user kept a junk dollar-sale (≤ ceiling) over a
+ *             previously healthy sale → the good old sale just got masked → flag.
+ *
+ * @param {string} jobId
+ * @param {Object} opts
+ *   - salesChanges:  comparisonResults.details.salesChanges
+ *   - salesDecisions: Map<compositeKey, decision>
+ *   - vendorType:    must be 'BRT'
+ * @returns {Promise<{ stale: string[], newMasks: Array<{key, block, lot, qualifier, location, oldPrice}> }>}
+ */
+export async function recheckMaskedAfterUpload(jobId, opts = {}) {
+  const {
+    salesChanges = [],
+    salesDecisions = new Map(),
+    vendorType = 'BRT',
+    junkPriceCeiling = MASKED_DEFAULTS.junkPriceCeiling,
+    priceThreshold = MASKED_DEFAULTS.priceThreshold,
+  } = opts;
+
+  const empty = { stale: [], newMasks: [] };
+  if (vendorType !== 'BRT' || !jobId || !Array.isArray(salesChanges) || salesChanges.length === 0) {
+    return empty;
+  }
+
+  const getDecision = (key) =>
+    (salesDecisions instanceof Map ? salesDecisions.get(key) : salesDecisions?.[key]) || 'Keep New (default)';
+
+  const changedKeys = salesChanges.map(c => c.property_composite_key).filter(Boolean);
+  if (changedKeys.length === 0) return empty;
+
+  // Which of the changed parcels currently carry an unmasked_sale?
+  const unmaskedKeys = new Set();
+  // Supabase .in() caps out on huge lists; chunk to be safe.
+  for (let i = 0; i < changedKeys.length; i += 500) {
+    const slice = changedKeys.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from('property_market_analysis')
+      .select('property_composite_key, unmasked_sale')
+      .eq('job_id', jobId)
+      .in('property_composite_key', slice);
+    if (error) {
+      console.error('recheckMaskedAfterUpload load failed:', error);
+      continue;
+    }
+    (data || []).forEach(r => { if (r.unmasked_sale) unmaskedKeys.add(r.property_composite_key); });
+  }
+
+  const stale = [];
+  const newMasks = [];
+
+  for (const c of salesChanges) {
+    const key = c.property_composite_key;
+    if (!key) continue;
+    const decision = getDecision(key);
+    const effPrice = effectiveCurrentFromChange(c, decision);
+    const oldPrice = Number(c?.differences?.sales_price?.old) || 0;
+
+    if (unmaskedKeys.has(key)) {
+      // Existing unmask + a now-valid current sale → stale, clear it.
+      if (effPrice > junkPriceCeiling) stale.push(key);
+    } else if (effPrice > 0 && effPrice <= junkPriceCeiling && oldPrice >= priceThreshold) {
+      // Kept a junk dollar-sale over a healthy prior → newly masked.
+      newMasks.push({
+        key,
+        block: c.property_block,
+        lot: c.property_lot,
+        qualifier: c.property_qualifier || '',
+        location: c.property_location,
+        oldPrice,
+      });
+    }
+  }
+
+  return { stale, newMasks };
+}
