@@ -7,12 +7,15 @@ import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
 import ManageResultSetsTab from './ManageResultSetsTab';
+import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
+  // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
+  const [showMaskedModal, setShowMaskedModal] = useState(false);
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
@@ -479,7 +482,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Helper: Get adjusted SFLA. Honors basement_type_config first; falls back
   // to the legacy Franklin hardcode only when no config is set.
   const getAdjustedSFLA = useCallback((prop) => {
-    if (!prop || !prop.asset_sfla) return prop?.asset_sfla || 0;
+    if (!prop) return 0;
+    // Prefer the centrally derived effective SFLA from JobContainer when present
+    // — it already accounts for basement_type_config (living / subtract) AND
+    // additional_card_handling_config (combine / separate) so every surface
+    // stays in sync.
+    if (Number.isFinite(Number(prop._effectiveSfla)) && Number(prop._effectiveSfla) > 0) {
+      return Number(prop._effectiveSfla);
+    }
+    if (!prop.asset_sfla) return prop?.asset_sfla || 0;
 
     let sfla = Number(prop.asset_sfla) || 0;
 
@@ -1404,11 +1415,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
-    // Only show main card properties (avoid duplicate cards)
+    // Dedupe to main card per parcel. We used to keep "first seen", which
+    // depended on load order and could silently land on an additional card —
+    // throwing off SFLA, $/SF, and the size-range filter. _isMainCard is
+    // stamped by JobContainer's derivation pass; fall back to a heuristic on
+    // the (very brief) initial paint where the marker hasn't landed yet.
     const seen = new Set();
-    return properties.filter(p => {
+    return properties
+      .map(p => {
+        // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
+        // which the filter below would drop anyway) and the user has unmasked a
+        // healthy prior, swap that prior in as the parcel's effective pool sale.
+        // Raw price/date are used here (the pool keys off sale price + window),
+        // not the HPI-normalized value (that's the Sales Review surface).
+        const currentJunk = !p.sales_price || Number(p.sales_price) <= 100;
+        if (currentJunk && p.unmasked_sale && p.unmasked_sale.sales_price) {
+          return {
+            ...p,
+            sales_price: p.unmasked_sale.sales_price,
+            sales_date: p.unmasked_sale.sales_date,
+            sales_nu: p.unmasked_sale.sales_nu ?? null,
+            _isUnmasked: true,
+          };
+        }
+        return p;
+      })
+      .filter(p => {
       if (!p.sales_date) return false;
-      // Deduplicate by block-lot-qualifier
+      const isMain = p._isMainCard !== undefined
+        ? p._isMainCard
+        : (() => {
+            const card = (p.property_addl_card || '').toString().trim();
+            const n = parseInt(card, 10);
+            return n === 1 || card === '' || Number.isNaN(n) || card.toUpperCase() === 'M';
+          })();
+      if (!isMain) return false;
       const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
       if (seen.has(baseKey)) return false;
       seen.add(baseKey);
@@ -1855,6 +1896,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const aggregatePropertyData = (prop) => {
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    // Honor additional_card_handling_config. In 'separate' mode the user wants
+    // each parcel evaluated against the main card only — no SFLA / amenity sums.
+    // We still surface the additional-cards count so the (+N cards) badge stays
+    // visible everywhere it renders today.
+    if (prop._cardMode === 'separate') {
+      return {
+        ...prop,
+        _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
+      };
+    }
 
     const aggregated = { ...prop };
 
@@ -3952,6 +4004,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
                 {/* Override Set Controls */}
                 <div className="flex items-center gap-2">
+                  {vendorType === 'BRT' && (
+                    <button
+                      onClick={() => setShowMaskedModal(true)}
+                      className="px-3 py-1.5 text-sm font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 border border-amber-300"
+                      title="Scan BRT prior sales for masked good sales overwritten by later junk transactions (uses the pool date window)"
+                    >
+                      Scan Masked Sales
+                    </button>
+                  )}
                   <button
                     onClick={handleSavePoolOverrideSet}
                     className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -4363,6 +4424,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         // Numeric fields
                         if (['sales_price', 'asset_sfla', '_adjustedSfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
                           return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
+                        }
+                        // Block / Lot / Qualifier are strings but should sort
+                        // numerically (1, 2, 10, 100 — not 1, 10, 100, 2).
+                        if (['property_block', 'property_lot', 'property_qualifier'].includes(field)) {
+                          return String(aVal || '').localeCompare(String(bVal || ''), undefined, { numeric: true, sensitivity: 'base' }) * dir;
                         }
                         return String(aVal || '').localeCompare(String(bVal || '')) * dir;
                       });
@@ -6538,6 +6604,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 int_cond: (p) => p.asset_int_cond || '',
               };
               const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
+              // Block / lot / qualifier are stored as strings but should sort
+              // naturally (e.g. "2" before "10", "10" before "101") rather than
+              // lexicographically.
+              const naturalKeys = new Set(['block', 'lot', 'qual']);
               const sortKey = compBrowserSort.key;
               const sortDir = compBrowserSort.dir === 'asc' ? 1 : -1;
               const accessor = sortAccessors[sortKey] || sortAccessors.sales_date;
@@ -6549,6 +6619,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 if (aMissing && !bMissing) return 1;
                 if (!aMissing && bMissing) return -1;
                 if (numericKeys.has(sortKey)) return (av - bv) * sortDir;
+                if (naturalKeys.has(sortKey)) {
+                  return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * sortDir;
+                }
                 return String(av).localeCompare(String(bv)) * sortDir;
               });
 
@@ -8006,6 +8079,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         )}
 
       </div>
+
+      {/* Scan Masked Sales Modal — Sales Pool window (user-selected dates) */}
+      <ScanMaskedSalesModal
+        isOpen={showMaskedModal}
+        onClose={() => setShowMaskedModal(false)}
+        properties={properties}
+        jobData={jobData}
+        dateRange={{
+          fromYear: compFilters.salesDateStart
+            ? new Date(compFilters.salesDateStart).getFullYear()
+            : undefined,
+          toDate: compFilters.salesDateEnd || null,
+        }}
+        surfaceLabel="Sales Pool"
+        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+      />
 
       {/* Import Block/Lot/Qual Modal */}
       {showManualEntryModal && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes, worksheetService } from '../../lib/supabaseClient';
 import { computeTargetNormalization, saveNormalizationDecisions } from '../../lib/targetNormalization';
+import { recheckMaskedAfterUpload, saveUnmaskedSales } from '../../lib/unmaskedSales';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
@@ -1997,6 +1998,35 @@ const handleCodeFileUpdate = async () => {
           }
         } else {
           addBatchLog('ℹ️ No sales changes detected — normalization review not needed', 'info');
+        }
+
+        // ── Masked-sales re-check (BRT only) ──────────────────────────────
+        // Runs here (pre-load) so unmask decisions stay honest before the job
+        // opens. Clears stale unmasks (a recent valid sale superseded them) and
+        // flags newly-masked good sales (a junk dollar-sale kept over a healthy
+        // prior). New masks are only flagged — they still need NU verification.
+        if (job.vendor_type === 'BRT' && allChangedSalesKeysForNorm.length > 0) {
+          try {
+            const { stale, newMasks } = await recheckMaskedAfterUpload(job.id, {
+              salesChanges: comparisonResults?.details?.salesChanges || [],
+              salesDecisions,
+              vendorType: job.vendor_type,
+            });
+            if (stale.length > 0) {
+              await saveUnmaskedSales(job.id, stale.map(key => ({ property_composite_key: key, sale: null })));
+              addBatchLog(`🔓 Cleared ${stale.length} stale unmasked sale${stale.length === 1 ? '' : 's'} (a recent valid sale superseded them)`, 'success');
+            }
+            if (newMasks.length > 0) {
+              addBatchLog(`⚠️ ${newMasks.length} new masked sale${newMasks.length === 1 ? '' : 's'} from this update — run "Scan Masked Sales" in Sales Review/Pool to review`, 'warning');
+              addNotification(`⚠️ ${newMasks.length} new masked sale(s) detected. Review via Scan Masked Sales.`, 'warning');
+            }
+            if (stale.length === 0 && newMasks.length === 0) {
+              addBatchLog('🔓 Masked-sales re-check: nothing to update', 'info');
+            }
+          } catch (maskErr) {
+            console.error('Masked-sales re-check failed:', maskErr);
+            addBatchLog('⚠️ Masked-sales re-check failed (non-fatal)', 'warning');
+          }
         }
       }
       // Check if rollback occurred

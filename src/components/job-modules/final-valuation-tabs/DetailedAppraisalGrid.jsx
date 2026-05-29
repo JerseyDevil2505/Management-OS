@@ -153,6 +153,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
 
+    // Honor additional_card_handling_config. In 'separate' mode the appraiser
+    // wants the main-card view only; the (+N cards) badge stays so they know to
+    // add a manual Misc Adjustment at PDF-export time. We still stamp the count
+    // so the badge and the header label render correctly.
+    if (prop._cardMode === 'separate') {
+      return { ...prop, _additionalCardsCount: allCards.length - 1 };
+    }
+
     // Aggregate data across all cards
     const aggregated = { ...prop };
 
@@ -451,6 +459,22 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [editedAdjustments, setEditedAdjustments] = useState({});
   const [hasEdits, setHasEdits] = useState(false);
   const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
+
+  // Miscellaneous Adjustment (PowerComp-style freeform row). Captured at PDF-
+  // export time only — not persisted, not shown in the Detailed grid behind the
+  // modal. One description label + a per-comp dollar value (signed). When the
+  // user clicks Recalculate, the misc $ is folded into each comp's
+  // totalAdjustment so adjustmentPercent (and therefore weight) reflects it.
+  // The Final Projected Assessment displayed in the modal + the row printed in
+  // the PDF + the value written to final_valuation_data on Send-to-Appeal-Log
+  // all use the misc-aware number.
+  const makeMiscRow = () => ({ subjectLabel: '', comps: [{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''},{desc:'',amount:''}] });
+  const [miscRows, setMiscRows] = useState([makeMiscRow(), makeMiscRow()]);
+  // Bump to force the uncontrolled misc inputs to remount (used by Clear).
+  const [miscFormKey, setMiscFormKey] = useState(0);
+  const isMiscRowActive = (row) => row.comps.some(c => Number(c.amount) !== 0 && c.amount !== '');
+  const activeMiscRows = useMemo(() => miscRows.filter(isMiscRowActive), [miscRows]);
+  const miscIsActive = activeMiscRows.length > 0;
 
   // Appeal number for PDF export
   const [appealNumber, setAppealNumber] = useState('');
@@ -1868,6 +1892,41 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       };
     });
 
+    // Misc Adjustment post-pass. The freeform "Miscellaneous Adjustment" row in
+    // the Export modal (single description, per-comp $ amount) folds into each
+    // comp's totalAdjustment AFTER the regular grid math so the new
+    // adjustmentPercent (and therefore the weighting below) reflects it. This
+    // matches how every other adjustment row affects weight, per user spec.
+    activeMiscRows.forEach((row) => {
+      comps.forEach((comp, idx) => {
+        if (!comp) return;
+        const compEntry = row.comps[idx] || {};
+        const miscAmount = Number(compEntry.amount) || 0;
+        if (miscAmount === 0) return;
+        const label = (compEntry.desc || '').trim() || (row.subjectLabel || '').trim() || 'Misc Adjustment';
+        const compKey = `comp_${idx}`;
+        const entry = newAdjustments[compKey] || {
+          adjustments: comp.adjustments || [],
+          totalAdjustment: comp.totalAdjustment || 0,
+          adjustedPrice: comp.adjustedPrice || (Number(comp.sales_price) || 0),
+          adjustmentPercent: comp.adjustmentPercent || 0,
+        };
+        const compSalesPrice = Number(comp.sales_price) || 0;
+        const nextTotal = (entry.totalAdjustment || 0) + miscAmount;
+        const nextAdjustedPrice = compSalesPrice + nextTotal;
+        const nextPercent = compSalesPrice > 0 ? (nextTotal / compSalesPrice) * 100 : 0;
+        newAdjustments[compKey] = {
+          adjustments: [
+            ...(entry.adjustments || []).filter(a => !(a?.isMisc && a?.name === label)),
+            { name: label, amount: miscAmount, isMisc: true },
+          ],
+          totalAdjustment: nextTotal,
+          adjustedPrice: nextAdjustedPrice,
+          adjustmentPercent: nextPercent,
+        };
+      });
+    });
+
     // Calculate weighted average projected assessment based on recalculated adjustments
     const validComps = comps.filter(c => c && newAdjustments[`comp_${comps.indexOf(c)}`]);
     if (validComps.length > 0) {
@@ -1893,13 +1952,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscRows, activeMiscRows]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
     setEditedAdjustments({});
     setRecalculatedProjectedAssessment(null);
     setHasEdits(false);
+    setMiscRows([makeMiscRow(), makeMiscRow()]);
     setAppellantCompsState([]);
     setAppealUploadStatus(null);
     setShowExportModal(true);
@@ -2237,6 +2297,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       return row;
     });
 
+    // Miscellaneous Adjustment rows — one per active misc row, rendered BEFORE
+    // Net Adjustment so the totals below reflect them. The amounts are already
+    // folded into adjustedPrice via recalculateAdjustments.
+    if (showAdjustments && miscIsActive) {
+      activeMiscRows.forEach((row) => {
+        const subjectCell = (row.subjectLabel || '').trim() || 'Misc Adjustment';
+        const miscRow = [subjectCell, '-'];
+        for (let i = 0; i < 5; i++) {
+          const comp = comps[i];
+          const compEntry = row.comps[i] || {};
+          const raw = comp ? Number(compEntry.amount) : null;
+          if (comp && raw && raw !== 0) {
+            const sign = raw > 0 ? '+' : '-';
+            const desc = (compEntry.desc || '').trim();
+            const amtStr = `${sign}$${Math.abs(Math.round(raw)).toLocaleString()}`;
+            const content = desc ? `${desc}: ${amtStr}` : amtStr;
+            miscRow.push({ content, adjAmount: raw });
+          } else {
+            miscRow.push(comp ? '$0' : '-');
+          }
+        }
+        staticRows.push(miscRow);
+      });
+    }
+
     // Add Net Adjustment row if visible and showing adjustments
     if (showAdjustments && rowVisibility['net_adjustment']) {
       const netRow = ['Net Adjustment', '-'];
@@ -2445,6 +2530,30 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         }
         return row;
       });
+
+      // Misc adjustment rows on the dynamic page mirror the static page —
+      // emitted BEFORE Net Adjustment so totals reflect them.
+      if (showAdjustments && miscIsActive) {
+        activeMiscRows.forEach((row) => {
+          const subjectCell = (row.subjectLabel || '').trim() || 'Misc Adjustment';
+          const miscRow = [subjectCell, '-'];
+          for (let i = 0; i < 5; i++) {
+            const comp = comps[i];
+            const compEntry = row.comps[i] || {};
+            const raw = comp ? Number(compEntry.amount) : null;
+            if (comp && raw && raw !== 0) {
+              const sign = raw > 0 ? '+' : '-';
+              const desc = (compEntry.desc || '').trim();
+              const amtStr = `${sign}$${Math.abs(Math.round(raw)).toLocaleString()}`;
+              const content = desc ? `${desc}: ${amtStr}` : amtStr;
+              miscRow.push({ content, adjAmount: raw });
+            } else {
+              miscRow.push(comp ? '$0' : '-');
+            }
+          }
+          dynamicRows.push(miscRow);
+        });
+      }
 
       // Add Net Adjustment and Valuation rows to page 2 as well
       if (showAdjustments && rowVisibility['net_adjustment']) {
@@ -3560,7 +3669,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (shouldClose) {
       setShowExportModal(false);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscRows, activeMiscRows, miscIsActive]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -4401,6 +4510,103 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 </div>
               </div>
             )}
+
+            {/* Miscellaneous Adjustment — freeform row applied at export time only.
+                Description + per-comp dollar value. Folds into each comp's totalAdjustment
+                on Recalculate, so adjustmentPercent and weights both reflect it. Not
+                persisted; resets when the modal closes. Row is omitted from the PDF if
+                description is blank OR all amounts are blank/0. */}
+            <div className="mx-4 my-3 bg-amber-50 border border-amber-200 rounded p-3 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-sm font-semibold text-amber-900">Miscellaneous Adjustments (optional)</div>
+                  <div className="text-xs text-amber-700">
+                    Two freeform rows for manual judgments — each comp gets its own description and dollar
+                    value (negative = downward). Click Recalculate after entering to fold into the projected assessment.
+                  </div>
+                </div>
+                {miscIsActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMiscRows([makeMiscRow(), makeMiscRow()]);
+                      setMiscFormKey(k => k + 1);
+                      if (!hasEdits) setHasEdits(true);
+                    }}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              {/* Uncontrolled inputs — defaultValue + onBlur commit so typing
+                  never re-renders the whole DetailedAppraisalGrid. The
+                  miscFormKey lets Clear force a remount with fresh defaults. */}
+              <div className="space-y-1.5">
+                {miscRows.map((row, rIdx) => (
+                  <div key={`${miscFormKey}-${rIdx}`} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      defaultValue={row.subjectLabel}
+                      onBlur={(e) => {
+                        const val = e.target.value;
+                        if (val === row.subjectLabel) return;
+                        setMiscRows(prev => prev.map((r, i) => i === rIdx ? { ...r, subjectLabel: val } : r));
+                        if (!hasEdits) setHasEdits(true);
+                      }}
+                      placeholder={`Misc Adj ${rIdx + 1}`}
+                      className="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 rounded"
+                      maxLength={60}
+                    />
+                    {[0, 1, 2, 3, 4].map((i) => {
+                      const compExists = !!comps[i];
+                      const cell = row.comps[i] || { desc: '', amount: '' };
+                      return (
+                        <div key={i} className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            defaultValue={cell.desc}
+                            onBlur={(e) => {
+                              const val = e.target.value;
+                              if (val === cell.desc) return;
+                              setMiscRows(prev => prev.map((r, ri) => {
+                                if (ri !== rIdx) return r;
+                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, desc: val } : c);
+                                return { ...r, comps: comps2 };
+                              }));
+                              if (!hasEdits) setHasEdits(true);
+                            }}
+                            disabled={!compExists}
+                            placeholder={`C${i + 1} desc`}
+                            className="w-20 px-1 py-1 text-xs border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+                            maxLength={40}
+                          />
+                          <span className="text-xs text-gray-500">$</span>
+                          <input
+                            type="number"
+                            defaultValue={cell.amount}
+                            onBlur={(e) => {
+                              const val = e.target.value;
+                              if (val === cell.amount) return;
+                              setMiscRows(prev => prev.map((r, ri) => {
+                                if (ri !== rIdx) return r;
+                                const comps2 = r.comps.map((c, ci) => ci === i ? { ...c, amount: val } : c);
+                                return { ...r, comps: comps2 };
+                              }));
+                              if (!hasEdits) setHasEdits(true);
+                            }}
+                            disabled={!compExists}
+                            placeholder="0"
+                            className="w-16 px-1 py-1 text-xs border border-gray-300 rounded text-right disabled:bg-gray-100 disabled:text-gray-400"
+                            step="100"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
