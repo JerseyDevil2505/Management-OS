@@ -40,10 +40,21 @@ const ScanMaskedSalesModal = ({
 
   const [hpiFn, setHpiFn] = useState(null);
   const [hpiLoaded, setHpiLoaded] = useState(false);
-  // selections: { [compositeKey]: { checked, chosenSource } }
-  const [selections, setSelections] = useState({});
+  // rows: { [compositeKey]: { decision: 'pending'|'unmask'|'skip', chosenSource } }
+  const [rows, setRows] = useState({});
+  const [hideReviewed, setHideReviewed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState(null);
+
+  // "Skip" decisions (reviewed in BRT, decided not to unmask) are parcel-level
+  // truth, so they persist per job in localStorage — survives reopen/surface
+  // switch without a DB column. Unmask decisions persist in the DB itself.
+  const skipStorageKey = jobData?.id ? `masked-skip-${jobData.id}` : null;
+  const loadSkipSet = useCallback(() => {
+    if (!skipStorageKey) return new Set();
+    try { return new Set(JSON.parse(localStorage.getItem(skipStorageKey) || '[]')); }
+    catch { return new Set(); }
+  }, [skipStorageKey]);
 
   const candidates = useMemo(() => {
     if (!isOpen) return [];
@@ -63,28 +74,49 @@ const ScanMaskedSalesModal = ({
     return () => { cancelled = true; };
   }, [isOpen, county]);
 
-  // Seed selections from candidates (auto-check suggested rows; default to best).
+  // Seed rows: nothing is auto-unmasked anymore. Already-unmasked → 'unmask',
+  // previously-skipped → 'skip', everything else starts 'pending' so the user
+  // must deliberately review each one (verify the NU in BRT first).
   useEffect(() => {
     if (!isOpen) return;
+    const skipped = loadSkipSet();
     const seed = {};
     candidates.forEach(c => {
-      seed[c.property_composite_key] = {
-        checked: c.alreadyUnmasked ? true : c.autoSuggest,
-        chosenSource: c.best?.source || null,
-      };
+      const key = c.property_composite_key;
+      let decision = 'pending';
+      if (c.alreadyUnmasked) decision = 'unmask';
+      else if (skipped.has(key)) decision = 'skip';
+      seed[key] = { decision, chosenSource: c.best?.source || null };
     });
-    setSelections(seed);
+    setRows(seed);
     setSaveResult(null);
-  }, [isOpen, candidates]);
+  }, [isOpen, candidates, loadSkipSet]);
 
-  const setRow = useCallback((key, patch) => {
-    setSelections(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  const setDecision = useCallback((key, decision) => {
+    setRows(prev => ({ ...prev, [key]: { ...prev[key], decision } }));
   }, []);
 
-  const checkedCount = useMemo(
-    () => Object.values(selections).filter(s => s?.checked).length,
-    [selections]
-  );
+  const setChosen = useCallback((key, chosenSource) => {
+    setRows(prev => ({ ...prev, [key]: { ...prev[key], chosenSource } }));
+  }, []);
+
+  const counts = useMemo(() => {
+    let unmask = 0, skip = 0, pending = 0;
+    candidates.forEach(c => {
+      const d = rows[c.property_composite_key]?.decision || 'pending';
+      if (d === 'unmask') unmask++;
+      else if (d === 'skip') skip++;
+      else pending++;
+    });
+    const total = candidates.length;
+    const reviewed = unmask + skip;
+    return { unmask, skip, pending, reviewed, total, pct: total ? Math.round((reviewed / total) * 100) : 0 };
+  }, [candidates, rows]);
+
+  const visibleCandidates = useMemo(() => {
+    if (!hideReviewed) return candidates;
+    return candidates.filter(c => (rows[c.property_composite_key]?.decision || 'pending') === 'pending');
+  }, [candidates, rows, hideReviewed]);
 
   const handleSave = useCallback(async () => {
     if (!jobData?.id) return;
@@ -92,14 +124,15 @@ const ScanMaskedSalesModal = ({
     setSaveResult(null);
 
     const decisions = candidates.map(c => {
-      const sel = selections[c.property_composite_key];
-      if (!sel?.checked) {
-        // Unchecked → clear any existing unmask (only if it was previously set).
+      const r = rows[c.property_composite_key];
+      const decision = r?.decision || 'pending';
+      if (decision !== 'unmask') {
+        // skip/pending → clear any existing unmask (only if previously set).
         return c.alreadyUnmasked
           ? { property_composite_key: c.property_composite_key, sale: null }
           : null;
       }
-      const chosen = c.candidates.find(s => s.source === sel.chosenSource) || c.best;
+      const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
       const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
       return {
         property_composite_key: c.property_composite_key,
@@ -115,6 +148,18 @@ const ScanMaskedSalesModal = ({
       };
     }).filter(Boolean);
 
+    // Persist the skip set: clear current-scope keys, re-add current skips.
+    if (skipStorageKey) {
+      const set = loadSkipSet();
+      candidates.forEach(c => set.delete(c.property_composite_key));
+      candidates.forEach(c => {
+        if ((rows[c.property_composite_key]?.decision || 'pending') === 'skip') {
+          set.add(c.property_composite_key);
+        }
+      });
+      try { localStorage.setItem(skipStorageKey, JSON.stringify([...set])); } catch { /* ignore quota */ }
+    }
+
     try {
       const res = await saveUnmaskedSales(jobData.id, decisions);
       setSaveResult(res);
@@ -125,7 +170,7 @@ const ScanMaskedSalesModal = ({
     } finally {
       setSaving(false);
     }
-  }, [candidates, selections, hpiFn, jobData?.id, userId, onSaved]);
+  }, [candidates, rows, hpiFn, jobData?.id, userId, onSaved, skipStorageKey, loadSkipSet]);
 
   if (!isOpen) return null;
 
@@ -150,6 +195,34 @@ const ScanMaskedSalesModal = ({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
 
+        {/* Progress bar */}
+        {candidates.length > 0 && (
+          <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-4 flex-shrink-0">
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                <span>
+                  Reviewed <span className="font-semibold text-gray-900">{counts.reviewed}</span> of {counts.total}
+                  <span className="ml-2 text-green-700">✓ {counts.unmask} to unmask</span>
+                  <span className="ml-2 text-gray-500">⊘ {counts.skip} skipped</span>
+                  <span className="ml-2 text-amber-600">● {counts.pending} pending</span>
+                </span>
+                <span className="font-semibold text-gray-700">{counts.pct}%</span>
+              </div>
+              <div className="h-2 w-full rounded bg-gray-200 overflow-hidden">
+                <div className="h-full bg-green-500 transition-all" style={{ width: `${counts.pct}%` }} />
+              </div>
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hideReviewed}
+                onChange={(e) => setHideReviewed(e.target.checked)}
+              />
+              Hide reviewed
+            </label>
+          </div>
+        )}
+
         {/* Body */}
         <div className="csv-export-modal-scroll p-5">
           {!hpiLoaded ? (
@@ -158,33 +231,35 @@ const ScanMaskedSalesModal = ({
             <div className="text-center text-gray-500 py-12">
               No masked-sale candidates found in this window. 🎉
             </div>
+          ) : visibleCandidates.length === 0 ? (
+            <div className="text-center text-gray-500 py-12">
+              All {counts.total} reviewed. Uncheck “Hide reviewed” to see them again.
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500 border-b bg-white sticky top-0 z-10">
-                  <th className="px-2 py-2 w-10 bg-white">Use</th>
                   <th className="px-2 py-2 bg-white">Parcel</th>
                   <th className="px-2 py-2 bg-white">Location</th>
                   <th className="px-2 py-2 text-right bg-white">Current (Masking) Sale</th>
                   <th className="px-2 py-2 bg-white">Unmask Sale</th>
                   <th className="px-2 py-2 text-right bg-white">HPI Norm.</th>
-                  <th className="px-2 py-2 bg-white">Status</th>
+                  <th className="px-2 py-2 text-center bg-white w-44">Decision</th>
                 </tr>
               </thead>
               <tbody>
-                {candidates.map(c => {
-                  const sel = selections[c.property_composite_key] || {};
-                  const chosen = c.candidates.find(s => s.source === sel.chosenSource) || c.best;
+                {visibleCandidates.map(c => {
+                  const r = rows[c.property_composite_key] || {};
+                  const decision = r.decision || 'pending';
+                  const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
                   const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
+                  const rowBg = decision === 'unmask'
+                    ? 'bg-green-50'
+                    : decision === 'skip'
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'hover:bg-gray-50';
                   return (
-                    <tr key={c.property_composite_key} className="border-b hover:bg-gray-50">
-                      <td className="px-2 py-2">
-                        <input
-                          type="checkbox"
-                          checked={!!sel.checked}
-                          onChange={(e) => setRow(c.property_composite_key, { checked: e.target.checked })}
-                        />
-                      </td>
+                    <tr key={c.property_composite_key} className={`border-b ${rowBg}`}>
                       <td className="px-2 py-2 font-mono text-xs whitespace-nowrap">
                         {c.property_block}/{c.property_lot}{c.property_qualifier ? `/${c.property_qualifier}` : ''}
                       </td>
@@ -198,8 +273,8 @@ const ScanMaskedSalesModal = ({
                       <td className="px-2 py-2">
                         {c.candidates.length > 1 ? (
                           <select
-                            value={sel.chosenSource || c.best?.source || ''}
-                            onChange={(e) => setRow(c.property_composite_key, { chosenSource: e.target.value })}
+                            value={r.chosenSource || c.best?.source || ''}
+                            onChange={(e) => setChosen(c.property_composite_key, e.target.value)}
                             className="text-xs border border-gray-300 rounded px-1 py-0.5"
                           >
                             {c.candidates.map(s => (
@@ -216,14 +291,31 @@ const ScanMaskedSalesModal = ({
                         {fmt(norm.values_norm_time)}
                         <div className="text-[10px] text-gray-400">×{(norm.hpi_multiplier || 1).toFixed(3)}</div>
                       </td>
-                      <td className="px-2 py-2 text-xs">
-                        {c.alreadyUnmasked ? (
-                          <span className="text-green-600">Unmasked</span>
-                        ) : c.autoSuggest ? (
-                          <span className="text-amber-600">Suggested</span>
-                        ) : (
-                          <span className="text-gray-400">Optional</span>
-                        )}
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setDecision(c.property_composite_key, decision === 'unmask' ? 'pending' : 'unmask')}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              decision === 'unmask'
+                                ? 'bg-green-600 text-white border-green-600'
+                                : 'bg-white text-green-700 border-green-300 hover:bg-green-50'
+                            }`}
+                            title="Unmask this prior sale"
+                          >
+                            ✓ Unmask
+                          </button>
+                          <button
+                            onClick={() => setDecision(c.property_composite_key, decision === 'skip' ? 'pending' : 'skip')}
+                            className={`px-2 py-1 text-xs rounded border ${
+                              decision === 'skip'
+                                ? 'bg-gray-600 text-white border-gray-600'
+                                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                            }`}
+                            title="Reviewed — do not unmask (remembered for this job)"
+                          >
+                            Skip
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -236,7 +328,7 @@ const ScanMaskedSalesModal = ({
         {/* Footer */}
         <div className="px-5 py-3 border-t bg-gray-50 flex items-center justify-between rounded-b-lg flex-shrink-0">
           <div className="text-xs text-gray-500">
-            {candidates.length} candidate{candidates.length === 1 ? '' : 's'} · {checkedCount} selected to unmask
+            {counts.total} candidate{counts.total === 1 ? '' : 's'} · {counts.unmask} to unmask · {counts.pending} still pending
             {saveResult && !saveResult.error && (
               <span className="ml-2 text-green-600">
                 ✓ Saved {saveResult.saved} · cleared {saveResult.cleared}
