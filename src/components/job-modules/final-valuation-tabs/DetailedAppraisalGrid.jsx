@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -1701,7 +1701,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // Check if using a custom bracket (matches CME tab logic)
     if (detailedTabBracket && detailedTabBracket.startsWith('custom_')) {
-      const customBracket = (result?.customBrackets || []).find(b => b.bracket_id === detailedTabBracket);
+      const customBracket = (customBrackets || []).find(b => b.bracket_id === detailedTabBracket);
       if (customBracket && customBracket.adjustment_values) {
         const customValue = customBracket.adjustment_values[adjustmentDef.adjustment_id];
         if (customValue) {
@@ -1739,7 +1739,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       default:
         return 0;
     }
-  }, [getBracketIndex, detailedTabBracket, result?.customBrackets]);
+  }, [getBracketIndex, detailedTabBracket, customBrackets]);
 
   // Recalculate all adjustments based on edited values.
   //

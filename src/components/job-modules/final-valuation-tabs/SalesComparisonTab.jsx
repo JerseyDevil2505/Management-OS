@@ -6455,6 +6455,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   adjustmentGrid={adjustmentGrid}
                   compFilters={compFilters}
                   cmeBrackets={CME_BRACKETS}
+                  customBrackets={customBrackets}
                   isJobContainerLoading={isJobContainerLoading}
                   allProperties={properties}
                   marketLandData={marketLandData}
