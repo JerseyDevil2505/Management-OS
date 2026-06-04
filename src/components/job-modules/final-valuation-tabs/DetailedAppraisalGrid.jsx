@@ -1696,8 +1696,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (!adjustmentDef) return 0;
 
     const bracketIndex = getBracketIndex(compSalesPrice);
-    const adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
-    const adjustmentType = adjustmentDef.adjustment_type || 'flat';
+    let adjustmentValue = 0;
+    let adjustmentType = adjustmentDef.adjustment_type || 'flat';
+
+    // Check if using a custom bracket (matches CME tab logic)
+    if (detailedTabBracket && detailedTabBracket.startsWith('custom_')) {
+      const customBracket = (result?.customBrackets || []).find(b => b.bracket_id === detailedTabBracket);
+      if (customBracket && customBracket.adjustment_values) {
+        const customValue = customBracket.adjustment_values[adjustmentDef.adjustment_id];
+        if (customValue) {
+          adjustmentValue = customValue.value || 0;
+          adjustmentType = customValue.type || adjustmentDef.adjustment_type;
+        }
+      }
+    } else {
+      // Standard bracket — look up column
+      adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
+    }
 
     const subjectNum = parseFloat(subjectVal) || 0;
     const compNum = parseFloat(compVal) || 0;
@@ -1724,7 +1739,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       default:
         return 0;
     }
-  }, [getBracketIndex]);
+  }, [getBracketIndex, detailedTabBracket, result?.customBrackets]);
 
   // Recalculate all adjustments based on edited values.
   //
@@ -1964,7 +1979,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscRows, activeMiscRows]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscRows, activeMiscRows, detailedTabBracket]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
