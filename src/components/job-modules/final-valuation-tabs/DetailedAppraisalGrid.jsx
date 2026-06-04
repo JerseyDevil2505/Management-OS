@@ -260,6 +260,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // appellant comps were saved.
   const [appellantCompsState, setAppellantCompsState] = useState([]);
 
+  // Preserve the bracket selection from the result (mappedBracket) so it persists
+  // during recalculation in the export modal. When the modal opens, we capture the
+  // bracket used during the original evaluation and use it consistently, preventing
+  // custom brackets from reverting to the default/auto bracket on recalc.
+  const [detailedTabBracket, setDetailedTabBracket] = useState(null);
+
   // Local in-memory overrides for geocode coordinates set via the inline
   // GeocodeStatusChip edit modal. Keyed by property_composite_key. Lets the
   // user fix a missing/wrong geocode and have the map + PDF reflect it
@@ -1663,21 +1669,27 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper: Get bracket index based on compFilters, mapped bracket, and comp price
   const getBracketIndex = useCallback((compNormTime) => {
-    // If a specific bracket is selected (not auto), use it
+    // Priority 1: Use the preserved bracket from the export modal (custom or standard)
+    // This ensures recalculation uses the same bracket as the original evaluation
+    if (detailedTabBracket && detailedTabBracket !== 'auto') {
+      const match = detailedTabBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    // Priority 2: If a specific bracket is selected in compFilters (not auto), use it
     if (compFilters?.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
       const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
       if (match) return parseInt(match[1]);
     }
-    // If auto with a mapped bracket for this subject, use the mapped bracket
+    // Priority 3: If auto with a mapped bracket for this subject, use the mapped bracket
     if (result.mappedBracket) {
       const match = result.mappedBracket.match(/bracket_(\d+)/);
       if (match) return parseInt(match[1]);
     }
-    // Fall back to price-based bracket
+    // Priority 4: Fall back to price-based bracket
     if (!compNormTime || !cmeBrackets?.length) return 0;
     const bracket = cmeBrackets.findIndex(b => compNormTime >= b.min && compNormTime <= b.max);
     return bracket >= 0 ? bracket : 0;
-  }, [compFilters, cmeBrackets, result.mappedBracket]);
+  }, [detailedTabBracket, compFilters, cmeBrackets, result.mappedBracket]);
 
   // Calculate adjustment for a single attribute between subject and comp
   const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
@@ -1962,6 +1974,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setMiscRows([makeMiscRow(), makeMiscRow()]);
     setAppellantCompsState([]);
     setAppealUploadStatus(null);
+    // Capture the bracket from this result so recalculation preserves it
+    setDetailedTabBracket(result.mappedBracket || compFilters?.adjustmentBracket || null);
     setShowExportModal(true);
 
     // Auto-detect appeal number for subject AND load appellant_comps so the
@@ -3668,6 +3682,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       : opts.closeModal !== false;
     if (shouldClose) {
       setShowExportModal(false);
+      setDetailedTabBracket(null);
     }
   }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscRows, activeMiscRows, miscIsActive]);
 
