@@ -2165,7 +2165,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   };
 
   const handleClearManualComps = () => {
-    setManualSubject({ block: '', lot: '', qualifier: '' });
     setManualComps([
       { block: '', lot: '', qualifier: '' },
       { block: '', lot: '', qualifier: '' },
