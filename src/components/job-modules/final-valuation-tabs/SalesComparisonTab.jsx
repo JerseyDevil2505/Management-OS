@@ -1983,12 +1983,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       } catch (_) { /* non-critical */ }
 
       // Find subject by block, lot, qualifier (normalize for comparison)
-      const subjectRaw = properties.find(p => {
+      // Prefer the main card if multiple cards exist for this block/lot/qualifier
+      const allMatches = properties.filter(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
         const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
         const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
         return blockMatch && lotMatch && qualMatch;
       });
+
+      const subjectRaw = allMatches.length > 0
+        ? (allMatches.find(p => isMainCard(p.property_addl_card)) || allMatches[0])
+        : null;
 
       if (!subjectRaw) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
@@ -2006,12 +2011,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const compRaw = properties.find(p => {
+          const allCompMatches = properties.filter(p => {
             const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
             const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
             const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
             return blockMatch && lotMatch && qualMatch;
           });
+
+          const compRaw = allCompMatches.length > 0
+            ? (allCompMatches.find(p => isMainCard(p.property_addl_card)) || allCompMatches[0])
+            : null;
 
           if (!compRaw) {
             // Property not found in database
@@ -2246,19 +2255,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       if (manualProperties.length > 0) {
         // Use manually entered properties (match by block/lot/qualifier, same as detailed tab)
-        subjects = properties.filter(p => {
-          if (!isResidentialProperty(p)) return false;
-          return manualProperties.some(key => {
-            const parts = key.split('-');
-            const block = (parts[0] || '').trim().toUpperCase();
-            const lot = (parts[1] || '').trim().toUpperCase();
-            const qual = (parts[2] || '').trim().toUpperCase();
-            const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
-            const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
-            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
-            return blockMatch && lotMatch && qualMatch;
-          });
+        // For multi-card properties, prefer the main card only
+        const subjectsByBaseKey = {};
+        manualProperties.forEach(key => {
+          const parts = key.split('-');
+          const block = (parts[0] || '').trim().toUpperCase();
+          const lot = (parts[1] || '').trim().toUpperCase();
+          const qual = (parts[2] || '').trim().toUpperCase();
+          const baseKey = `${block}|${lot}|${qual}`;
+          if (!subjectsByBaseKey[baseKey]) {
+            subjectsByBaseKey[baseKey] = { block, lot, qual };
+          }
         });
+
+        subjects = Object.values(subjectsByBaseKey)
+          .map(({ block, lot, qual }) => {
+            const matches = properties.filter(p => {
+              if (!isResidentialProperty(p)) return false;
+              const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
+              const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
+              const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
+              return blockMatch && lotMatch && qualMatch;
+            });
+            // Prefer the main card if multiple cards exist
+            return matches.length > 0
+              ? (matches.find(p => isMainCard(p.property_addl_card)) || matches[0])
+              : null;
+          })
+          .filter(p => p !== null);
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
