@@ -1888,22 +1888,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     if (!prop) return [prop];
     const block = prop.property_block || '';
     const lot = prop.property_lot || '';
-    const qual = (prop.property_qualifier || '').trim();
+    const qual = (prop.property_qualifier || '').trim().toUpperCase();
 
     // Normalize qualifier for farm grouping: 7/4/QFARM and 7/4 should group together
-    // QFARM or any Q-prefixed qualifier indicates farm land parcel paired with the base property
-    const isQualifier = qual.toUpperCase().startsWith('Q');
-    const baseQual = isQualifier ? '' : qual;
+    // For matching purposes, treat Q-prefixed qualifiers (QFARM, etc.) as part of the
+    // same base property (block/lot) as the non-qualified version. This allows
+    // 3A farmhouse (7/4) and 3B farmland (7/4/QFARM) to aggregate together.
+    const qualForMatching = qual.startsWith('Q') ? '' : qual;
 
     return properties.filter(p => {
       const pBlock = p.property_block || '';
       const pLot = p.property_lot || '';
-      const pQual = (p.property_qualifier || '').trim();
-      const pIsQualifier = pQual.toUpperCase().startsWith('Q');
-      const pBaseQual = pIsQualifier ? '' : pQual;
+      const pQual = (p.property_qualifier || '').trim().toUpperCase();
+      const pQualForMatching = pQual.startsWith('Q') ? '' : pQual;
 
-      // Match: same block/lot, and either same non-Q qualifier or both are Q-prefixed
-      return pBlock === block && pLot === lot && pBaseQual === baseQual;
+      // Match: same block/lot, and both have same non-Q qualifier (or both are Q-prefixed)
+      return pBlock === block && pLot === lot && pQualForMatching === qualForMatching;
     });
   };
 
@@ -1911,6 +1911,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const aggregatePropertyData = (prop) => {
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    console.log(`🔗 Aggregating ${allCards.length} cards for ${prop.property_block}/${prop.property_lot}/${prop.property_qualifier}:`,
+      allCards.map(c => `${c.property_addl_card}(${parseFloat(c.asset_lot_acre)||0}ac)`).join(' + '));
 
     // Honor additional_card_handling_config. In 'separate' mode the user wants
     // each parcel evaluated against the main card only — no SFLA / amenity sums.
