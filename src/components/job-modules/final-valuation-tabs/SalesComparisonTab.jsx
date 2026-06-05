@@ -1883,12 +1883,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   };
 
   // Helper to get all cards for a property (main + additional)
+  // For farms: includes both the 3A (base) and 3B/QFARM (farmland) parcels
   const getPropertyCards = (prop) => {
     if (!prop) return [prop];
-    const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+    const block = prop.property_block || '';
+    const lot = prop.property_lot || '';
+    const qual = (prop.property_qualifier || '').trim();
+
+    // Normalize qualifier for farm grouping: 7/4/QFARM and 7/4 should group together
+    // QFARM or any Q-prefixed qualifier indicates farm land parcel paired with the base property
+    const isQualifier = qual.toUpperCase().startsWith('Q');
+    const baseQual = isQualifier ? '' : qual;
+
     return properties.filter(p => {
-      const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
-      return pBaseKey === baseKey;
+      const pBlock = p.property_block || '';
+      const pLot = p.property_lot || '';
+      const pQual = (p.property_qualifier || '').trim();
+      const pIsQualifier = pQual.toUpperCase().startsWith('Q');
+      const pBaseQual = pIsQualifier ? '' : pQual;
+
+      // Match: same block/lot, and either same non-Q qualifier or both are Q-prefixed
+      return pBlock === block && pLot === lot && pBaseQual === baseQual;
     });
   };
 
