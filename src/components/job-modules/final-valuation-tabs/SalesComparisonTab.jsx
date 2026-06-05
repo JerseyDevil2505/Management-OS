@@ -1915,11 +1915,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     console.log(`🔗 Aggregating ${allCards.length} cards for ${prop.property_block}/${prop.property_lot}/${prop.property_qualifier}:`,
       allCards.map(c => `${c.property_addl_card}(${parseFloat(c.asset_lot_acre)||0}ac)`).join(' + '));
 
-    // Honor additional_card_handling_config. In 'separate' mode the user wants
-    // each parcel evaluated against the main card only — no SFLA / amenity sums.
-    // We still surface the additional-cards count so the (+N cards) badge stays
-    // visible everywhere it renders today.
-    if (prop._cardMode === 'separate') {
+    // Honor additional_card_handling_config from job settings (not per-card _cardMode, which may vary)
+    // In 'separate' mode the user wants each parcel evaluated against the main card only —
+    // no SFLA / amenity sums. We still surface the additional-cards count so the
+    // (+N cards) badge stays visible everywhere it renders today.
+    const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
+    if (cardMode === 'separate') {
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
