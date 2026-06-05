@@ -4298,6 +4298,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const numberInitial = (() => {
                         if (editedVal !== undefined) return editedVal;
                         if (!prop) return '';
+                        if (attr.id === 'liveable_area') {
+                          const adjustedSFLA = getAdjustedSFLA(prop);
+                          return adjustedSFLA ? adjustedSFLA : '';
+                        }
                         if (
                           attr.id === 'lot_size_acre' &&
                           compFilters?.farmSalesMode &&
