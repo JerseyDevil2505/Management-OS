@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -259,6 +259,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // can pull lat/lng for the map. Empty array if no appeal exists or no
   // appellant comps were saved.
   const [appellantCompsState, setAppellantCompsState] = useState([]);
+
+  // Preserve the bracket selection from the result (mappedBracket) so it persists
+  // during recalculation in the export modal. When the modal opens, we capture the
+  // bracket used during the original evaluation and use it consistently, preventing
+  // custom brackets from reverting to the default/auto bracket on recalc.
+  const [detailedTabBracket, setDetailedTabBracket] = useState(null);
 
   // Local in-memory overrides for geocode coordinates set via the inline
   // GeocodeStatusChip edit modal. Keyed by property_composite_key. Lets the
@@ -1663,29 +1669,50 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper: Get bracket index based on compFilters, mapped bracket, and comp price
   const getBracketIndex = useCallback((compNormTime) => {
-    // If a specific bracket is selected (not auto), use it
+    // Priority 1: Use the preserved bracket from the export modal (custom or standard)
+    // This ensures recalculation uses the same bracket as the original evaluation
+    if (detailedTabBracket && detailedTabBracket !== 'auto') {
+      const match = detailedTabBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    // Priority 2: If a specific bracket is selected in compFilters (not auto), use it
     if (compFilters?.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
       const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
       if (match) return parseInt(match[1]);
     }
-    // If auto with a mapped bracket for this subject, use the mapped bracket
+    // Priority 3: If auto with a mapped bracket for this subject, use the mapped bracket
     if (result.mappedBracket) {
       const match = result.mappedBracket.match(/bracket_(\d+)/);
       if (match) return parseInt(match[1]);
     }
-    // Fall back to price-based bracket
+    // Priority 4: Fall back to price-based bracket
     if (!compNormTime || !cmeBrackets?.length) return 0;
     const bracket = cmeBrackets.findIndex(b => compNormTime >= b.min && compNormTime <= b.max);
     return bracket >= 0 ? bracket : 0;
-  }, [compFilters, cmeBrackets, result.mappedBracket]);
+  }, [detailedTabBracket, compFilters, cmeBrackets, result.mappedBracket]);
 
   // Calculate adjustment for a single attribute between subject and comp
   const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
     if (!adjustmentDef) return 0;
 
     const bracketIndex = getBracketIndex(compSalesPrice);
-    const adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
-    const adjustmentType = adjustmentDef.adjustment_type || 'flat';
+    let adjustmentValue = 0;
+    let adjustmentType = adjustmentDef.adjustment_type || 'flat';
+
+    // Check if using a custom bracket (matches CME tab logic)
+    if (detailedTabBracket && detailedTabBracket.startsWith('custom_')) {
+      const customBracket = (customBrackets || []).find(b => b.bracket_id === detailedTabBracket);
+      if (customBracket && customBracket.adjustment_values) {
+        const customValue = customBracket.adjustment_values[adjustmentDef.adjustment_id];
+        if (customValue) {
+          adjustmentValue = customValue.value || 0;
+          adjustmentType = customValue.type || adjustmentDef.adjustment_type;
+        }
+      }
+    } else {
+      // Standard bracket — look up column
+      adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
+    }
 
     const subjectNum = parseFloat(subjectVal) || 0;
     const compNum = parseFloat(compVal) || 0;
@@ -1712,7 +1739,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       default:
         return 0;
     }
-  }, [getBracketIndex]);
+  }, [getBracketIndex, detailedTabBracket, customBrackets]);
 
   // Recalculate all adjustments based on edited values.
   //
@@ -1952,7 +1979,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     setEditedAdjustments(newAdjustments);
     setHasEdits(false);
-  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscRows, activeMiscRows]);
+  }, [comps, subject, editableProperties, editedAdjustments, getRawValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank, miscRows, activeMiscRows, detailedTabBracket]);
 
   const openExportModal = useCallback(async () => {
     setEditableProperties({});
@@ -1962,6 +1989,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setMiscRows([makeMiscRow(), makeMiscRow()]);
     setAppellantCompsState([]);
     setAppealUploadStatus(null);
+    // Capture the bracket from this result so recalculation preserves it
+    setDetailedTabBracket(result.mappedBracket || compFilters?.adjustmentBracket || null);
     setShowExportModal(true);
 
     // Auto-detect appeal number for subject AND load appellant_comps so the
@@ -2240,6 +2269,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           default: break;
         }
         return (rawValue !== null && rawValue !== undefined && rawValue > 0) ? 'Yes' : 'No';
+      }
+
+      // Special handling for Liveable Area: return plain text with asterisk for PDF
+      if (attr.id === 'liveable_area') {
+        const adjustedSFLA = getAdjustedSFLA(prop);
+        if (!adjustedSFLA) return 'N/A';
+        if (!hasConfiguredLivingBasement(prop)) return adjustedSFLA.toLocaleString();
+        return `${adjustedSFLA.toLocaleString()}*`;
       }
 
       return attr.render(prop);
@@ -3668,6 +3705,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       : opts.closeModal !== false;
     if (shouldClose) {
       setShowExportModal(false);
+      setDetailedTabBracket(null);
     }
   }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscRows, activeMiscRows, miscIsActive]);
 
@@ -4198,7 +4236,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       }
 
                       const editedVal = editableProperties[propKey]?.[attr.id];
-                      const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+                      let displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+
+                      // Special handling for Liveable Area: extract text from JSX + add asterisk for living basements
+                      if (attr.id === 'liveable_area' && editedVal === undefined) {
+                        const adjustedSFLA = getAdjustedSFLA(prop);
+                        if (adjustedSFLA) {
+                          displayVal = hasConfiguredLivingBasement(prop)
+                            ? `${adjustedSFLA.toLocaleString()}*`
+                            : adjustedSFLA.toLocaleString();
+                        }
+                      }
 
                       // Get adjustment for this comp - use edited if recalculated, otherwise original
                       let compAdj = null;
@@ -4250,6 +4298,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const numberInitial = (() => {
                         if (editedVal !== undefined) return editedVal;
                         if (!prop) return '';
+                        if (attr.id === 'liveable_area') {
+                          const adjustedSFLA = getAdjustedSFLA(prop);
+                          return adjustedSFLA ? adjustedSFLA : '';
+                        }
                         if (
                           attr.id === 'lot_size_acre' &&
                           compFilters?.farmSalesMode &&
