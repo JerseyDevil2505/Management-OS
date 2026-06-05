@@ -4236,7 +4236,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       }
 
                       const editedVal = editableProperties[propKey]?.[attr.id];
-                      const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+                      let displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+
+                      // Special handling for Liveable Area: extract text from JSX + add asterisk for living basements
+                      if (attr.id === 'liveable_area' && editedVal === undefined) {
+                        const adjustedSFLA = getAdjustedSFLA(prop);
+                        if (adjustedSFLA) {
+                          displayVal = hasConfiguredLivingBasement(prop)
+                            ? `${adjustedSFLA.toLocaleString()}*`
+                            : adjustedSFLA.toLocaleString();
+                        }
+                      }
 
                       // Get adjustment for this comp - use edited if recalculated, otherwise original
                       let compAdj = null;
