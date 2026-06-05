@@ -2271,6 +2271,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         return (rawValue !== null && rawValue !== undefined && rawValue > 0) ? 'Yes' : 'No';
       }
 
+      // Special handling for Liveable Area: return plain text with asterisk for PDF
+      if (attr.id === 'liveable_area') {
+        const adjustedSFLA = getAdjustedSFLA(prop);
+        if (!adjustedSFLA) return 'N/A';
+        if (!hasConfiguredLivingBasement(prop)) return adjustedSFLA.toLocaleString();
+        return `${adjustedSFLA.toLocaleString()}*`;
+      }
+
       return attr.render(prop);
     };
 
