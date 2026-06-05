@@ -2271,6 +2271,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         return (rawValue !== null && rawValue !== undefined && rawValue > 0) ? 'Yes' : 'No';
       }
 
+      // Special handling for Liveable Area: return plain text with asterisk for PDF
+      if (attr.id === 'liveable_area') {
+        const adjustedSFLA = getAdjustedSFLA(prop);
+        if (!adjustedSFLA) return 'N/A';
+        if (!hasConfiguredLivingBasement(prop)) return adjustedSFLA.toLocaleString();
+        return `${adjustedSFLA.toLocaleString()}*`;
+      }
+
       return attr.render(prop);
     };
 
@@ -4228,7 +4236,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       }
 
                       const editedVal = editableProperties[propKey]?.[attr.id];
-                      const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+                      let displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+
+                      // Special handling for Liveable Area: extract text from JSX + add asterisk for living basements
+                      if (attr.id === 'liveable_area' && editedVal === undefined) {
+                        const adjustedSFLA = getAdjustedSFLA(prop);
+                        if (adjustedSFLA) {
+                          displayVal = hasConfiguredLivingBasement(prop)
+                            ? `${adjustedSFLA.toLocaleString()}*`
+                            : adjustedSFLA.toLocaleString();
+                        }
+                      }
 
                       // Get adjustment for this comp - use edited if recalculated, otherwise original
                       let compAdj = null;
@@ -4280,6 +4298,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const numberInitial = (() => {
                         if (editedVal !== undefined) return editedVal;
                         if (!prop) return '';
+                        if (attr.id === 'liveable_area') {
+                          const adjustedSFLA = getAdjustedSFLA(prop);
+                          return adjustedSFLA ? adjustedSFLA : '';
+                        }
                         if (
                           attr.id === 'lot_size_acre' &&
                           compFilters?.farmSalesMode &&
