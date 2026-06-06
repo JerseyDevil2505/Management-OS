@@ -1438,6 +1438,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
+    // Build a map of manual sales for quick lookup (Microsystems only)
+    const manualSalesMap = {};
+    if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+      manualSalesData.forEach(manual => {
+        const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+        manualSalesMap[baseKey] = manual;
+      });
+    }
+
     // Dedupe to main card per parcel. We used to keep "first seen", which
     // depended on load order and could silently land on an additional card —
     // throwing off SFLA, $/SF, and the size-range filter. _isMainCard is
@@ -1446,6 +1455,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const seen = new Set();
     let candidates = properties
       .map(p => {
+        const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+        const manualSale = manualSalesMap[baseKey];
+
+        // If a manual sale exists for this property, override the sales data
+        if (manualSale) {
+          return {
+            ...p,
+            sales_price: manualSale.sales_price,
+            sales_date: manualSale.sales_date,
+            sales_nu: manualSale.sales_nu || null,
+            sales_book: manualSale.sales_book,
+            sales_page: manualSale.sales_page,
+            _isManualSale: true,
+          };
+        }
+
         // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
         // which the filter below would drop anyway) and the user has unmasked a
         // healthy prior, swap that prior in as the parcel's effective pool sale.
@@ -1484,7 +1509,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       return true;
     });
 
-    // For Microsystems, add manually-entered sales as synthetic property entries
+    // For Microsystems, add orphan manual sales (ones with no matching property record) as synthetic entries
     if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
       manualSalesData.forEach(manual => {
         const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
