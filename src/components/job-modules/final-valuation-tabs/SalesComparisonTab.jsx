@@ -4280,11 +4280,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex flex-wrap items-end justify-center gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                    <input type="date" value={stagedDateStart} onChange={(e) => setStagedDateStart(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateStart} onChange={(e) => { setStagedDateStart(e.target.value); setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value })); }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                    <input type="date" value={stagedDateEnd} onChange={(e) => setStagedDateEnd(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateEnd} onChange={(e) => { setStagedDateEnd(e.target.value); setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value })); }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
