@@ -1939,7 +1939,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     sumFields.forEach(field => {
       const total = allCards.reduce((sum, card) => sum + (parseFloat(card[field]) || 0), 0);
-      if (total > 0) aggregated[field] = total;
+      if (total > 0) {
+        if (field === 'asset_lot_acre') {
+          console.log(`📊 Summing ${field}:`, allCards.map(c => parseFloat(c[field]) || 0).join(' + '), '=', total);
+        }
+        aggregated[field] = total;
+      }
     });
 
     // AVERAGE: year_built
@@ -1966,7 +1971,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
     // This keeps the editable value in sync with the display render function
     if (aggregated._pkg?.is_farm_package && aggregated._pkg?.combined_lot_acres > 0) {
+      console.log(`🌾 Farm package override: _pkg.combined_lot_acres=${aggregated._pkg?.combined_lot_acres}, was=${aggregated.asset_lot_acre}`);
       aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
+    } else {
+      console.log(`🚫 No farm override: _pkg.is_farm_package=${aggregated._pkg?.is_farm_package}, combined_lot_acres=${aggregated._pkg?.combined_lot_acres}, final acres=${aggregated.asset_lot_acre}`);
     }
 
     return aggregated;
