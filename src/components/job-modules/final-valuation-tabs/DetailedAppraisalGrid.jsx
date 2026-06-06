@@ -1087,8 +1087,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'lot_size_acre',
       label: 'Lot Size (Acre)',
       render: (prop) => {
-        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
-        if (compFilters?.farmSalesMode && allProperties?.length > 0) {
+        // For farm properties with farmSalesMode enabled, use farm_combined_lot_acre from database
+        if (compFilters?.farmSalesMode) {
+          // First check database field (farm_combined_lot_acre)
+          const dbCombinedAcres = parseFloat(prop.farm_combined_lot_acre);
+          if (dbCombinedAcres > 0) {
+            return `${dbCombinedAcres.toFixed(2)} (Farm)`;
+          }
+          // Fall back to _pkg.combined_lot_acres if available
           const pkgData = prop._pkg;
           if (pkgData?.is_farm_package && pkgData.combined_lot_acres > 0) {
             return `${pkgData.combined_lot_acres.toFixed(2)} (Farm)`;
