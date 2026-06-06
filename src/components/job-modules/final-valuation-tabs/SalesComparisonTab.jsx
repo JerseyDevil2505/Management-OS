@@ -1929,12 +1929,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
     }
 
-    // In separate mode, dont combine additional cards A, B, C with the main card.
-    // HOWEVER, we ALWAYS combine farm properties (7/4 base 3A + 7/4/QFARM variant 3B) regardless of mode.
-    // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
-
-    if (cardMode === 'separate' && !isFarmProperty) {
-      // Not a farm property and cardMode is separate: return early with just the main card
+    // In separate mode, keep additional cards (A, B, C) separate from the main card.
+    // This applies to ALL properties including farms — if cardMode is 'separate',
+    // return just the main card with a count of how many additional cards exist.
+    if (cardMode === 'separate') {
+      // Separate mode: return early with just the main card
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
