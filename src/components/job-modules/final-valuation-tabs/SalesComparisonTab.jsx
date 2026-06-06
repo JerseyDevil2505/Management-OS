@@ -1883,12 +1883,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   };
 
   // Helper to get all cards for a property (main + additional)
+  // For farms: includes both the 3A (base) and 3B/QFARM (farmland) parcels
   const getPropertyCards = (prop) => {
     if (!prop) return [prop];
-    const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+    const block = prop.property_block || '';
+    const lot = prop.property_lot || '';
+    const qual = (prop.property_qualifier || '').trim().toUpperCase();
+
+    // Normalize qualifier for farm grouping: 7/4/QFARM and 7/4 should group together
+    // For matching purposes, treat Q-prefixed qualifiers (QFARM, etc.) as part of the
+    // same base property (block/lot) as the non-qualified version. This allows
+    // 3A farmhouse (7/4) and 3B farmland (7/4/QFARM) to aggregate together.
+    const qualForMatching = qual.startsWith('Q') ? '' : qual;
+
     return properties.filter(p => {
-      const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
-      return pBaseKey === baseKey;
+      const pBlock = p.property_block || '';
+      const pLot = p.property_lot || '';
+      const pQual = (p.property_qualifier || '').trim().toUpperCase();
+      const pQualForMatching = pQual.startsWith('Q') ? '' : pQual;
+
+      // Match: same block/lot, and both have same non-Q qualifier (or both are Q-prefixed)
+      return pBlock === block && pLot === lot && pQualForMatching === qualForMatching;
     });
   };
 
@@ -1897,11 +1912,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const allCards = getPropertyCards(prop);
     if (allCards.length <= 1) return prop; // No additional cards, return as-is
 
-    // Honor additional_card_handling_config. In 'separate' mode the user wants
-    // each parcel evaluated against the main card only — no SFLA / amenity sums.
-    // We still surface the additional-cards count so the (+N cards) badge stays
-    // visible everywhere it renders today.
-    if (prop._cardMode === 'separate') {
+    console.log(`🔗 Aggregating ${allCards.length} cards for ${prop.property_block}/${prop.property_lot}/${prop.property_qualifier}:`,
+      allCards.map(c => `${c.property_addl_card}(${parseFloat(c.asset_lot_acre)||0}ac)`).join(' + '));
+
+    const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
+
+    // Check if this is a farm property by looking at the class codes (3A or 3B).
+    // This handles both the _pkg.is_farm_package flag AND cases where 3A and 3B
+    // are on different sales records and don't share the same _pkg grouping.
+    let isFarmProperty = false;
+    for (const card of allCards) {
+      const cls = (card.property_m4_class || card.property_class || '').toString().trim().toUpperCase();
+      if (cls === '3A' || cls === '3B') {
+        isFarmProperty = true;
+        break;
+      }
+    }
+
+    // In separate mode, dont combine additional cards A, B, C with the main card.
+    // HOWEVER, we ALWAYS combine farm properties (7/4 base 3A + 7/4/QFARM variant 3B) regardless of mode.
+    // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
+
+    if (cardMode === 'separate' && !isFarmProperty) {
+      // Not a farm property and cardMode is separate: return early with just the main card
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
@@ -1920,7 +1953,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     sumFields.forEach(field => {
       const total = allCards.reduce((sum, card) => sum + (parseFloat(card[field]) || 0), 0);
-      if (total > 0) aggregated[field] = total;
+      if (total > 0) {
+        if (field === 'asset_lot_acre') {
+          console.log(`📊 Summing ${field}:`, allCards.map(c => parseFloat(c[field]) || 0).join(' + '), '=', total);
+        }
+        aggregated[field] = total;
+      }
     });
 
     // AVERAGE: year_built
@@ -1944,10 +1982,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
 
-    // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
-    // This keeps the editable value in sync with the display render function
-    if (aggregated._pkg?.is_farm_package && aggregated._pkg?.combined_lot_acres > 0) {
-      aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
+    // For farm properties, the combined lot acre is the sum of all cards (already done above in sumFields).
+    // No special override needed since the summation in the loop above already handles 3A + 3B acres aggregation.
+    if (isFarmProperty) {
+      console.log(`🌾 Farm property detected: asset_lot_acre=${aggregated.asset_lot_acre}`);
     }
 
     return aggregated;
@@ -1983,12 +2021,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       } catch (_) { /* non-critical */ }
 
       // Find subject by block, lot, qualifier (normalize for comparison)
-      const subjectRaw = properties.find(p => {
+      // Prefer the main card if multiple cards exist for this block/lot/qualifier
+      const allMatches = properties.filter(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
         const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
         const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
         return blockMatch && lotMatch && qualMatch;
       });
+
+      const subjectRaw = allMatches.length > 0
+        ? (allMatches.find(p => isMainCard(p.property_addl_card)) || allMatches[0])
+        : null;
 
       if (!subjectRaw) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
@@ -2006,12 +2049,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const compRaw = properties.find(p => {
+          const allCompMatches = properties.filter(p => {
             const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
             const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
             const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
             return blockMatch && lotMatch && qualMatch;
           });
+
+          const compRaw = allCompMatches.length > 0
+            ? (allCompMatches.find(p => isMainCard(p.property_addl_card)) || allCompMatches[0])
+            : null;
 
           if (!compRaw) {
             // Property not found in database
@@ -2246,19 +2293,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       if (manualProperties.length > 0) {
         // Use manually entered properties (match by block/lot/qualifier, same as detailed tab)
-        subjects = properties.filter(p => {
-          if (!isResidentialProperty(p)) return false;
-          return manualProperties.some(key => {
-            const parts = key.split('-');
-            const block = (parts[0] || '').trim().toUpperCase();
-            const lot = (parts[1] || '').trim().toUpperCase();
-            const qual = (parts[2] || '').trim().toUpperCase();
-            const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
-            const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
-            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
-            return blockMatch && lotMatch && qualMatch;
-          });
+        // For multi-card properties, prefer the main card only
+        const subjectsByBaseKey = {};
+        manualProperties.forEach(key => {
+          const parts = key.split('-');
+          const block = (parts[0] || '').trim().toUpperCase();
+          const lot = (parts[1] || '').trim().toUpperCase();
+          const qual = (parts[2] || '').trim().toUpperCase();
+          const baseKey = `${block}|${lot}|${qual}`;
+          if (!subjectsByBaseKey[baseKey]) {
+            subjectsByBaseKey[baseKey] = { block, lot, qual };
+          }
         });
+
+        subjects = Object.values(subjectsByBaseKey)
+          .map(({ block, lot, qual }) => {
+            const matches = properties.filter(p => {
+              if (!isResidentialProperty(p)) return false;
+              const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
+              const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
+              const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
+              return blockMatch && lotMatch && qualMatch;
+            });
+            // Prefer the main card if multiple cards exist
+            return matches.length > 0
+              ? (matches.find(p => isMainCard(p.property_addl_card)) || matches[0])
+              : null;
+          })
+          .filter(p => p !== null);
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
