@@ -1917,17 +1917,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
 
-    // Check if ANY card in the group is marked as a farm package.
-    // The farm package metadata might be on different cards (e.g., main card has is_farm_package=true,
-    // but the QFARM variant might have different _pkg). We check all of them.
-    const isFarmPackage = allCards.some(card => card._pkg?.is_farm_package && card._pkg?.combined_lot_acres > 0);
+    // Check if this is a farm property by looking at the class codes (3A or 3B).
+    // This handles both the _pkg.is_farm_package flag AND cases where 3A and 3B
+    // are on different sales records and don't share the same _pkg grouping.
+    const isFarmProperty = allCards.some(card => {
+      const cls = (card.property_m4_class || card.property_class || '').toString().trim().toUpperCase();
+      return cls === '3A' || cls === '3B';
+    });
 
     // In 'separate' mode, we DON'T combine additional cards (A, B, C, etc.) with the main card.
-    // HOWEVER, we ALWAYS combine farm packages (7/4 base + 7/4/QFARM variant) regardless of mode.
+    // HOWEVER, we ALWAYS combine farm properties (7/4 base 3A + 7/4/QFARM variant 3B) regardless of mode.
     // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
 
-    if (cardMode === 'separate' && !isFarmPackage) {
-      // Not a farm package and cardMode is separate: return early with just the main card
+    if (cardMode === 'separate' && !isFarmProperty) {
+      // Not a farm property and cardMode is separate: return early with just the main card
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
@@ -1975,15 +1978,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
 
-    // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
-    // This keeps the editable value in sync with the display render function
-    if (isFarmPackage) {
-      // Find the farm package info from any card in the group (it might be on a different card than the main one)
-      const farmPackageInfo = allCards.find(card => card._pkg?.is_farm_package && card._pkg?.combined_lot_acres > 0)?._pkg;
-      if (farmPackageInfo) {
-        console.log(`🌾 Farm package override: combined_lot_acres=${farmPackageInfo.combined_lot_acres}, was=${aggregated.asset_lot_acre}`);
-        aggregated.asset_lot_acre = farmPackageInfo.combined_lot_acres;
-      }
+    // For farm properties, the combined lot acre is the sum of all cards (already done above in sumFields).
+    // No special override needed here since the summation already handles 3A + 3B aggregation.
+    if (isFarmProperty) {
+      console.log(`🌾 Farm property detected: aggregated.asset_lot_acre=${aggregated.asset_lot_acre}`);
     }
 
     return aggregated;
