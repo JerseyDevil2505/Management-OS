@@ -6586,6 +6586,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     //     job_cme_result_sets.
                     handleManualEvaluate(true);
                   }}
+                  onGeocodeSaved={(compositeKey, patch) => {
+                    // Patch the in-memory properties array so coordinates persist
+                    // when navigating between properties. The DB has already been
+                    // updated by GeocodeStatusChip.
+                    const target = properties.find(p => p.property_composite_key === compositeKey);
+                    if (target) {
+                      Object.assign(target, patch);
+                    }
+                  }}
                 />
               </div>
             )}

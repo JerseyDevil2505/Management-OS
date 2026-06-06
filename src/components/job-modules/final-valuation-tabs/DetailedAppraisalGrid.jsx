@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -282,7 +282,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const handleGeocodeSaved = useCallback((compositeKey, patch) => {
     if (!compositeKey) return;
     setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
-  }, []);
+    // Notify parent so it can update the properties array
+    if (onGeocodeSaved) {
+      onGeocodeSaved(compositeKey, patch);
+    }
+  }, [onGeocodeSaved]);
 
   // ==================== SALES HISTORY (Hidden / Cover Sale Swap) ====================
   // When a property's current sale is a cover ($1, family transfer, estate, etc.)
