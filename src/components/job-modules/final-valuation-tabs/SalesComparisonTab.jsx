@@ -1936,22 +1936,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // for use when farm sales mode is toggled ON.
     if (cardMode === 'separate') {
       // Separate mode: return early with just the main card
-      const result = {
+      // The farm_combined_lot_acre field from the DB is already in prop,
+      // so just pass it through as-is
+      return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
       };
-
-      // For farm properties in separate mode, calculate and store combined lot acres
-      // so that when farm sales mode is ON, we can use the combined total
-      if (isFarmProperty) {
-        const combinedLotAcre = allCards.reduce((sum, card) => sum + (parseFloat(card.asset_lot_acre) || 0), 0);
-        if (combinedLotAcre > 0) {
-          result._combinedLotAcre = combinedLotAcre;
-          console.log(`🌾 Farm property (separate mode): main card acre=${result.asset_lot_acre}, combined=${combinedLotAcre}`);
-        }
-      }
-
-      return result;
     }
 
     const aggregated = { ...prop };
