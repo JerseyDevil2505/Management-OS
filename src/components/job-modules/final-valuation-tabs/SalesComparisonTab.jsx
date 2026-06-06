@@ -1944,6 +1944,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const aggregated = { ...prop };
 
     // SUM fields (includes lot acre for farm properties with multiple cards like 3A + 3B)
+    // IMPORTANT: For farm properties, we need to sum lot_acre across all cards (3A + 3B),
+    // but we'll store it separately so we can choose between individual card acre or combined acre
+    // depending on the farmSalesMode setting at display time.
     const sumFields = [
       'asset_sfla', 'asset_lot_acre', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
       'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
@@ -1957,7 +1960,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         if (field === 'asset_lot_acre') {
           console.log(`📊 Summing ${field}:`, allCards.map(c => parseFloat(c[field]) || 0).join(' + '), '=', total);
         }
-        aggregated[field] = total;
+        // For farm properties, preserve the main card's asset_lot_acre (don't overwrite it)
+        // and store the combined total separately
+        if (isFarmProperty && field === 'asset_lot_acre') {
+          aggregated._combinedLotAcre = total;
+        } else {
+          aggregated[field] = total;
+        }
       }
     });
 
@@ -1982,10 +1991,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
 
-    // For farm properties, the combined lot acre is the sum of all cards (already done above in sumFields).
-    // No special override needed since the summation in the loop above already handles 3A + 3B acres aggregation.
+    // For farm properties, the combined lot acre is the sum of all cards (already stored in _combinedLotAcre).
+    // The individual card's asset_lot_acre is preserved so we can show the right value based on farmSalesMode.
     if (isFarmProperty) {
-      console.log(`🌾 Farm property detected: asset_lot_acre=${aggregated.asset_lot_acre}`);
+      console.log(`🌾 Farm property detected: main card asset_lot_acre=${aggregated.asset_lot_acre}, combined=${aggregated._combinedLotAcre}`);
     }
 
     return aggregated;
@@ -3321,22 +3330,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
       case 'lot_size_acre':
         // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
+        // Otherwise use the individual card's acre (preserved as asset_lot_acre)
         if (compFilters?.farmSalesMode) {
           const subjectPkgInfo = subject._pkg;
           const compPkgInfo = comp._pkg;
 
-          if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
+          // Try _combinedLotAcre first (from aggregation), then fall back to _pkg data
+          if (subject._combinedLotAcre && subject._combinedLotAcre > 0) {
+            subjectValue = subject._combinedLotAcre;
+          } else if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
             subjectValue = subjectPkgInfo.combined_lot_acres;
           } else {
             subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           }
 
-          if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
+          if (comp._combinedLotAcre && comp._combinedLotAcre > 0) {
+            compValue = comp._combinedLotAcre;
+          } else if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
             compValue = compPkgInfo.combined_lot_acres;
           } else {
             compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
           }
         } else {
+          // Farm sales mode OFF: use the individual card's asset_lot_acre (not combined)
           subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         }
