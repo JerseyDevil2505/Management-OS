@@ -8,6 +8,7 @@ import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
 import ManageResultSetsTab from './ManageResultSetsTab';
 import ScanMaskedSalesModal from './ScanMaskedSalesModal';
+import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
@@ -16,6 +17,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [activeSubTab, setActiveSubTab] = useState('search');
   // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
   const [showMaskedModal, setShowMaskedModal] = useState(false);
+  // Manual Sales modal (Microsystems) — for manually entering historical sales
+  const [showManualSalesModal, setShowManualSalesModal] = useState(false);
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
@@ -408,6 +411,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL STATE ====================
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
+  const [manualSalesData, setManualSalesData] = useState([]); // Loaded manual sales (Microsystems)
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
   // Staged filter inputs (not applied until user clicks Filter)
   const [stagedDateStart, setStagedDateStart] = useState(compFilters.salesDateStart);
@@ -698,6 +702,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   ];
 
   // ==================== LOAD ADJUSTMENT GRID AND CUSTOM BRACKETS ====================
+  const loadManualSales = async () => {
+    if (!jobData?.id || vendorType !== 'Microsystems') return;
+    try {
+      const { data, error } = await supabase
+        .from('pool_manual_sales')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sales_date', { ascending: false });
+      if (error) throw error;
+      setManualSalesData(data || []);
+      if (data && data.length > 0) {
+        console.log(`✅ Loaded ${data.length} manual sales`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error loading manual sales:', error.message);
+    }
+  };
+
   useEffect(() => {
     if (jobData?.id) {
       loadAdjustmentGrid();
@@ -707,6 +729,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       loadSavedResultSets();
       loadBracketMappings();
       loadSavedPoolOverrideSets();
+      loadManualSales();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -1421,7 +1444,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // stamped by JobContainer's derivation pass; fall back to a heuristic on
     // the (very brief) initial paint where the marker hasn't landed yet.
     const seen = new Set();
-    return properties
+    let candidates = properties
       .map(p => {
         // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
         // which the filter below would drop anyway) and the user has unmasked a
@@ -1460,7 +1483,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (bc <= 10) return false;
       return true;
     });
-  }, [properties]);
+
+    // For Microsystems, add manually-entered sales as synthetic property entries
+    if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+      manualSalesData.forEach(manual => {
+        const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+        if (!seen.has(baseKey)) {
+          candidates.push({
+            property_block: manual.property_block,
+            property_lot: manual.property_lot,
+            property_qualifier: manual.property_qualifier || '',
+            property_composite_key: `${manual.property_block}-${manual.property_lot}-${manual.property_qualifier || ''}`,
+            sales_date: manual.sales_date,
+            sales_price: manual.sales_price,
+            sales_nu: manual.sales_nu || '00',
+            sales_book: manual.sales_book,
+            sales_page: manual.sales_page,
+            _isManualSale: true,
+            _isMainCard: true,
+            asset_building_class: 100, // dummy value to pass filter
+          });
+          seen.add(baseKey);
+        }
+      });
+    }
+
+    return candidates;
+  }, [properties, vendorType, manualSalesData]);
 
   // Compute which sales are included in the pool based on filters + overrides
   const salesPoolEntries = useMemo(() => {
@@ -4079,6 +4128,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       title="Scan BRT prior sales for masked good sales overwritten by later junk transactions (uses the pool date window)"
                     >
                       Scan Masked Sales
+                    </button>
+                  )}
+                  {vendorType === 'Microsystems' && (
+                    <button
+                      onClick={() => setShowManualSalesModal(true)}
+                      className="px-3 py-1.5 text-sm font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 border border-amber-300"
+                      title="Manually enter historical sales to unmask junk transactions or fill missing data"
+                    >
+                      Add Manual Sale
                     </button>
                   )}
                   <button
@@ -8172,6 +8230,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         }}
         surfaceLabel="Sales Pool"
         onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+      />
+
+      {/* Manual Sales Modal — Microsystems unmask feature */}
+      <ManualSalesModal
+        isOpen={showManualSalesModal}
+        onClose={() => setShowManualSalesModal(false)}
+        jobData={jobData}
+        properties={properties}
+        onSaved={() => {
+          loadManualSales();
+          onUpdateJobCache?.(jobData?.id, { forceRefresh: true });
+        }}
       />
 
       {/* Import Block/Lot/Qual Modal */}
