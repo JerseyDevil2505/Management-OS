@@ -1932,12 +1932,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // In separate mode, keep additional cards (A, B, C) separate from the main card.
     // This applies to ALL properties including farms — if cardMode is 'separate',
     // return just the main card with a count of how many additional cards exist.
+    // HOWEVER, for farm properties, we still need to calculate the combined lot acres
+    // for use when farm sales mode is toggled ON.
     if (cardMode === 'separate') {
       // Separate mode: return early with just the main card
-      return {
+      const result = {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
       };
+
+      // For farm properties in separate mode, calculate and store combined lot acres
+      // so that when farm sales mode is ON, we can use the combined total
+      if (isFarmProperty) {
+        const combinedLotAcre = allCards.reduce((sum, card) => sum + (parseFloat(card.asset_lot_acre) || 0), 0);
+        if (combinedLotAcre > 0) {
+          result._combinedLotAcre = combinedLotAcre;
+          console.log(`🌾 Farm property (separate mode): main card acre=${result.asset_lot_acre}, combined=${combinedLotAcre}`);
+        }
+      }
+
+      return result;
     }
 
     const aggregated = { ...prop };
