@@ -1920,12 +1920,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // Check if this is a farm property by looking at the class codes (3A or 3B).
     // This handles both the _pkg.is_farm_package flag AND cases where 3A and 3B
     // are on different sales records and don't share the same _pkg grouping.
-    const isFarmProperty = allCards.some(card => {
+    let isFarmProperty = false;
+    for (const card of allCards) {
       const cls = (card.property_m4_class || card.property_class || '').toString().trim().toUpperCase();
-      return cls === '3A' || cls === '3B';
-    });
+      if (cls === '3A' || cls === '3B') {
+        isFarmProperty = true;
+        break;
+      }
+    }
 
-    // In 'separate' mode, we DON'T combine additional cards (A, B, C, etc.) with the main card.
+    // In separate mode, dont combine additional cards A, B, C with the main card.
     // HOWEVER, we ALWAYS combine farm properties (7/4 base 3A + 7/4/QFARM variant 3B) regardless of mode.
     // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
 
@@ -1979,9 +1983,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
 
     // For farm properties, the combined lot acre is the sum of all cards (already done above in sumFields).
-    // No special override needed here since the summation already handles 3A + 3B aggregation.
+    // No special override needed since the summation in the loop above already handles 3A + 3B acres aggregation.
     if (isFarmProperty) {
-      console.log(`🌾 Farm property detected: aggregated.asset_lot_acre=${aggregated.asset_lot_acre}`);
+      console.log(`🌾 Farm property detected: asset_lot_acre=${aggregated.asset_lot_acre}`);
     }
 
     return aggregated;
