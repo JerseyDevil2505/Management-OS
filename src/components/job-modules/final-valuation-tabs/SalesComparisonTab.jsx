@@ -1916,7 +1916,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       allCards.map(c => `${c.property_addl_card}(${parseFloat(c.asset_lot_acre)||0}ac)`).join(' + '));
 
     const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
-    const isFarmPackage = prop._pkg?.is_farm_package && prop._pkg?.combined_lot_acres > 0;
+
+    // Check if ANY card in the group is marked as a farm package.
+    // The farm package metadata might be on different cards (e.g., main card has is_farm_package=true,
+    // but the QFARM variant might have different _pkg). We check all of them.
+    const isFarmPackage = allCards.some(card => card._pkg?.is_farm_package && card._pkg?.combined_lot_acres > 0);
 
     // In 'separate' mode, we DON'T combine additional cards (A, B, C, etc.) with the main card.
     // HOWEVER, we ALWAYS combine farm packages (7/4 base + 7/4/QFARM variant) regardless of mode.
@@ -1974,8 +1978,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
     // This keeps the editable value in sync with the display render function
     if (isFarmPackage) {
-      console.log(`🌾 Farm package override: _pkg.combined_lot_acres=${aggregated._pkg?.combined_lot_acres}, was=${aggregated.asset_lot_acre}`);
-      aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
+      // Find the farm package info from any card in the group (it might be on a different card than the main one)
+      const farmPackageInfo = allCards.find(card => card._pkg?.is_farm_package && card._pkg?.combined_lot_acres > 0)?._pkg;
+      if (farmPackageInfo) {
+        console.log(`🌾 Farm package override: combined_lot_acres=${farmPackageInfo.combined_lot_acres}, was=${aggregated.asset_lot_acre}`);
+        aggregated.asset_lot_acre = farmPackageInfo.combined_lot_acres;
+      }
     }
 
     return aggregated;
