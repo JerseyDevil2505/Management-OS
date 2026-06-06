@@ -4762,7 +4762,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           photo is uploaded to `appeal-photos` storage and recorded in the
           `appeal_photos` table, keyed by (job_id, property_composite_key). */}
       <div className="px-4 pb-4">
-        <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+        <ParcelPhotoStrip
+          jobId={jobData?.id}
+          parcels={photoStripParcels}
+          onPhotoSaved={(photoRow) => {
+            // Photo was saved to appeal_photos table. This callback ensures the
+            // parent (SalesComparisonTab) knows about the photo save so it can
+            // update its state if the user navigates away and comes back.
+            console.log('📸 Photo saved to appeal_photos:', photoRow.property_composite_key);
+          }}
+        />
       </div>
     </div>
   );

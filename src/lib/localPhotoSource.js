@@ -321,6 +321,21 @@ export async function indexSourcesForCcdd(ccdd, opts = {}) {
 /** Convenience: read the bytes of a single matched photo. */
 export async function readPhoto(match) {
   if (match?.file) return match.file; // session-source already holds the File
+
+  // If this is a DB-stored photo, fetch it from Supabase storage
+  if (match?.storageKey && match?.source === 'db_storage') {
+    try {
+      const { supabase } = await import('./supabaseClient.js');
+      const { data, error } = await supabase.storage
+        .from('appeal-photos')
+        .download(match.storageKey);
+      if (error) throw error;
+      return data; // This is already a Blob/File
+    } catch (e) {
+      throw new Error(`Failed to load photo from storage: ${e?.message}`);
+    }
+  }
+
   if (!match?.fileHandle) throw new Error('No file handle on match.');
   const file = await match.fileHandle.getFile();
   return file;
