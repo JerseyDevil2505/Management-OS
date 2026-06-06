@@ -3342,30 +3342,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'lot_size_acre':
-        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
-        // Otherwise use the individual card's acre (preserved as asset_lot_acre)
+        // Farm properties: use farm_combined_lot_acre when farm sales mode is ON
+        // Otherwise use the individual card's asset_lot_acre
         if (compFilters?.farmSalesMode) {
-          const subjectPkgInfo = subject._pkg;
-          const compPkgInfo = comp._pkg;
-
-          // Try _combinedLotAcre first (from aggregation), then fall back to _pkg data
-          if (subject._combinedLotAcre && subject._combinedLotAcre > 0) {
-            subjectValue = subject._combinedLotAcre;
-          } else if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
-            subjectValue = subjectPkgInfo.combined_lot_acres;
-          } else {
-            subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
-          }
-
-          if (comp._combinedLotAcre && comp._combinedLotAcre > 0) {
-            compValue = comp._combinedLotAcre;
-          } else if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
-            compValue = compPkgInfo.combined_lot_acres;
-          } else {
-            compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
-          }
+          // Farm mode ON: use the pre-calculated combined 3A+3B acreage
+          subjectValue = subject.farm_combined_lot_acre || subject.asset_lot_acre || 0;
+          compValue = comp.farm_combined_lot_acre || comp.asset_lot_acre || 0;
         } else {
-          // Farm sales mode OFF: use the individual card's asset_lot_acre (not combined)
+          // Farm mode OFF: use the individual card's acreage only
           subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         }

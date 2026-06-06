@@ -874,8 +874,11 @@ export class MicrosystemsProcessor {
       // Update jobs table with property totals AFTER successful processing
       if (results.processed > 0) {
         await this.updateJobTotals(jobId, totalresidential, totalcommercial);
+
+        // Calculate farm_combined_lot_acre for 3A properties with matching 3B variants
+        await this.calculateFarmCombinedAcreage(jobId);
       }
-      
+
       console.log('🚀 Enhanced Microsystems processing complete:', results);
       return results;
       
@@ -1475,6 +1478,65 @@ export class MicrosystemsProcessor {
     }
     
     return result;
+  }
+
+  /**
+   * Calculate farm_combined_lot_acre for 3A properties with matching 3B variants.
+   * This is called after all properties are inserted so we can look for matching
+   * block/lot pairs and sum their acreage together.
+   */
+  async calculateFarmCombinedAcreage(jobId) {
+    try {
+      console.log('🌾 Calculating farm_combined_lot_acre for 3A properties...');
+
+      // Find all 3A properties and look for matching 3B variants
+      const { data: farm3aProperties, error: fetchError } = await supabase
+        .from('property_records')
+        .select('id, property_block, property_lot, property_m4_class, asset_lot_acre')
+        .eq('job_id', jobId)
+        .eq('property_m4_class', '3A');
+
+      if (fetchError) throw fetchError;
+
+      if (!farm3aProperties || farm3aProperties.length === 0) {
+        console.log('  No 3A properties found, skipping farm calculation');
+        return;
+      }
+
+      // For each 3A, find matching 3B and sum their acres
+      let updatedCount = 0;
+      for (const prop3a of farm3aProperties) {
+        // Find all properties with same block/lot that are 3A or 3B
+        const { data: farmPairs, error: pairError } = await supabase
+          .from('property_records')
+          .select('asset_lot_acre')
+          .eq('job_id', jobId)
+          .eq('property_block', prop3a.property_block)
+          .eq('property_lot', prop3a.property_lot)
+          .in('property_m4_class', ['3A', '3B']);
+
+        if (!pairError && farmPairs && farmPairs.length > 0) {
+          const combinedAcre = farmPairs.reduce((sum, p) => sum + (parseFloat(p.asset_lot_acre) || 0), 0);
+
+          if (combinedAcre > 0) {
+            const { error: updateError } = await supabase
+              .from('property_records')
+              .update({ farm_combined_lot_acre: combinedAcre })
+              .eq('id', prop3a.id);
+
+            if (!updateError) {
+              updatedCount++;
+              console.log(`  ✅ Block ${prop3a.property_block}/Lot ${prop3a.property_lot}: ${combinedAcre} acres`);
+            }
+          }
+        }
+      }
+
+      console.log(`🌾 Farm acreage calculation complete: updated ${updatedCount} properties`);
+    } catch (error) {
+      console.error('⚠️ Error calculating farm combined acreage:', error);
+      // Non-critical error - don't fail the whole upload
+    }
   }
 }
 
