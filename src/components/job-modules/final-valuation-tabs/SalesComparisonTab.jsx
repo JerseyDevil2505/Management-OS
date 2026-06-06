@@ -2165,6 +2165,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         setEvaluationResults(updatedResults);
         console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
 
+        // Clear editingResultIndex so the next Evaluate-and-Update works on a fresh slate
+        // and doesn't overwrite the same row again
+        setEditingResultIndex(null);
+
         // Auto-persist back to the loaded saved set so the user doesn't have
         // to switch tabs and re-save. Only fires when an active set is loaded
         // (set in handleLoadResultSet / handleSaveResultSet). The plain
