@@ -1915,12 +1915,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     console.log(`🔗 Aggregating ${allCards.length} cards for ${prop.property_block}/${prop.property_lot}/${prop.property_qualifier}:`,
       allCards.map(c => `${c.property_addl_card}(${parseFloat(c.asset_lot_acre)||0}ac)`).join(' + '));
 
-    // Honor additional_card_handling_config from job settings (not per-card _cardMode, which may vary)
-    // In 'separate' mode the user wants each parcel evaluated against the main card only —
-    // no SFLA / amenity sums. We still surface the additional-cards count so the
-    // (+N cards) badge stays visible everywhere it renders today.
     const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
-    if (cardMode === 'separate') {
+    const isFarmPackage = prop._pkg?.is_farm_package && prop._pkg?.combined_lot_acres > 0;
+
+    // In 'separate' mode, we DON'T combine additional cards (A, B, C, etc.) with the main card.
+    // HOWEVER, we ALWAYS combine farm packages (7/4 base + 7/4/QFARM variant) regardless of mode.
+    // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
+
+    if (cardMode === 'separate' && !isFarmPackage) {
+      // Not a farm package and cardMode is separate: return early with just the main card
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
@@ -1970,11 +1973,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     // For farm properties, ensure asset_lot_acre matches the combined lot from _pkg
     // This keeps the editable value in sync with the display render function
-    if (aggregated._pkg?.is_farm_package && aggregated._pkg?.combined_lot_acres > 0) {
+    if (isFarmPackage) {
       console.log(`🌾 Farm package override: _pkg.combined_lot_acres=${aggregated._pkg?.combined_lot_acres}, was=${aggregated.asset_lot_acre}`);
       aggregated.asset_lot_acre = aggregated._pkg.combined_lot_acres;
-    } else {
-      console.log(`🚫 No farm override: _pkg.is_farm_package=${aggregated._pkg?.is_farm_package}, combined_lot_acres=${aggregated._pkg?.combined_lot_acres}, final acres=${aggregated.asset_lot_acre}`);
     }
 
     return aggregated;
