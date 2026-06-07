@@ -3057,18 +3057,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         let topComps = [...pinnedSelected, ...fillerComps];
 
-        // CRITICAL: If a comp has a manual sales override, recalculate adjustmentPercent
-        // so it's based on the overridden sales_price, not the original junk price
+        // CRITICAL: If a comp has a manual sales override, FULLY recalculate all adjustments
+        // based on the overridden sales_price, not the original junk price
         topComps = topComps.map(comp => {
-          if (comp._isManualSale && comp.adjustments && comp.sales_price > 0) {
-            // Recalculate adjustment percent from the total adjustment amount
-            const totalAdj = comp.adjustments.reduce((sum, adj) => sum + (adj.amount || 0), 0);
-            const newAdjPercent = (totalAdj / comp.sales_price) * 100;
-            const newAdjustedPrice = comp.sales_price + totalAdj;
+          if (comp._isManualSale) {
+            // Recalculate all adjustments using the overridden price
+            const recalc = calculateAllAdjustments(subject, comp, subjectMapping?.bracket || null);
             return {
               ...comp,
-              adjustmentPercent: newAdjPercent,
-              adjustedPrice: newAdjustedPrice
+              adjustments: recalc.adjustments,
+              totalAdjustment: recalc.totalAdjustment,
+              adjustedPrice: recalc.adjustedPrice,
+              adjustmentPercent: recalc.adjustmentPercent
             };
           }
           return comp;
