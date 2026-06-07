@@ -6612,6 +6612,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   marketLandData={marketLandData}
                   tenantConfig={tenantConfig}
                   activeResultSetId={activeResultSetId}
+                  manualSalesOverrides={manualSalesData}
                   onSentToAppealLog={async (subject) => {
                     // Rich's "did I do this one yet?" tracer. When the user
                     // successfully sends a Detailed snapshot to Appeal Log,

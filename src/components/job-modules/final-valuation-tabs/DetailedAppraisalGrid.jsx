@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null, manualSalesOverrides = [] }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -136,6 +136,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [vendorType]);
 
+  // Helper to apply manual sales overrides to a property
+  const applyManualSalesOverride = useCallback((prop) => {
+    if (!prop || !manualSalesOverrides || manualSalesOverrides.length === 0) return prop;
+
+    const override = manualSalesOverrides.find(m =>
+      m.property_block === (prop.property_block || '').toString() &&
+      m.property_lot === (prop.property_lot || '').toString() &&
+      m.property_qualifier === (prop.property_qualifier || '').toString()
+    );
+
+    if (!override) return prop;
+
+    return {
+      ...prop,
+      sales_price: override.sales_price,
+      sales_date: override.sales_date,
+      sales_nu: override.sales_nu || null,
+      sales_book: override.sales_book,
+      sales_page: override.sales_page,
+      _isManualSale: true
+    };
+  }, [manualSalesOverrides]);
+
   // Helper to get all cards for a property (main + additional)
   const getPropertyCards = useCallback((prop) => {
     if (!prop || !allProperties || allProperties.length === 0) return [prop];
@@ -217,8 +240,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Manual comps are not in property_records, so skip the additional-cards
     // aggregation pass entirely - just return them as-is.
     if (comp.is_manual_comp) return comp;
-    return { ...comp, ...getAggregatedPropertyData(comp) };
-  }), [comps, getAggregatedPropertyData]);
+    const aggregated = { ...comp, ...getAggregatedPropertyData(comp) };
+    // Apply manual sales override if present
+    return applyManualSalesOverride(aggregated);
+  }), [comps, getAggregatedPropertyData, applyManualSalesOverride]);
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
