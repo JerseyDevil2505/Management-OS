@@ -8,6 +8,7 @@ import VacantLandAppraisalTab from './VacantLandAppraisalTab';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
 import ManageResultSetsTab from './ManageResultSetsTab';
 import ScanMaskedSalesModal from './ScanMaskedSalesModal';
+import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
@@ -16,6 +17,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [activeSubTab, setActiveSubTab] = useState('search');
   // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
   const [showMaskedModal, setShowMaskedModal] = useState(false);
+  // Manual Sales modal (Microsystems) — for manually entering historical sales
+  const [showManualSalesModal, setShowManualSalesModal] = useState(false);
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
@@ -408,6 +411,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL STATE ====================
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
+  const [manualSalesData, setManualSalesData] = useState([]); // Loaded manual sales (Microsystems)
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
   // Staged filter inputs (not applied until user clicks Filter)
   const [stagedDateStart, setStagedDateStart] = useState(compFilters.salesDateStart);
@@ -698,6 +702,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   ];
 
   // ==================== LOAD ADJUSTMENT GRID AND CUSTOM BRACKETS ====================
+  const loadManualSales = async () => {
+    if (!jobData?.id || vendorType !== 'Microsystems') return;
+    try {
+      const { data, error } = await supabase
+        .from('pool_manual_sales')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sales_date', { ascending: false });
+      if (error) throw error;
+      setManualSalesData(data || []);
+      if (data && data.length > 0) {
+        console.log(`✅ Loaded ${data.length} manual sales`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error loading manual sales:', error.message);
+    }
+  };
+
   useEffect(() => {
     if (jobData?.id) {
       loadAdjustmentGrid();
@@ -707,6 +729,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       loadSavedResultSets();
       loadBracketMappings();
       loadSavedPoolOverrideSets();
+      loadManualSales();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -1415,14 +1438,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
+    // Build a map of manual sales for quick lookup (Microsystems only)
+    const manualSalesMap = {};
+    if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+      manualSalesData.forEach(manual => {
+        const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+        manualSalesMap[baseKey] = manual;
+      });
+    }
+
     // Dedupe to main card per parcel. We used to keep "first seen", which
     // depended on load order and could silently land on an additional card —
     // throwing off SFLA, $/SF, and the size-range filter. _isMainCard is
     // stamped by JobContainer's derivation pass; fall back to a heuristic on
     // the (very brief) initial paint where the marker hasn't landed yet.
     const seen = new Set();
-    return properties
+    let candidates = properties
       .map(p => {
+        // FIRST: Apply manual sales override (Microsystems) BEFORE any junk-sale checks
+        const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+        const manualSale = manualSalesMap[baseKey];
+        if (manualSale) {
+          return {
+            ...p,
+            sales_price: manualSale.sales_price,
+            sales_date: manualSale.sales_date,
+            sales_nu: manualSale.sales_nu || null,
+            sales_book: manualSale.sales_book,
+            sales_page: manualSale.sales_page,
+            _isManualSale: true,
+          };
+        }
+
+        // SECOND: Apply BRT masked sales unmask (only if no manual override)
         // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
         // which the filter below would drop anyway) and the user has unmasked a
         // healthy prior, swap that prior in as the parcel's effective pool sale.
@@ -1460,7 +1508,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       if (bc <= 10) return false;
       return true;
     });
-  }, [properties]);
+
+    // For Microsystems, add orphan manual sales (ones with no matching property record) as synthetic entries
+    if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+      manualSalesData.forEach(manual => {
+        const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+        if (!seen.has(baseKey)) {
+          candidates.push({
+            property_block: manual.property_block,
+            property_lot: manual.property_lot,
+            property_qualifier: manual.property_qualifier || '',
+            property_composite_key: `${manual.property_block}-${manual.property_lot}-${manual.property_qualifier || ''}`,
+            sales_date: manual.sales_date,
+            sales_price: manual.sales_price,
+            sales_nu: manual.sales_nu || '00',
+            sales_book: manual.sales_book,
+            sales_page: manual.sales_page,
+            _isManualSale: true,
+            _isMainCard: true,
+            asset_building_class: 100, // dummy value to pass filter
+          });
+          seen.add(baseKey);
+        }
+      });
+    }
+
+    return candidates;
+  }, [properties, vendorType, manualSalesData]);
 
   // Compute which sales are included in the pool based on filters + overrides
   const salesPoolEntries = useMemo(() => {
@@ -1929,12 +2003,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       }
     }
 
-    // In separate mode, dont combine additional cards A, B, C with the main card.
-    // HOWEVER, we ALWAYS combine farm properties (7/4 base 3A + 7/4/QFARM variant 3B) regardless of mode.
-    // This is because 3A (farmhouse) and 3B (farmland) are different parcel types, not just "additional cards".
-
-    if (cardMode === 'separate' && !isFarmProperty) {
-      // Not a farm property and cardMode is separate: return early with just the main card
+    // In separate mode, keep additional cards (A, B, C) separate from the main card.
+    // This applies to ALL properties including farms — if cardMode is 'separate',
+    // return just the main card with a count of how many additional cards exist.
+    // HOWEVER, for farm properties, we still need to calculate the combined lot acres
+    // for use when farm sales mode is toggled ON.
+    if (cardMode === 'separate') {
+      // Separate mode: return early with just the main card
+      // The farm_combined_lot_acre field from the DB is already in prop,
+      // so just pass it through as-is
       return {
         ...prop,
         _additionalCardsCount: allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length,
@@ -1944,6 +2021,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const aggregated = { ...prop };
 
     // SUM fields (includes lot acre for farm properties with multiple cards like 3A + 3B)
+    // IMPORTANT: For farm properties, we need to sum lot_acre across all cards (3A + 3B),
+    // but we'll store it separately so we can choose between individual card acre or combined acre
+    // depending on the farmSalesMode setting at display time.
     const sumFields = [
       'asset_sfla', 'asset_lot_acre', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
       'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
@@ -1957,7 +2037,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         if (field === 'asset_lot_acre') {
           console.log(`📊 Summing ${field}:`, allCards.map(c => parseFloat(c[field]) || 0).join(' + '), '=', total);
         }
-        aggregated[field] = total;
+        // For farm properties, preserve the main card's asset_lot_acre (don't overwrite it)
+        // and store the combined total separately
+        if (isFarmProperty && field === 'asset_lot_acre') {
+          aggregated._combinedLotAcre = total;
+        } else {
+          aggregated[field] = total;
+        }
       }
     });
 
@@ -1982,10 +2068,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
     aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
 
-    // For farm properties, the combined lot acre is the sum of all cards (already done above in sumFields).
-    // No special override needed since the summation in the loop above already handles 3A + 3B acres aggregation.
+    // For farm properties, the combined lot acre is the sum of all cards (already stored in _combinedLotAcre).
+    // The individual card's asset_lot_acre is preserved so we can show the right value based on farmSalesMode.
     if (isFarmProperty) {
-      console.log(`🌾 Farm property detected: asset_lot_acre=${aggregated.asset_lot_acre}`);
+      console.log(`🌾 Farm property detected: main card asset_lot_acre=${aggregated.asset_lot_acre}, combined=${aggregated._combinedLotAcre}`);
     }
 
     return aggregated;
@@ -2164,6 +2250,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         updatedResults[editingResultIndex] = updatedResult;
         setEvaluationResults(updatedResults);
         console.log(`✅ Updated result row ${editingResultIndex} in Search and Results tab`);
+
+        // Clear editingResultIndex so the next Evaluate-and-Update works on a fresh slate
+        // and doesn't overwrite the same row again
+        setEditingResultIndex(null);
 
         // Auto-persist back to the loaded saved set so the user doesn't have
         // to switch tabs and re-save. Only fires when an active set is loaded
@@ -2392,7 +2482,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
 
       // Step 2: Get eligible sales from the curated Sales Pool
-      const eligibleSales = getEligibleSales();
+      let eligibleSales = getEligibleSales();
+
+      // Apply manual sales overrides (Microsystems) — ensure override prices are used in calculations
+      if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+        const manualSalesMap = {};
+        manualSalesData.forEach(manual => {
+          const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+          manualSalesMap[baseKey] = manual;
+        });
+        const beforeCount = eligibleSales.length;
+        eligibleSales = eligibleSales.map(sale => {
+          const baseKey = `${sale.property_block || ''}-${sale.property_lot || ''}-${sale.property_qualifier || ''}`;
+          const override = manualSalesMap[baseKey];
+          if (override) {
+            console.log(`✅ Applying override to ${baseKey}: ${sale.sales_price} → ${override.sales_price}`);
+            return {
+              ...sale,
+              sales_price: override.sales_price,
+              sales_date: override.sales_date,
+              sales_nu: override.sales_nu || null,
+              sales_book: override.sales_book,
+              sales_page: override.sales_page,
+              _isManualSale: true,
+            };
+          }
+          return sale;
+        });
+        console.log(`📊 Applied ${manualSalesData.length} manual sales overrides to ${beforeCount} eligible sales`);
+      }
+
       console.log(`📊 Found ${eligibleSales.length} eligible sales from Sales Pool`);
 
       if (eligibleSales.length === 0) {
@@ -2941,6 +3060,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
 
         let topComps = [...pinnedSelected, ...fillerComps];
 
+        // CRITICAL: If a comp has a manual sales override, FULLY recalculate all adjustments
+        // based on the overridden sales_price, not the original junk price
+        topComps = topComps.map(comp => {
+          if (comp._isManualSale) {
+            // Recalculate all adjustments using the overridden price
+            const recalc = calculateAllAdjustments(subject, comp, subjectMapping?.bracket || null);
+            console.log(`🔧 Recalculating adjustments for overridden comp ${comp.property_block}/${comp.property_lot}: sales_price=${comp.sales_price}, condition_adj=${recalc.adjustments.find(a => a.name.includes('Condition'))?.amount || 0}`);
+            return {
+              ...comp,
+              _isManualSale: true,  // Preserve flag for downstream use
+              adjustments: recalc.adjustments,
+              totalAdjustment: recalc.totalAdjustment,
+              adjustedPrice: recalc.adjustedPrice,
+              adjustmentPercent: recalc.adjustmentPercent
+            };
+          }
+          return comp;
+        });
+
         // Add subject sale as Comp #1 if it exists
         if (priorityComp) {
           topComps = [priorityComp, ...topComps];
@@ -3316,23 +3454,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         break;
 
       case 'lot_size_acre':
-        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
+        // Farm properties: use farm_combined_lot_acre when farm sales mode is ON
+        // Otherwise use the individual card's asset_lot_acre
         if (compFilters?.farmSalesMode) {
-          const subjectPkgInfo = subject._pkg;
-          const compPkgInfo = comp._pkg;
-
-          if (subjectPkgInfo?.is_farm_package && subjectPkgInfo.combined_lot_acres > 0) {
-            subjectValue = subjectPkgInfo.combined_lot_acres;
-          } else {
-            subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
-          }
-
-          if (compPkgInfo?.is_farm_package && compPkgInfo.combined_lot_acres > 0) {
-            compValue = compPkgInfo.combined_lot_acres;
-          } else {
-            compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
-          }
+          // Farm mode ON: use the pre-calculated combined 3A+3B acreage
+          subjectValue = subject.farm_combined_lot_acre || subject.asset_lot_acre || 0;
+          compValue = comp.farm_combined_lot_acre || comp.asset_lot_acre || 0;
         } else {
+          // Farm mode OFF: use the individual card's acreage only
           subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
           compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         }
@@ -4074,6 +4203,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       Scan Masked Sales
                     </button>
                   )}
+                  {vendorType === 'Microsystems' && (
+                    <button
+                      onClick={() => setShowManualSalesModal(true)}
+                      className="px-3 py-1.5 text-sm font-medium bg-amber-100 text-amber-800 rounded hover:bg-amber-200 border border-amber-300"
+                      title="Manually enter historical sales to unmask junk transactions or fill missing data"
+                    >
+                      Add Manual Sale
+                    </button>
+                  )}
                   <button
                     onClick={handleSavePoolOverrideSet}
                     className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -4276,11 +4414,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 <div className="flex flex-wrap items-end justify-center gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                    <input type="date" value={stagedDateStart} onChange={(e) => setStagedDateStart(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateStart} onChange={(e) => { setStagedDateStart(e.target.value); setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value })); }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                    <input type="date" value={stagedDateEnd} onChange={(e) => setStagedDateEnd(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={stagedDateEnd} onChange={(e) => { setStagedDateEnd(e.target.value); setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value })); }} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
@@ -6522,6 +6660,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   marketLandData={marketLandData}
                   tenantConfig={tenantConfig}
                   activeResultSetId={activeResultSetId}
+                  manualSalesOverrides={manualSalesData}
                   onSentToAppealLog={async (subject) => {
                     // Rich's "did I do this one yet?" tracer. When the user
                     // successfully sends a Detailed snapshot to Appeal Log,
@@ -6581,6 +6720,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     //   - Active saved set loaded: also auto-persists to
                     //     job_cme_result_sets.
                     handleManualEvaluate(true);
+                  }}
+                  onGeocodeSaved={(compositeKey, patch) => {
+                    // Patch the in-memory properties array so coordinates persist
+                    // when navigating between properties. The DB has already been
+                    // updated by GeocodeStatusChip.
+                    const target = properties.find(p => p.property_composite_key === compositeKey);
+                    if (target) {
+                      Object.assign(target, patch);
+                    }
                   }}
                 />
               </div>
@@ -8156,6 +8304,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         }}
         surfaceLabel="Sales Pool"
         onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+      />
+
+      {/* Manual Sales Modal — Microsystems unmask feature */}
+      <ManualSalesModal
+        isOpen={showManualSalesModal}
+        onClose={() => setShowManualSalesModal(false)}
+        jobData={jobData}
+        properties={properties}
+        onSaved={() => {
+          // Override is saved to DB. User will manually refresh if needed.
+          console.log('✅ Manual sales override saved to database');
+        }}
       />
 
       {/* Import Block/Lot/Qual Modal */}

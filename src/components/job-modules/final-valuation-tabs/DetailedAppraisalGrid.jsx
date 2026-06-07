@@ -40,7 +40,7 @@ const EditableInput = React.memo(function EditableInput({
   );
 });
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null, manualSalesOverrides = [] }) => {
   const subject = result.subject;
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
@@ -136,6 +136,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [vendorType]);
 
+  // Helper to apply manual sales overrides to a property
+  const applyManualSalesOverride = useCallback((prop) => {
+    if (!prop || !manualSalesOverrides || manualSalesOverrides.length === 0) return prop;
+
+    const override = manualSalesOverrides.find(m =>
+      m.property_block === (prop.property_block || '').toString() &&
+      m.property_lot === (prop.property_lot || '').toString() &&
+      m.property_qualifier === (prop.property_qualifier || '').toString()
+    );
+
+    if (!override) return prop;
+
+    return {
+      ...prop,
+      sales_price: override.sales_price,
+      sales_date: override.sales_date,
+      sales_nu: override.sales_nu || null,
+      sales_book: override.sales_book,
+      sales_page: override.sales_page,
+      _isManualSale: true
+    };
+  }, [manualSalesOverrides]);
+
   // Helper to get all cards for a property (main + additional)
   const getPropertyCards = useCallback((prop) => {
     if (!prop || !allProperties || allProperties.length === 0) return [prop];
@@ -217,8 +240,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Manual comps are not in property_records, so skip the additional-cards
     // aggregation pass entirely - just return them as-is.
     if (comp.is_manual_comp) return comp;
-    return { ...comp, ...getAggregatedPropertyData(comp) };
-  }), [comps, getAggregatedPropertyData]);
+    const aggregated = { ...comp, ...getAggregatedPropertyData(comp) };
+    // Apply manual sales override if present
+    return applyManualSalesOverride(aggregated);
+  }), [comps, getAggregatedPropertyData, applyManualSalesOverride]);
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
@@ -282,7 +307,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const handleGeocodeSaved = useCallback((compositeKey, patch) => {
     if (!compositeKey) return;
     setGeocodePatches((prev) => ({ ...prev, [compositeKey]: patch }));
-  }, []);
+    // Notify parent so it can update the properties array
+    if (onGeocodeSaved) {
+      onGeocodeSaved(compositeKey, patch);
+    }
+  }, [onGeocodeSaved]);
 
   // ==================== SALES HISTORY (Hidden / Cover Sale Swap) ====================
   // When a property's current sale is a cover ($1, family transfer, estate, etc.)
@@ -1083,8 +1112,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'lot_size_acre',
       label: 'Lot Size (Acre)',
       render: (prop) => {
-        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
-        if (compFilters?.farmSalesMode && allProperties?.length > 0) {
+        // For farm properties with farmSalesMode enabled, use farm_combined_lot_acre from database
+        if (compFilters?.farmSalesMode) {
+          // First check database field (farm_combined_lot_acre)
+          const dbCombinedAcres = parseFloat(prop.farm_combined_lot_acre);
+          if (dbCombinedAcres > 0) {
+            return `${dbCombinedAcres.toFixed(2)} (Farm)`;
+          }
+          // Fall back to _pkg.combined_lot_acres if available
           const pkgData = prop._pkg;
           if (pkgData?.is_farm_package && pkgData.combined_lot_acres > 0) {
             return `${pkgData.combined_lot_acres.toFixed(2)} (Farm)`;
@@ -4758,7 +4793,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           photo is uploaded to `appeal-photos` storage and recorded in the
           `appeal_photos` table, keyed by (job_id, property_composite_key). */}
       <div className="px-4 pb-4">
-        <ParcelPhotoStrip jobId={jobData?.id} parcels={photoStripParcels} />
+        <ParcelPhotoStrip
+          jobId={jobData?.id}
+          parcels={photoStripParcels}
+          onPhotoSaved={(photoRow) => {
+            // Photo was saved to appeal_photos table. This callback ensures the
+            // parent (SalesComparisonTab) knows about the photo save so it can
+            // update its state if the user navigates away and comes back.
+            console.log('📸 Photo saved to appeal_photos:', photoRow.property_composite_key);
+          }}
+        />
       </div>
     </div>
   );
