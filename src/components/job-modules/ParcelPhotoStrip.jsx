@@ -49,7 +49,31 @@ function ParcelColumn({ parcel, jobId, savedPhoto, onSaved, pickLabel = 'Front' 
 
   // Local additions (paste / file-picker) not on disk
   const [extras, setExtras] = useState([]);
-  const photos = useMemo(() => [...folderPhotos, ...extras], [folderPhotos, extras]);
+
+  // Build photos array: folder photos + local extras + saved DB photo (if any)
+  // If a photo was already saved to appeal_photos, include it in the list so it
+  // can be picked again when the user returns to this property
+  const photos = useMemo(() => {
+    const list = [...folderPhotos, ...extras];
+    // If there's a saved photo from the DB and it's not already in the list,
+    // synthesize a photo object so it can be displayed and re-picked
+    if (savedPhoto?.storage_path && savedPhoto?.original_filename) {
+      const alreadyInList = list.some(p => p.name === savedPhoto.original_filename);
+      if (!alreadyInList) {
+        list.push({
+          name: savedPhoto.original_filename,
+          // For DB photos, store the storage path so readPhoto can load it
+          storageKey: savedPhoto.storage_path,
+          // Mark as DB photo so readPhoto knows to fetch from storage
+          source: 'db_storage',
+          photoNum: Number.MAX_SAFE_INTEGER,
+          vendor: null,
+          captureTs: savedPhoto.capture_ts || null,
+        });
+      }
+    }
+    return list;
+  }, [folderPhotos, extras, savedPhoto]);
 
   const [focusIdx, setFocusIdx] = useState(() => Math.max(0, photos.length - 1));
   // Default the focused photo to the one already saved as Front (if any),
@@ -381,7 +405,7 @@ export function ExportPhotosPreview({ jobId, parcels = [], appealNumber = '' }) 
 // Main: compact horizontal strip aligned with the comp grid above
 // ---------------------------------------------------------------------------
 
-export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Front' }) {
+export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Front', onPhotoSaved = null }) {
   const { connected, indexResult, source } = useJobPhotoSource();
   const [savedMap, setSavedMap] = useState({});
 
@@ -391,14 +415,19 @@ export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Fro
       if (!jobId || parcels.length === 0) return;
       const keys = parcels.map((p) => p.composite_key).filter(Boolean);
       if (keys.length === 0) return;
+      console.log('📸 ParcelPhotoStrip loading photos for keys:', keys);
       const { data, error } = await supabase
         .from('appeal_photos')
         .select('*')
         .eq('job_id', jobId)
         .in('property_composite_key', keys);
-      if (cancelled || error) return;
+      if (cancelled || error) {
+        console.warn('📸 Error loading photos:', error);
+        return;
+      }
       const map = {};
       (data || []).forEach((r) => { map[r.property_composite_key] = r; });
+      console.log('📸 ParcelPhotoStrip loaded photos:', map);
       setSavedMap(map);
     })();
     return () => { cancelled = true; };
@@ -439,7 +468,11 @@ export default function ParcelPhotoStrip({ jobId, parcels = [], pickLabel = 'Fro
             jobId={jobId}
             pickLabel={pickLabel}
             savedPhoto={savedMap[p.composite_key]}
-            onSaved={(row) => setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }))}
+            onSaved={(row) => {
+              setSavedMap((m) => ({ ...m, [row.property_composite_key]: row }));
+              // Notify parent when a photo is saved (for refreshing state if needed)
+              onPhotoSaved?.(row);
+            }}
           />
         ))}
       </div>

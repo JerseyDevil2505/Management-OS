@@ -31,12 +31,32 @@ const enrichPropertiesWithPackageData = (properties) => {
     });
     // Prefer market_manual_* (unit-rate-config calculated values for BRT) over asset_lot_* (Microsystems direct extract)
     // SF and acres represent the SAME measurement in different units, so use SF if available, otherwise convert acres
-    const combinedLotSF = group.reduce((sum, p) => {
-      const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
-      if (sf > 0) return sum + sf;
-      const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
-      return sum + (acres * 43560);
-    }, 0);
+    // For farm properties (hasFarm=true), check if the first card has farm_combined_lot_acre from the database
+    let combinedLotSF;
+    if (hasFarm && group.length > 0) {
+      const firstCard = group[0];
+      const farmCombinedAcres = parseFloat(firstCard.farm_combined_lot_acre);
+      if (farmCombinedAcres > 0) {
+        // Use the pre-calculated database value
+        combinedLotSF = farmCombinedAcres * 43560;
+      } else {
+        // Fall back to summing individual cards
+        combinedLotSF = group.reduce((sum, p) => {
+          const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+          if (sf > 0) return sum + sf;
+          const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
+          return sum + (acres * 43560);
+        }, 0);
+      }
+    } else {
+      // Non-farm: sum individual cards
+      combinedLotSF = group.reduce((sum, p) => {
+        const sf = parseFloat(p.market_manual_lot_sf) || parseFloat(p.asset_lot_sf) || 0;
+        if (sf > 0) return sum + sf;
+        const acres = parseFloat(p.market_manual_lot_acre) || parseFloat(p.asset_lot_acre) || 0;
+        return sum + (acres * 43560);
+      }, 0);
+    }
     // Determine additional card vs multi-property package
     const baseKeys = new Set();
     const cardIds = new Set();
@@ -1224,7 +1244,23 @@ const JobContainer = ({
       refreshMarketLandData: refreshMarketLandData,
       // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
       // NEW: Pass loading state to disable FileUploadButton while loading
-      isJobContainerLoading: isLoadingVersion || isLoadingProperties
+      isJobContainerLoading: isLoadingVersion || isLoadingProperties,
+      // SURGICAL PATCH: Fast in-memory update for unmask/manual-sales without full reload
+      patchPropertiesWithMarketAnalysis: async (compositeKeys = null) => {
+        if (!selectedJob?.id) return;
+        console.log(`🔧 Surgical patch: updating ${compositeKeys?.length || 'all'} properties`);
+        try {
+          const updated = await supabase.patchPropertiesWithMarketAnalysis(
+            properties,
+            selectedJob.id,
+            compositeKeys
+          );
+          setProperties(updated);
+          console.log('✅ Properties patched in-memory; CME can see unmasks now');
+        } catch (e) {
+          console.error('❌ Surgical patch failed:', e);
+        }
+      }
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
