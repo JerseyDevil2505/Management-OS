@@ -2482,7 +2482,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
 
       // Step 2: Get eligible sales from the curated Sales Pool
-      const eligibleSales = getEligibleSales();
+      let eligibleSales = getEligibleSales();
+
+      // Apply manual sales overrides (Microsystems) — ensure override prices are used in calculations
+      if (vendorType === 'Microsystems' && manualSalesData.length > 0) {
+        const manualSalesMap = {};
+        manualSalesData.forEach(manual => {
+          const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
+          manualSalesMap[baseKey] = manual;
+        });
+        eligibleSales = eligibleSales.map(sale => {
+          const baseKey = `${sale.property_block || ''}-${sale.property_lot || ''}-${sale.property_qualifier || ''}`;
+          const override = manualSalesMap[baseKey];
+          if (override) {
+            return {
+              ...sale,
+              sales_price: override.sales_price,
+              sales_date: override.sales_date,
+              sales_nu: override.sales_nu || null,
+              sales_book: override.sales_book,
+              sales_page: override.sales_page,
+              _isManualSale: true,
+            };
+          }
+          return sale;
+        });
+      }
+
       console.log(`📊 Found ${eligibleSales.length} eligible sales from Sales Pool`);
 
       if (eligibleSales.length === 0) {
