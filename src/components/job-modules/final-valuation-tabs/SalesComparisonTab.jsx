@@ -8312,38 +8312,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         onClose={() => setShowManualSalesModal(false)}
         jobData={jobData}
         properties={properties}
-        onSaved={async (savedSales) => {
-          // Reload only the affected properties from the DB (not a full refresh)
-          // This is efficient even with 20k records since we're only fetching a few
-          if (savedSales && savedSales.length > 0) {
-            try {
-              const { supabase } = await import('../../../lib/supabaseClient');
-              const { data: updatedProps } = await supabase
-                .from('property_records')
-                .select('*')
-                .eq('job_id', jobData.id)
-                .in('property_composite_key',
-                  savedSales.map(s => `${s.property_block}-${s.property_lot}-${s.property_qualifier || ''}`)
-                );
-
-              if (updatedProps && updatedProps.length > 0) {
-                // Update the properties array with the fresh data
-                setProperties((prev) => {
-                  const updated = [...prev];
-                  updatedProps.forEach(newProp => {
-                    const idx = updated.findIndex(p => p.property_composite_key === newProp.property_composite_key);
-                    if (idx >= 0) {
-                      updated[idx] = newProp;
-                    }
-                  });
-                  return updated;
-                });
-                console.log(`✅ Reloaded ${updatedProps.length} updated properties from DB`);
-              }
-            } catch (err) {
-              console.warn('Could not reload updated properties:', err);
-            }
-          }
+        onSaved={() => {
+          // Override is saved to DB. User will manually refresh if needed.
+          console.log('✅ Manual sales override saved to database');
         }}
       />
 
