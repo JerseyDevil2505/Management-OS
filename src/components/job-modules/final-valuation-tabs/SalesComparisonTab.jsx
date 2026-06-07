@@ -19,6 +19,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [showMaskedModal, setShowMaskedModal] = useState(false);
   // Manual Sales modal (Microsystems) — for manually entering historical sales
   const [showManualSalesModal, setShowManualSalesModal] = useState(false);
+  // Toast notification for surgical patch status
+  const [patchToast, setPatchToast] = useState(null);
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
@@ -8307,7 +8309,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           // Surgical patch: update only the changed properties in memory
           if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
             console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
-            patchPropertiesWithMarketAnalysis();
+            setPatchToast({ type: 'loading', message: '🔧 Updating CME data...' });
+            patchPropertiesWithMarketAnalysis().then(() => {
+              setPatchToast({ type: 'success', message: '✅ CME data refreshed instantly!' });
+              setTimeout(() => setPatchToast(null), 3000);
+            }).catch(err => {
+              setPatchToast({ type: 'error', message: '❌ Patch failed: ' + err.message });
+              setTimeout(() => setPatchToast(null), 5000);
+            });
           }
         }}
       />
@@ -8322,7 +8331,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           // Surgical patch: update only the changed properties in memory
           if (patchPropertiesWithMarketAnalysis && res?.count > 0) {
             console.log(`🔧 Surgical patch: updated ${res.count} manual sales`);
-            patchPropertiesWithMarketAnalysis();
+            setPatchToast({ type: 'loading', message: '🔧 Updating CME data...' });
+            patchPropertiesWithMarketAnalysis().then(() => {
+              setPatchToast({ type: 'success', message: '✅ CME data refreshed instantly!' });
+              setTimeout(() => setPatchToast(null), 3000);
+            }).catch(err => {
+              setPatchToast({ type: 'error', message: '❌ Patch failed: ' + err.message });
+              setTimeout(() => setPatchToast(null), 5000);
+            });
           }
         }}
       />
@@ -8486,6 +8502,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 Go to Adjustments
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Surgical Patch Toast Notification */}
+      {patchToast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
+            patchToast.type === 'loading' ? 'bg-blue-500' :
+            patchToast.type === 'success' ? 'bg-green-500' :
+            'bg-red-500'
+          } flex items-center gap-2`}>
+            {patchToast.type === 'loading' && (
+              <div className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+            )}
+            {patchToast.type === 'success' && <span>✅</span>}
+            {patchToast.type === 'error' && <span>❌</span>}
+            <span>{patchToast.message}</span>
           </div>
         </div>
       )}
