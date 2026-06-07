@@ -5164,6 +5164,88 @@ export const countyHpiService = {
 
   clearCache() {
     dataCache.clear('county_hpi_all');
+  },
+
+  /**
+   * SURGICAL PATCH: Update only changed market_analysis rows in memory
+   *
+   * After unmask/manual sales save, instead of full job reload (5-10+ min),
+   * fetch only the changed property_market_analysis rows and merge them back
+   * into the in-memory properties array. This fires instantly and lets CME
+   * evaluation see the new data without interruption.
+   *
+   * @param {Array} properties - current in-memory properties array
+   * @param {string} jobId - job ID
+   * @param {Array<string>} compositeKeys - specific keys that changed (null = fetch all)
+   * @returns {Array} updated properties array with merged market_analysis data
+   */
+  async patchPropertiesWithMarketAnalysis(properties, jobId, compositeKeys = null) {
+    if (!properties || !jobId) return properties;
+
+    try {
+      // Build query for changed rows only (or all if not specified)
+      let query = supabase
+        .from('property_market_analysis')
+        .select('property_composite_key, location_analysis, new_vcs, asset_map_page, asset_key_page, asset_zoning, values_norm_size, values_norm_time, sales_history, unmasked_sale, market_manual_lot_acre, market_manual_lot_sf, market_manual_acre, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth, unit_rate_codes_applied')
+        .eq('job_id', jobId);
+
+      // If specific keys provided, only fetch those (surgical)
+      if (Array.isArray(compositeKeys) && compositeKeys.length > 0) {
+        query = query.in('property_composite_key', compositeKeys);
+      }
+
+      const { data: marketAnalysisRows, error } = await query;
+
+      if (error) {
+        console.error('❌ Surgical patch failed:', error);
+        return properties;
+      }
+
+      if (!marketAnalysisRows || marketAnalysisRows.length === 0) {
+        console.log('ℹ️ No market analysis rows to patch');
+        return properties;
+      }
+
+      // Build a map for O(1) lookup
+      const analysisMap = new Map();
+      marketAnalysisRows.forEach(row => {
+        analysisMap.set(row.property_composite_key, row);
+      });
+
+      // Merge back into properties array
+      const updated = properties.map(p => {
+        const key = p.property_composite_key;
+        const analysis = analysisMap.get(key);
+
+        if (!analysis) return p; // No update for this property
+
+        return {
+          ...p,
+          location_analysis: analysis.location_analysis || p.location_analysis || null,
+          new_vcs: analysis.new_vcs || p.new_vcs || null,
+          asset_map_page: analysis.asset_map_page || p.asset_map_page || null,
+          asset_key_page: analysis.asset_key_page || p.asset_key_page || null,
+          asset_zoning: analysis.asset_zoning || p.asset_zoning || null,
+          values_norm_size: analysis.values_norm_size || p.values_norm_size || null,
+          values_norm_time: analysis.values_norm_time || p.values_norm_time || null,
+          sales_history: analysis.sales_history || p.sales_history || null,
+          unmasked_sale: analysis.unmasked_sale || null, // Critical: refresh unmask data
+          market_manual_lot_acre: analysis.market_manual_lot_acre ?? p.market_manual_lot_acre ?? null,
+          market_manual_lot_sf: analysis.market_manual_lot_sf ?? p.market_manual_lot_sf ?? null,
+          market_manual_acre: analysis.market_manual_acre ?? p.market_manual_acre ?? null,
+          asset_lot_acre: analysis.asset_lot_acre ?? p.asset_lot_acre ?? null,
+          asset_lot_sf: analysis.asset_lot_sf ?? p.asset_lot_sf ?? null,
+          asset_lot_frontage: analysis.asset_lot_frontage ?? p.asset_lot_frontage ?? null,
+          asset_lot_depth: analysis.asset_lot_depth ?? p.asset_lot_depth ?? null
+        };
+      });
+
+      console.log(`✅ Surgical patch applied to ${marketAnalysisRows.length} properties`);
+      return updated;
+    } catch (error) {
+      console.error('❌ Surgical patch error:', error);
+      return properties;
+    }
   }
 };
 

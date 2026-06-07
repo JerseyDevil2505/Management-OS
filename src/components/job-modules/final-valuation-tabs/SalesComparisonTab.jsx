@@ -11,7 +11,7 @@ import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -8303,7 +8303,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           toDate: compFilters.salesDateEnd || null,
         }}
         surfaceLabel="Sales Pool"
-        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+            patchPropertiesWithMarketAnalysis();
+          }
+        }}
       />
 
       {/* Manual Sales Modal — Microsystems unmask feature */}
@@ -8312,9 +8318,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         onClose={() => setShowManualSalesModal(false)}
         jobData={jobData}
         properties={properties}
-        onSaved={() => {
-          // Override is saved to DB. User will manually refresh if needed.
-          console.log('✅ Manual sales override saved to database');
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.count > 0) {
+            console.log(`🔧 Surgical patch: updated ${res.count} manual sales`);
+            patchPropertiesWithMarketAnalysis();
+          }
         }}
       />
 

@@ -47,7 +47,8 @@ const SalesReviewTab = ({
   marketLandData = {},
   hpiData = [],
   onUpdateJobCache = () => {},
-  tenantConfig = null
+  tenantConfig = null,
+  patchPropertiesWithMarketAnalysis = null
 }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
@@ -1687,7 +1688,13 @@ const SalesReviewTab = ({
         jobData={jobData}
         dateRange={{ fromYear: 2012 }}
         surfaceLabel="Sales Review"
-        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+            patchPropertiesWithMarketAnalysis();
+          }
+        }}
       />
 
       {/* Settings Modal */}

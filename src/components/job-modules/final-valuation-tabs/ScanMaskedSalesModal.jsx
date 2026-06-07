@@ -331,7 +331,7 @@ const ScanMaskedSalesModal = ({
             {counts.total} candidate{counts.total === 1 ? '' : 's'} · {counts.unmask} to unmask · {counts.pending} still pending
             {saveResult && !saveResult.error && (
               <span className="ml-2 text-green-600">
-                ✓ Saved {saveResult.saved} · cleared {saveResult.cleared}
+                ✓ Saved {saveResult.saved} · cleared {saveResult.cleared} — 🔧 CME data ready
               </span>
             )}
             {saveResult?.error && <span className="ml-2 text-red-600">Error: {saveResult.error}</span>}

@@ -1244,7 +1244,23 @@ const JobContainer = ({
       refreshMarketLandData: refreshMarketLandData,
       // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
       // NEW: Pass loading state to disable FileUploadButton while loading
-      isJobContainerLoading: isLoadingVersion || isLoadingProperties
+      isJobContainerLoading: isLoadingVersion || isLoadingProperties,
+      // SURGICAL PATCH: Fast in-memory update for unmask/manual-sales without full reload
+      patchPropertiesWithMarketAnalysis: async (compositeKeys = null) => {
+        if (!selectedJob?.id) return;
+        console.log(`🔧 Surgical patch: updating ${compositeKeys?.length || 'all'} properties`);
+        try {
+          const updated = await supabase.patchPropertiesWithMarketAnalysis(
+            properties,
+            selectedJob.id,
+            compositeKeys
+          );
+          setProperties(updated);
+          console.log('✅ Properties patched in-memory; CME can see unmasks now');
+        } catch (e) {
+          console.error('❌ Surgical patch failed:', e);
+        }
+      }
     };
 
     // 🔧 CRITICAL: Pass App.js state management to ProductionTracker
