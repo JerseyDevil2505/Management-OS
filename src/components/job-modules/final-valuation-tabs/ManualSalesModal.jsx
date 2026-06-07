@@ -140,12 +140,12 @@ const ManualSalesModal = ({
 
       console.log(`✅ Updated ${manualSales.length} properties in property_records with overrides`);
       setSaveResult({ success: true, count: manualSales.length });
-      setManualSales([]);
 
-      // Step 2: Trigger full job cache refresh so the in-memory properties array gets the updated data
-      // This is necessary because the evaluation uses the cached properties array, not the DB directly
+      // Notify parent to reload just these properties from the DB
+      onSaved?.(manualSales);
+
+      setManualSales([]);
       setTimeout(() => {
-        onSaved();  // This should call the parent's refresh callback
         onClose();
       }, 500);
     } catch (error) {
