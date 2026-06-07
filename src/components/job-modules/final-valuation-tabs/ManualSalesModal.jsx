@@ -111,7 +111,7 @@ const ManualSalesModal = ({
     try {
       const { supabase } = await import('../../../lib/supabaseClient');
 
-      // Update property_records directly with the override data (like BRT's unmasked sales)
+      // Step 1: Update property_records directly with the override data (like BRT's unmasked sales)
       // This ensures the override is used everywhere: pool, evaluations, PDF exports
       const updates = await Promise.all(
         manualSales.map(sale =>
@@ -138,12 +138,16 @@ const ManualSalesModal = ({
         throw new Error(errors[0].error.message);
       }
 
+      console.log(`✅ Updated ${manualSales.length} properties in property_records with overrides`);
       setSaveResult({ success: true, count: manualSales.length });
       setManualSales([]);
+
+      // Step 2: Trigger full job cache refresh so the in-memory properties array gets the updated data
+      // This is necessary because the evaluation uses the cached properties array, not the DB directly
       setTimeout(() => {
-        onSaved();
+        onSaved();  // This should call the parent's refresh callback
         onClose();
-      }, 1000);
+      }, 500);
     } catch (error) {
       console.error('❌ Error saving manual sales:', error);
       setSaveResult({ success: false, error: error.message });

@@ -8312,7 +8312,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         onClose={() => setShowManualSalesModal(false)}
         jobData={jobData}
         properties={properties}
-        onSaved={() => loadManualSales()}
+        onSaved={() => {
+          // Full refresh: properties were updated in DB, need to reload them
+          onUpdateJobCache?.(jobData?.id, { forceRefresh: true });
+        }}
       />
 
       {/* Import Block/Lot/Qual Modal */}
