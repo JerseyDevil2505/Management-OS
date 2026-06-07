@@ -2491,10 +2491,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           const baseKey = `${manual.property_block || ''}-${manual.property_lot || ''}-${manual.property_qualifier || ''}`;
           manualSalesMap[baseKey] = manual;
         });
+        const beforeCount = eligibleSales.length;
         eligibleSales = eligibleSales.map(sale => {
           const baseKey = `${sale.property_block || ''}-${sale.property_lot || ''}-${sale.property_qualifier || ''}`;
           const override = manualSalesMap[baseKey];
           if (override) {
+            console.log(`✅ Applying override to ${baseKey}: ${sale.sales_price} → ${override.sales_price}`);
             return {
               ...sale,
               sales_price: override.sales_price,
@@ -2507,6 +2509,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           }
           return sale;
         });
+        console.log(`📊 Applied ${manualSalesData.length} manual sales overrides to ${beforeCount} eligible sales`);
       }
 
       console.log(`📊 Found ${eligibleSales.length} eligible sales from Sales Pool`);
@@ -3063,8 +3066,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           if (comp._isManualSale) {
             // Recalculate all adjustments using the overridden price
             const recalc = calculateAllAdjustments(subject, comp, subjectMapping?.bracket || null);
+            console.log(`🔧 Recalculating adjustments for overridden comp ${comp.property_block}/${comp.property_lot}: sales_price=${comp.sales_price}, condition_adj=${recalc.adjustments.find(a => a.name.includes('Condition'))?.amount || 0}`);
             return {
               ...comp,
+              _isManualSale: true,  // Preserve flag for downstream use
               adjustments: recalc.adjustments,
               totalAdjustment: recalc.totalAdjustment,
               adjustedPrice: recalc.adjustedPrice,
