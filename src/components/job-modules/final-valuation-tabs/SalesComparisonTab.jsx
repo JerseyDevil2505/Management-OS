@@ -1455,10 +1455,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     const seen = new Set();
     let candidates = properties
       .map(p => {
+        // FIRST: Apply manual sales override (Microsystems) BEFORE any junk-sale checks
         const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
         const manualSale = manualSalesMap[baseKey];
-
-        // If a manual sale exists for this property, override the sales data
         if (manualSale) {
           return {
             ...p,
@@ -1471,6 +1470,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           };
         }
 
+        // SECOND: Apply BRT masked sales unmask (only if no manual override)
         // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
         // which the filter below would drop anyway) and the user has unmasked a
         // healthy prior, swap that prior in as the parcel's effective pool sale.
