@@ -111,24 +111,34 @@ const ManualSalesModal = ({
     try {
       const { supabase } = await import('../../../lib/supabaseClient');
 
-      // Save as pool_manual_sales (overrides for existing properties)
-      const rows = manualSales.map(sale => ({
-        job_id: jobData.id,
-        property_block: sale.property_block,
-        property_lot: sale.property_lot,
-        property_qualifier: sale.property_qualifier,
-        sales_date: sale.sales_date,
-        sales_price: sale.sales_price,
-        sales_nu: sale.sales_nu,
-        sales_book: sale.sales_book,
-        sales_page: sale.sales_page
-      }));
+      // Update property_records directly with the override data (like BRT's unmasked sales)
+      // This ensures the override is used everywhere: pool, evaluations, PDF exports
+      const updates = await Promise.all(
+        manualSales.map(sale =>
+          supabase
+            .from('property_records')
+            .update({
+              sales_date: sale.sales_date,
+              sales_price: sale.sales_price,
+              sales_nu: sale.sales_nu,
+              sales_book: sale.sales_book,
+              sales_page: sale.sales_page,
+              sales_override: true  // Mark so file update won't clobber this
+            })
+            .eq('job_id', jobData.id)
+            .eq('property_block', sale.property_block)
+            .eq('property_lot', sale.property_lot)
+            .eq('property_qualifier', sale.property_qualifier)
+        )
+      );
 
-      const { error } = await supabase
-        .from('pool_manual_sales')
-        .insert(rows);
-      if (error) throw error;
-      setSaveResult({ success: true, count: rows.length });
+      // Check for errors
+      const errors = updates.filter(r => r.error);
+      if (errors.length > 0) {
+        throw new Error(errors[0].error.message);
+      }
+
+      setSaveResult({ success: true, count: manualSales.length });
       setManualSales([]);
       setTimeout(() => {
         onSaved();
