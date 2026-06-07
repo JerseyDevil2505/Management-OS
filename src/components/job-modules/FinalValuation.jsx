@@ -14,7 +14,8 @@ const FinalValuation = ({
   hpiData = [],
   onUpdateJobCache = () => {},
   tenantConfig = null,
-  updateJobDataDirect = null
+  updateJobDataDirect = null,
+  patchPropertiesWithMarketAnalysis = null
 }) => {
   const isAssessor = tenantConfig?.orgType === 'assessor';
   // Archived/draft jobs are appeal-mode work — open straight to Sales
@@ -117,6 +118,7 @@ const FinalValuation = ({
             hpiData={hpiData}
             onUpdateJobCache={handleCacheUpdate}
             tenantConfig={tenantConfig}
+            patchPropertiesWithMarketAnalysis={patchPropertiesWithMarketAnalysis}
           />
         )}
 
@@ -168,6 +170,7 @@ const FinalValuation = ({
                 jobData._clearNavigateToCME();
               }
             }}
+            patchPropertiesWithMarketAnalysis={patchPropertiesWithMarketAnalysis}
           />
         )}
 

@@ -11,7 +11,7 @@ import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
@@ -19,6 +19,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [showMaskedModal, setShowMaskedModal] = useState(false);
   // Manual Sales modal (Microsystems) — for manually entering historical sales
   const [showManualSalesModal, setShowManualSalesModal] = useState(false);
+  // Toast notification for surgical patch status
+  const [patchToast, setPatchToast] = useState(null);
   const resultsRef = React.useRef(null);
   const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
@@ -8303,7 +8305,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           toDate: compFilters.salesDateEnd || null,
         }}
         surfaceLabel="Sales Pool"
-        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+            setPatchToast({ type: 'loading', message: '🔧 Updating CME data...' });
+            patchPropertiesWithMarketAnalysis().then(() => {
+              setPatchToast({ type: 'success', message: '✅ CME data refreshed instantly!' });
+              setTimeout(() => setPatchToast(null), 3000);
+            }).catch(err => {
+              setPatchToast({ type: 'error', message: '❌ Patch failed: ' + err.message });
+              setTimeout(() => setPatchToast(null), 5000);
+            });
+          }
+        }}
       />
 
       {/* Manual Sales Modal — Microsystems unmask feature */}
@@ -8312,9 +8327,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         onClose={() => setShowManualSalesModal(false)}
         jobData={jobData}
         properties={properties}
-        onSaved={() => {
-          // Override is saved to DB. User will manually refresh if needed.
-          console.log('✅ Manual sales override saved to database');
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.count > 0) {
+            console.log(`🔧 Surgical patch: updated ${res.count} manual sales`);
+            setPatchToast({ type: 'loading', message: '🔧 Updating CME data...' });
+            patchPropertiesWithMarketAnalysis().then(() => {
+              setPatchToast({ type: 'success', message: '✅ CME data refreshed instantly!' });
+              setTimeout(() => setPatchToast(null), 3000);
+            }).catch(err => {
+              setPatchToast({ type: 'error', message: '❌ Patch failed: ' + err.message });
+              setTimeout(() => setPatchToast(null), 5000);
+            });
+          }
         }}
       />
 
@@ -8477,6 +8502,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 Go to Adjustments
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Surgical Patch Toast Notification */}
+      {patchToast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
+            patchToast.type === 'loading' ? 'bg-blue-500' :
+            patchToast.type === 'success' ? 'bg-green-500' :
+            'bg-red-500'
+          } flex items-center gap-2`}>
+            {patchToast.type === 'loading' && (
+              <div className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+            )}
+            {patchToast.type === 'success' && <span>✅</span>}
+            {patchToast.type === 'error' && <span>❌</span>}
+            <span>{patchToast.message}</span>
           </div>
         </div>
       )}

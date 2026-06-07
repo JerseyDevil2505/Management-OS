@@ -47,8 +47,10 @@ const SalesReviewTab = ({
   marketLandData = {},
   hpiData = [],
   onUpdateJobCache = () => {},
-  tenantConfig = null
+  tenantConfig = null,
+  patchPropertiesWithMarketAnalysis = null
 }) => {
+  const [patchToast, setPatchToast] = useState(null);
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
 
@@ -1687,7 +1689,20 @@ const SalesReviewTab = ({
         jobData={jobData}
         dateRange={{ fromYear: 2012 }}
         surfaceLabel="Sales Review"
-        onSaved={() => { onUpdateJobCache?.(jobData?.id, { forceRefresh: true }); }}
+        onSaved={(res) => {
+          // Surgical patch: update only the changed properties in memory
+          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+            setPatchToast({ type: 'loading', message: '🔧 Updating data...' });
+            patchPropertiesWithMarketAnalysis().then(() => {
+              setPatchToast({ type: 'success', message: '✅ Data refreshed instantly!' });
+              setTimeout(() => setPatchToast(null), 3000);
+            }).catch(err => {
+              setPatchToast({ type: 'error', message: '❌ Failed: ' + err.message });
+              setTimeout(() => setPatchToast(null), 5000);
+            });
+          }
+        }}
       />
 
       {/* Settings Modal */}
@@ -1938,6 +1953,23 @@ const SalesReviewTab = ({
         )}
       </div>
 
+      {/* Surgical Patch Toast Notification */}
+      {patchToast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
+            patchToast.type === 'loading' ? 'bg-blue-500' :
+            patchToast.type === 'success' ? 'bg-green-500' :
+            'bg-red-500'
+          } flex items-center gap-2`}>
+            {patchToast.type === 'loading' && (
+              <div className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+            )}
+            {patchToast.type === 'success' && <span>✅</span>}
+            {patchToast.type === 'error' && <span>❌</span>}
+            <span>{patchToast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -332,7 +332,7 @@ const ManualSalesModal = ({
           {saveResult && (
             <div className={`p-3 rounded text-sm ${saveResult.success ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
               {saveResult.success
-                ? `✅ ${saveResult.count} sale${saveResult.count !== 1 ? 's' : ''} saved successfully!`
+                ? `✅ ${saveResult.count} sale${saveResult.count !== 1 ? 's' : ''} saved successfully! — 🔧 CME data ready`
                 : `❌ Error: ${saveResult.error}`}
             </div>
           )}
