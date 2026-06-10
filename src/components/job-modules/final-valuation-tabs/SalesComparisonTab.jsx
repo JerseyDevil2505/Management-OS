@@ -3459,9 +3459,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         // Farm properties: use farm_combined_lot_acre when farm sales mode is ON
         // Otherwise use the individual card's asset_lot_acre
         if (compFilters?.farmSalesMode) {
-          // Farm mode ON: use the pre-calculated combined 3A+3B acreage
-          subjectValue = subject.farm_combined_lot_acre || subject.asset_lot_acre || 0;
-          compValue = comp.farm_combined_lot_acre || comp.asset_lot_acre || 0;
+          // Farm mode ON: use the pre-calculated combined 3A+3B acreage, fall back to market_manual_lot_acre if not available
+          subjectValue = subject.farm_combined_lot_acre || subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+          compValue = comp.farm_combined_lot_acre || comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         } else {
           // Farm mode OFF: use the individual card's acreage only
           subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
