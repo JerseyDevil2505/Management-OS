@@ -984,6 +984,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
       // re-running Evaluate after a reload silently falls back to whole-town.
       const searchCriteriaPayload = {
         ...compFilters,
+        farmSalesMode: false,
         subject_selection: {
           manualProperties,
           subjectVCS,
