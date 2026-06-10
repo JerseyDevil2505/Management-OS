@@ -102,7 +102,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     individualAdjPct: 0,
     netAdjPct: 0,
     grossAdjPct: 0,
-    farmSalesMode: true // When enabled, farm subjects only compare to farm comps and use combined 3A+3B lot size
+    farmSalesMode: false // When enabled, farm subjects only compare to farm comps and use combined 3A+3B lot size
   });
   
   // ==================== EVALUATION STATE ====================
