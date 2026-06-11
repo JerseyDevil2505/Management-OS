@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, parseDateLocal, formatDateLocalYMD } from '../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 // Development logging wrapper
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -1494,6 +1494,80 @@ const calculateDistributionMetrics = async () => {
       setShowOpenInvoices(true);
     } catch (error) {
       console.error('Error loading open invoices:', error);
+    }
+  };
+
+  const exportOpenInvoicesToExcel = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Prepare data for export
+      const exportData = getSortedInvoices().map(invoice => ({
+        'Municipality': invoice.job_name,
+        'Invoice #': invoice.invoice_number,
+        'Date': new Date(invoice.billing_date).toLocaleDateString(),
+        'Open Balance': parseFloat(invoice.amount_billed),
+        'Age (Days)': calculateInvoiceAge(invoice.billing_date)
+      }));
+
+      // Create worksheet from data
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Apply styling (matching ProductionTracker style)
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Style header row (row 0)
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[cellAddress]) continue;
+
+        ws[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          fill: { fgColor: { rgb: 'FFE8E8E8' } }
+        };
+      }
+
+      // Style data rows with alternating colors
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Currency formatting for Open Balance column (column 3)
+          const isCurrencyColumn = C === 3;
+          const isAgeColumn = C === 4;
+
+          ws[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: isCurrencyColumn || isAgeColumn ? 'right' : 'left', vertical: 'center' },
+            fill: { fgColor: { rgb: R % 2 === 0 ? 'FFFFFFFF' : 'FFFAFAFA' } }
+          };
+
+          // Apply number format for currency
+          if (isCurrencyColumn) {
+            ws[cellAddress].z = '$#,##0.00';
+          }
+        }
+      }
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 30 }, // Municipality
+        { wch: 15 }, // Invoice #
+        { wch: 12 }, // Date
+        { wch: 15 }, // Open Balance
+        { wch: 12 }  // Age
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Open Invoices');
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Open_Invoices_${timestamp}.xlsx`);
+    } catch (error) {
+      console.error('Error exporting invoices:', error);
+      alert('Failed to export invoices');
     }
   };
 
@@ -4260,6 +4334,16 @@ const calculateDistributionMetrics = async () => {
                 <span className="text-lg font-medium text-orange-600">
                   Total: {formatCurrency(allOpenInvoices.reduce((sum, inv) => sum + parseFloat(inv.amount_billed), 0))}
                 </span>
+                <button
+                  onClick={exportOpenInvoicesToExcel}
+                  className="px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors"
+                  title="Export to Excel"
+                >
+                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16v-4m0 0V8m0 4h4m-4 0H8" />
+                  </svg>
+                  Export
+                </button>
                 <button
                   onClick={() => setShowOpenInvoices(false)}
                   className="text-gray-500 hover:text-gray-700"
