@@ -922,14 +922,12 @@ const JobContainer = ({
         // Only load employees when ProductionTracker is enabled (PPA jobs)
         // Filter by the job's organization to prevent LOJIK clients appearing as inspectors
         // Also exclude Admin role — admins are not inspectors
-        // Exclude inactive employees — only active/full_time/part_time/contractor allowed
         try {
           let empQuery = supabase
             .from('employees')
             .select('*')
             .eq('organization_id', jobOrgId || PPA_ORG_ID)
             .not('role', 'eq', 'Admin')
-            .in('employment_status', ['active', 'full_time', 'part_time', 'contractor'])
             .order('last_name', { ascending: true });
 
           const { data, error } = await withTimeout(
