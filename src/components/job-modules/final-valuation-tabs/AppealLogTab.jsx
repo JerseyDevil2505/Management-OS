@@ -11,6 +11,74 @@ import {
   safeFilenamePart,
 } from '../../../lib/appealReportBuilder';
 
+// Judgment code definitions (N.J.S.A. 54:3-26)
+const JUDGMENT_CODE_MAP = {
+  '1A': 'Assessment Revised - Assessed value exceeds 100%',
+  '1B': 'Assessment Revised - Assessment outside range',
+  '1C': 'Assessment Revised - Material Depreciation',
+  '1D': 'Assessment Revised - Personal Property',
+  '1E': 'Assessment Revised - Other (Explanation mandatory)',
+  '2A': 'Assessment Affirmed - Assessment within range',
+  '2B': 'Assessment Affirmed - Presumption of correctness not overturned',
+  '2C': 'Assessment Affirmed - Personal Property',
+  '3': 'Stipulated',
+  '4A': 'Freeze Act - Granted',
+  '4B': 'Freeze Act - Denied',
+  '5A': 'Dismissal with Prejudice - Non-appearance (lack of prosecution)',
+  '5B': 'Dismissal with Prejudice - No evidence provided',
+  '5C': 'Dismissal with Prejudice - Taxes/municipal charges not paid',
+  '5D': 'Dismissal with Prejudice - Failure to respond to income request',
+  '5E': 'Dismissal with Prejudice - Appeal not timely filed',
+  '5F': 'Dismissal with Prejudice - Other (Explanation mandatory)',
+  '5G': 'Dismissal with Prejudice - Added/Omitted appeal not timely filed',
+  '6A': 'Dismissal without Prejudice - Tax Court pending',
+  '6B': 'Dismissal without Prejudice - Hearing waived',
+  '7': 'Withdrawn',
+  '8A': 'Property Tax Deduction - Granted',
+  '8B': 'Property Tax Deduction - Denied',
+  '9A': 'Farmland Assessment - Qualification approved per application',
+  '9B': 'Farmland Assessment - Qualified acres changed',
+  '9C': 'Farmland Assessment - Qualified value changed',
+  '9D': 'Farmland Assessment - B & C above',
+  '10': 'Farmland Assessment Denied',
+  '11A': 'Veteran Deduction ($250) - Granted',
+  '11B': 'Veteran Deduction ($250) - Denied',
+  '12A': '100% Totally Disabled Veteran - Granted',
+  '12B': '100% Totally Disabled Veteran - Denied',
+  '13A': 'Exempt Property - Granted',
+  '13B': 'Exempt Property - Denied',
+  '13C': 'Exempt Property - Exempt amount changed',
+  '14A': 'Added Assessment Affirmed - As filed by assessor',
+  '14B': 'Added Assessment Affirmed - Prorated months changed',
+  '14C': 'Added Assessment Affirmed - Valuation changed',
+  '14D': 'Added Assessment Affirmed - B & C above',
+  '15': 'Added Assessment Removed',
+  '16A': 'Omitted Assessment Affirmed - As filed by assessor',
+  '16B': 'Omitted Assessment Affirmed - Prorated months changed',
+  '16C': 'Omitted Assessment Affirmed - Valuation changed',
+  '16D': 'Omitted Assessment Affirmed - B & C above',
+  '17': 'Omitted Assessment Removed',
+  '18': 'Reserved',
+  '19': 'Reserved',
+  '20A': 'Abatements - Granted',
+  '20B': 'Abatements - Denied',
+  '20C': 'Abatements - Abatement amount changed'
+};
+
+// Status code definitions (internal)
+const STATUS_CODE_MAP = {
+  'D': 'Defend',
+  'S': 'Stipulated',
+  'H': 'Heard',
+  'W': 'Withdrawn',
+  'Z': 'Dismissed',
+  'A': 'Assessor',
+  'AP': 'Affirmed w/Prejudice',
+  'AWP': 'Affirmed w/o Prejudice',
+  'O': 'Offered',
+  'NA': 'Non Appearance'
+};
+
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
@@ -2003,6 +2071,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           lossPct = (loss / currentAssessment) * 100;
         }
 
+        // Extract judgment code (authoritative from import, overwrites any user entry)
+        const judgmentCodeNJ = row['JUDGMNT_CODE'] ? String(row['JUDGMNT_CODE']).trim() : null;
+
         const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
         const record = {
           job_id: jobData.id,
@@ -2019,6 +2090,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           current_assessment: currentAssessment,
           requested_value: 0,
           judgment_value: judgmentValue,
+          judgment_code_nj: judgmentCodeNJ,
           loss,
           loss_pct: lossPct,
           property_block: block,
@@ -2075,6 +2147,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               hearing_date: hearingDate,
               evidence_due_date: evidenceDueDate,
               judgment_value: judgmentValue,
+              judgment_code_nj: judgmentCodeNJ,
               loss: refreshedLoss,
               loss_pct: refreshedLossPct,
               tax_court_pending: taxCourtPending
@@ -2753,7 +2826,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       }
 
       return {
-        Status: appeal.status || '-',
+        Status: appeal.status ? `${appeal.status} - ${STATUS_CODE_MAP[appeal.status] || 'Unknown'}` : '-',
+        'Judgment Code': appeal.judgment_code_nj ? `${appeal.judgment_code_nj} - ${JUDGMENT_CODE_MAP[appeal.judgment_code_nj] || 'Unknown'}` : '-',
         'Appeal #': appeal.appeal_number || '-',
         'Appeal Year': appeal.appeal_year || '-',
         Block: appeal.property_block || '-',
