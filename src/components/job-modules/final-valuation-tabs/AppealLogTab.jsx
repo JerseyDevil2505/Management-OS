@@ -4379,12 +4379,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                   <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong} font-medium`} style={{ left: '135px', minWidth: '120px', maxWidth: '120px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textMuted}`} style={{ left: '255px', minWidth: '90px', maxWidth: '90px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
+                  <td className={`sticky z-10 px-2 py-2 whitespace-nowrap border-r border-gray-200 ${textMuted}`} style={{ left: '255px', minWidth: '75px', maxWidth: '75px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     <select
                       value={appeal.judgment_code_nj || ''}
                       onChange={(e) => handleDropdownChange(appeal.id, 'judgment_code_nj', e.target.value || null)}
-                      className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
-                      style={{ width: '80px' }}
+                      className="px-0.5 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                      style={{ width: '65px' }}
                       title={`${appeal.judgment_code_nj || 'No code'} - ${JUDGMENT_CODE_MAP[appeal.judgment_code_nj] || 'Unknown'}`}
                     >
                       <option value="">-</option>
