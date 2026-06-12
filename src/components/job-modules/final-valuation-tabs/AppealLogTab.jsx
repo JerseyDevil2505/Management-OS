@@ -2916,6 +2916,40 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     // Create workbook with data
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
+
+    // Create Summary sheet FIRST (so it appears first in workbook)
+    const summaryData = [];
+
+    // Helper to format currency
+    const formatCurrency = (value) => typeof value === 'number' ? value : 0;
+
+    // Summary sheet rows
+    summaryData.push({ Metric: 'APPEAL SUMMARY', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Total Appeals', Value: stats.totalAppeals, Percentage: '100%' });
+    summaryData.push({ Metric: 'Assessment Exposure', Value: formatCurrency(stats.totalAssessmentExposure), Percentage: '' });
+    summaryData.push({ Metric: '% of Ratables', Value: `${Math.round(stats.ratablePercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: 'Total Actual Loss', Value: formatCurrency(stats.totalActualLoss), Percentage: '' });
+    summaryData.push({ Metric: 'Total % Loss (of Ratables)', Value: `${Math.round(stats.totalLossPercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: '', Value: '', Percentage: '' });
+
+    // Status breakdown
+    summaryData.push({ Metric: 'STATUS BREAKDOWN', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Defend/Heard', Value: (stats.statusCounts.D || 0) + (stats.statusCounts.H || 0), Percentage: `${Math.round(((stats.statusCounts.D || 0) + (stats.statusCounts.H || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Stipulated', Value: stats.statusCounts.S || 0, Percentage: `${Math.round((stats.statusCounts.S || 0) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Assessor/Cross', Value: (stats.statusCounts.A || 0), Percentage: `${Math.round((stats.statusCounts.A || 0) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Withdrawn/Non Appearance', Value: (stats.statusCounts.W || 0) + (stats.statusCounts.NA || 0), Percentage: `${Math.round(((stats.statusCounts.W || 0) + (stats.statusCounts.NA || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Dismissed/Affirmed', Value: (stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0), Percentage: `${Math.round(((stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: '', Value: '', Percentage: '' });
+
+    // Class breakdown
+    summaryData.push({ Metric: 'CLASS BREAKDOWN', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.residentialCount, Percentage: `${Math.round(stats.residentialCount / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.commercialCount, Percentage: `${Math.round(stats.commercialCount / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.vacantCount, Percentage: `${Math.round(stats.vacantCount / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Other', Value: stats.otherCount, Percentage: `${Math.round(stats.otherCount / stats.totalAppeals * 100)}%` });
+
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
     XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
     // Get headers from first row
@@ -2923,6 +2957,47 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const range = XLSX.utils.decode_range(ws['!ref']);
 
     // Define styles matching other exports (Leelawadee, size 10)
+    // Style Summary sheet
+    wsSummary['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 15 }];
+
+    // Summary sheet styling
+    const summaryRange = XLSX.utils.decode_range(wsSummary['!ref']);
+    for (let R = 0; R <= summaryRange.e.r; R++) {
+      for (let C = 0; C <= 2; C++) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!wsSummary[cellRef]) wsSummary[cellRef] = {};
+
+        const cellStyle = {
+          font: { name: 'Leelawadee', sz: 10 },
+          alignment: { horizontal: 'left', vertical: 'center', wrapText: false },
+          border: { left: { style: 'thin', color: { rgb: 'D0D0D0' } }, right: { style: 'thin', color: { rgb: 'D0D0D0' } }, top: { style: 'thin', color: { rgb: 'D0D0D0' } }, bottom: { style: 'thin', color: { rgb: 'D0D0D0' } } }
+        };
+
+        // Section headers (APPEAL SUMMARY, STATUS BREAKDOWN, CLASS BREAKDOWN)
+        if (wsSummary[cellRef].v && (wsSummary[cellRef].v.includes('SUMMARY') || wsSummary[cellRef].v.includes('BREAKDOWN'))) {
+          cellStyle.font = { name: 'Leelawadee', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+          cellStyle.fill = { fgColor: { rgb: '1F2937' }, patternType: 'solid' };
+          cellStyle.alignment = { horizontal: 'left', vertical: 'center' };
+        }
+
+        // Value column - right align and format
+        if (C === 1 && R > 0) {
+          cellStyle.alignment = { horizontal: 'right', vertical: 'center' };
+          const val = wsSummary[cellRef].v;
+          if (typeof val === 'number') {
+            cellStyle.numFmt = '$#,##0';
+          }
+        }
+
+        // Percentage column - right align
+        if (C === 2 && R > 0) {
+          cellStyle.alignment = { horizontal: 'right', vertical: 'center' };
+        }
+
+        wsSummary[cellRef].s = cellStyle;
+      }
+    }
+
     const baseStyle = {
       font: { name: 'Leelawadee', sz: 10 },
       alignment: { horizontal: 'center', vertical: 'center' }
