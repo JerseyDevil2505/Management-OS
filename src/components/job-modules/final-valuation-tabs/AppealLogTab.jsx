@@ -2970,12 +2970,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     summaryData.push({ Metric: 'Dismissed/Affirmed', Value: (stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0), Percentage: `${Math.round(((stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0)) / stats.totalAppeals * 100)}%` });
     summaryData.push({ Metric: '', Value: '', Percentage: '' });
 
-    // Class breakdown - all properties in the job
+    // Class breakdown - appeals of each class as % of total properties in that class
     summaryData.push({ Metric: 'CLASS BREAKDOWN', Value: '', Percentage: '' });
-    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.allPropertiesCount.residential, Percentage: `${Math.round(stats.allPropertiesCount.residential / stats.totalPropertiesCount * 100)}%` });
-    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.allPropertiesCount.commercial, Percentage: `${Math.round(stats.allPropertiesCount.commercial / stats.totalPropertiesCount * 100)}%` });
-    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.allPropertiesCount.vacant, Percentage: `${Math.round(stats.allPropertiesCount.vacant / stats.totalPropertiesCount * 100)}%` });
-    summaryData.push({ Metric: 'Other', Value: stats.allPropertiesCount.other, Percentage: `${Math.round(stats.allPropertiesCount.other / stats.totalPropertiesCount * 100)}%` });
+    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.residentialCount, Percentage: stats.allPropertiesCount.residential > 0 ? `${Math.round(stats.residentialCount / stats.allPropertiesCount.residential * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.commercialCount, Percentage: stats.allPropertiesCount.commercial > 0 ? `${Math.round(stats.commercialCount / stats.allPropertiesCount.commercial * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.vacantCount, Percentage: stats.allPropertiesCount.vacant > 0 ? `${Math.round(stats.vacantCount / stats.allPropertiesCount.vacant * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Other', Value: stats.otherCount, Percentage: stats.allPropertiesCount.other > 0 ? `${Math.round(stats.otherCount / stats.allPropertiesCount.other * 100 * 10) / 10}%` : '0%' });
 
     const wsSummary = XLSX.utils.json_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
