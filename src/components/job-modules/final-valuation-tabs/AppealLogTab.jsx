@@ -934,11 +934,38 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       }
     });
 
-    // Class counts
+    // Class counts for appeals
     const residentialCount = filtered.filter(a => ['2', '3A'].includes(a.property_m4_class)).length;
     const commercialCount = filtered.filter(a => ['4A', '4B', '4C'].includes(a.property_m4_class)).length;
     const vacantCount = filtered.filter(a => ['1', '3B'].includes(a.property_m4_class)).length;
     const otherCount = totalAppeals - residentialCount - commercialCount - vacantCount;
+
+    // Class breakdown for all properties in the job (main cards only, excluding exempt)
+    const allPropertiesCount = {
+      residential: 0,
+      commercial: 0,
+      vacant: 0,
+      other: 0
+    };
+    properties.forEach(p => {
+      // Exclude EXEMPT properties and additional cards
+      if (p.property_facility === 'EXEMPT') return;
+      const cardType = p.property_addl_card;
+      const isMainCard = cardType === '1' || cardType?.toUpperCase() === 'M' || !cardType;
+      if (!isMainCard) return;
+
+      const propClass = p.property_m4_class || p.property_class || '';
+      if (['2', '3A'].includes(propClass)) {
+        allPropertiesCount.residential++;
+      } else if (['4A', '4B', '4C'].includes(propClass)) {
+        allPropertiesCount.commercial++;
+      } else if (['1', '3B'].includes(propClass)) {
+        allPropertiesCount.vacant++;
+      } else {
+        allPropertiesCount.other++;
+      }
+    });
+    const totalPropertiesCount = allPropertiesCount.residential + allPropertiesCount.commercial + allPropertiesCount.vacant + allPropertiesCount.other;
 
     // Appeal type counts
     const petitionerCount = filtered.filter(a => a.appeal_type === 'petitioner').length;
@@ -963,7 +990,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       representedCount,
       assessorCount,
       crossCount,
-      unknownTypeCount
+      unknownTypeCount,
+      allPropertiesCount,
+      totalPropertiesCount
     };
   }, [filteredAppeals, properties]);
 
@@ -2941,12 +2970,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     summaryData.push({ Metric: 'Dismissed/Affirmed', Value: (stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0), Percentage: `${Math.round(((stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0)) / stats.totalAppeals * 100)}%` });
     summaryData.push({ Metric: '', Value: '', Percentage: '' });
 
-    // Class breakdown
+    // Class breakdown - all properties in the job
     summaryData.push({ Metric: 'CLASS BREAKDOWN', Value: '', Percentage: '' });
-    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.residentialCount, Percentage: `${Math.round(stats.residentialCount / stats.totalAppeals * 100)}%` });
-    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.commercialCount, Percentage: `${Math.round(stats.commercialCount / stats.totalAppeals * 100)}%` });
-    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.vacantCount, Percentage: `${Math.round(stats.vacantCount / stats.totalAppeals * 100)}%` });
-    summaryData.push({ Metric: 'Other', Value: stats.otherCount, Percentage: `${Math.round(stats.otherCount / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.allPropertiesCount.residential, Percentage: `${Math.round(stats.allPropertiesCount.residential / stats.totalPropertiesCount * 100)}%` });
+    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.allPropertiesCount.commercial, Percentage: `${Math.round(stats.allPropertiesCount.commercial / stats.totalPropertiesCount * 100)}%` });
+    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.allPropertiesCount.vacant, Percentage: `${Math.round(stats.allPropertiesCount.vacant / stats.totalPropertiesCount * 100)}%` });
+    summaryData.push({ Metric: 'Other', Value: stats.allPropertiesCount.other, Percentage: `${Math.round(stats.allPropertiesCount.other / stats.totalPropertiesCount * 100)}%` });
 
     const wsSummary = XLSX.utils.json_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
@@ -2973,6 +3002,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           border: { left: { style: 'thin', color: { rgb: 'D0D0D0' } }, right: { style: 'thin', color: { rgb: 'D0D0D0' } }, top: { style: 'thin', color: { rgb: 'D0D0D0' } }, bottom: { style: 'thin', color: { rgb: 'D0D0D0' } } }
         };
 
+        // Get the metric name from column A for this row
+        const metricCell = XLSX.utils.encode_cell({ r: R, c: 0 });
+        const metricName = wsSummary[metricCell]?.v ? String(wsSummary[metricCell].v) : '';
+
         // Section headers (APPEAL SUMMARY, STATUS BREAKDOWN, CLASS BREAKDOWN)
         if (wsSummary[cellRef].v && typeof wsSummary[cellRef].v === 'string' && (wsSummary[cellRef].v.includes('SUMMARY') || wsSummary[cellRef].v.includes('BREAKDOWN'))) {
           cellStyle.font = { name: 'Leelawadee', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
@@ -2985,7 +3018,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           cellStyle.alignment = { horizontal: 'right', vertical: 'center' };
           const val = wsSummary[cellRef].v;
           if (typeof val === 'number') {
-            cellStyle.numFmt = '$#,##0';
+            // Only apply currency format to Assessment Exposure and Total Actual Loss
+            if (metricName.includes('Assessment Exposure') || metricName.includes('Total Actual Loss')) {
+              cellStyle.numFmt = '$#,##0';
+            } else {
+              // Count values should be plain numbers
+              cellStyle.numFmt = '0';
+            }
           }
         }
 
