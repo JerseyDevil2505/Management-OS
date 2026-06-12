@@ -34,14 +34,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
   // Filter state - separates pending (UI) from active (applied)
   const [pendingFilters, setPendingFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'O', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
   });
 
   const [filters, setFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'O', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
@@ -3722,6 +3722,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 { code: 'A', label: 'Assessor' },
                 { code: 'AP', label: 'Affirmed w/Prejudice' },
                 { code: 'AWP', label: 'Affirmed w/o Prejudice' },
+                { code: 'O', label: 'Offered' },
                 { code: 'NA', label: 'Non Appearance' }
               ]
                 .filter(s => !pendingFilters.statuses.has(s.code))
@@ -4065,7 +4066,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* STATUS LEGEND BAR */}
       <div className="bg-gray-50 border-t border-b border-gray-200 px-4 py-2 text-xs text-gray-600">
-        <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · NA = Non Appearance
+        <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · O = Offered · NA = Non Appearance
       </div>
 
       {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
@@ -4140,13 +4141,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
               const isResolved = ['S', 'W', 'Z', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
+              const isOffered = (appeal.status || '') === 'O';
               const resolvedBg = '#ecfdf5'; // pastel mint green
-              const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? '' : 'hover:bg-gray-50';
+              const offeredBg = '#eff6ff'; // light blue
+              const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isOffered ? '' : isResolved ? '' : 'hover:bg-gray-50';
               const textMuted = isResolved ? 'text-gray-500' : 'text-gray-600';
               const textStrong = isResolved ? 'text-gray-600' : 'text-gray-900';
 
               return (
-                <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={isResolved && !selectedAppeals.has(appeal.id) ? { backgroundColor: resolvedBg } : undefined}>
+                <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={selectedAppeals.has(appeal.id) ? undefined : isOffered ? { backgroundColor: offeredBg } : isResolved ? { backgroundColor: resolvedBg } : undefined}>
                   {/* CHECKBOX COLUMN */}
                   <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     {(() => {
