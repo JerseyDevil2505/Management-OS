@@ -3621,7 +3621,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
 
     // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
-    const ccdd = jobData?.ccdd || 'UNKNOWN';
+    const ccdd = jobData?.ccdd_code || 'UNKNOWN';
     const block = subject.property_block || '';
     const lot = subject.property_lot || '';
     const qualifier = subject.property_qualifier || '';

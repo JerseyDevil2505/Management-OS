@@ -11,6 +11,74 @@ import {
   safeFilenamePart,
 } from '../../../lib/appealReportBuilder';
 
+// Judgment code definitions (N.J.S.A. 54:3-26)
+const JUDGMENT_CODE_MAP = {
+  '1A': 'Assessment Revised - Assessed value exceeds 100%',
+  '1B': 'Assessment Revised - Assessment outside range',
+  '1C': 'Assessment Revised - Material Depreciation',
+  '1D': 'Assessment Revised - Personal Property',
+  '1E': 'Assessment Revised - Other (Explanation mandatory)',
+  '2A': 'Assessment Affirmed - Assessment within range',
+  '2B': 'Assessment Affirmed - Presumption of correctness not overturned',
+  '2C': 'Assessment Affirmed - Personal Property',
+  '3': 'Stipulated',
+  '4A': 'Freeze Act - Granted',
+  '4B': 'Freeze Act - Denied',
+  '5A': 'Dismissal with Prejudice - Non-appearance (lack of prosecution)',
+  '5B': 'Dismissal with Prejudice - No evidence provided',
+  '5C': 'Dismissal with Prejudice - Taxes/municipal charges not paid',
+  '5D': 'Dismissal with Prejudice - Failure to respond to income request',
+  '5E': 'Dismissal with Prejudice - Appeal not timely filed',
+  '5F': 'Dismissal with Prejudice - Other (Explanation mandatory)',
+  '5G': 'Dismissal with Prejudice - Added/Omitted appeal not timely filed',
+  '6A': 'Dismissal without Prejudice - Tax Court pending',
+  '6B': 'Dismissal without Prejudice - Hearing waived',
+  '7': 'Withdrawn',
+  '8A': 'Property Tax Deduction - Granted',
+  '8B': 'Property Tax Deduction - Denied',
+  '9A': 'Farmland Assessment - Qualification approved per application',
+  '9B': 'Farmland Assessment - Qualified acres changed',
+  '9C': 'Farmland Assessment - Qualified value changed',
+  '9D': 'Farmland Assessment - B & C above',
+  '10': 'Farmland Assessment Denied',
+  '11A': 'Veteran Deduction ($250) - Granted',
+  '11B': 'Veteran Deduction ($250) - Denied',
+  '12A': '100% Totally Disabled Veteran - Granted',
+  '12B': '100% Totally Disabled Veteran - Denied',
+  '13A': 'Exempt Property - Granted',
+  '13B': 'Exempt Property - Denied',
+  '13C': 'Exempt Property - Exempt amount changed',
+  '14A': 'Added Assessment Affirmed - As filed by assessor',
+  '14B': 'Added Assessment Affirmed - Prorated months changed',
+  '14C': 'Added Assessment Affirmed - Valuation changed',
+  '14D': 'Added Assessment Affirmed - B & C above',
+  '15': 'Added Assessment Removed',
+  '16A': 'Omitted Assessment Affirmed - As filed by assessor',
+  '16B': 'Omitted Assessment Affirmed - Prorated months changed',
+  '16C': 'Omitted Assessment Affirmed - Valuation changed',
+  '16D': 'Omitted Assessment Affirmed - B & C above',
+  '17': 'Omitted Assessment Removed',
+  '18': 'Reserved',
+  '19': 'Reserved',
+  '20A': 'Abatements - Granted',
+  '20B': 'Abatements - Denied',
+  '20C': 'Abatements - Abatement amount changed'
+};
+
+// Status code definitions (internal)
+const STATUS_CODE_MAP = {
+  'D': 'Defend',
+  'S': 'Stipulated',
+  'H': 'Heard',
+  'W': 'Withdrawn',
+  'Z': 'Dismissed',
+  'A': 'Assessor',
+  'AP': 'Affirmed w/Prejudice',
+  'AWP': 'Affirmed w/o Prejudice',
+  'O': 'Offered',
+  'NA': 'Non Appearance'
+};
+
 const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLandData = {}, tenantConfig = null, onNavigateToCME = () => {}, onAppealsStatUpdate = () => {} }) => {
   // State
   const [appeals, setAppeals] = useState([]);
@@ -34,14 +102,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
   // Filter state - separates pending (UI) from active (applied)
   const [pendingFilters, setPendingFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'O', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
   });
 
   const [filters, setFilters] = useState({
-    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'NA']),
+    statuses: new Set(['D', 'S', 'H', 'W', 'Z', 'A', 'AP', 'AWP', 'O', 'NA']),
     classes: new Set(['2,3A', '4A,4B,4C', '1,3B', 'other']),
     attorneys: new Set(),
     vcs: new Set()
@@ -833,24 +901,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const settledAppeals = filtered.filter(a => a.judgment_value !== null && a.judgment_value !== undefined);
     const totalActualLoss = settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0);
 
-    // Total % Loss: (Total Actual Loss / Total Assessment Exposure) × 100
-    const totalLossPercent = totalAssessmentExposure > 0
-      ? (totalActualLoss / totalAssessmentExposure) * 100
-      : 0;
-
-    // Calculate total ratables (same logic as RatableComparisonTab)
-    const totalRatables = properties.reduce((sum, p) => {
+    // Total % Loss: (Total Actual Loss / Total Ratables) × 100
+    // Calculate total ratables first (same logic as RatableComparisonTab)
+    const tempTotalRatables = properties.reduce((sum, p) => {
       // Exclude EXEMPT properties
       if (p.property_facility === 'EXEMPT') return sum;
-
       // Only count main cards: '1' (BRT), 'M' (Microsystems), or null/empty
       const cardType = p.property_addl_card;
       const isMainCard = cardType === '1' || cardType?.toUpperCase() === 'M' || !cardType;
-
       if (!isMainCard) return sum;
-
       return sum + (p.values_mod_total || 0);
     }, 0);
+
+    const totalLossPercent = tempTotalRatables > 0
+      ? (totalActualLoss / tempTotalRatables) * 100
+      : 0;
+
+    // Use tempTotalRatables calculated above for consistency
+    const totalRatables = tempTotalRatables;
 
     // Calculate % of ratables
     const ratablePercent = totalRatables > 0 ? (totalAssessmentExposure / totalRatables) * 100 : 0;
@@ -866,11 +934,38 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       }
     });
 
-    // Class counts
+    // Class counts for appeals
     const residentialCount = filtered.filter(a => ['2', '3A'].includes(a.property_m4_class)).length;
     const commercialCount = filtered.filter(a => ['4A', '4B', '4C'].includes(a.property_m4_class)).length;
     const vacantCount = filtered.filter(a => ['1', '3B'].includes(a.property_m4_class)).length;
     const otherCount = totalAppeals - residentialCount - commercialCount - vacantCount;
+
+    // Class breakdown for all properties in the job (main cards only, excluding exempt)
+    const allPropertiesCount = {
+      residential: 0,
+      commercial: 0,
+      vacant: 0,
+      other: 0
+    };
+    properties.forEach(p => {
+      // Exclude EXEMPT properties and additional cards
+      if (p.property_facility === 'EXEMPT') return;
+      const cardType = p.property_addl_card;
+      const isMainCard = cardType === '1' || cardType?.toUpperCase() === 'M' || !cardType;
+      if (!isMainCard) return;
+
+      const propClass = p.property_m4_class || p.property_class || '';
+      if (['2', '3A'].includes(propClass)) {
+        allPropertiesCount.residential++;
+      } else if (['4A', '4B', '4C'].includes(propClass)) {
+        allPropertiesCount.commercial++;
+      } else if (['1', '3B'].includes(propClass)) {
+        allPropertiesCount.vacant++;
+      } else {
+        allPropertiesCount.other++;
+      }
+    });
+    const totalPropertiesCount = allPropertiesCount.residential + allPropertiesCount.commercial + allPropertiesCount.vacant + allPropertiesCount.other;
 
     // Appeal type counts
     const petitionerCount = filtered.filter(a => a.appeal_type === 'petitioner').length;
@@ -895,7 +990,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       representedCount,
       assessorCount,
       crossCount,
-      unknownTypeCount
+      unknownTypeCount,
+      allPropertiesCount,
+      totalPropertiesCount
     };
   }, [filteredAppeals, properties]);
 
@@ -2003,6 +2100,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           lossPct = (loss / currentAssessment) * 100;
         }
 
+        // Extract judgment code (authoritative from import, overwrites any user entry)
+        const judgmentCodeNJ = row['JUDGMNT_CODE'] ? String(row['JUDGMNT_CODE']).trim() : null;
+
         const ownerName = row['OWNER_NAME'] ? String(row['OWNER_NAME']).trim() : '';
         const record = {
           job_id: jobData.id,
@@ -2019,6 +2119,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           current_assessment: currentAssessment,
           requested_value: 0,
           judgment_value: judgmentValue,
+          judgment_code_nj: judgmentCodeNJ,
           loss,
           loss_pct: lossPct,
           property_block: block,
@@ -2075,6 +2176,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               hearing_date: hearingDate,
               evidence_due_date: evidenceDueDate,
               judgment_value: judgmentValue,
+              judgment_code_nj: judgmentCodeNJ,
               loss: refreshedLoss,
               loss_pct: refreshedLossPct,
               tax_court_pending: taxCourtPending
@@ -2753,7 +2855,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       }
 
       return {
-        Status: appeal.status || '-',
+        Status: appeal.status ? `${appeal.status} - ${STATUS_CODE_MAP[appeal.status] || 'Unknown'}` : '-',
+        'Judgment Code': appeal.judgment_code_nj ? `${appeal.judgment_code_nj} - ${JUDGMENT_CODE_MAP[appeal.judgment_code_nj] || 'Unknown'}` : '-',
         'Appeal #': appeal.appeal_number || '-',
         'Appeal Year': appeal.appeal_year || '-',
         Block: appeal.property_block || '-',
@@ -2842,6 +2945,40 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     // Create workbook with data
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
+
+    // Create Summary sheet FIRST (so it appears first in workbook)
+    const summaryData = [];
+
+    // Helper to format currency
+    const formatCurrency = (value) => typeof value === 'number' ? value : 0;
+
+    // Summary sheet rows
+    summaryData.push({ Metric: 'APPEAL SUMMARY', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Total Appeals', Value: stats.totalAppeals, Percentage: '100%' });
+    summaryData.push({ Metric: 'Assessment Exposure', Value: formatCurrency(stats.totalAssessmentExposure), Percentage: '' });
+    summaryData.push({ Metric: '% of Ratables', Value: `${Math.round(stats.ratablePercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: 'Total Actual Loss', Value: formatCurrency(stats.totalActualLoss), Percentage: '' });
+    summaryData.push({ Metric: 'Total % Loss (of Ratables)', Value: `${Math.round(stats.totalLossPercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: '', Value: '', Percentage: '' });
+
+    // Status breakdown
+    summaryData.push({ Metric: 'STATUS BREAKDOWN', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Defend/Heard', Value: (stats.statusCounts.D || 0) + (stats.statusCounts.H || 0), Percentage: `${Math.round(((stats.statusCounts.D || 0) + (stats.statusCounts.H || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Stipulated', Value: stats.statusCounts.S || 0, Percentage: `${Math.round((stats.statusCounts.S || 0) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Assessor/Cross', Value: (stats.statusCounts.A || 0), Percentage: `${Math.round((stats.statusCounts.A || 0) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Withdrawn/Non Appearance', Value: (stats.statusCounts.W || 0) + (stats.statusCounts.NA || 0), Percentage: `${Math.round(((stats.statusCounts.W || 0) + (stats.statusCounts.NA || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: 'Dismissed/Affirmed', Value: (stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0), Percentage: `${Math.round(((stats.statusCounts.Z || 0) + (stats.statusCounts.AP || 0) + (stats.statusCounts.AWP || 0)) / stats.totalAppeals * 100)}%` });
+    summaryData.push({ Metric: '', Value: '', Percentage: '' });
+
+    // Class breakdown - appeals of each class as % of total properties in that class
+    summaryData.push({ Metric: 'CLASS BREAKDOWN', Value: '', Percentage: '' });
+    summaryData.push({ Metric: 'Residential (Class 2, 3A)', Value: stats.residentialCount, Percentage: stats.allPropertiesCount.residential > 0 ? `${Math.round(stats.residentialCount / stats.allPropertiesCount.residential * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Commercial (Class 4A, 4B, 4C)', Value: stats.commercialCount, Percentage: stats.allPropertiesCount.commercial > 0 ? `${Math.round(stats.commercialCount / stats.allPropertiesCount.commercial * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Vacant (Class 1, 3B)', Value: stats.vacantCount, Percentage: stats.allPropertiesCount.vacant > 0 ? `${Math.round(stats.vacantCount / stats.allPropertiesCount.vacant * 100 * 10) / 10}%` : '0%' });
+    summaryData.push({ Metric: 'Other', Value: stats.otherCount, Percentage: stats.allPropertiesCount.other > 0 ? `${Math.round(stats.otherCount / stats.allPropertiesCount.other * 100 * 10) / 10}%` : '0%' });
+
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
     XLSX.utils.book_append_sheet(wb, ws, 'Appeals');
 
     // Get headers from first row
@@ -2849,6 +2986,57 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const range = XLSX.utils.decode_range(ws['!ref']);
 
     // Define styles matching other exports (Leelawadee, size 10)
+    // Style Summary sheet
+    wsSummary['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 15 }];
+
+    // Summary sheet styling
+    const summaryRange = XLSX.utils.decode_range(wsSummary['!ref']);
+    for (let R = 0; R <= summaryRange.e.r; R++) {
+      for (let C = 0; C <= 2; C++) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!wsSummary[cellRef]) wsSummary[cellRef] = {};
+
+        const cellStyle = {
+          font: { name: 'Leelawadee', sz: 10 },
+          alignment: { horizontal: 'left', vertical: 'center', wrapText: false },
+          border: { left: { style: 'thin', color: { rgb: 'D0D0D0' } }, right: { style: 'thin', color: { rgb: 'D0D0D0' } }, top: { style: 'thin', color: { rgb: 'D0D0D0' } }, bottom: { style: 'thin', color: { rgb: 'D0D0D0' } } }
+        };
+
+        // Get the metric name from column A for this row
+        const metricCell = XLSX.utils.encode_cell({ r: R, c: 0 });
+        const metricName = wsSummary[metricCell]?.v ? String(wsSummary[metricCell].v) : '';
+
+        // Section headers (APPEAL SUMMARY, STATUS BREAKDOWN, CLASS BREAKDOWN)
+        if (wsSummary[cellRef].v && typeof wsSummary[cellRef].v === 'string' && (wsSummary[cellRef].v.includes('SUMMARY') || wsSummary[cellRef].v.includes('BREAKDOWN'))) {
+          cellStyle.font = { name: 'Leelawadee', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+          cellStyle.fill = { fgColor: { rgb: '1F2937' }, patternType: 'solid' };
+          cellStyle.alignment = { horizontal: 'left', vertical: 'center' };
+        }
+
+        // Value column - right align and format
+        if (C === 1 && R > 0) {
+          cellStyle.alignment = { horizontal: 'right', vertical: 'center' };
+          const val = wsSummary[cellRef].v;
+          if (typeof val === 'number') {
+            // Only apply currency format to Assessment Exposure and Total Actual Loss
+            if (metricName.includes('Assessment Exposure') || metricName.includes('Total Actual Loss')) {
+              cellStyle.numFmt = '$#,##0';
+            } else {
+              // Count values should be plain numbers
+              cellStyle.numFmt = '0';
+            }
+          }
+        }
+
+        // Percentage column - right align
+        if (C === 2 && R > 0) {
+          cellStyle.alignment = { horizontal: 'right', vertical: 'center' };
+        }
+
+        wsSummary[cellRef].s = cellStyle;
+      }
+    }
+
     const baseStyle = {
       font: { name: 'Leelawadee', sz: 10 },
       alignment: { horizontal: 'center', vertical: 'center' }
@@ -3722,6 +3910,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 { code: 'A', label: 'Assessor' },
                 { code: 'AP', label: 'Affirmed w/Prejudice' },
                 { code: 'AWP', label: 'Affirmed w/o Prejudice' },
+                { code: 'O', label: 'Offered' },
                 { code: 'NA', label: 'Non Appearance' }
               ]
                 .filter(s => !pendingFilters.statuses.has(s.code))
@@ -4065,7 +4254,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
       {/* STATUS LEGEND BAR */}
       <div className="bg-gray-50 border-t border-b border-gray-200 px-4 py-2 text-xs text-gray-600">
-        <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · NA = Non Appearance
+        <span className="font-medium">Status Legend:</span> D = Defend · S = Stipulated · H = Heard · W = Withdrawn · A = Assessor · AP = Affirmed w/ Prejudice · AWP = Affirmed w/o Prejudice · O = Offered · NA = Non Appearance
       </div>
 
       {/* TABLE - HORIZONTALLY SCROLLABLE WITH STICKY LEFT COLUMNS */}
@@ -4109,8 +4298,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               {/* FROZEN LEFT COLUMNS */}
               <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="85px" maxWidth="85px" />
               <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="135px" minWidth="120px" maxWidth="120px" />
-              <SortableHeader label="Block" columnKey="block" sticky={true} left="255px" minWidth="60px" maxWidth="60px" />
-              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="315px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Judgment Code" columnKey="judgment_code_nj" sticky={true} left="255px" minWidth="90px" maxWidth="90px" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="345px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="405px" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
               <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
@@ -4140,13 +4330,15 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               const acPercent = calculateACPercent(appeal);
               const evidenceDue = getEvidenceDueDate(appeal);
               const isResolved = ['S', 'W', 'Z', 'AWP', 'AP', 'NA', 'A'].includes(appeal.status);
+              const isOffered = (appeal.status || '') === 'O';
               const resolvedBg = '#ecfdf5'; // pastel mint green
-              const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isResolved ? '' : 'hover:bg-gray-50';
+              const offeredBg = '#eff6ff'; // light blue
+              const rowBg = selectedAppeals.has(appeal.id) ? 'bg-blue-50' : isOffered ? '' : isResolved ? '' : 'hover:bg-gray-50';
               const textMuted = isResolved ? 'text-gray-500' : 'text-gray-600';
               const textStrong = isResolved ? 'text-gray-600' : 'text-gray-900';
 
               return (
-                <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={isResolved && !selectedAppeals.has(appeal.id) ? { backgroundColor: resolvedBg } : undefined}>
+                <tr key={idx} className={`border-b border-gray-100 ${rowBg}`} style={selectedAppeals.has(appeal.id) ? undefined : isOffered ? { backgroundColor: offeredBg } : isResolved ? { backgroundColor: resolvedBg } : undefined}>
                   {/* CHECKBOX COLUMN */}
                   <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 text-center" style={{ minWidth: '50px', maxWidth: '50px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     {(() => {
@@ -4170,23 +4362,39 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
                       className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
                       style={{ width: '70px' }}
+                      title={`${appeal.status || 'NA'} - ${STATUS_CODE_MAP[appeal.status || 'NA'] || 'Unknown'}`}
                     >
-                      <option value="D">D</option>
-                      <option value="S">S</option>
-                      <option value="H">H</option>
-                      <option value="W">W</option>
-                      <option value="Z">Z</option>
-                      <option value="A">A</option>
-                      <option value="AP">AP</option>
-                      <option value="AWP">AWP</option>
-                      <option value="NA">NA</option>
+                      <option value="D" title="Defend">D</option>
+                      <option value="S" title="Stipulated">S</option>
+                      <option value="H" title="Heard">H</option>
+                      <option value="W" title="Withdrawn">W</option>
+                      <option value="Z" title="Dismissed">Z</option>
+                      <option value="A" title="Assessor">A</option>
+                      <option value="AP" title="Affirmed w/Prejudice">AP</option>
+                      <option value="AWP" title="Affirmed w/o Prejudice">AWP</option>
+                      <option value="O" title="Offered">O</option>
+                      <option value="NA" title="Non Appearance">NA</option>
                     </select>
                   </td>
                   <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong} font-medium`} style={{ left: '135px', minWidth: '120px', maxWidth: '120px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '255px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_block || '-'}</td>
-                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '315px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_lot || '-'}</td>
+                  <td className={`sticky z-10 px-2 py-2 whitespace-nowrap border-r border-gray-200 ${textMuted}`} style={{ left: '255px', minWidth: '75px', maxWidth: '75px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
+                    <select
+                      value={appeal.judgment_code_nj || ''}
+                      onChange={(e) => handleDropdownChange(appeal.id, 'judgment_code_nj', e.target.value || null)}
+                      className="px-0.5 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
+                      style={{ width: '65px' }}
+                      title={`${appeal.judgment_code_nj || 'No code'} - ${JUDGMENT_CODE_MAP[appeal.judgment_code_nj] || 'Unknown'}`}
+                    >
+                      <option value="">-</option>
+                      {Object.keys(JUDGMENT_CODE_MAP).sort().map(code => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '345px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_block || '-'}</td>
+                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '405px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_lot || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
