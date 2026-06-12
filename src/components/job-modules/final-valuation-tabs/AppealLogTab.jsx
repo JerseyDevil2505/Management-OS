@@ -4184,8 +4184,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               {/* FROZEN LEFT COLUMNS */}
               <SortableHeader label="Status" columnKey="status" sticky={true} left="50px" minWidth="85px" maxWidth="85px" />
               <SortableHeader label="Appeal #" columnKey="appeal_number" sticky={true} left="135px" minWidth="120px" maxWidth="120px" />
-              <SortableHeader label="Block" columnKey="block" sticky={true} left="255px" minWidth="60px" maxWidth="60px" />
-              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="315px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Judgment Code" columnKey="judgment_code_nj" sticky={true} left="255px" minWidth="90px" maxWidth="90px" />
+              <SortableHeader label="Block" columnKey="block" sticky={true} left="345px" minWidth="60px" maxWidth="60px" />
+              <SortableHeader label="Lot" columnKey="lot" sticky={true} left="405px" minWidth="60px" maxWidth="60px" />
               <SortableHeader label="Qual" columnKey="qualifier" minWidth="50px" maxWidth="50px" />
               <SortableHeader label="Location" columnKey="location" minWidth="120px" />
               <SortableHeader label="Class" columnKey="class" minWidth="50px" maxWidth="50px" />
@@ -4247,23 +4248,28 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                       onChange={(e) => handleDropdownChange(appeal.id, 'status', e.target.value || 'NA')}
                       className="px-1 py-0.5 border border-gray-300 rounded text-xs cursor-pointer"
                       style={{ width: '70px' }}
+                      title={`${appeal.status || 'NA'} - ${STATUS_CODE_MAP[appeal.status || 'NA'] || 'Unknown'}`}
                     >
-                      <option value="D">D</option>
-                      <option value="S">S</option>
-                      <option value="H">H</option>
-                      <option value="W">W</option>
-                      <option value="Z">Z</option>
-                      <option value="A">A</option>
-                      <option value="AP">AP</option>
-                      <option value="AWP">AWP</option>
-                      <option value="NA">NA</option>
+                      <option value="D" title="Defend">D</option>
+                      <option value="S" title="Stipulated">S</option>
+                      <option value="H" title="Heard">H</option>
+                      <option value="W" title="Withdrawn">W</option>
+                      <option value="Z" title="Dismissed">Z</option>
+                      <option value="A" title="Assessor">A</option>
+                      <option value="AP" title="Affirmed w/Prejudice">AP</option>
+                      <option value="AWP" title="Affirmed w/o Prejudice">AWP</option>
+                      <option value="O" title="Offered">O</option>
+                      <option value="NA" title="Non Appearance">NA</option>
                     </select>
                   </td>
                   <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong} font-medium`} style={{ left: '135px', minWidth: '120px', maxWidth: '120px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>
                     {renderEditableCell(appeal.id, 'appeal_number', appeal.appeal_number, 'text')}
                   </td>
-                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '255px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_block || '-'}</td>
-                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '315px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_lot || '-'}</td>
+                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textMuted}`} style={{ left: '255px', minWidth: '90px', maxWidth: '90px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }} title={`${appeal.judgment_code_nj || 'N/A'} - ${JUDGMENT_CODE_MAP[appeal.judgment_code_nj] || 'No judgment code'}`}>
+                    {appeal.judgment_code_nj || '-'}
+                  </td>
+                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '345px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_block || '-'}</td>
+                  <td className={`sticky z-10 px-3 py-2 whitespace-nowrap border-r border-gray-200 ${textStrong}`} style={{ left: '405px', minWidth: '60px', maxWidth: '60px', backgroundColor: selectedAppeals.has(appeal.id) ? '#eff6ff' : isResolved ? resolvedBg : '#fff' }}>{appeal.property_lot || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_qualifier || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '120px' }}>{appeal.property_location || '-'}</td>
                   <td className={`px-3 py-2 whitespace-nowrap ${textMuted}`} style={{ minWidth: '50px', maxWidth: '50px' }}>{appeal.property_m4_class || '-'}</td>
