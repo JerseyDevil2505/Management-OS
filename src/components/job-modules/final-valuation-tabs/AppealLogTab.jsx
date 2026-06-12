@@ -901,24 +901,24 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const settledAppeals = filtered.filter(a => a.judgment_value !== null && a.judgment_value !== undefined);
     const totalActualLoss = settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0);
 
-    // Total % Loss: (Total Actual Loss / Total Assessment Exposure) × 100
-    const totalLossPercent = totalAssessmentExposure > 0
-      ? (totalActualLoss / totalAssessmentExposure) * 100
-      : 0;
-
-    // Calculate total ratables (same logic as RatableComparisonTab)
-    const totalRatables = properties.reduce((sum, p) => {
+    // Total % Loss: (Total Actual Loss / Total Ratables) × 100
+    // Calculate total ratables first (same logic as RatableComparisonTab)
+    const tempTotalRatables = properties.reduce((sum, p) => {
       // Exclude EXEMPT properties
       if (p.property_facility === 'EXEMPT') return sum;
-
       // Only count main cards: '1' (BRT), 'M' (Microsystems), or null/empty
       const cardType = p.property_addl_card;
       const isMainCard = cardType === '1' || cardType?.toUpperCase() === 'M' || !cardType;
-
       if (!isMainCard) return sum;
-
       return sum + (p.values_mod_total || 0);
     }, 0);
+
+    const totalLossPercent = tempTotalRatables > 0
+      ? (totalActualLoss / tempTotalRatables) * 100
+      : 0;
+
+    // Use tempTotalRatables calculated above for consistency
+    const totalRatables = tempTotalRatables;
 
     // Calculate % of ratables
     const ratablePercent = totalRatables > 0 ? (totalAssessmentExposure / totalRatables) * 100 : 0;
