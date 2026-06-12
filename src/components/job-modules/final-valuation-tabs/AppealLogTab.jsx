@@ -2974,7 +2974,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         };
 
         // Section headers (APPEAL SUMMARY, STATUS BREAKDOWN, CLASS BREAKDOWN)
-        if (wsSummary[cellRef].v && (wsSummary[cellRef].v.includes('SUMMARY') || wsSummary[cellRef].v.includes('BREAKDOWN'))) {
+        if (wsSummary[cellRef].v && typeof wsSummary[cellRef].v === 'string' && (wsSummary[cellRef].v.includes('SUMMARY') || wsSummary[cellRef].v.includes('BREAKDOWN'))) {
           cellStyle.font = { name: 'Leelawadee', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
           cellStyle.fill = { fgColor: { rgb: '1F2937' }, patternType: 'solid' };
           cellStyle.alignment = { horizontal: 'left', vertical: 'center' };
