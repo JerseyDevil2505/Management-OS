@@ -108,11 +108,17 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} 
         .in('organization_id', orgIds)
         .order('created_at', { ascending: false });
 
-      setOrgJobs(jobs || []);
+      // Transform jobs to add ccdd alias (matches App.js line 598)
+      const transformedJobs = (jobs || []).map(job => ({
+        ...job,
+        ccdd: job.ccdd || job.ccdd_code || ''
+      }));
+
+      setOrgJobs(transformedJobs);
 
       // If single org, single_job_mode, and has a job, go straight to it
-      if (orgsList.length === 1 && primaryOrg?.single_job_mode && jobs?.length > 0) {
-        const job = jobs[0];
+      if (orgsList.length === 1 && primaryOrg?.single_job_mode && transformedJobs?.length > 0) {
+        const job = transformedJobs[0];
         onJobSelect(job);
         return;
       }
