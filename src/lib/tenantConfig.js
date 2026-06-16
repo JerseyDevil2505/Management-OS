@@ -72,7 +72,7 @@ const TENANT_CONFIGS = {
 
     jobModules: {
       checklist: false,                // Internal PPA workflow - not visible to assessor clients
-      production: false,               // Replaced by inspectionInfo
+      production: true,                // Enable for assessor clients (e.g., Rich's reassessments)
       inspectionInfo: true,            // Simplified inspection view with staff hints
       dataVisualizations: true,
       marketAnalysis: true,
