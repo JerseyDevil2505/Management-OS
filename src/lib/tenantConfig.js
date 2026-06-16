@@ -48,7 +48,8 @@ const TENANT_CONFIGS = {
       organizations: 'Organizations',
       organization: 'Organization',
       organizationsTab: 'Organizations',
-      productionTab: 'ProductionTracker',
+      productionTab: 'Production Tracker',
+      inspectionInfoTab: 'Inspection Info',
     },
 
     // Behavior defaults
@@ -88,6 +89,7 @@ const TENANT_CONFIGS = {
       organization: 'Municipality',
       organizationsTab: 'Municipalities',
       productionTab: 'Production Tracker',
+      inspectionInfoTab: 'Inspection Info',
     },
 
     behavior: {

@@ -1366,7 +1366,7 @@ const JobContainer = ({
     },
     {
       id: 'inspection-info',
-      name: getLabel(jobTenantConfig, 'productionTab', 'Inspection Info'),
+      name: getLabel(jobTenantConfig, 'inspectionInfoTab', 'Inspection Info'),
       icon: Database,
       component: InspectionInfo,
       description: 'Property inspection metrics and status',
