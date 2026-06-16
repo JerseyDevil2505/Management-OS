@@ -87,7 +87,7 @@ const TENANT_CONFIGS = {
       organizations: 'Municipalities',
       organization: 'Municipality',
       organizationsTab: 'Municipalities',
-      productionTab: 'Inspection Info',
+      productionTab: 'Production Tracker',
     },
 
     behavior: {
