@@ -48,7 +48,8 @@ const TENANT_CONFIGS = {
       organizations: 'Organizations',
       organization: 'Organization',
       organizationsTab: 'Organizations',
-      productionTab: 'ProductionTracker',
+      productionTab: 'Production Tracker',
+      inspectionInfoTab: 'Inspection Info',
     },
 
     // Behavior defaults
@@ -72,7 +73,7 @@ const TENANT_CONFIGS = {
 
     jobModules: {
       checklist: false,                // Internal PPA workflow - not visible to assessor clients
-      production: false,               // Replaced by inspectionInfo
+      production: true,                // Enable for assessor clients (e.g., Rich's reassessments)
       inspectionInfo: true,            // Simplified inspection view with staff hints
       dataVisualizations: true,
       marketAnalysis: true,
@@ -87,7 +88,8 @@ const TENANT_CONFIGS = {
       organizations: 'Municipalities',
       organization: 'Municipality',
       organizationsTab: 'Municipalities',
-      productionTab: 'Inspection Info',
+      productionTab: 'Production Tracker',
+      inspectionInfoTab: 'Inspection Info',
     },
 
     behavior: {
