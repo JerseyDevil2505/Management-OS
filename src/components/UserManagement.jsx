@@ -742,7 +742,7 @@ const UserManagement = ({ onViewAs }) => {
                               Delete
                             </button>
                           )}
-                          {isDevMode && onViewAs && (
+                          {onViewAs && (
                             <button
                               onClick={() => onViewAs(user)}
                               style={{
