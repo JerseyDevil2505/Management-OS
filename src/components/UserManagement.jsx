@@ -13,6 +13,9 @@ const UserManagement = ({ onViewAs }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [employeeOrgLinks, setEmployeeOrgLinks] = useState({});
+
+  const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
+  const isAdminOnly = !!onViewAs; // onViewAs is only passed from App.js when isAdmin is true
   
   // Form states
   const [newUser, setNewUser] = useState({
@@ -742,7 +745,7 @@ const UserManagement = ({ onViewAs }) => {
                               Delete
                             </button>
                           )}
-                          {onViewAs && (
+                          {isAdminOnly && onViewAs && (
                             <button
                               onClick={() => onViewAs(user)}
                               style={{
