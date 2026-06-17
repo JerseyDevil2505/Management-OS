@@ -1828,6 +1828,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         if (rendered && rendered !== 'N/A') return rendered;
       }
 
+      // Liveable Area: use adjusted SFLA to respect additional_card_config and basement_config
+      if (attrId === 'liveable_area') {
+        return getAdjustedSFLA(prop);
+      }
+
       return getRawValue(prop, attrId);
     };
 
