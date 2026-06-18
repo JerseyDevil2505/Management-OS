@@ -460,11 +460,40 @@ useEffect(() => {
         });
       
       if (error) throw error;
-      
+
+      // Update workflow_stats when second-attempt or third-attempt items are marked complete
+      if (newStatus === 'completed' && (itemId === 'second-attempt' || itemId === 'third-attempt')) {
+        try {
+          const updateData = {};
+          if (itemId === 'second-attempt') {
+            updateData.workflow_stats = {
+              ...(jobData?.workflow_stats || {}),
+              checklist_second_attempts_complete: true
+            };
+          } else if (itemId === 'third-attempt') {
+            updateData.workflow_stats = {
+              ...(jobData?.workflow_stats || {}),
+              checklist_third_attempts_complete: true
+            };
+          }
+
+          const { error: updateError } = await supabase
+            .from('jobs')
+            .update(updateData)
+            .eq('id', jobData.id);
+
+          if (updateError) {
+            console.error(`Error updating workflow_stats for ${itemId}:`, updateError);
+          }
+        } catch (err) {
+          console.error(`Failed to update workflow_stats for ${itemId}:`, err);
+        }
+      }
+
       // Update local state
-      setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { 
-          ...item, 
+      setChecklistItems(items => items.map(item =>
+        item.id === itemId ? {
+          ...item,
           status: newStatus,
           completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
           completed_by: newStatus === 'completed' ? (currentUser?.name || 'Jim Duda') : null

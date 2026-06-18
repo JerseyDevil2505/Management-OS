@@ -2728,6 +2728,24 @@ const AdminJobManagement = ({
                                   <div className="text-xs text-orange-600 font-medium">📁 New file data available</div>
                                 )}
                               </div>
+
+                              {/* Appeal Workflow Badges */}
+                              {(job.workflow_stats?.checklist_second_attempts_complete || job.workflow_stats?.checklist_third_attempts_complete) && (
+                                <div className="flex items-center justify-between mb-2 px-3">
+                                  <div className="flex items-center space-x-3">
+                                    {job.workflow_stats?.checklist_second_attempts_complete && (
+                                      <div className="flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <span>✓ 2nd Attempts</span>
+                                      </div>
+                                    )}
+                                    {job.workflow_stats?.checklist_third_attempts_complete && (
+                                      <div className="flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <span>✓ 3rd Attempts</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </>
                           ) : (
                             <>
