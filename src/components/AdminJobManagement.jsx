@@ -70,7 +70,21 @@ const AdminJobManagement = ({
   const isPpaJob = (job) => !job.organization_id || job.organization_id === PPA_ORG_ID;
   const scopedJobs = jobScope === 'ppa' ? jobs.filter(isPpaJob) : jobs.filter(j => !isPpaJob(j));
   const scopedPlanning = jobScope === 'ppa' ? planningJobs.filter(isPpaJob) : planningJobs.filter(j => !isPpaJob(j));
-  const scopedArchived = jobScope === 'ppa' ? archivedJobs.filter(isPpaJob) : archivedJobs.filter(j => !isPpaJob(j));
+  const scopedArchived = (jobScope === 'ppa' ? archivedJobs.filter(isPpaJob) : archivedJobs.filter(j => !isPpaJob(j)))
+    .sort((a, b) => {
+      const getYear = (job) => {
+        if (job.archived_at) {
+          return new Date(job.archived_at).getFullYear();
+        }
+        return 0;
+      };
+      const yearA = getYear(a);
+      const yearB = getYear(b);
+      if (yearB !== yearA) {
+        return yearB - yearA; // Sort by year descending (newest first)
+      }
+      return (a.name || '').localeCompare(b.name || ''); // Then alphabetically by name
+    });
   const [managers, setManagers] = useState(propsManagers || []);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showCreatePlanning, setShowCreatePlanning] = useState(false);

@@ -663,7 +663,7 @@ const loadInitialData = async () => {
           const style = { ...totalsStyle };
           // Format numeric columns
           if (C === 1) {
-            style.numFmt = '0.##'; // Hours - preserve decimals
+            style.numFmt = '0.0'; // Hours - always show one decimal
           } else if (C >= 2) {
             style.numFmt = '0.00'; // Currency columns
           }
@@ -682,7 +682,7 @@ const loadInitialData = async () => {
             if (typeof ws[cellAddress].v === 'string') {
               style.alignment = { horizontal: 'center', vertical: 'center' };
             } else {
-              style.numFmt = '0.##';
+              style.numFmt = '0.0';
             }
           }
           // Numeric columns (Appt OT, Field Bonus, TOTAL OT)
