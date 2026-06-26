@@ -974,6 +974,14 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     const crossCount = filtered.filter(a => a.appeal_type === 'cross').length;
     const unknownTypeCount = totalAppeals - petitionerCount - representedCount - assessorCount - crossCount;
 
+    // Table totals (for TOTALS row in table)
+    const tableTotals = {
+      currentAssessment: filtered.reduce((sum, a) => sum + (a.current_assessment || 0), 0),
+      cmeProjectedValue: filtered.reduce((sum, a) => sum + (Number(a.cme_projected_value) || 0), 0),
+      judgment: settledAppeals.reduce((sum, a) => sum + (a.judgment_value || 0), 0),
+      loss: settledAppeals.reduce((sum, a) => sum + (a.loss || 0), 0)
+    };
+
     return {
       totalAppeals,
       totalAssessmentExposure,
@@ -992,7 +1000,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       crossCount,
       unknownTypeCount,
       allPropertiesCount,
-      totalPropertiesCount
+      totalPropertiesCount,
+      tableTotals
     };
   }, [filteredAppeals, properties]);
 
@@ -4547,13 +4556,13 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
               {/* Tax Court */}
               <td style={{ minWidth: '100px' }}></td>
               {/* Current Assessment */}
-              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '120px', maxWidth: '120px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (a.current_assessment || 0), 0))}</td>
+              <td className="px-3 py-3 text-right" style={{ minWidth: '140px' }}>{formatCurrency(stats.tableTotals.currentAssessment)}</td>
               {/* CME Value */}
-              <td className="px-3 py-3 whitespace-nowrap text-blue-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.reduce((sum, a) => sum + (Number(a.cme_projected_value) || 0), 0))}</td>
+              <td className="px-3 py-3 text-blue-600 text-right" style={{ minWidth: '140px' }}>{formatCurrency(stats.tableTotals.cmeProjectedValue)}</td>
               {/* Judgment */}
-              <td className="px-3 py-3 whitespace-nowrap text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.judgment_value || 0), 0))}</td>
+              <td className="px-3 py-3 text-right" style={{ minWidth: '140px' }}>{formatCurrency(stats.tableTotals.judgment)}</td>
               {/* Loss */}
-              <td className="px-3 py-3 whitespace-nowrap text-red-600 text-right" style={{ minWidth: '100px', maxWidth: '100px' }}>{formatCurrency(filteredAppeals.filter(a => a.judgment_value !== null && a.judgment_value !== undefined).reduce((sum, a) => sum + (a.loss || 0), 0))}</td>
+              <td className="px-3 py-3 text-red-600 text-right" style={{ minWidth: '140px' }}>{formatCurrency(stats.tableTotals.loss)}</td>
               {/* Action */}
               <td></td>
             </tr>
