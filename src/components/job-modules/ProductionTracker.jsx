@@ -2071,8 +2071,8 @@ const ProductionTracker = ({
       };
 
       // Create missing priced properties report (commercial properties not yet priced)
-      const totalCommercial = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
-      const totalPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+      const totalCommercialProps = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
+      const totalCommercialPricedProps = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
       // Include commercial properties from missingProperties that aren't inspected yet
       const commercialMissingFromInspection = missingProperties.filter(p =>
@@ -2088,7 +2088,7 @@ const ProductionTracker = ({
 
       const missingPricedReportData = {
         summary: {
-          total_missing: totalCommercial - totalPriced,
+          total_missing: totalCommercialProps - totalCommercialPricedProps,
           by_class: allMissingPriced.reduce((acc, prop) => {
             acc[prop.property_class] = (acc[prop.property_class] || 0) + 1;
             return acc;
@@ -2098,8 +2098,8 @@ const ProductionTracker = ({
             acc[insp] = (acc[insp] || 0) + 1;
             return acc;
           }, {}),
-          total_commercial: totalCommercial,
-          total_priced: totalPriced
+          total_commercial: totalCommercialProps,
+          total_priced: totalCommercialPricedProps
         },
         detailed_missing: allMissingPriced
       };
