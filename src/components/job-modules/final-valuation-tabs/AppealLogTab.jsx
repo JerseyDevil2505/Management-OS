@@ -913,6 +913,11 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return sum + (p.values_mod_total || 0);
     }, 0);
 
+    // % Loss of Appeals Filed: (Total Actual Loss / Assessment Exposure) × 100
+    const lossOfAppealsPercent = totalAssessmentExposure > 0
+      ? (totalActualLoss / totalAssessmentExposure) * 100
+      : 0;
+
     const totalLossPercent = tempTotalRatables > 0
       ? (totalActualLoss / tempTotalRatables) * 100
       : 0;
@@ -986,6 +991,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       totalAppeals,
       totalAssessmentExposure,
       totalActualLoss,
+      lossOfAppealsPercent,
       totalLossPercent,
       totalRatables,
       ratablePercent,
@@ -2967,7 +2973,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     summaryData.push({ Metric: 'Assessment Exposure', Value: formatCurrency(stats.totalAssessmentExposure), Percentage: '' });
     summaryData.push({ Metric: '% of Ratables', Value: `${Math.round(stats.ratablePercent * 10) / 10}%`, Percentage: '' });
     summaryData.push({ Metric: 'Total Actual Loss', Value: formatCurrency(stats.totalActualLoss), Percentage: '' });
-    summaryData.push({ Metric: 'Total % Loss (of Ratables)', Value: `${Math.round(stats.totalLossPercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: 'Percent Loss of Appeals Filed', Value: `${Math.round(stats.lossOfAppealsPercent * 10) / 10}%`, Percentage: '' });
+    summaryData.push({ Metric: 'Total % Loss of Ratables', Value: `${Math.round(stats.totalLossPercent * 10) / 10}%`, Percentage: '' });
     summaryData.push({ Metric: '', Value: '', Percentage: '' });
 
     // Status breakdown
@@ -3713,8 +3720,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         </div>
       )}
 
-      {/* STATS ROW 1 - TOTALS */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* STATS ROW 1 - APPEAL METRICS */}
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Appeals</p>
           <div className="mt-2">
@@ -3727,6 +3734,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <p className="text-xl font-bold text-blue-600 mt-2">{formatCurrency(stats.totalAssessmentExposure)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% Loss of Appeals</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{stats.lossOfAppealsPercent !== null ? `${Math.round(stats.lossOfAppealsPercent * 10) / 10}%` : '-'}</p>
+        </div>
+      </div>
+
+      {/* STATS ROW 1B - RATABLE METRICS */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% of Ratables</p>
           <p className={`text-xl font-bold mt-2 ${
             stats.totalRatables === 0 ? 'text-gray-600' :
@@ -3738,11 +3757,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           </p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total % Loss</p>
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total % Loss (Ratables)</p>
           <p className="text-xl font-bold text-red-600 mt-2">{stats.totalLossPercent !== null ? `${Math.round(stats.totalLossPercent * 10) / 10}%` : '-'}</p>
         </div>
       </div>

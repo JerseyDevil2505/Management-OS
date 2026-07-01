@@ -1201,6 +1201,7 @@ const ProductionTracker = ({
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
+      const mainCardsPriced = {}; // NEW: Track priced main cards ONLY for billing summary
       const propertyIssues = {};
       const inspectorIssuesMap = {};
       const inspectionDataBatch = []; // For inspection_data UPSERT
@@ -1214,6 +1215,7 @@ const ProductionTracker = ({
       allClasses.forEach(cls => {
         classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
+        mainCardsPriced[cls] = 0; // NEW: Only count priced main cards
       });
 
       // DEBUG: Track processing counts
@@ -1316,6 +1318,9 @@ const ProductionTracker = ({
                 if (classBreakdown[propertyClass]) {
                   classBreakdown[propertyClass].priced++;
                 }
+                if (isPrimary && ['4A', '4B', '4C'].includes(propertyClass)) {
+                  mainCardsPriced[propertyClass]++;
+                }
               }
             } else if (['4A', '4B', '4C'].includes(propertyClass)) {
               // Override on commercial with no measure date — still credit pricing,
@@ -1323,6 +1328,9 @@ const ProductionTracker = ({
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
               }
             }
           }
@@ -1698,11 +1706,17 @@ const ProductionTracker = ({
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
+              }
 
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
               }
             } else {
               // Track commercial properties not yet priced
@@ -2057,22 +2071,37 @@ const ProductionTracker = ({
       };
 
       // Create missing priced properties report (commercial properties not yet priced)
+      const totalCommercialProps = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
+      const totalCommercialPricedProps = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+
+      // Include commercial properties from missingProperties that aren't inspected yet
+      const commercialMissingFromInspection = missingProperties.filter(p =>
+        ['4A', '4B', '4C'].includes(p.property_class)
+      ).map(p => ({
+        ...p,
+        property_class: p.property_class,
+        reason: `${p.reason} (no pricing)`
+      }));
+
+      // Combine both sources of missing priced properties
+      const allMissingPriced = [...missingPricedProperties, ...commercialMissingFromInspection];
+
       const missingPricedReportData = {
         summary: {
-          total_missing: missingPricedProperties.length,
-          by_class: missingPricedProperties.reduce((acc, prop) => {
+          total_missing: totalCommercialProps - totalCommercialPricedProps,
+          by_class: allMissingPriced.reduce((acc, prop) => {
             acc[prop.property_class] = (acc[prop.property_class] || 0) + 1;
             return acc;
           }, {}),
-          by_inspector: missingPricedProperties.reduce((acc, prop) => {
+          by_inspector: allMissingPriced.reduce((acc, prop) => {
             const insp = prop.inspector || 'None';
             acc[insp] = (acc[insp] || 0) + 1;
             return acc;
           }, {}),
-          total_commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0),
-          total_priced: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
+          total_commercial: totalCommercialProps,
+          total_priced: totalCommercialPricedProps
         },
-        detailed_missing: missingPricedProperties
+        detailed_missing: allMissingPriced
       };
 
       // Final analytics result with correct entry rate
@@ -2100,6 +2129,7 @@ const ProductionTracker = ({
       };
 
       // Billing analytics with progress calculations
+      const commercialClasses = ['4A', '4B', '4C'];
       const billingResult = {
         byClass: billingByClass,
         grouped: {
@@ -2126,6 +2156,11 @@ const ProductionTracker = ({
             billable: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           }
         },
+        mainCardPricingData: commercialClasses.map(cls => ({
+          class: cls,
+          priced: mainCardsPriced[cls] || 0,
+          total: billingByClass[cls]?.total || 0
+        })),
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
@@ -2719,7 +2754,8 @@ const exportMissingPropertiesReport = () => {
       blue: 'bg-blue-500',
       green: 'bg-green-500',
       purple: 'bg-purple-500',
-      gray: 'bg-gray-500'
+      gray: 'bg-gray-500',
+      indigo: 'bg-indigo-500'
     };
 
     return (
@@ -3044,11 +3080,11 @@ const exportMissingPropertiesReport = () => {
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {commercialCounts.inspected > 0 ?
-                      Math.round((commercialCounts.priced / commercialCounts.inspected) * 100) : 0}%
+                    {commercialCounts.total > 0 ?
+                      Math.round((commercialCounts.priced / commercialCounts.total) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.inspected.toLocaleString()} properties`}
+                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.total.toLocaleString()} properties`}
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
@@ -3921,12 +3957,32 @@ const exportMissingPropertiesReport = () => {
                             <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
                           </div>
                         </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.personalProperty.billable} 
-                          total={billingAnalytics.progressData.personalProperty.total} 
-                          color="gray" 
+                        <ProgressBar
+                          current={billingAnalytics.progressData.personalProperty.billable}
+                          total={billingAnalytics.progressData.personalProperty.total}
+                          color="gray"
                         />
                       </div>
+
+                      {billingAnalytics.mainCardPricingData && billingAnalytics.mainCardPricingData.length > 0 ? (
+                        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                          <div className="flex justify-between items-center mb-2">
+                            <div>
+                              <span className="font-medium text-gray-900">Commercial Priced (4A, 4B, 4C)</span>
+                              <div className="text-xs text-gray-600">Main cards priced</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-indigo-600 text-xl">{billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0).toLocaleString()}</div>
+                              <div className="text-xs text-indigo-600">of {billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0).toLocaleString()}</div>
+                            </div>
+                          </div>
+                          <ProgressBar
+                            current={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0)}
+                            total={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0)}
+                            color="indigo"
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
