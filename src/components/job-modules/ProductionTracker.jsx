@@ -1201,6 +1201,7 @@ const ProductionTracker = ({
       const inspectorStats = {};
       const classBreakdown = {};
       const billingByClass = {};
+      const mainCardsPriced = {}; // NEW: Track priced main cards ONLY for billing summary
       const propertyIssues = {};
       const inspectorIssuesMap = {};
       const inspectionDataBatch = []; // For inspection_data UPSERT
@@ -1214,6 +1215,7 @@ const ProductionTracker = ({
       allClasses.forEach(cls => {
         classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
+        mainCardsPriced[cls] = 0; // NEW: Only count priced main cards
       });
 
       // DEBUG: Track processing counts
@@ -1313,16 +1315,22 @@ const ProductionTracker = ({
                 // that this property is fully complete. Audit trail lives in override_reason.
                 inspectorStats[inspector].priced++;
                 inspectorStats[inspector].pricingWorkDays.add(workDayString);
-                if (classBreakdown[propertyClass] && isPrimary) {
+                if (classBreakdown[propertyClass]) {
                   classBreakdown[propertyClass].priced++;
+                }
+                if (isPrimary && ['4A', '4B', '4C'].includes(propertyClass)) {
+                  mainCardsPriced[propertyClass]++;
                 }
               }
             } else if (['4A', '4B', '4C'].includes(propertyClass)) {
               // Override on commercial with no measure date — still credit pricing,
               // but skip the work-day add since we don't have a date to attribute it to.
               inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass] && isPrimary) {
+              if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
               }
             }
           }
@@ -1695,14 +1703,20 @@ const ProductionTracker = ({
 
               inspectorStats[inspector].priced++;
               inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-              if (classBreakdown[propertyClass] && isPrimary) {
+              if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
               }
 
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass] && isPrimary) {
+              if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
+              }
+              if (isPrimary) {
+                mainCardsPriced[propertyClass]++;
               }
             } else {
               // Track commercial properties not yet priced
@@ -2129,7 +2143,7 @@ const ProductionTracker = ({
         },
         mainCardPricingData: commercialClasses.map(cls => ({
           class: cls,
-          priced: classBreakdown[cls]?.priced || 0,
+          priced: mainCardsPriced[cls] || 0,
           total: billingByClass[cls]?.total || 0
         })),
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
