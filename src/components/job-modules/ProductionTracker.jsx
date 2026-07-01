@@ -2071,22 +2071,37 @@ const ProductionTracker = ({
       };
 
       // Create missing priced properties report (commercial properties not yet priced)
+      const totalCommercial = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0);
+      const totalPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+
+      // Include commercial properties from missingProperties that aren't inspected yet
+      const commercialMissingFromInspection = missingProperties.filter(p =>
+        ['4A', '4B', '4C'].includes(p.property_class)
+      ).map(p => ({
+        ...p,
+        property_class: p.property_class,
+        reason: `${p.reason} (no pricing)`
+      }));
+
+      // Combine both sources of missing priced properties
+      const allMissingPriced = [...missingPricedProperties, ...commercialMissingFromInspection];
+
       const missingPricedReportData = {
         summary: {
-          total_missing: missingPricedProperties.length,
-          by_class: missingPricedProperties.reduce((acc, prop) => {
+          total_missing: totalCommercial - totalPriced,
+          by_class: allMissingPriced.reduce((acc, prop) => {
             acc[prop.property_class] = (acc[prop.property_class] || 0) + 1;
             return acc;
           }, {}),
-          by_inspector: missingPricedProperties.reduce((acc, prop) => {
+          by_inspector: allMissingPriced.reduce((acc, prop) => {
             const insp = prop.inspector || 'None';
             acc[insp] = (acc[insp] || 0) + 1;
             return acc;
           }, {}),
-          total_commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0),
-          total_priced: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
+          total_commercial: totalCommercial,
+          total_priced: totalPriced
         },
-        detailed_missing: missingPricedProperties
+        detailed_missing: allMissingPriced
       };
 
       // Final analytics result with correct entry rate
