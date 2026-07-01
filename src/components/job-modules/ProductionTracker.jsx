@@ -1313,7 +1313,7 @@ const ProductionTracker = ({
                 // that this property is fully complete. Audit trail lives in override_reason.
                 inspectorStats[inspector].priced++;
                 inspectorStats[inspector].pricingWorkDays.add(workDayString);
-                if (classBreakdown[propertyClass]) {
+                if (classBreakdown[propertyClass] && isPrimary) {
                   classBreakdown[propertyClass].priced++;
                 }
               }
@@ -1321,7 +1321,7 @@ const ProductionTracker = ({
               // Override on commercial with no measure date — still credit pricing,
               // but skip the work-day add since we don't have a date to attribute it to.
               inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass]) {
+              if (classBreakdown[propertyClass] && isPrimary) {
                 classBreakdown[propertyClass].priced++;
               }
             }
@@ -1695,13 +1695,13 @@ const ProductionTracker = ({
 
               inspectorStats[inspector].priced++;
               inspectorStats[inspector].pricingWorkDays.add(priceDate.toISOString().split('T')[0]);
-              if (classBreakdown[propertyClass]) {
+              if (classBreakdown[propertyClass] && isPrimary) {
                 classBreakdown[propertyClass].priced++;
               }
 
             } else if (currentVendor === 'Microsystems' && isPricedCode) {
               inspectorStats[inspector].priced++;
-              if (classBreakdown[propertyClass]) {
+              if (classBreakdown[propertyClass] && isPrimary) {
                 classBreakdown[propertyClass].priced++;
               }
             } else {
