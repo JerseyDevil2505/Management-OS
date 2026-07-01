@@ -3935,23 +3935,25 @@ const exportMissingPropertiesReport = () => {
                         />
                       </div>
 
-                      <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <div>
-                            <span className="font-medium text-gray-900">Commercial Priced (4A, 4B, 4C)</span>
-                            <div className="text-xs text-gray-600">Main cards priced</div>
+                      {billingAnalytics.mainCardPricingData && billingAnalytics.mainCardPricingData.length > 0 ? (
+                        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                          <div className="flex justify-between items-center mb-2">
+                            <div>
+                              <span className="font-medium text-gray-900">Commercial Priced (4A, 4B, 4C)</span>
+                              <div className="text-xs text-gray-600">Main cards priced</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-indigo-600 text-xl">{billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0).toLocaleString()}</div>
+                              <div className="text-xs text-indigo-600">of {billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0).toLocaleString()}</div>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-bold text-indigo-600 text-xl">{billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0).toLocaleString()}</div>
-                            <div className="text-xs text-indigo-600">of {billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0).toLocaleString()}</div>
-                          </div>
+                          <ProgressBar
+                            current={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0)}
+                            total={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0)}
+                            color="indigo"
+                          />
                         </div>
-                        <ProgressBar
-                          current={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0)}
-                          total={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0)}
-                          color="indigo"
-                        />
-                      </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
