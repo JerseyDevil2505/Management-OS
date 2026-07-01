@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save, Building } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase, jobService, parseDateLocal } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
@@ -2726,7 +2725,8 @@ const exportMissingPropertiesReport = () => {
       blue: 'bg-blue-500',
       green: 'bg-green-500',
       purple: 'bg-purple-500',
-      gray: 'bg-gray-500'
+      gray: 'bg-gray-500',
+      indigo: 'bg-indigo-500'
     };
 
     return (
@@ -3928,38 +3928,31 @@ const exportMissingPropertiesReport = () => {
                             <div className="text-xs text-gray-600">of {billingAnalytics.progressData.personalProperty.total.toLocaleString()}</div>
                           </div>
                         </div>
-                        <ProgressBar 
-                          current={billingAnalytics.progressData.personalProperty.billable} 
-                          total={billingAnalytics.progressData.personalProperty.total} 
-                          color="gray" 
+                        <ProgressBar
+                          current={billingAnalytics.progressData.personalProperty.billable}
+                          total={billingAnalytics.progressData.personalProperty.total}
+                          color="gray"
+                        />
+                      </div>
+
+                      <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium text-gray-900">Commercial Priced (4A, 4B, 4C)</span>
+                            <div className="text-xs text-gray-600">Main cards priced</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-indigo-600 text-xl">{billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0).toLocaleString()}</div>
+                            <div className="text-xs text-indigo-600">of {billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0).toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <ProgressBar
+                          current={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.priced, 0)}
+                          total={billingAnalytics.mainCardPricingData.reduce((sum, item) => sum + item.total, 0)}
+                          color="indigo"
                         />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Main Cards Pricing Chart */}
-                  <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h4 className="text-md font-semibold text-gray-800 mb-4">Commercial Pricing - Main Cards Only</h4>
-                    {billingAnalytics.mainCardPricingData && billingAnalytics.mainCardPricingData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={billingAnalytics.mainCardPricingData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="class" />
-                          <YAxis />
-                          <Tooltip
-                            formatter={(value) => value.toLocaleString()}
-                            labelFormatter={(label) => `Class ${label}`}
-                          />
-                          <Legend />
-                          <Bar dataKey="priced" fill="#3b82f6" name="Priced Main Cards" />
-                          <Bar dataKey="total" fill="#e5e7eb" name="Total Main Cards" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="text-center py-6 text-gray-500">
-                        No commercial pricing data available
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
