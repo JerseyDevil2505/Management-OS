@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save, Building } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase, jobService, parseDateLocal } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
@@ -2100,6 +2101,7 @@ const ProductionTracker = ({
       };
 
       // Billing analytics with progress calculations
+      const commercialClasses = ['4A', '4B', '4C'];
       const billingResult = {
         byClass: billingByClass,
         grouped: {
@@ -2126,6 +2128,11 @@ const ProductionTracker = ({
             billable: ['6A', '6B'].reduce((sum, cls) => sum + (billingByClass[cls]?.billable || 0), 0)
           }
         },
+        mainCardPricingData: commercialClasses.map(cls => ({
+          class: cls,
+          priced: classBreakdown[cls]?.priced || 0,
+          total: billingByClass[cls]?.total || 0
+        })),
         totalBillable: Object.values(billingByClass).reduce((sum, cls) => sum + cls.billable, 0)
       };
 
@@ -3928,6 +3935,31 @@ const exportMissingPropertiesReport = () => {
                         />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Main Cards Pricing Chart */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h4 className="text-md font-semibold text-gray-800 mb-4">Commercial Pricing - Main Cards Only</h4>
+                    {billingAnalytics.mainCardPricingData && billingAnalytics.mainCardPricingData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={billingAnalytics.mainCardPricingData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="class" />
+                          <YAxis />
+                          <Tooltip
+                            formatter={(value) => value.toLocaleString()}
+                            labelFormatter={(label) => `Class ${label}`}
+                          />
+                          <Legend />
+                          <Bar dataKey="priced" fill="#3b82f6" name="Priced Main Cards" />
+                          <Bar dataKey="total" fill="#e5e7eb" name="Total Main Cards" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-center py-6 text-gray-500">
+                        No commercial pricing data available
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
