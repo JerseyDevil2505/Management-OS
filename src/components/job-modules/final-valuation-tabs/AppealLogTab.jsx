@@ -3720,8 +3720,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         </div>
       )}
 
-      {/* STATS ROW 1 - TOTALS */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* STATS ROW 1 - APPEAL METRICS */}
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Appeals</p>
           <div className="mt-2">
@@ -3734,6 +3734,18 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           <p className="text-xl font-bold text-blue-600 mt-2">{formatCurrency(stats.totalAssessmentExposure)}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% Loss of Appeals</p>
+          <p className="text-xl font-bold text-red-600 mt-2">{stats.lossOfAppealsPercent !== null ? `${Math.round(stats.lossOfAppealsPercent * 10) / 10}%` : '-'}</p>
+        </div>
+      </div>
+
+      {/* STATS ROW 1B - RATABLE METRICS */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% of Ratables</p>
           <p className={`text-xl font-bold mt-2 ${
             stats.totalRatables === 0 ? 'text-gray-600' :
@@ -3743,14 +3755,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           }`}>
             {stats.totalRatables === 0 ? 'N/A' : `${Math.round(stats.ratablePercent * 100) / 100}%`}
           </p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Actual Loss</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{formatCurrency(stats.totalActualLoss)}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">% Loss of Appeals</p>
-          <p className="text-xl font-bold text-red-600 mt-2">{stats.lossOfAppealsPercent !== null ? `${Math.round(stats.lossOfAppealsPercent * 10) / 10}%` : '-'}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total % Loss (Ratables)</p>
