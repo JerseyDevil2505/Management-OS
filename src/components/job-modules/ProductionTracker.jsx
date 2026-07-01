@@ -3065,11 +3065,11 @@ const exportMissingPropertiesReport = () => {
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {commercialCounts.inspected > 0 ?
-                      Math.round((commercialCounts.priced / commercialCounts.inspected) * 100) : 0}%
+                    {commercialCounts.total > 0 ?
+                      Math.round((commercialCounts.priced / commercialCounts.total) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.inspected.toLocaleString()} properties`}
+                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.total.toLocaleString()} properties`}
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
