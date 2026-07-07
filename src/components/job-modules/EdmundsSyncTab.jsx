@@ -129,24 +129,23 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
-  // Parse owner_csz field (format: "City, ST ZIP" but can vary)
+  // Parse owner_csz field (formats: "City, ST ZIP" or "City ST ZIP")
   const parseCsz = (csz) => {
     if (!csz) return { city: '', state: '', zip: '' };
     const str = String(csz).trim();
-    const parts = str.split(',').map(p => p.trim());
-    let city = parts[0] || '';
-    let stateZip = parts[1] || '';
 
-    // Parse state and zip from "ST ZIP" or "ST  ZIP" (with extra spaces)
-    const stateZipMatch = stateZip.match(/([A-Z]{2})\s+(\d{5})/i);
-    let state = '';
-    let zip = '';
+    // Try to match state and zip at the end: "XX ##### " or "XX-#### "
+    const stateZipMatch = str.match(/([A-Z]{2})\s+([\d\-]{5,10})\s*$/i);
+
     if (stateZipMatch) {
-      state = stateZipMatch[1].toUpperCase();
-      zip = stateZipMatch[2];
+      const state = stateZipMatch[1].toUpperCase();
+      const zip = stateZipMatch[2];
+      // Everything before state/zip is the city (remove trailing spaces and commas)
+      const city = str.substring(0, stateZipMatch.index).trim().replace(/,\s*$/, '').trim();
+      return { city, state, zip };
     }
 
-    return { city, state, zip };
+    return { city: str, state: '', zip: '' };
   };
 
   // Compare fields and find discrepancies — FLAG ANYTHING THAT ISN'T EXACT
