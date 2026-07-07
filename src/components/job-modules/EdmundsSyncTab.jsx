@@ -195,17 +195,54 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const ownerDisc = compareTextField('owner', edmundsOwner, copilotOwner);
     if (ownerDisc) discrepancies.push(ownerDisc);
 
-    // Property Location
+    // Helper: normalize numbers in addresses (7 vs 7th, 2 vs 02, etc.)
+    const normalizeAddressNumbers = (addr) => {
+      return addr.replace(/(\d+)(?:st|nd|rd|th)?/gi, (match, num) => num).replace(/\b0+(\d+)\b/g, '$1').toUpperCase();
+    };
+
+    // Property Location — allow numeric variations as fuzzy
     const edmundsAddr = (edmundsRecord.property_location || '').toString().trim();
     const copilotAddr = (copilotRecord.property_location || '').toString().trim();
-    const addrDisc = compareTextField('property_location', edmundsAddr, copilotAddr);
-    if (addrDisc) discrepancies.push(addrDisc);
+    if (edmundsAddr !== copilotAddr) {
+      const normalizedEdmunds = normalizeAddressNumbers(edmundsAddr);
+      const normalizedCopilot = normalizeAddressNumbers(copilotAddr);
+      if (normalizedEdmunds === normalizedCopilot) {
+        // Numeric variations only, count as fuzzy
+        discrepancies.push({
+          field: 'property_location',
+          edmunds: edmundsAddr,
+          copilot: copilotAddr,
+          similarity: 0.95,
+          severity: 'fuzzy'
+        });
+      } else {
+        // Real difference, use similarity scoring
+        const addrDisc = compareTextField('property_location', edmundsAddr, copilotAddr);
+        if (addrDisc) discrepancies.push(addrDisc);
+      }
+    }
 
-    // Owner Address
+    // Owner Address — allow numeric variations as fuzzy
     const edmundsOwnerAddr = (edmundsRecord.owner_street || '').toString().trim();
     const copilotOwnerAddr = (copilotRecord.owner_street || '').toString().trim();
-    const ownerAddrDisc = compareTextField('owner_address', edmundsOwnerAddr, copilotOwnerAddr);
-    if (ownerAddrDisc) discrepancies.push(ownerAddrDisc);
+    if (edmundsOwnerAddr !== copilotOwnerAddr) {
+      const normalizedEdmundsOwner = normalizeAddressNumbers(edmundsOwnerAddr);
+      const normalizedCopilotOwner = normalizeAddressNumbers(copilotOwnerAddr);
+      if (normalizedEdmundsOwner === normalizedCopilotOwner) {
+        // Numeric variations only, count as fuzzy
+        discrepancies.push({
+          field: 'owner_address',
+          edmunds: edmundsOwnerAddr,
+          copilot: copilotOwnerAddr,
+          similarity: 0.95,
+          severity: 'fuzzy'
+        });
+      } else {
+        // Real difference, use similarity scoring
+        const ownerAddrDisc = compareTextField('owner_address', edmundsOwnerAddr, copilotOwnerAddr);
+        if (ownerAddrDisc) discrepancies.push(ownerAddrDisc);
+      }
+    }
 
     // Extract city/state and zip from both sources
     // Edmunds: owner_city is "NEWARK, NJ" and zip is separate "07105"
