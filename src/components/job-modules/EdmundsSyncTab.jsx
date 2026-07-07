@@ -664,7 +664,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       ['Total Edmunds Records', scanResults.totalEdmunds],
       ['Exact Matches (No Issues)', scanResults.exactMatches],
       ['Discrepancies Found', scanResults.discrepancies],
-      ['Ghost Records', scanResults.ghosts],
+      ['Phantom Properties', scanResults.ghosts],
       ['Scan Date', new Date(scanResults.timestamp).toLocaleString()]
     ];
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -697,7 +697,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-200 p-6">
         <div className="flex items-center mb-3">
           <AlertCircle className="w-8 h-8 mr-3 text-blue-600" />
-          <h2 className="text-2xl font-bold text-gray-800">🔄 Edmunds Sync & Reconciliation</h2>
+          <h2 className="text-2xl font-bold text-gray-800">🔄 Edmunds Audit</h2>
         </div>
         <p className="text-gray-600">Import Edmunds collector data and reconcile against your property records. Identify mismatches, ghost records, and data quality issues.</p>
       </div>
@@ -768,42 +768,51 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="text-3xl font-bold text-red-600">{scanResults.ghosts}</div>
-              <div className="text-sm text-gray-600 mt-1">Ghost Records</div>
+              <div className="text-sm text-gray-600 mt-1">Phantom Properties</div>
             </div>
           </div>
 
           {/* Results Tabs */}
           <div className="bg-white rounded-lg border border-gray-200">
-            <div className="border-b border-gray-200 flex">
+            <div className="border-b border-gray-200 flex items-center justify-between">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveResultTab('matches')}
+                  className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                    activeResultTab === 'matches'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  ✓ Exact Matches ({scanResults.exactMatches})
+                </button>
+                <button
+                  onClick={() => setActiveResultTab('discrepancies')}
+                  className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                    activeResultTab === 'discrepancies'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  ⚠️ Discrepancies ({scanResults.discrepancies})
+                </button>
+                <button
+                  onClick={() => setActiveResultTab('ghosts')}
+                  className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                    activeResultTab === 'ghosts'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  👻 Phantom Properties ({scanResults.ghosts})
+                </button>
+              </div>
               <button
-                onClick={() => setActiveResultTab('matches')}
-                className={`px-6 py-3 font-medium text-sm border-b-2 ${
-                  activeResultTab === 'matches'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                onClick={exportReport}
+                className="flex items-center gap-2 px-4 py-2 mr-4 bg-green-600 text-white rounded hover:bg-green-700 font-medium text-sm transition-all"
               >
-                ✓ Exact Matches ({scanResults.exactMatches})
-              </button>
-              <button
-                onClick={() => setActiveResultTab('discrepancies')}
-                className={`px-6 py-3 font-medium text-sm border-b-2 ${
-                  activeResultTab === 'discrepancies'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                ⚠️ Discrepancies ({scanResults.discrepancies})
-              </button>
-              <button
-                onClick={() => setActiveResultTab('ghosts')}
-                className={`px-6 py-3 font-medium text-sm border-b-2 ${
-                  activeResultTab === 'ghosts'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                👻 Phantom Properties ({scanResults.ghosts})
+                <Download className="w-4 h-4" />
+                Export
               </button>
             </div>
 
@@ -1044,16 +1053,6 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
             </div>
           </div>
 
-          {/* Export Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={exportReport}
-              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-all"
-            >
-              <Download className="w-4 h-4" />
-              Export Report for Collector
-            </button>
-          </div>
         </div>
       )}
     </div>
