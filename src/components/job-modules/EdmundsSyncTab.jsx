@@ -9,6 +9,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
   const [activeDiscrepancyView, setActiveDiscrepancyView] = useState('list'); // list, breakdown
+  const [selectedBreakdownField, setSelectedBreakdownField] = useState(null); // Filter breakdown by field
 
   // Fuzzy string matching
   const stringSimilarity = (str1, str2) => {
@@ -624,14 +625,38 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                   </div>
 
                   {activeDiscrepancyView === 'breakdown' && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                      {Object.entries(scanResults.fieldBreakdown || {}).map(([field, count]) => (
-                        <div key={field} className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                          <div className="text-2xl font-bold text-blue-600">{count}</div>
-                          <div className="text-sm text-gray-600 capitalize mt-1">{field.replace(/_/g, ' ')}</div>
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                        {Object.entries(scanResults.fieldBreakdown || {}).map(([field, count]) => (
+                          <div
+                            key={field}
+                            onClick={() => setSelectedBreakdownField(selectedBreakdownField === field ? null : field)}
+                            className={`rounded-lg p-4 border cursor-pointer transition ${
+                              selectedBreakdownField === field
+                                ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-300'
+                                : 'bg-blue-50 border-blue-200 hover:bg-blue-75'
+                            }`}
+                          >
+                            <div className="text-2xl font-bold text-blue-600">{count}</div>
+                            <div className="text-sm text-gray-600 capitalize mt-1">{field.replace(/_/g, ' ')}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {selectedBreakdownField && (
+                        <div className="bg-blue-50 p-4 rounded mb-4 border border-blue-200">
+                          <p className="text-sm text-gray-700">
+                            Showing discrepancies for: <span className="font-bold capitalize">{selectedBreakdownField.replace(/_/g, ' ')}</span>
+                            <button
+                              onClick={() => setSelectedBreakdownField(null)}
+                              className="ml-4 text-xs px-2 py-1 bg-blue-200 hover:bg-blue-300 rounded"
+                            >
+                              Clear Filter
+                            </button>
+                          </p>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
 
                   {activeDiscrepancyView === 'list' && (
@@ -648,12 +673,21 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {scanResults.detailedDiscrepancies.map((match, idx) =>
-                            match.discrepancies.map((d, didx) => (
-                              <tr key={`${idx}-${didx}`} className="border-t hover:bg-yellow-50">
+                          {scanResults.detailedDiscrepancies
+                            .map((match, idx) => ({
+                              match,
+                              idx,
+                              filtered: selectedBreakdownField
+                                ? match.discrepancies.filter(d => d.field === selectedBreakdownField)
+                                : match.discrepancies
+                            }))
+                            .filter(item => item.filtered.length > 0)
+                            .map(item =>
+                              item.filtered.map((d, didx) => (
+                                <tr key={`${item.idx}-${didx}`} className="border-t hover:bg-yellow-50">
                                 {didx === 0 && (
                                   <>
-                                    <td className="px-4 py-2 font-medium" rowSpan={match.discrepancies.length}>{match.edmunds.block}/{match.edmunds.lot}</td>
+                                    <td className="px-4 py-2 font-medium" rowSpan={item.filtered.length}>{item.match.edmunds.block}/{item.match.edmunds.lot}</td>
                                   </>
                                 )}
                                 <td className="px-4 py-2 text-xs font-medium">{d.field}</td>
@@ -661,13 +695,13 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                                 <td className="px-4 py-2 text-xs">{d.copilot}</td>
                                 <td className="px-4 py-2 text-xs">{(d.similarity * 100).toFixed(0)}%</td>
                                 {didx === 0 && (
-                                  <td className="px-4 py-2" rowSpan={match.discrepancies.length}>
+                                  <td className="px-4 py-2" rowSpan={item.filtered.length}>
                                     <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                      match.severity === 'critical'
+                                      item.match.severity === 'critical'
                                         ? 'bg-red-100 text-red-800'
                                         : 'bg-yellow-100 text-yellow-800'
                                     }`}>
-                                      {match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
+                                      {item.match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
                                     </span>
                                   </td>
                                 )}
