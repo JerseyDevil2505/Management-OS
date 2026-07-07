@@ -279,13 +279,13 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         block: findColumn(row, ['block']),
         lot: findColumn(row, ['lot']),
         qualifier: findColumn(row, ['qualifier']) || '',
-        owner: findColumn(row, ['owner']),
+        owner: findColumn(row, ['owner name', 'owner']),
         property_location: findColumn(row, ['property location', 'address']),
-        owner_street: findColumn(row, ['owner address', 'owner street']),
-        owner_city: findColumn(row, ['owner city', 'city']),
+        owner_street: findColumn(row, ['owner street', 'owner address']), // Only Street1, not Street2
+        owner_city: findColumn(row, ['owner city']),
         state: findColumn(row, ['state']),
-        zip: findColumn(row, ['zip']),
-        property_m4_class: findColumn(row, ['class', 'm4 class'])
+        zip: findColumn(row, ['owner zip', 'zip']),
+        property_m4_class: findColumn(row, ['property class', 'class', 'm4 class'])
       })).filter(r => r.block && r.lot);
 
       const primaryCopilot = getPrimaryProperties();
