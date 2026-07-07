@@ -149,65 +149,54 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   };
 
   // Compare fields and find discrepancies — FLAG ANYTHING THAT ISN'T EXACT
+  // Fuzzy = minor differences (space, abbrev, typo) | Review/Critical = unrelated values
   const compareRecords = (edmundsRecord, copilotRecord) => {
     const discrepancies = [];
 
-    // Owner — flag if not exact match
+    // Helper: compare text fields with fuzzy detection
+    const compareTextField = (field, edmunds, copilot) => {
+      if (edmunds === copilot) return null; // Exact match, no discrepancy
+
+      const sim = stringSimilarity(edmunds, copilot);
+      const severity = sim >= 0.90 ? 'fuzzy' : 'critical'; // 90%+ = fuzzy, <90% = review needed
+
+      return {
+        field,
+        edmunds: edmunds || '(empty)',
+        copilot: copilot || '(empty)',
+        similarity: sim,
+        severity
+      };
+    };
+
+    // Owner
     const edmundsOwner = (edmundsRecord.owner || '').toString().trim();
     const copilotOwner = (copilotRecord.owner_name || '').toString().trim();
-    if (edmundsOwner !== copilotOwner) {
-      discrepancies.push({
-        field: 'owner',
-        edmunds: edmundsOwner || '(empty)',
-        copilot: copilotOwner || '(empty)',
-        similarity: 1,
-        severity: 'critical'
-      });
-    }
+    const ownerDisc = compareTextField('owner', edmundsOwner, copilotOwner);
+    if (ownerDisc) discrepancies.push(ownerDisc);
 
-    // Property Location — flag if not exact match
+    // Property Location
     const edmundsAddr = (edmundsRecord.property_location || '').toString().trim();
     const copilotAddr = (copilotRecord.property_location || '').toString().trim();
-    if (edmundsAddr !== copilotAddr) {
-      discrepancies.push({
-        field: 'property_location',
-        edmunds: edmundsAddr || '(empty)',
-        copilot: copilotAddr || '(empty)',
-        similarity: 1,
-        severity: 'critical'
-      });
-    }
+    const addrDisc = compareTextField('property_location', edmundsAddr, copilotAddr);
+    if (addrDisc) discrepancies.push(addrDisc);
 
-    // Owner Address — flag if not exact match
+    // Owner Address
     const edmundsOwnerAddr = (edmundsRecord.owner_street || '').toString().trim();
     const copilotOwnerAddr = (copilotRecord.owner_street || '').toString().trim();
-    if (edmundsOwnerAddr !== copilotOwnerAddr) {
-      discrepancies.push({
-        field: 'owner_address',
-        edmunds: edmundsOwnerAddr || '(empty)',
-        copilot: copilotOwnerAddr || '(empty)',
-        similarity: 1,
-        severity: 'critical'
-      });
-    }
+    const ownerAddrDisc = compareTextField('owner_address', edmundsOwnerAddr, copilotOwnerAddr);
+    if (ownerAddrDisc) discrepancies.push(ownerAddrDisc);
 
     // Parse Copilot owner_csz field
     const parsedCopilot = parseCsz(copilotRecord.owner_csz);
 
-    // Owner City — flag if not exact match
+    // Owner City
     const edmundsCity = (edmundsRecord.owner_city || '').toString().trim();
     const copilotCity = parsedCopilot.city;
-    if (edmundsCity !== copilotCity) {
-      discrepancies.push({
-        field: 'owner_city',
-        edmunds: edmundsCity || '(empty)',
-        copilot: copilotCity || '(empty)',
-        similarity: 1,
-        severity: 'critical'
-      });
-    }
+    const cityDisc = compareTextField('owner_city', edmundsCity, copilotCity);
+    if (cityDisc) discrepancies.push(cityDisc);
 
-    // State — normalize spaces and compare exactly
+    // State — normalize spaces then compare exactly (N J → NJ)
     const edmundsState = (edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
     const copilotState = parsedCopilot.state;
     if (edmundsState !== copilotState) {
@@ -215,12 +204,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         field: 'state',
         edmunds: edmundsState || '(empty)',
         copilot: copilotState || '(empty)',
-        similarity: 1,
+        similarity: 0,
         severity: 'critical'
       });
     }
 
-    // ZIP — flag if not exact match
+    // ZIP — exact match only
     const edmundsZip = (edmundsRecord.zip || '').toString().trim();
     const copilotZip = parsedCopilot.zip;
     if (edmundsZip !== copilotZip) {
@@ -228,12 +217,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         field: 'zip',
         edmunds: edmundsZip || '(empty)',
         copilot: copilotZip || '(empty)',
-        similarity: 1,
+        similarity: 0,
         severity: 'critical'
       });
     }
 
-    // Property Class — flag if not exact match
+    // Property Class — exact match only
     const edmundsClass = (edmundsRecord.property_m4_class || '').toString().trim();
     const copilotClass = (copilotRecord.property_m4_class || '').toString().trim();
     if (edmundsClass !== copilotClass) {
@@ -241,7 +230,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         field: 'property_class',
         edmunds: edmundsClass || '(empty)',
         copilot: copilotClass || '(empty)',
-        similarity: 1,
+        similarity: 0,
         severity: 'critical'
       });
     }
