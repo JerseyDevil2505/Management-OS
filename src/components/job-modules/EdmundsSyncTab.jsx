@@ -585,23 +585,33 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         modIvColumns.add(i);
       }
     });
+    console.log('[Edmunds Export] Disc headers:', discHeaders);
+    console.log('[Edmunds Export] MOD IV columns:', Array.from(modIvColumns));
 
     // Apply styling to all cells
     const range = XLSX.utils.decode_range(discSheet['!ref']);
+    console.log('[Edmunds Export] Disc sheet range:', range);
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!discSheet[cellAddress]) continue;
+        if (!discSheet[cellAddress]) {
+          console.log('[Edmunds Export] Cell missing:', cellAddress);
+          continue;
+        }
+
+        // Initialize s if it doesn't exist
+        if (!discSheet[cellAddress].s) discSheet[cellAddress].s = {};
 
         if (R === 0) {
-          discSheet[cellAddress].s = headerStyle;
+          discSheet[cellAddress].s = JSON.parse(JSON.stringify(headerStyle));
         } else if (modIvColumns.has(C)) {
-          discSheet[cellAddress].s = modIvStyle;
+          discSheet[cellAddress].s = JSON.parse(JSON.stringify(modIvStyle));
         } else {
-          discSheet[cellAddress].s = baseStyle;
+          discSheet[cellAddress].s = JSON.parse(JSON.stringify(baseStyle));
         }
       }
     }
+    console.log('[Edmunds Export] Applied styles to discrepancies sheet');
 
     XLSX.utils.book_append_sheet(workbook, discSheet, 'Discrepancies');
 
@@ -640,9 +650,11 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       for (let C = phantomRange.s.c; C <= phantomRange.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!phantomSheet[cellAddress]) continue;
-        phantomSheet[cellAddress].s = R === 0 ? headerStyle : baseStyle;
+        if (!phantomSheet[cellAddress].s) phantomSheet[cellAddress].s = {};
+        phantomSheet[cellAddress].s = JSON.parse(JSON.stringify(R === 0 ? headerStyle : baseStyle));
       }
     }
+    console.log('[Edmunds Export] Applied styles to phantom sheet');
 
     XLSX.utils.book_append_sheet(workbook, phantomSheet, 'Phantom Properties');
 
@@ -664,9 +676,11 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!summarySheet[cellAddress]) continue;
-        summarySheet[cellAddress].s = R === 0 ? headerStyle : baseStyle;
+        if (!summarySheet[cellAddress].s) summarySheet[cellAddress].s = {};
+        summarySheet[cellAddress].s = JSON.parse(JSON.stringify(R === 0 ? headerStyle : baseStyle));
       }
     }
+    console.log('[Edmunds Export] Applied styles to summary sheet');
 
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
