@@ -6,6 +6,7 @@ import DataVisualizations from './DataVisualizations';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
 import InspectionInfo from './InspectionInfo';
+import EdmundsSyncTab from './EdmundsSyncTab';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 import AppealLogTab from './final-valuation-tabs/AppealLogTab';
@@ -1371,6 +1372,14 @@ const JobContainer = ({
       component: InspectionInfo,
       description: 'Property inspection metrics and status',
       configKey: 'inspectionInfo'
+    },
+    {
+      id: 'edmunds-sync',
+      name: 'Edmunds Sync',
+      icon: AlertCircle,
+      component: EdmundsSyncTab,
+      description: 'Reconcile with collector data',
+      configKey: 'edmundsSync'
     },
     {
       id: 'market-analysis',
