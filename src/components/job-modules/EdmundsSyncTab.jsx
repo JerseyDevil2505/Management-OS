@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Download, AlertCircle, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { Download, AlertCircle, CheckCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { supabase } from '../../lib/supabaseClient';
 
 const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [isUploading, setIsUploading] = useState(false);
@@ -129,12 +128,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
-  // Parse owner_csz field (formats: "City, ST ZIP" or "City ST ZIP")
-  const parseCsz = (csz) => {
+  // Parse Copilot's owner_csz field (format: "City State Zip" or "City, State Zip")
+  const parseCszCopilot = (csz) => {
     if (!csz) return { city: '', state: '', zip: '' };
     const str = String(csz).trim();
 
-    // Try to match state and zip at the end: "XX ##### " or "XX-#### "
+    // Try to match state and zip at the end: "XX ##### " or "XX-#####"
     const stateZipMatch = str.match(/([A-Z]{2})\s+([\d\-]{5,10})\s*$/i);
 
     if (stateZipMatch) {
@@ -146,6 +145,22 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     }
 
     return { city: str, state: '', zip: '' };
+  };
+
+  // Parse Edmunds data: owner_city is "City, State" and zip is separate
+  const parseEdmundsCity = (ownerCity) => {
+    if (!ownerCity) return { city: '', state: '' };
+    const str = String(ownerCity).trim();
+
+    // Try to match "City, State" or "City State"
+    const match = str.match(/^(.+?)[,\s]+([A-Z]{2})\s*$/i);
+    if (match) {
+      const city = match[1].trim();
+      const state = match[2].toUpperCase().replace(/\s+/g, ''); // Normalize spaces in state
+      return { city, state };
+    }
+
+    return { city: str, state: '' };
   };
 
   // Compare fields and find discrepancies — FLAG ANYTHING THAT ISN'T EXACT
@@ -187,11 +202,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const ownerAddrDisc = compareTextField('owner_address', edmundsOwnerAddr, copilotOwnerAddr);
     if (ownerAddrDisc) discrepancies.push(ownerAddrDisc);
 
-    // Parse Copilot owner_csz field
-    const parsedCopilot = parseCsz(copilotRecord.owner_csz);
+    // Parse Copilot owner_csz field (has city, state, zip all together)
+    const parsedCopilot = parseCszCopilot(copilotRecord.owner_csz);
 
-    // Parse Edmunds owner_city field same way as Copilot (extracts city, state, zip)
-    const parsedEdmunds = parseCsz(edmundsRecord.owner_city);
+    // Parse Edmunds owner_city field (has city, state) and zip is separate column
+    const parsedEdmunds = parseEdmundsCity(edmundsRecord.owner_city);
+    const edmundsZip = (edmundsRecord.zip || '').toString().trim();
 
     // Owner City
     const edmundsCity = parsedEdmunds.city;
@@ -199,9 +215,9 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const cityDisc = compareTextField('owner_city', edmundsCity, copilotCity);
     if (cityDisc) discrepancies.push(cityDisc);
 
-    // State — normalize spaces then compare exactly (N J → NJ)
-    const edmundsState = (parsedEdmunds.state || edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
-    const copilotState = parsedCopilot.state;
+    // State — compare directly (Edmunds state from "City, State" and Copilot from owner_csz)
+    const edmundsState = parsedEdmunds.state || '';
+    const copilotState = parsedCopilot.state || '';
     if (edmundsState !== copilotState) {
       discrepancies.push({
         field: 'state',
@@ -213,7 +229,6 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     }
 
     // ZIP — exact match, preserve leading zeros (treat as string)
-    const edmundsZip = (parsedEdmunds.zip || edmundsRecord.zip || '').toString().trim();
     const copilotZip = (parsedCopilot.zip || '').toString().trim();
     if (edmundsZip !== copilotZip) {
       discrepancies.push({
