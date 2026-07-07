@@ -128,40 +128,34 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
-  // Parse Copilot's owner_csz field: split on comma or double space
+  // Parse Copilot's owner_csz field: handle various formats
+  // "RIVERTON NJ 08077" → city: "RIVERTON", state: "NJ", zip: "08077"
   // "RIVERTON, N J 08077" → city: "RIVERTON", state: "NJ", zip: "08077"
   const parseCszCopilot = (csz) => {
     if (!csz) return { city: '', state: '', zip: '' };
     const str = String(csz).trim();
 
-    let remainder = str;
-    let city = '';
-
-    // Split on comma first
-    if (str.includes(',')) {
-      const parts = str.split(',').map(p => p.trim());
-      city = parts[0];
-      remainder = parts[1] || '';
-    } else if (str.includes('  ')) {
-      // Split on double space
-      const parts = str.split(/\s{2,}/).map(p => p.trim());
-      city = parts[0];
-      remainder = parts[1] || '';
-    } else {
-      // No separator, whole thing is city
+    // Try to extract ZIP from the end first (5 or 9 digits)
+    const zipMatch = str.match(/([\d\-]{5,10})\s*$/);
+    if (!zipMatch) {
+      // No ZIP, treat whole thing as city or return empty
       return { city: str, state: '', zip: '' };
     }
 
-    // From remainder, extract ZIP (ends with digits) and state (before ZIP)
-    const zipMatch = remainder.match(/([A-Z\s]+?)\s+([\d\-]{5,10})\s*$/i);
-    if (zipMatch) {
-      const state = zipMatch[1].trim().replace(/\s+/g, ''); // Normalize spaces
-      const zip = zipMatch[2];
+    const zip = zipMatch[1];
+    const beforeZip = str.substring(0, zipMatch.index).trim();
+
+    // Now extract state and city from beforeZip
+    // State is the last 1-2 letters (possibly with space like "N J")
+    const stateMatch = beforeZip.match(/([A-Z])(?:\s+([A-Z]))?\s*$/i);
+    if (stateMatch) {
+      const state = (stateMatch[1] + (stateMatch[2] ? stateMatch[2] : '')).toUpperCase();
+      const city = beforeZip.substring(0, stateMatch.index).trim().replace(/,\s*$/, '').trim();
       return { city, state, zip };
     }
 
-    // If no ZIP found, everything is state
-    return { city, state: remainder.replace(/\s+/g, ''), zip: '' };
+    // If can't parse state, everything before ZIP is city
+    return { city: beforeZip, state: '', zip };
   };
 
   // Parse Edmunds owner_city: split on comma or double space
