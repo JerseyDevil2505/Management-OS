@@ -699,7 +699,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
           <AlertCircle className="w-8 h-8 mr-3 text-blue-600" />
           <h2 className="text-2xl font-bold text-gray-800">🔄 Edmunds Audit</h2>
         </div>
-        <p className="text-gray-600">Import Edmunds collector data and reconcile against your property records. Identify mismatches, ghost records, and data quality issues.</p>
+        <p className="text-gray-600">Import Edmunds collector data and reconcile against your property records. Identify mismatches, phantom properties, and data quality issues.</p>
       </div>
 
       {/* Error Messages */}
