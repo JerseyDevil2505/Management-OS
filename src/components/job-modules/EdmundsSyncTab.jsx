@@ -9,6 +9,9 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
   const [selectedBreakdownField, setSelectedBreakdownField] = useState(null); // Filter by field
+  const [sortColumn, setSortColumn] = useState('block'); // Sorting
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [severityFilter, setSeverityFilter] = useState(null); // null = all, 'critical', 'fuzzy'
 
   // Fuzzy string matching
   const stringSimilarity = (str1, str2) => {
@@ -189,11 +192,20 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       };
     };
 
-    // Owner
+    // Owner — 50% threshold for fuzzy
     const edmundsOwner = (edmundsRecord.owner || '').toString().trim();
     const copilotOwner = (copilotRecord.owner_name || '').toString().trim();
-    const ownerDisc = compareTextField('owner', edmundsOwner, copilotOwner);
-    if (ownerDisc) discrepancies.push(ownerDisc);
+    if (edmundsOwner !== copilotOwner) {
+      const sim = stringSimilarity(edmundsOwner, copilotOwner);
+      const severity = sim >= 0.50 ? 'fuzzy' : 'critical'; // 50%+ = fuzzy
+      discrepancies.push({
+        field: 'owner',
+        edmunds: edmundsOwner || '(empty)',
+        copilot: copilotOwner || '(empty)',
+        similarity: sim,
+        severity
+      });
+    }
 
     // Helper: normalize ordinals and numbers in addresses
     // "fourth" → "4", "4th" → "4", "03" → "3", etc.
@@ -307,6 +319,50 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       });
     }
 
+    // Sales Data (optional fields) — for recent sales tracking
+    const edmundsSalesDate = (edmundsRecord.sales_date || '').toString().trim();
+    const edmundsSalesPrice = (edmundsRecord.sales_price || '').toString().trim();
+    const edmundsSalesBook = (edmundsRecord.sales_book || '').toString().trim();
+    const edmundsSalesPage = (edmundsRecord.sales_page || '').toString().trim();
+
+    // Note: Copilot may not have these fields yet, so we include Edmunds values for reference
+    if (edmundsSalesDate) {
+      discrepancies.push({
+        field: 'sales_date',
+        edmunds: edmundsSalesDate,
+        copilot: '(not in Copilot)',
+        similarity: 0,
+        severity: 'fuzzy' // Info only, not a critical mismatch
+      });
+    }
+    if (edmundsSalesPrice) {
+      discrepancies.push({
+        field: 'sales_price',
+        edmunds: edmundsSalesPrice,
+        copilot: '(not in Copilot)',
+        similarity: 0,
+        severity: 'fuzzy'
+      });
+    }
+    if (edmundsSalesBook) {
+      discrepancies.push({
+        field: 'sales_book',
+        edmunds: edmundsSalesBook,
+        copilot: '(not in Copilot)',
+        similarity: 0,
+        severity: 'fuzzy'
+      });
+    }
+    if (edmundsSalesPage) {
+      discrepancies.push({
+        field: 'sales_page',
+        edmunds: edmundsSalesPage,
+        copilot: '(not in Copilot)',
+        similarity: 0,
+        severity: 'fuzzy'
+      });
+    }
+
     return discrepancies;
   };
 
@@ -360,7 +416,11 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         owner_city: findColumn(row, ['owner city']),
         state: findColumn(row, ['state']),
         zip: findColumn(row, ['owner zip', 'zip'], true), // true = preserve leading zeros
-        property_m4_class: findColumn(row, ['property class', 'class', 'm4 class'])
+        property_m4_class: findColumn(row, ['property class', 'class', 'm4 class']),
+        sales_date: findColumn(row, ['sales date', 'sale date']) || '',
+        sales_price: findColumn(row, ['sales price', 'sale price']) || '',
+        sales_book: findColumn(row, ['sales book', 'sale book']) || '',
+        sales_page: findColumn(row, ['sales page', 'sale page']) || ''
       })).filter(r => r.block && r.lot);
 
       const primaryCopilot = getPrimaryProperties();
@@ -674,6 +734,41 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                     ))}
                   </div>
 
+                  {/* Severity Filter Buttons */}
+                  <div className="flex gap-2 mb-4 items-center">
+                    <span className="text-xs font-medium text-gray-600">Filter Severity:</span>
+                    <button
+                      onClick={() => setSeverityFilter(null)}
+                      className={`text-xs px-3 py-1 rounded ${
+                        severityFilter === null
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setSeverityFilter('critical')}
+                      className={`text-xs px-3 py-1 rounded ${
+                        severityFilter === 'critical'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      🔴 Review
+                    </button>
+                    <button
+                      onClick={() => setSeverityFilter('fuzzy')}
+                      className={`text-xs px-3 py-1 rounded ${
+                        severityFilter === 'fuzzy'
+                          ? 'bg-yellow-600 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      🟡 Fuzzy
+                    </button>
+                  </div>
+
                   {selectedBreakdownField && (
                     <div className="bg-blue-50 p-3 rounded mb-4 border border-blue-200 flex items-center justify-between">
                       <p className="text-sm text-gray-700">
@@ -683,7 +778,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                         onClick={() => setSelectedBreakdownField(null)}
                         className="text-xs px-3 py-1 bg-blue-200 hover:bg-blue-300 rounded"
                       >
-                        Show All
+                        Clear
                       </button>
                     </div>
                   )}
@@ -691,7 +786,25 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                            <th
+                              className="px-4 py-2 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                              onClick={() => {
+                                setSortColumn('block');
+                                setSortDirection(sortColumn === 'block' && sortDirection === 'asc' ? 'desc' : 'asc');
+                              }}
+                            >
+                              Block {sortColumn === 'block' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th
+                              className="px-4 py-2 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
+                              onClick={() => {
+                                setSortColumn('lot');
+                                setSortDirection(sortColumn === 'lot' && sortDirection === 'asc' ? 'desc' : 'asc');
+                              }}
+                            >
+                              Lot {sortColumn === 'lot' && (sortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Qualifier</th>
                             <th className="px-4 py-2 text-left font-medium text-gray-700">Field</th>
                             <th className="px-4 py-2 text-left font-medium text-gray-700">Edmunds Value</th>
                             <th className="px-4 py-2 text-left font-medium text-gray-700">Copilot Value</th>
@@ -709,29 +822,37 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                                 : match.discrepancies
                             }))
                             .filter(item => item.filtered.length > 0)
+                            .filter(item => !severityFilter || item.filtered.some(d => d.severity === severityFilter))
+                            .sort((a, b) => {
+                              const aVal = Number(a.match.edmunds[sortColumn]) || 0;
+                              const bVal = Number(b.match.edmunds[sortColumn]) || 0;
+                              return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                            })
                             .map(item =>
-                              item.filtered.map((d, didx) => (
+                              item.filtered
+                                .filter(d => !severityFilter || d.severity === severityFilter)
+                                .map((d, didx) => (
                                 <tr key={`${item.idx}-${didx}`} className="border-t hover:bg-yellow-50">
                                 {didx === 0 && (
                                   <>
-                                    <td className="px-4 py-2 font-medium" rowSpan={item.filtered.length}>{item.match.edmunds.block}/{item.match.edmunds.lot}</td>
+                                    <td className="px-4 py-2 font-medium text-sm" rowSpan={item.filtered.filter(d => !severityFilter || d.severity === severityFilter).length}>{item.match.edmunds.block}</td>
+                                    <td className="px-4 py-2 font-medium text-sm" rowSpan={item.filtered.filter(d => !severityFilter || d.severity === severityFilter).length}>{item.match.edmunds.lot}</td>
+                                    <td className="px-4 py-2 font-medium text-sm" rowSpan={item.filtered.filter(d => !severityFilter || d.severity === severityFilter).length}>{item.match.edmunds.qualifier || '-'}</td>
                                   </>
                                 )}
                                 <td className="px-4 py-2 text-xs font-medium">{d.field}</td>
                                 <td className="px-4 py-2 text-xs">{d.edmunds}</td>
                                 <td className="px-4 py-2 text-xs">{d.copilot}</td>
                                 <td className="px-4 py-2 text-xs">{(d.similarity * 100).toFixed(0)}%</td>
-                                {didx === 0 && (
-                                  <td className="px-4 py-2" rowSpan={item.filtered.length}>
-                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                      item.match.severity === 'critical'
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {item.match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
-                                    </span>
-                                  </td>
-                                )}
+                                <td className="px-4 py-2">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    d.severity === 'critical'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {d.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
+                                  </span>
+                                </td>
                               </tr>
                             ))
                           )}
