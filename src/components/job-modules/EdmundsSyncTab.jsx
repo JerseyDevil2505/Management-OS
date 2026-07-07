@@ -527,36 +527,42 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       }
     };
 
-    // Discrepancies sheet - expanded with separate columns for each field
-    const discrepanciesData = scanResults.detailedDiscrepancies.flatMap(match =>
-      match.discrepancies.map(disc => ({
+    // Discrepancies sheet - one row per Block/Lot/Qualifier, fields as columns
+    const discrepanciesData = scanResults.detailedDiscrepancies.map(match => {
+      const row = {
         'Block': match.edmunds.block,
         'Lot': match.edmunds.lot,
         'Qualifier': match.edmunds.qualifier,
-        'Field': disc.field,
-        'Status': disc.severity === 'critical' ? 'REVIEW' : 'FUZZY',
-        'MOD IV Value': disc.copilot,
-        'Edmunds Value': disc.edmunds,
-        'Match %': `${(disc.similarity * 100).toFixed(0)}%`
-      }))
-    );
+        'Status': match.discrepancies[0]?.severity === 'critical' ? 'REVIEW' : 'FUZZY'
+      };
+
+      // Add columns for each field comparison
+      match.discrepancies.forEach(disc => {
+        row[`${disc.field} - MOD IV`] = disc.copilot;
+        row[`${disc.field} - Edmunds`] = disc.edmunds;
+      });
+
+      return row;
+    });
 
     const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
-    discSheet['!cols'] = [
+    // Dynamic columns: 4 base + 2 per discrepancy field
+    const colWidths = [
       { wch: 10 },  // Block
       { wch: 10 },  // Lot
       { wch: 12 },  // Qualifier
-      { wch: 20 },  // Field
-      { wch: 12 },  // Status
-      { wch: 35 },  // MOD IV Value
-      { wch: 35 },  // Edmunds Value
-      { wch: 10 }   // Match %
+      { wch: 12 }   // Status
     ];
+    // Add columns for each field (estimate max 10 fields, 2 cols each = 20 more cols)
+    for (let i = 0; i < 20; i++) {
+      colWidths.push({ wch: 30 });
+    }
+    discSheet['!cols'] = colWidths;
 
     // Apply styling to discrepancy sheet
     Object.keys(discSheet).forEach(cell => {
       if (cell.startsWith('!')) return;
-      if (cell.match(/^[A-H]1$/)) {
+      if (cell.match(/^[A-Z]+1$/)) {  // All header cells (row 1)
         discSheet[cell].s = headerStyle;
       } else {
         discSheet[cell].s = cellStyle;
