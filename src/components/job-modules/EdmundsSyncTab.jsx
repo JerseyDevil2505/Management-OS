@@ -9,6 +9,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
+  const [activeDiscrepancyView, setActiveDiscrepancyView] = useState('list'); // list, breakdown
 
   // Fuzzy string matching
   const stringSimilarity = (str1, str2) => {
@@ -190,14 +191,17 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     // Parse Copilot owner_csz field
     const parsedCopilot = parseCsz(copilotRecord.owner_csz);
 
+    // Parse Edmunds owner_city field same way as Copilot (extracts city, state, zip)
+    const parsedEdmunds = parseCsz(edmundsRecord.owner_city);
+
     // Owner City
-    const edmundsCity = (edmundsRecord.owner_city || '').toString().trim();
+    const edmundsCity = parsedEdmunds.city;
     const copilotCity = parsedCopilot.city;
     const cityDisc = compareTextField('owner_city', edmundsCity, copilotCity);
     if (cityDisc) discrepancies.push(cityDisc);
 
     // State — normalize spaces then compare exactly (N J → NJ)
-    const edmundsState = (edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+    const edmundsState = (parsedEdmunds.state || edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
     const copilotState = parsedCopilot.state;
     if (edmundsState !== copilotState) {
       discrepancies.push({
@@ -209,9 +213,9 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       });
     }
 
-    // ZIP — exact match only
-    const edmundsZip = (edmundsRecord.zip || '').toString().trim();
-    const copilotZip = parsedCopilot.zip;
+    // ZIP — exact match, preserve leading zeros (treat as string)
+    const edmundsZip = (parsedEdmunds.zip || edmundsRecord.zip || '').toString().trim();
+    const copilotZip = (parsedCopilot.zip || '').toString().trim();
     if (edmundsZip !== copilotZip) {
       discrepancies.push({
         field: 'zip',
@@ -336,6 +340,14 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         }
       });
 
+      // Calculate discrepancy breakdown by field
+      const fieldBreakdown = {};
+      fuzzyMatches.forEach(match => {
+        match.discrepancies.forEach(disc => {
+          fieldBreakdown[disc.field] = (fieldBreakdown[disc.field] || 0) + 1;
+        });
+      });
+
       setScanResults({
         totalEdmunds: edmundsRecords.length,
         exactMatches: exactMatches.length,
@@ -344,6 +356,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         detailedMatches: exactMatches,
         detailedDiscrepancies: fuzzyMatches,
         detailedGhosts: ghostRecords,
+        fieldBreakdown,
         timestamp: new Date().toISOString()
       });
 
@@ -567,48 +580,86 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
               {activeResultTab === 'discrepancies' && (
                 <div>
                   <p className="text-sm text-gray-600 mb-4">Records with matching block/lot/qualifier but field differences (owner, address, class, etc.)</p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Field</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Edmunds Value</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Copilot Value</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Match %</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Severity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {scanResults.detailedDiscrepancies.map((match, idx) =>
-                          match.discrepancies.map((d, didx) => (
-                            <tr key={`${idx}-${didx}`} className="border-t hover:bg-yellow-50">
-                              {didx === 0 && (
-                                <>
-                                  <td className="px-4 py-2 font-medium" rowSpan={match.discrepancies.length}>{match.edmunds.block}/{match.edmunds.lot}</td>
-                                </>
-                              )}
-                              <td className="px-4 py-2 text-xs font-medium">{d.field}</td>
-                              <td className="px-4 py-2 text-xs">{d.edmunds}</td>
-                              <td className="px-4 py-2 text-xs">{d.copilot}</td>
-                              <td className="px-4 py-2 text-xs">{(d.similarity * 100).toFixed(0)}%</td>
-                              {didx === 0 && (
-                                <td className="px-4 py-2" rowSpan={match.discrepancies.length}>
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    match.severity === 'critical'
-                                      ? 'bg-red-100 text-red-800'
-                                      : 'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
-                                  </span>
-                                </td>
-                              )}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+
+                  {/* Discrepancy View Switcher */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setActiveDiscrepancyView('list')}
+                      className={`px-4 py-2 rounded text-sm font-medium ${
+                        activeDiscrepancyView === 'list'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      📋 Full List ({scanResults.discrepancies})
+                    </button>
+                    <button
+                      onClick={() => setActiveDiscrepancyView('breakdown')}
+                      className={`px-4 py-2 rounded text-sm font-medium ${
+                        activeDiscrepancyView === 'breakdown'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      📊 Breakdown by Field
+                    </button>
                   </div>
+
+                  {activeDiscrepancyView === 'breakdown' && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                      {Object.entries(scanResults.fieldBreakdown || {}).map(([field, count]) => (
+                        <div key={field} className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                          <div className="text-2xl font-bold text-blue-600">{count}</div>
+                          <div className="text-sm text-gray-600 capitalize mt-1">{field.replace(/_/g, ' ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeDiscrepancyView === 'list' && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Field</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Edmunds Value</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Copilot Value</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Match %</th>
+                            <th className="px-4 py-2 text-left font-medium text-gray-700">Severity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {scanResults.detailedDiscrepancies.map((match, idx) =>
+                            match.discrepancies.map((d, didx) => (
+                              <tr key={`${idx}-${didx}`} className="border-t hover:bg-yellow-50">
+                                {didx === 0 && (
+                                  <>
+                                    <td className="px-4 py-2 font-medium" rowSpan={match.discrepancies.length}>{match.edmunds.block}/{match.edmunds.lot}</td>
+                                  </>
+                                )}
+                                <td className="px-4 py-2 text-xs font-medium">{d.field}</td>
+                                <td className="px-4 py-2 text-xs">{d.edmunds}</td>
+                                <td className="px-4 py-2 text-xs">{d.copilot}</td>
+                                <td className="px-4 py-2 text-xs">{(d.similarity * 100).toFixed(0)}%</td>
+                                {didx === 0 && (
+                                  <td className="px-4 py-2" rowSpan={match.discrepancies.length}>
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      match.severity === 'critical'
+                                        ? 'bg-red-100 text-red-800'
+                                        : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
+                                    </span>
+                                  </td>
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
