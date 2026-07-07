@@ -262,13 +262,20 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       }
 
       // Helper: fuzzy column matching (find columns by partial name match)
-      const findColumn = (row, searchTerms) => {
+      const findColumn = (row, searchTerms, isZip = false) => {
         const columnNames = Object.keys(row);
         for (const search of (Array.isArray(searchTerms) ? searchTerms : [searchTerms])) {
           const match = columnNames.find(col =>
             col.toLowerCase().includes(search.toLowerCase())
           );
-          if (match) return row[match];
+          if (match) {
+            let value = row[match];
+            // Preserve leading zeros for ZIP codes (Excel converts 07105 → 7105)
+            if (isZip && value) {
+              value = String(value).padStart(5, '0');
+            }
+            return value;
+          }
         }
         return '';
       };
@@ -283,7 +290,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         owner_street: findColumn(row, ['owner street', 'owner address']), // Only Street1, not Street2
         owner_city: findColumn(row, ['owner city']),
         state: findColumn(row, ['state']),
-        zip: findColumn(row, ['owner zip', 'zip']),
+        zip: findColumn(row, ['owner zip', 'zip'], true), // true = preserve leading zeros
         property_m4_class: findColumn(row, ['property class', 'class', 'm4 class'])
       })).filter(r => r.block && r.lot);
 
