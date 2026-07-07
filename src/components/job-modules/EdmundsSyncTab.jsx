@@ -258,18 +258,30 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         return;
       }
 
-      // Parse Edmunds records
+      // Helper: fuzzy column matching (find columns by partial name match)
+      const findColumn = (row, searchTerms) => {
+        const columnNames = Object.keys(row);
+        for (const search of (Array.isArray(searchTerms) ? searchTerms : [searchTerms])) {
+          const match = columnNames.find(col =>
+            col.toLowerCase().includes(search.toLowerCase())
+          );
+          if (match) return row[match];
+        }
+        return '';
+      };
+
+      // Parse Edmunds records with flexible column matching
       const edmundsRecords = data.map(row => ({
-        block: row['Block'] || row['block'] || row['BLOCK'],
-        lot: row['Lot'] || row['lot'] || row['LOT'],
-        qualifier: row['Qualifier'] || row['qualifier'] || row['QUALIFIER'] || '',
-        owner: row['Owner'] || row['owner'] || row['OWNER'],
-        property_location: row['Property Location'] || row['property_location'] || row['Address'] || row['address'],
-        owner_street: row['Owner Address'] || row['owner_address'] || row['owner street'],
-        owner_city: row['Owner City'] || row['owner_city'] || row['City'],
-        state: row['State'] || row['state'],
-        zip: row['Zip'] || row['zip'],
-        property_m4_class: row['Class'] || row['class'] || row['M4 Class']
+        block: findColumn(row, ['block']),
+        lot: findColumn(row, ['lot']),
+        qualifier: findColumn(row, ['qualifier']) || '',
+        owner: findColumn(row, ['owner']),
+        property_location: findColumn(row, ['property location', 'address']),
+        owner_street: findColumn(row, ['owner address', 'owner street']),
+        owner_city: findColumn(row, ['owner city', 'city']),
+        state: findColumn(row, ['state']),
+        zip: findColumn(row, ['zip']),
+        property_m4_class: findColumn(row, ['class', 'm4 class'])
       })).filter(r => r.block && r.lot);
 
       const primaryCopilot = getPrimaryProperties();
