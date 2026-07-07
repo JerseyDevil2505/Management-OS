@@ -7,7 +7,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [scanResults, setScanResults] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-  const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
+  const [activeResultTab, setActiveResultTab] = useState('discrepancies'); // matches, discrepancies, ghosts
   const [selectedBreakdownField, setSelectedBreakdownField] = useState(null); // Filter by field
   const [sortColumn, setSortColumn] = useState('block'); // Sorting
   const [sortDirection, setSortDirection] = useState('asc');
@@ -527,44 +527,36 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       }
     };
 
-    // Summary sheet
-    const summaryData = [
-      { Metric: 'Total Edmunds Records', Value: scanResults.totalEdmunds },
-      { Metric: 'Exact Matches (No Issues)', Value: scanResults.exactMatches },
-      { Metric: 'Discrepancies Found', Value: scanResults.discrepancies },
-      { Metric: 'Ghost Records', Value: scanResults.ghosts },
-      { Metric: 'Scan Date', Value: new Date(scanResults.timestamp).toLocaleString() }
-    ];
-    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-    summarySheet['!cols'] = [{ wch: 35 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary', 0);
-
-    // Discrepancies sheet
-    const discrepanciesData = scanResults.detailedDiscrepancies.map(match => ({
-      'Block': match.edmunds.block,
-      'Lot': match.edmunds.lot,
-      'Qualifier': match.edmunds.qualifier || '-',
-      'Status': match.severity === 'critical' ? 'REVIEW' : 'FUZZY',
-      'Issue': match.discrepancies.map(d => `${d.field}`).join('; '),
-      'Your Value': match.discrepancies.map(d => `${d.field}: ${d.copilot}`).join(' | '),
-      'Edmunds Value': match.discrepancies.map(d => `${d.field}: ${d.edmunds}`).join(' | ')
-    }));
+    // Discrepancies sheet - expanded with separate columns for each field
+    const discrepanciesData = scanResults.detailedDiscrepancies.flatMap(match =>
+      match.discrepancies.map(disc => ({
+        'Block': match.edmunds.block,
+        'Lot': match.edmunds.lot,
+        'Qualifier': match.edmunds.qualifier,
+        'Field': disc.field,
+        'Status': disc.severity === 'critical' ? 'REVIEW' : 'FUZZY',
+        'MOD IV Value': disc.copilot,
+        'Edmunds Value': disc.edmunds,
+        'Match %': `${(disc.similarity * 100).toFixed(0)}%`
+      }))
+    );
 
     const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
     discSheet['!cols'] = [
       { wch: 10 },  // Block
       { wch: 10 },  // Lot
       { wch: 12 },  // Qualifier
+      { wch: 20 },  // Field
       { wch: 12 },  // Status
-      { wch: 25 },  // Issue
-      { wch: 35 },  // Your Value
-      { wch: 35 }   // Edmunds Value
+      { wch: 35 },  // MOD IV Value
+      { wch: 35 },  // Edmunds Value
+      { wch: 10 }   // Match %
     ];
 
     // Apply styling to discrepancy sheet
     Object.keys(discSheet).forEach(cell => {
       if (cell.startsWith('!')) return;
-      if (cell.match(/^[A-G]1$/)) {
+      if (cell.match(/^[A-H]1$/)) {
         discSheet[cell].s = headerStyle;
       } else {
         discSheet[cell].s = cellStyle;
@@ -577,7 +569,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const phantomData = scanResults.detailedGhosts.map(ghost => ({
       'Block': ghost.edmunds.block,
       'Lot': ghost.edmunds.lot,
-      'Qualifier': ghost.edmunds.qualifier || '-',
+      'Qualifier': ghost.edmunds.qualifier,
       'Category': ghost.category,
       'Edmunds Owner': ghost.edmunds.owner,
       'Edmunds Address': ghost.edmunds.property_location,
@@ -613,6 +605,29 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     });
 
     XLSX.utils.book_append_sheet(workbook, phantomSheet, 'Phantom Properties');
+
+    // Summary sheet - added last
+    const summaryData = [
+      { Metric: 'Total Edmunds Records', Value: scanResults.totalEdmunds },
+      { Metric: 'Exact Matches (No Issues)', Value: scanResults.exactMatches },
+      { Metric: 'Discrepancies Found', Value: scanResults.discrepancies },
+      { Metric: 'Ghost Records', Value: scanResults.ghosts },
+      { Metric: 'Scan Date', Value: new Date(scanResults.timestamp).toLocaleString() }
+    ];
+    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    summarySheet['!cols'] = [{ wch: 35 }, { wch: 20 }];
+
+    // Apply styling to summary sheet
+    Object.keys(summarySheet).forEach(cell => {
+      if (cell.startsWith('!')) return;
+      if (cell.match(/^[A-B]1$/)) {
+        summarySheet[cell].s = headerStyle;
+      } else {
+        summarySheet[cell].s = cellStyle;
+      }
+    });
+
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
     XLSX.writeFile(workbook, `Edmunds-Reconciliation-${jobData?.job_name || 'Job'}-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
