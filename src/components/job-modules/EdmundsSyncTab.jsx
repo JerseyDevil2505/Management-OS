@@ -455,12 +455,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {scanResults.detailedDiscrepancies.slice(0, 10).map((match, idx) => (
+                    {scanResults.detailedDiscrepancies.map((match, idx) => (
                       <tr key={idx} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-2">{match.edmunds.block}</td>
                         <td className="px-4 py-2">{match.edmunds.lot}</td>
                         <td className="px-4 py-2 text-xs">
-                          {match.discrepancies.map(d => d.field).join(', ')}
+                          {match.discrepancies.map(d => `${d.field} (${(d.similarity * 100).toFixed(0)}%)`).join(', ')}
                         </td>
                         <td className="px-4 py-2">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -486,21 +486,46 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                 <AlertCircle className="w-5 h-5 text-red-600" />
                 Phantom Properties ({scanResults.ghosts})
               </h3>
-              <div className="space-y-3">
-                {scanResults.detailedGhosts.slice(0, 10).map((ghost, idx) => (
-                  <div key={idx} className="bg-red-50 rounded-lg p-3 border border-red-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium text-gray-800">{ghost.edmunds.block}/{ghost.edmunds.lot}</div>
-                        <div className="text-sm text-gray-600 mt-1">{ghost.edmunds.owner}</div>
-                        <div className="text-xs text-gray-500 mt-1">{ghost.details}</div>
-                      </div>
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                        {ghost.category}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto mb-4">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Category</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Owner (Edmunds)</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Class (Edmunds)</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Address (Edmunds)</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">City, State ZIP</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scanResults.detailedGhosts.map((ghost, idx) => (
+                      <tr key={idx} className="border-t hover:bg-red-50">
+                        <td className="px-4 py-2 font-medium">{ghost.edmunds.block}/{ghost.edmunds.lot}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            ghost.category === 'Subdivided'
+                              ? 'bg-blue-100 text-blue-800'
+                              : ghost.category === 'Additional Lot'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {ghost.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-xs">{ghost.edmunds.owner || '—'}</td>
+                        <td className="px-4 py-2 text-xs">{ghost.edmunds.property_m4_class || '—'}</td>
+                        <td className="px-4 py-2 text-xs">{ghost.edmunds.property_location || '—'}</td>
+                        <td className="px-4 py-2 text-xs">
+                          {ghost.edmunds.owner_city && `${ghost.edmunds.owner_city}, ${ghost.edmunds.state} ${ghost.edmunds.zip}`}
+                          {!ghost.edmunds.owner_city && '—'}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-gray-600">{ghost.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
