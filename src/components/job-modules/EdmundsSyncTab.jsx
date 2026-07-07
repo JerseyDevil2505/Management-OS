@@ -8,6 +8,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [scanResults, setScanResults] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
 
   // Fuzzy string matching
   const stringSimilarity = (str1, str2) => {
@@ -60,16 +61,13 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     });
   };
 
-  // Build composite key like the rest of the system
-  const buildCompositeKey = (block, lot, qualifier = '', card = '', address = '') => {
-    const ccdd = jobData?.ccdd_code || jobData?.ccdd || '';
-    const year = jobData?.year_of_value || new Date().getFullYear();
+  // Build composite key - match on block/lot/qualifier/card only (address is compared separately)
+  const buildCompositeKey = (block, lot, qualifier = '', card = '') => {
     const blockStr = String(block || '').trim();
     const lotStr = String(lot || '').trim();
     const qualStr = String(qualifier || '').trim();
     const cardStr = String(card || '').trim();
-    const addrStr = String(address || '').trim().substring(0, 20); // Truncate for matching
-    return `${ccdd}_${year}_${blockStr}_${lotStr}_${qualStr}_${cardStr}_${addrStr}`.toUpperCase();
+    return `${blockStr}_${lotStr}_${qualStr}_${cardStr}`.toUpperCase();
   };
 
   // Detect if lot is subdivided (e.g., lot "1" split into "1.01", "1.02")
@@ -222,22 +220,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       const primaryCopilot = getPrimaryProperties();
       const allCopilot = properties;
 
-      // Build composite key map for Copilot using: ccdd_year_block_lot_qualifier_card_address
+      // Build composite key map for Copilot using: block_lot_qualifier_card only
       const copilotMap = new Map();
       primaryCopilot.forEach(p => {
-        // Use abbreviated address for matching
-        const addr = String(p.property_location || '').trim().substring(0, 20).toUpperCase();
         const card = getPrimaryCardIndicator(); // Primary card only
-        const key = buildCompositeKey(p.property_block, p.property_lot, p.property_qualifier, card, addr);
+        const key = buildCompositeKey(p.property_block, p.property_lot, p.property_qualifier, card);
         copilotMap.set(key, p);
-      });
-
-      // Also build a block/lot only map for ghost detection
-      const blockLotMap = new Map();
-      primaryCopilot.forEach(p => {
-        const key = `${String(p.property_block || '').trim()}_${String(p.property_lot || '').trim()}_${String(p.property_qualifier || '').trim()}`;
-        if (!blockLotMap.has(key)) blockLotMap.set(key, []);
-        blockLotMap.get(key).push(p);
       });
 
       // Match records
@@ -246,8 +234,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       const ghostRecords = [];
 
       edmundsRecords.forEach(edmundsRec => {
-        const addr = String(edmundsRec.property_location || '').trim().substring(0, 20).toUpperCase();
-        const key = buildCompositeKey(edmundsRec.block, edmundsRec.lot, edmundsRec.qualifier, getPrimaryCardIndicator(), addr);
+        const key = buildCompositeKey(edmundsRec.block, edmundsRec.lot, edmundsRec.qualifier, getPrimaryCardIndicator());
 
         const copilotRec = copilotMap.get(key);
 
@@ -437,98 +424,175 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
             </div>
           </div>
 
-          {/* Discrepancies */}
-          {scanResults.discrepancies > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                Discrepancies Found ({scanResults.discrepancies})
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Block</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Lot</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Issues</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scanResults.detailedDiscrepancies.map((match, idx) => (
-                      <tr key={idx} className="border-t hover:bg-gray-50">
-                        <td className="px-4 py-2">{match.edmunds.block}</td>
-                        <td className="px-4 py-2">{match.edmunds.lot}</td>
-                        <td className="px-4 py-2 text-xs">
-                          {match.discrepancies.map(d => `${d.field} (${(d.similarity * 100).toFixed(0)}%)`).join(', ')}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            match.severity === 'critical'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Results Tabs */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="border-b border-gray-200 flex">
+              <button
+                onClick={() => setActiveResultTab('matches')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                  activeResultTab === 'matches'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ✓ Exact Matches ({scanResults.exactMatches})
+              </button>
+              <button
+                onClick={() => setActiveResultTab('discrepancies')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                  activeResultTab === 'discrepancies'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ⚠️ Discrepancies ({scanResults.discrepancies})
+              </button>
+              <button
+                onClick={() => setActiveResultTab('ghosts')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 ${
+                  activeResultTab === 'ghosts'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                👻 Phantom Properties ({scanResults.ghosts})
+              </button>
             </div>
-          )}
 
-          {/* Ghost Records */}
-          {scanResults.ghosts > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                Phantom Properties ({scanResults.ghosts})
-              </h3>
-              <div className="overflow-x-auto mb-4">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Category</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Owner (Edmunds)</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Class (Edmunds)</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Address (Edmunds)</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">City, State ZIP</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scanResults.detailedGhosts.map((ghost, idx) => (
-                      <tr key={idx} className="border-t hover:bg-red-50">
-                        <td className="px-4 py-2 font-medium">{ghost.edmunds.block}/{ghost.edmunds.lot}</td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            ghost.category === 'Subdivided'
-                              ? 'bg-blue-100 text-blue-800'
-                              : ghost.category === 'Additional Lot'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {ghost.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-xs">{ghost.edmunds.owner || '—'}</td>
-                        <td className="px-4 py-2 text-xs">{ghost.edmunds.property_m4_class || '—'}</td>
-                        <td className="px-4 py-2 text-xs">{ghost.edmunds.property_location || '—'}</td>
-                        <td className="px-4 py-2 text-xs">
-                          {ghost.edmunds.owner_city && `${ghost.edmunds.owner_city}, ${ghost.edmunds.state} ${ghost.edmunds.zip}`}
-                          {!ghost.edmunds.owner_city && '—'}
-                        </td>
-                        <td className="px-4 py-2 text-xs text-gray-600">{ghost.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="p-6">
+              {activeResultTab === 'matches' && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">Showing {scanResults.exactMatches} records with matching block/lot/qualifier and no field discrepancies</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Owner (Edmunds)</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Owner (Copilot)</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Address (Edmunds)</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Address (Copilot)</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Class</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scanResults.detailedMatches.slice(0, 50).map((match, idx) => (
+                          <tr key={idx} className="border-t hover:bg-green-50">
+                            <td className="px-4 py-2 font-medium">{match.edmunds.block}/{match.edmunds.lot}</td>
+                            <td className="px-4 py-2 text-xs">{match.edmunds.owner || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{match.copilot.owner_name || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{match.edmunds.property_location || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{match.copilot.property_location || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{match.edmunds.property_m4_class || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {scanResults.detailedMatches.length > 50 && (
+                      <div className="text-center text-sm text-gray-500 py-4">
+                        Showing first 50 of {scanResults.detailedMatches.length} exact matches
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeResultTab === 'discrepancies' && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">Records with matching block/lot/qualifier but field differences (owner, address, class, etc.)</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Field</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Edmunds Value</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Copilot Value</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Match %</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Severity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scanResults.detailedDiscrepancies.map((match, idx) =>
+                          match.discrepancies.map((d, didx) => (
+                            <tr key={`${idx}-${didx}`} className="border-t hover:bg-yellow-50">
+                              {didx === 0 && (
+                                <>
+                                  <td className="px-4 py-2 font-medium" rowSpan={match.discrepancies.length}>{match.edmunds.block}/{match.edmunds.lot}</td>
+                                </>
+                              )}
+                              <td className="px-4 py-2 text-xs font-medium">{d.field}</td>
+                              <td className="px-4 py-2 text-xs">{d.edmunds}</td>
+                              <td className="px-4 py-2 text-xs">{d.copilot}</td>
+                              <td className="px-4 py-2 text-xs">{(d.similarity * 100).toFixed(0)}%</td>
+                              {didx === 0 && (
+                                <td className="px-4 py-2" rowSpan={match.discrepancies.length}>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    match.severity === 'critical'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {match.severity === 'critical' ? '🔴 Review' : '🟡 Fuzzy'}
+                                  </span>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {activeResultTab === 'ghosts' && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">Edmunds records with no match in Copilot system</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Block/Lot</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Category</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Owner (Edmunds)</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Class</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Address</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">City, State ZIP</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scanResults.detailedGhosts.map((ghost, idx) => (
+                          <tr key={idx} className="border-t hover:bg-red-50">
+                            <td className="px-4 py-2 font-medium">{ghost.edmunds.block}/{ghost.edmunds.lot}</td>
+                            <td className="px-4 py-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                ghost.category === 'Subdivided'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : ghost.category === 'Additional Lot'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {ghost.category}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-xs">{ghost.edmunds.owner || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{ghost.edmunds.property_m4_class || '—'}</td>
+                            <td className="px-4 py-2 text-xs">{ghost.edmunds.property_location || '—'}</td>
+                            <td className="px-4 py-2 text-xs">
+                              {ghost.edmunds.owner_city && `${ghost.edmunds.owner_city}, ${ghost.edmunds.state} ${ghost.edmunds.zip}`}
+                              {!ghost.edmunds.owner_city && '—'}
+                            </td>
+                            <td className="px-4 py-2 text-xs text-gray-600">{ghost.details}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Export Button */}
           <div className="flex justify-end">
