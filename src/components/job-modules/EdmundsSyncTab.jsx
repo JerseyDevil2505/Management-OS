@@ -147,20 +147,39 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { city: str, state: '', zip: '' };
   };
 
-  // Parse Edmunds data: owner_city is "City, State" and zip is separate
+  // Parse Edmunds data: owner_city is "City, State" or "City State" or "City, S S" (like "RIVERTON, N J")
   const parseEdmundsCity = (ownerCity) => {
     if (!ownerCity) return { city: '', state: '' };
     const str = String(ownerCity).trim();
 
-    // Try to match "City, State" or "City State"
-    const match = str.match(/^(.+?)[,\s]+([A-Z]{2})\s*$/i);
+    // Try to match state at the end: "XX" or "X X" (with space)
+    // Pattern: city, then comma or spaces, then 1-2 letter state (possibly with space)
+    const match = str.match(/^(.+?)[,\s]+([A-Z])(?:\s+([A-Z]))?\s*$/i);
     if (match) {
       const city = match[1].trim();
-      const state = match[2].toUpperCase().replace(/\s+/g, ''); // Normalize spaces in state
+      // Handle both "NJ" and "N J" formats
+      const state = (match[2] + (match[3] ? match[3] : '')).toUpperCase();
       return { city, state };
     }
 
+    // If no state found, assume whole thing is city
     return { city: str, state: '' };
+  };
+
+  // Format ZIP code to standard format (XXXXX or XXXXX-XXXX)
+  const formatZip = (zip) => {
+    if (!zip) return '';
+    const str = String(zip).trim();
+    // Remove any non-digit/hyphen characters and extra spaces
+    const cleaned = str.replace(/[^\d\-]/g, '');
+    // If 9 digits, format as XXXXX-XXXX; if 5 digits, format as XXXXX
+    if (cleaned.length === 9) {
+      return `${cleaned.substring(0, 5)}-${cleaned.substring(5)}`;
+    }
+    if (cleaned.length >= 5) {
+      return cleaned.substring(0, 5);
+    }
+    return str; // Return original if can't parse
   };
 
   // Compare fields and find discrepancies — FLAG ANYTHING THAT ISN'T EXACT
@@ -228,13 +247,15 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       });
     }
 
-    // ZIP — exact match, preserve leading zeros (treat as string)
+    // ZIP — exact match, format both to standard format (XXXXX or XXXXX-XXXX)
     const copilotZip = (parsedCopilot.zip || '').toString().trim();
-    if (edmundsZip !== copilotZip) {
+    const edmundsZipFormatted = formatZip(edmundsZip);
+    const copilotZipFormatted = formatZip(copilotZip);
+    if (edmundsZipFormatted !== copilotZipFormatted) {
       discrepancies.push({
         field: 'zip',
-        edmunds: edmundsZip || '(empty)',
-        copilot: copilotZip || '(empty)',
+        edmunds: edmundsZipFormatted || '(empty)',
+        copilot: copilotZipFormatted || '(empty)',
         similarity: 0,
         severity: 'critical'
       });
