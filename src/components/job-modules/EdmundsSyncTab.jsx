@@ -130,18 +130,22 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
   // Extract ZIP from owner_csz: last space-separated token if it's numeric
   // "RIVERTON NJ 08077" → csz: "RIVERTON NJ", zip: "08077"
-  // "POINT PLEASANT, NJ 07756" → csz: "POINT PLEASANT, NJ", zip: "07756"
+  // "RIVERTON NJ 0807711110" → csz: "RIVERTON NJ", zip: "08077" (extract first 5 digits)
   const extractZipFromCsz = (csz) => {
     if (!csz) return { csz: '', zip: '' };
     const str = String(csz).trim();
     const parts = str.split(/\s+/);
 
-    // Check if last part is numeric (ZIP code)
+    // Check if last part starts with digits (ZIP code, may include +4)
     const lastPart = parts[parts.length - 1];
-    if (/^\d{5}(?:-\d{4})?$/.test(lastPart)) {
-      const zip = lastPart;
-      const csz = parts.slice(0, -1).join(' ');
-      return { csz, zip };
+    if (/^\d+/.test(lastPart)) {
+      // Extract the first 5 digits as the ZIP code (ignore +4 extension)
+      const zipMatch = lastPart.match(/^(\d{5})/);
+      if (zipMatch) {
+        const zip = zipMatch[1];
+        const csz = parts.slice(0, -1).join(' ');
+        return { csz, zip };
+      }
     }
 
     // No ZIP found, entire string is csz
