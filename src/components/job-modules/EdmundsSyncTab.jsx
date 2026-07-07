@@ -148,128 +148,102 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { city, state, zip };
   };
 
-  // Compare fields and find discrepancies
+  // Compare fields and find discrepancies — FLAG ANYTHING THAT ISN'T EXACT
   const compareRecords = (edmundsRecord, copilotRecord) => {
     const discrepancies = [];
 
-    // Owner comparison — flag if different OR if one is missing
+    // Owner — flag if not exact match
     const edmundsOwner = (edmundsRecord.owner || '').toString().trim();
     const copilotOwner = (copilotRecord.owner_name || '').toString().trim();
-    if (edmundsOwner || copilotOwner) {
-      if (!edmundsOwner || !copilotOwner || edmundsOwner !== copilotOwner) {
-        const ownerSim = stringSimilarity(edmundsOwner, copilotOwner);
-        if (ownerSim < 0.92) { // Lowered from 0.95 to catch typos
-          discrepancies.push({
-            field: 'owner',
-            edmunds: edmundsOwner || '(empty)',
-            copilot: copilotOwner || '(empty)',
-            similarity: ownerSim,
-            severity: ownerSim < 0.7 ? 'critical' : 'fuzzy'
-          });
-        }
-      }
+    if (edmundsOwner !== copilotOwner) {
+      discrepancies.push({
+        field: 'owner',
+        edmunds: edmundsOwner || '(empty)',
+        copilot: copilotOwner || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
-    // Property Location comparison
+    // Property Location — flag if not exact match
     const edmundsAddr = (edmundsRecord.property_location || '').toString().trim();
     const copilotAddr = (copilotRecord.property_location || '').toString().trim();
-    if (edmundsAddr || copilotAddr) {
-      if (!edmundsAddr || !copilotAddr || edmundsAddr !== copilotAddr) {
-        const addrSim = stringSimilarity(edmundsAddr, copilotAddr);
-        if (addrSim < 0.92) {
-          discrepancies.push({
-            field: 'property_location',
-            edmunds: edmundsAddr || '(empty)',
-            copilot: copilotAddr || '(empty)',
-            similarity: addrSim,
-            severity: addrSim < 0.7 ? 'critical' : 'fuzzy'
-          });
-        }
-      }
+    if (edmundsAddr !== copilotAddr) {
+      discrepancies.push({
+        field: 'property_location',
+        edmunds: edmundsAddr || '(empty)',
+        copilot: copilotAddr || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
-    // Owner Address comparison
+    // Owner Address — flag if not exact match
     const edmundsOwnerAddr = (edmundsRecord.owner_street || '').toString().trim();
     const copilotOwnerAddr = (copilotRecord.owner_street || '').toString().trim();
-    if (edmundsOwnerAddr || copilotOwnerAddr) {
-      if (!edmundsOwnerAddr || !copilotOwnerAddr || edmundsOwnerAddr !== copilotOwnerAddr) {
-        const ownerAddrSim = stringSimilarity(edmundsOwnerAddr, copilotOwnerAddr);
-        if (ownerAddrSim < 0.92) {
-          discrepancies.push({
-            field: 'owner_address',
-            edmunds: edmundsOwnerAddr || '(empty)',
-            copilot: copilotOwnerAddr || '(empty)',
-            similarity: ownerAddrSim,
-            severity: ownerAddrSim < 0.7 ? 'critical' : 'fuzzy'
-          });
-        }
-      }
+    if (edmundsOwnerAddr !== copilotOwnerAddr) {
+      discrepancies.push({
+        field: 'owner_address',
+        edmunds: edmundsOwnerAddr || '(empty)',
+        copilot: copilotOwnerAddr || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
     // Parse Copilot owner_csz field
     const parsedCopilot = parseCsz(copilotRecord.owner_csz);
 
-    // Owner City comparison
+    // Owner City — flag if not exact match
     const edmundsCity = (edmundsRecord.owner_city || '').toString().trim();
     const copilotCity = parsedCopilot.city;
-    if (edmundsCity || copilotCity) {
-      if (!edmundsCity || !copilotCity || edmundsCity !== copilotCity) {
-        const citySim = stringSimilarity(edmundsCity, copilotCity);
-        if (citySim < 0.92) {
-          discrepancies.push({
-            field: 'owner_city',
-            edmunds: edmundsCity || '(empty)',
-            copilot: copilotCity || '(empty)',
-            similarity: citySim,
-            severity: citySim < 0.7 ? 'critical' : 'fuzzy'
-          });
-        }
-      }
+    if (edmundsCity !== copilotCity) {
+      discrepancies.push({
+        field: 'owner_city',
+        edmunds: edmundsCity || '(empty)',
+        copilot: copilotCity || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
-    // State comparison (normalize format: "NJ" vs "N J")
+    // State — normalize spaces and compare exactly
     const edmundsState = (edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
     const copilotState = parsedCopilot.state;
-    if (edmundsState || copilotState) {
-      if (!edmundsState || !copilotState || edmundsState !== copilotState) {
-        discrepancies.push({
-          field: 'state',
-          edmunds: edmundsState || '(empty)',
-          copilot: copilotState || '(empty)',
-          similarity: edmundsState === copilotState ? 1 : 0,
-          severity: 'critical'
-        });
-      }
+    if (edmundsState !== copilotState) {
+      discrepancies.push({
+        field: 'state',
+        edmunds: edmundsState || '(empty)',
+        copilot: copilotState || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
-    // ZIP comparison
+    // ZIP — flag if not exact match
     const edmundsZip = (edmundsRecord.zip || '').toString().trim();
     const copilotZip = parsedCopilot.zip;
-    if (edmundsZip || copilotZip) {
-      if (!edmundsZip || !copilotZip || edmundsZip !== copilotZip) {
-        discrepancies.push({
-          field: 'zip',
-          edmunds: edmundsZip || '(empty)',
-          copilot: copilotZip || '(empty)',
-          similarity: edmundsZip === copilotZip ? 1 : 0,
-          severity: 'critical'
-        });
-      }
+    if (edmundsZip !== copilotZip) {
+      discrepancies.push({
+        field: 'zip',
+        edmunds: edmundsZip || '(empty)',
+        copilot: copilotZip || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
-    // Class comparison
+    // Property Class — flag if not exact match
     const edmundsClass = (edmundsRecord.property_m4_class || '').toString().trim();
     const copilotClass = (copilotRecord.property_m4_class || '').toString().trim();
-    if (edmundsClass || copilotClass) {
-      if (!edmundsClass || !copilotClass || edmundsClass !== copilotClass) {
-        discrepancies.push({
-          field: 'property_class',
-          edmunds: edmundsClass || '(empty)',
-          copilot: copilotClass || '(empty)',
-          similarity: edmundsClass === copilotClass ? 1 : 0,
-          severity: 'critical'
-        });
-      }
+    if (edmundsClass !== copilotClass) {
+      discrepancies.push({
+        field: 'property_class',
+        edmunds: edmundsClass || '(empty)',
+        copilot: copilotClass || '(empty)',
+        similarity: 1,
+        severity: 'critical'
+      });
     }
 
     return discrepancies;
