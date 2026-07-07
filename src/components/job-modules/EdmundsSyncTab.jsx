@@ -505,8 +505,12 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   };
 
   const exportReport = () => {
-    if (!scanResults) return;
+    if (!scanResults) {
+      alert('No scan results to export. Please upload and scan Edmunds data first.');
+      return;
+    }
 
+    console.log('[Edmunds Export] Starting export with proper formatting...');
     const workbook = XLSX.utils.book_new();
 
     // Define styles (matching OverallAnalysisTab pattern)
@@ -526,17 +530,23 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     };
 
     // Discrepancies sheet - one row per Block/Lot/Qualifier, fields as columns
-    // Build headers first
+    // Build headers first - use array to preserve order
     const discHeaders = ['Block', 'Lot', 'Qualifier', 'Status'];
-    const fieldPairs = new Set();
+    const fieldPairs = [];
+    const seenFields = new Set();
+
+    // Collect unique fields in order they appear
     scanResults.detailedDiscrepancies.forEach(match => {
       match.discrepancies.forEach(disc => {
-        fieldPairs.add(disc.field);
+        if (!seenFields.has(disc.field)) {
+          seenFields.add(disc.field);
+          fieldPairs.push(disc.field);
+        }
       });
     });
 
     // Add field pairs to headers
-    Array.from(fieldPairs).forEach(field => {
+    fieldPairs.forEach(field => {
       discHeaders.push(`${field} - MOD IV`, `${field} - Edmunds`);
     });
 
@@ -550,7 +560,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       ];
 
       // Add field values in order
-      Array.from(fieldPairs).forEach(field => {
+      fieldPairs.forEach(field => {
         const disc = match.discrepancies.find(d => d.field === field);
         row.push(disc?.copilot || '');
         row.push(disc?.edmunds || '');
@@ -660,7 +670,11 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
-    XLSX.writeFile(workbook, `Edmunds-Reconciliation-${jobData?.job_name || 'Job'}-${new Date().toISOString().split('T')[0]}.xlsx`);
+    const filename = `Edmunds-Reconciliation-${jobData?.job_name || 'Job'}-${new Date().toISOString().split('T')[0]}.xlsx`;
+    console.log('[Edmunds Export] File being written:', filename);
+    console.log('[Edmunds Export] Workbook sheets:', workbook.SheetNames);
+    XLSX.writeFile(workbook, filename);
+    console.log('[Edmunds Export] Export complete');
   };
 
   return (
