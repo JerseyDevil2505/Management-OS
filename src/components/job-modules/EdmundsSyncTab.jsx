@@ -509,129 +509,86 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
     const workbook = XLSX.utils.book_new();
 
-    // Define styles
-    const headerStyle = {
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
-      fill: { fgColor: { rgb: '1F2937' } },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: {
-        left: { style: 'thin' },
-        right: { style: 'thin' },
-        top: { style: 'thin' },
-        bottom: { style: 'thin' }
-      }
+    // Define styles (matching OverallAnalysisTab pattern)
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
     };
 
-    const cellStyle = {
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: {
-        left: { style: 'thin' },
-        right: { style: 'thin' },
-        top: { style: 'thin' },
-        bottom: { style: 'thin' }
-      }
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
     };
 
     const modIvStyle = {
-      font: { color: { rgb: '1F2937' }, sz: 10 }, // Dark blue color for MOD IV columns
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: {
-        left: { style: 'thin' },
-        right: { style: 'thin' },
-        top: { style: 'thin' },
-        bottom: { style: 'thin' }
-      }
+      font: { name: 'Leelawadee', sz: 10, color: { rgb: '00008B' } }, // Dark blue
+      alignment: { horizontal: 'center', vertical: 'center' }
     };
 
     // Discrepancies sheet - one row per Block/Lot/Qualifier, fields as columns
-    const discrepanciesData = scanResults.detailedDiscrepancies.map(match => {
-      const row = {
-        'Block': match.edmunds.block,
-        'Lot': match.edmunds.lot,
-        'Qualifier': match.edmunds.qualifier,
-        'Status': match.discrepancies[0]?.severity === 'critical' ? 'REVIEW' : 'FUZZY'
-      };
-
-      // Add columns for each field comparison
+    // Build headers first
+    const discHeaders = ['Block', 'Lot', 'Qualifier', 'Status'];
+    const fieldPairs = new Set();
+    scanResults.detailedDiscrepancies.forEach(match => {
       match.discrepancies.forEach(disc => {
-        row[`${disc.field} - MOD IV`] = disc.copilot;
-        row[`${disc.field} - Edmunds`] = disc.edmunds;
+        fieldPairs.add(disc.field);
+      });
+    });
+
+    // Add field pairs to headers
+    Array.from(fieldPairs).forEach(field => {
+      discHeaders.push(`${field} - MOD IV`, `${field} - Edmunds`);
+    });
+
+    // Build data rows
+    const discData = scanResults.detailedDiscrepancies.map(match => {
+      const row = [
+        match.edmunds.block,
+        match.edmunds.lot,
+        match.edmunds.qualifier || '',
+        match.discrepancies[0]?.severity === 'critical' ? 'REVIEW' : 'FUZZY'
+      ];
+
+      // Add field values in order
+      Array.from(fieldPairs).forEach(field => {
+        const disc = match.discrepancies.find(d => d.field === field);
+        row.push(disc?.copilot || '');
+        row.push(disc?.edmunds || '');
       });
 
       return row;
     });
 
-    const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
+    const discSheet = XLSX.utils.aoa_to_sheet([discHeaders, ...discData]);
 
     // Set column widths
-    const colWidths = [
-      { wch: 10 },  // Block
-      { wch: 10 },  // Lot
-      { wch: 12 },  // Qualifier
-      { wch: 12 }   // Status
-    ];
-    for (let i = 0; i < 20; i++) {
+    const colWidths = [{ wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+    for (let i = 0; i < (discHeaders.length - 4); i++) {
       colWidths.push({ wch: 30 });
     }
     discSheet['!cols'] = colWidths;
 
-    // Apply styling using proper XLSX iteration (like ManagementChecklist)
-    const range = XLSX.utils.decode_range(discSheet['!ref']);
-
-    // First pass: identify MOD IV columns from header
+    // Identify MOD IV columns
     const modIvColumns = new Set();
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (discSheet[cellAddress]?.v?.includes('MOD IV')) {
-        modIvColumns.add(C);
+    discHeaders.forEach((h, i) => {
+      if (h.includes('MOD IV')) {
+        modIvColumns.add(i);
       }
-    }
+    });
 
-    // Second pass: apply styles to all cells
+    // Apply styling to all cells
+    const range = XLSX.utils.decode_range(discSheet['!ref']);
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!discSheet[cellAddress]) continue;
 
-        if (!discSheet[cellAddress].s) discSheet[cellAddress].s = {};
-
         if (R === 0) {
-          // Header row
-          discSheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
-            fill: { fgColor: { rgb: '1F2937' } },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: {
-              left: { style: 'thin' },
-              right: { style: 'thin' },
-              top: { style: 'thin' },
-              bottom: { style: 'thin' }
-            }
-          };
+          discSheet[cellAddress].s = headerStyle;
         } else if (modIvColumns.has(C)) {
-          // MOD IV columns - dark blue
-          discSheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10, color: { rgb: '1F2937' } },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: {
-              left: { style: 'thin' },
-              right: { style: 'thin' },
-              top: { style: 'thin' },
-              bottom: { style: 'thin' }
-            }
-          };
+          discSheet[cellAddress].s = modIvStyle;
         } else {
-          // Regular data cells
-          discSheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: {
-              left: { style: 'thin' },
-              right: { style: 'thin' },
-              top: { style: 'thin' },
-              bottom: { style: 'thin' }
-            }
-          };
+          discSheet[cellAddress].s = baseStyle;
         }
       }
     }
@@ -639,23 +596,23 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     XLSX.utils.book_append_sheet(workbook, discSheet, 'Discrepancies');
 
     // Phantom Properties sheet
-    const phantomData = scanResults.detailedGhosts.map(ghost => ({
-      'Block': ghost.edmunds.block,
-      'Lot': ghost.edmunds.lot,
-      'Qualifier': ghost.edmunds.qualifier,
-      'Category': ghost.category,
-      'Edmunds Owner': ghost.edmunds.owner,
-      'Edmunds Address': ghost.edmunds.property_location,
-      'Details': ghost.details,
-      'Recommended Action':
-        ghost.category === 'Subdivided'
-          ? 'Update lot numbers to reflect subdivision'
-          : ghost.category === 'Additional Lot'
-          ? 'Already exists as additional card'
-          : 'Review and delete if invalid'
-    }));
+    const phantomHeaders = ['Block', 'Lot', 'Qualifier', 'Category', 'Edmunds Owner', 'Edmunds Address', 'Details', 'Recommended Action'];
+    const phantomData = scanResults.detailedGhosts.map(ghost => [
+      ghost.edmunds.block,
+      ghost.edmunds.lot,
+      ghost.edmunds.qualifier || '',
+      ghost.category,
+      ghost.edmunds.owner,
+      ghost.edmunds.property_location,
+      ghost.details,
+      ghost.category === 'Subdivided'
+        ? 'Update lot numbers to reflect subdivision'
+        : ghost.category === 'Additional Lot'
+        ? 'Already exists as additional card'
+        : 'Review and delete if invalid'
+    ]);
 
-    const phantomSheet = XLSX.utils.json_to_sheet(phantomData);
+    const phantomSheet = XLSX.utils.aoa_to_sheet([phantomHeaders, ...phantomData]);
     phantomSheet['!cols'] = [
       { wch: 10 },  // Block
       { wch: 10 },  // Lot
@@ -673,23 +630,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       for (let C = phantomRange.s.c; C <= phantomRange.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!phantomSheet[cellAddress]) continue;
-
-        if (!phantomSheet[cellAddress].s) phantomSheet[cellAddress].s = {};
-
-        if (R === 0) {
-          phantomSheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
-            fill: { fgColor: { rgb: '1F2937' } },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
-          };
-        } else {
-          phantomSheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
-          };
-        }
+        phantomSheet[cellAddress].s = R === 0 ? headerStyle : baseStyle;
       }
     }
 
@@ -697,13 +638,14 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
     // Summary sheet - added last
     const summaryData = [
-      { Metric: 'Total Edmunds Records', Value: scanResults.totalEdmunds },
-      { Metric: 'Exact Matches (No Issues)', Value: scanResults.exactMatches },
-      { Metric: 'Discrepancies Found', Value: scanResults.discrepancies },
-      { Metric: 'Ghost Records', Value: scanResults.ghosts },
-      { Metric: 'Scan Date', Value: new Date(scanResults.timestamp).toLocaleString() }
+      ['Metric', 'Value'],
+      ['Total Edmunds Records', scanResults.totalEdmunds],
+      ['Exact Matches (No Issues)', scanResults.exactMatches],
+      ['Discrepancies Found', scanResults.discrepancies],
+      ['Ghost Records', scanResults.ghosts],
+      ['Scan Date', new Date(scanResults.timestamp).toLocaleString()]
     ];
-    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
     summarySheet['!cols'] = [{ wch: 35 }, { wch: 20 }];
 
     // Apply styling to summary sheet
@@ -712,23 +654,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!summarySheet[cellAddress]) continue;
-
-        if (!summarySheet[cellAddress].s) summarySheet[cellAddress].s = {};
-
-        if (R === 0) {
-          summarySheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
-            fill: { fgColor: { rgb: '1F2937' } },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
-          };
-        } else {
-          summarySheet[cellAddress].s = {
-            font: { name: 'Leelawadee', sz: 10 },
-            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
-          };
-        }
+        summarySheet[cellAddress].s = R === 0 ? headerStyle : baseStyle;
       }
     }
 
