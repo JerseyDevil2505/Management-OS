@@ -195,9 +195,29 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const ownerDisc = compareTextField('owner', edmundsOwner, copilotOwner);
     if (ownerDisc) discrepancies.push(ownerDisc);
 
-    // Helper: normalize numbers in addresses (7 vs 7th, 2 vs 02, etc.)
+    // Helper: normalize ordinals and numbers in addresses
+    // "fourth" → "4", "4th" → "4", "03" → "3", etc.
     const normalizeAddressNumbers = (addr) => {
-      return addr.replace(/(\d+)(?:st|nd|rd|th)?/gi, (match, num) => num).replace(/\b0+(\d+)\b/g, '$1').toUpperCase();
+      const ordinals = {
+        'first': '1', 'second': '2', 'third': '3', 'fourth': '4', 'fifth': '5',
+        'sixth': '6', 'seventh': '7', 'eighth': '8', 'ninth': '9', 'tenth': '10',
+        'eleventh': '11', 'twelfth': '12', 'thirteenth': '13', 'fourteenth': '14',
+        'fifteenth': '15', 'sixteenth': '16', 'seventeenth': '17', 'eighteenth': '18',
+        'nineteenth': '19', 'twentieth': '20', 'thirtieth': '30', 'fortieth': '40',
+        'fiftieth': '50', 'sixtieth': '60', 'seventieth': '70', 'eightieth': '80',
+        'ninetieth': '90', 'hundredth': '100'
+      };
+
+      let result = addr.toUpperCase();
+      // Replace written ordinals with numeric equivalents
+      Object.entries(ordinals).forEach(([word, num]) => {
+        result = result.replace(new RegExp(`\\b${word}\\b`, 'gi'), num);
+      });
+      // Remove ordinal suffixes (st, nd, rd, th)
+      result = result.replace(/(\d+)(?:ST|ND|RD|TH)\b/g, '$1');
+      // Remove leading zeros (03 → 3)
+      result = result.replace(/\b0+(\d+)\b/g, '$1');
+      return result;
     };
 
     // Property Location — allow numeric variations as fuzzy
