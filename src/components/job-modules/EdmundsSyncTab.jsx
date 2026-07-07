@@ -128,103 +128,148 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
+  // Parse owner_csz field (format: "City, ST ZIP" but can vary)
+  const parseCsz = (csz) => {
+    if (!csz) return { city: '', state: '', zip: '' };
+    const str = String(csz).trim();
+    const parts = str.split(',').map(p => p.trim());
+    let city = parts[0] || '';
+    let stateZip = parts[1] || '';
+
+    // Parse state and zip from "ST ZIP" or "ST  ZIP" (with extra spaces)
+    const stateZipMatch = stateZip.match(/([A-Z]{2})\s+(\d{5})/i);
+    let state = '';
+    let zip = '';
+    if (stateZipMatch) {
+      state = stateZipMatch[1].toUpperCase();
+      zip = stateZipMatch[2];
+    }
+
+    return { city, state, zip };
+  };
+
   // Compare fields and find discrepancies
   const compareRecords = (edmundsRecord, copilotRecord) => {
     const discrepancies = [];
 
-    // Owner comparison
+    // Owner comparison — flag if different OR if one is missing
     const edmundsOwner = (edmundsRecord.owner || '').toString().trim();
     const copilotOwner = (copilotRecord.owner_name || '').toString().trim();
-    const ownerSim = stringSimilarity(edmundsOwner, copilotOwner);
-    if (ownerSim < 0.95 && edmundsOwner && copilotOwner) {
-      discrepancies.push({
-        field: 'owner',
-        edmunds: edmundsOwner,
-        copilot: copilotOwner,
-        similarity: ownerSim,
-        severity: ownerSim < 0.7 ? 'critical' : 'fuzzy'
-      });
+    if (edmundsOwner || copilotOwner) {
+      if (!edmundsOwner || !copilotOwner || edmundsOwner !== copilotOwner) {
+        const ownerSim = stringSimilarity(edmundsOwner, copilotOwner);
+        if (ownerSim < 0.92) { // Lowered from 0.95 to catch typos
+          discrepancies.push({
+            field: 'owner',
+            edmunds: edmundsOwner || '(empty)',
+            copilot: copilotOwner || '(empty)',
+            similarity: ownerSim,
+            severity: ownerSim < 0.7 ? 'critical' : 'fuzzy'
+          });
+        }
+      }
     }
 
     // Property Location comparison
     const edmundsAddr = (edmundsRecord.property_location || '').toString().trim();
     const copilotAddr = (copilotRecord.property_location || '').toString().trim();
-    const addrSim = stringSimilarity(edmundsAddr, copilotAddr);
-    if (addrSim < 0.95 && edmundsAddr && copilotAddr) {
-      discrepancies.push({
-        field: 'property_location',
-        edmunds: edmundsAddr,
-        copilot: copilotAddr,
-        similarity: addrSim,
-        severity: addrSim < 0.7 ? 'critical' : 'fuzzy'
-      });
+    if (edmundsAddr || copilotAddr) {
+      if (!edmundsAddr || !copilotAddr || edmundsAddr !== copilotAddr) {
+        const addrSim = stringSimilarity(edmundsAddr, copilotAddr);
+        if (addrSim < 0.92) {
+          discrepancies.push({
+            field: 'property_location',
+            edmunds: edmundsAddr || '(empty)',
+            copilot: copilotAddr || '(empty)',
+            similarity: addrSim,
+            severity: addrSim < 0.7 ? 'critical' : 'fuzzy'
+          });
+        }
+      }
     }
 
     // Owner Address comparison
     const edmundsOwnerAddr = (edmundsRecord.owner_street || '').toString().trim();
     const copilotOwnerAddr = (copilotRecord.owner_street || '').toString().trim();
-    const ownerAddrSim = stringSimilarity(edmundsOwnerAddr, copilotOwnerAddr);
-    if (ownerAddrSim < 0.95 && edmundsOwnerAddr && copilotOwnerAddr) {
-      discrepancies.push({
-        field: 'owner_address',
-        edmunds: edmundsOwnerAddr,
-        copilot: copilotOwnerAddr,
-        similarity: ownerAddrSim,
-        severity: ownerAddrSim < 0.7 ? 'critical' : 'fuzzy'
-      });
+    if (edmundsOwnerAddr || copilotOwnerAddr) {
+      if (!edmundsOwnerAddr || !copilotOwnerAddr || edmundsOwnerAddr !== copilotOwnerAddr) {
+        const ownerAddrSim = stringSimilarity(edmundsOwnerAddr, copilotOwnerAddr);
+        if (ownerAddrSim < 0.92) {
+          discrepancies.push({
+            field: 'owner_address',
+            edmunds: edmundsOwnerAddr || '(empty)',
+            copilot: copilotOwnerAddr || '(empty)',
+            similarity: ownerAddrSim,
+            severity: ownerAddrSim < 0.7 ? 'critical' : 'fuzzy'
+          });
+        }
+      }
     }
+
+    // Parse Copilot owner_csz field
+    const parsedCopilot = parseCsz(copilotRecord.owner_csz);
 
     // Owner City comparison
     const edmundsCity = (edmundsRecord.owner_city || '').toString().trim();
-    const copilotCity = (copilotRecord.owner_csz || '').toString().trim().split(',')[0] || ''; // Extract city from csz
-    const citySim = stringSimilarity(edmundsCity, copilotCity);
-    if (citySim < 0.95 && edmundsCity && copilotCity) {
-      discrepancies.push({
-        field: 'owner_city',
-        edmunds: edmundsCity,
-        copilot: copilotCity,
-        similarity: citySim,
-        severity: citySim < 0.7 ? 'critical' : 'fuzzy'
-      });
+    const copilotCity = parsedCopilot.city;
+    if (edmundsCity || copilotCity) {
+      if (!edmundsCity || !copilotCity || edmundsCity !== copilotCity) {
+        const citySim = stringSimilarity(edmundsCity, copilotCity);
+        if (citySim < 0.92) {
+          discrepancies.push({
+            field: 'owner_city',
+            edmunds: edmundsCity || '(empty)',
+            copilot: copilotCity || '(empty)',
+            similarity: citySim,
+            severity: citySim < 0.7 ? 'critical' : 'fuzzy'
+          });
+        }
+      }
     }
 
-    // State comparison
-    const edmundsState = (edmundsRecord.state || '').toString().trim();
-    const copilotState = (copilotRecord.owner_csz || '').toString().trim().split(',')[1]?.trim().split(' ')[0] || ''; // Extract state from csz
-    if (edmundsState && copilotState && edmundsState.toUpperCase() !== copilotState.toUpperCase()) {
-      discrepancies.push({
-        field: 'state',
-        edmunds: edmundsState,
-        copilot: copilotState,
-        similarity: 0,
-        severity: 'critical'
-      });
+    // State comparison (normalize format: "NJ" vs "N J")
+    const edmundsState = (edmundsRecord.state || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+    const copilotState = parsedCopilot.state;
+    if (edmundsState || copilotState) {
+      if (!edmundsState || !copilotState || edmundsState !== copilotState) {
+        discrepancies.push({
+          field: 'state',
+          edmunds: edmundsState || '(empty)',
+          copilot: copilotState || '(empty)',
+          similarity: edmundsState === copilotState ? 1 : 0,
+          severity: 'critical'
+        });
+      }
     }
 
     // ZIP comparison
     const edmundsZip = (edmundsRecord.zip || '').toString().trim();
-    const copilotZip = (copilotRecord.owner_csz || '').toString().trim().split(' ').pop() || ''; // Extract zip from csz
-    if (edmundsZip && copilotZip && edmundsZip !== copilotZip) {
-      discrepancies.push({
-        field: 'zip',
-        edmunds: edmundsZip,
-        copilot: copilotZip,
-        similarity: 0,
-        severity: 'critical'
-      });
+    const copilotZip = parsedCopilot.zip;
+    if (edmundsZip || copilotZip) {
+      if (!edmundsZip || !copilotZip || edmundsZip !== copilotZip) {
+        discrepancies.push({
+          field: 'zip',
+          edmunds: edmundsZip || '(empty)',
+          copilot: copilotZip || '(empty)',
+          similarity: edmundsZip === copilotZip ? 1 : 0,
+          severity: 'critical'
+        });
+      }
     }
 
     // Class comparison
     const edmundsClass = (edmundsRecord.property_m4_class || '').toString().trim();
     const copilotClass = (copilotRecord.property_m4_class || '').toString().trim();
-    if (edmundsClass && copilotClass && edmundsClass !== copilotClass) {
-      discrepancies.push({
-        field: 'property_class',
-        edmunds: edmundsClass,
-        copilot: copilotClass,
-        similarity: 0,
-        severity: 'critical'
-      });
+    if (edmundsClass || copilotClass) {
+      if (!edmundsClass || !copilotClass || edmundsClass !== copilotClass) {
+        discrepancies.push({
+          field: 'property_class',
+          edmunds: edmundsClass || '(empty)',
+          copilot: copilotClass || '(empty)',
+          similarity: edmundsClass === copilotClass ? 1 : 0,
+          severity: 'critical'
+        });
+      }
     }
 
     return discrepancies;
