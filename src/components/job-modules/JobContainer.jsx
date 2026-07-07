@@ -1375,7 +1375,7 @@ const JobContainer = ({
     },
     {
       id: 'edmunds-sync',
-      name: 'Edmunds Sync',
+      name: 'Edmunds Audit',
       icon: AlertCircle,
       component: EdmundsSyncTab,
       description: 'Reconcile with collector data',
