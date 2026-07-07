@@ -8,8 +8,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeResultTab, setActiveResultTab] = useState('matches'); // matches, discrepancies, ghosts
-  const [activeDiscrepancyView, setActiveDiscrepancyView] = useState('list'); // list, breakdown
-  const [selectedBreakdownField, setSelectedBreakdownField] = useState(null); // Filter breakdown by field
+  const [selectedBreakdownField, setSelectedBreakdownField] = useState(null); // Filter by field
 
   // Fuzzy string matching
   const stringSimilarity = (str1, str2) => {
@@ -600,66 +599,37 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                 <div>
                   <p className="text-sm text-gray-600 mb-4">Records with matching block/lot/qualifier but field differences (owner, address, class, etc.)</p>
 
-                  {/* Discrepancy View Switcher */}
-                  <div className="flex gap-2 mb-4">
-                    <button
-                      onClick={() => setActiveDiscrepancyView('list')}
-                      className={`px-4 py-2 rounded text-sm font-medium ${
-                        activeDiscrepancyView === 'list'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      📋 Full List ({scanResults.discrepancies})
-                    </button>
-                    <button
-                      onClick={() => setActiveDiscrepancyView('breakdown')}
-                      className={`px-4 py-2 rounded text-sm font-medium ${
-                        activeDiscrepancyView === 'breakdown'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      📊 Breakdown by Field
-                    </button>
+                  {/* Field Filter Tiles */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+                    {Object.entries(scanResults.fieldBreakdown || {}).map(([field, count]) => (
+                      <div
+                        key={field}
+                        onClick={() => setSelectedBreakdownField(selectedBreakdownField === field ? null : field)}
+                        className={`rounded-lg p-3 border cursor-pointer transition text-center ${
+                          selectedBreakdownField === field
+                            ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-300'
+                            : 'bg-blue-50 border-blue-200 hover:bg-blue-75'
+                        }`}
+                      >
+                        <div className="text-xl font-bold text-blue-600">{count}</div>
+                        <div className="text-xs text-gray-600 capitalize mt-1">{field.replace(/_/g, ' ')}</div>
+                      </div>
+                    ))}
                   </div>
 
-                  {activeDiscrepancyView === 'breakdown' && (
-                    <>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                        {Object.entries(scanResults.fieldBreakdown || {}).map(([field, count]) => (
-                          <div
-                            key={field}
-                            onClick={() => setSelectedBreakdownField(selectedBreakdownField === field ? null : field)}
-                            className={`rounded-lg p-4 border cursor-pointer transition ${
-                              selectedBreakdownField === field
-                                ? 'bg-blue-100 border-blue-500 ring-2 ring-blue-300'
-                                : 'bg-blue-50 border-blue-200 hover:bg-blue-75'
-                            }`}
-                          >
-                            <div className="text-2xl font-bold text-blue-600">{count}</div>
-                            <div className="text-sm text-gray-600 capitalize mt-1">{field.replace(/_/g, ' ')}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {selectedBreakdownField && (
-                        <div className="bg-blue-50 p-4 rounded mb-4 border border-blue-200">
-                          <p className="text-sm text-gray-700">
-                            Showing discrepancies for: <span className="font-bold capitalize">{selectedBreakdownField.replace(/_/g, ' ')}</span>
-                            <button
-                              onClick={() => setSelectedBreakdownField(null)}
-                              className="ml-4 text-xs px-2 py-1 bg-blue-200 hover:bg-blue-300 rounded"
-                            >
-                              Clear Filter
-                            </button>
-                          </p>
-                        </div>
-                      )}
-                    </>
+                  {selectedBreakdownField && (
+                    <div className="bg-blue-50 p-3 rounded mb-4 border border-blue-200 flex items-center justify-between">
+                      <p className="text-sm text-gray-700">
+                        Filtering by: <span className="font-bold capitalize">{selectedBreakdownField.replace(/_/g, ' ')}</span>
+                      </p>
+                      <button
+                        onClick={() => setSelectedBreakdownField(null)}
+                        className="text-xs px-3 py-1 bg-blue-200 hover:bg-blue-300 rounded"
+                      >
+                        Show All
+                      </button>
+                    </div>
                   )}
-
-                  {activeDiscrepancyView === 'list' && (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
@@ -711,7 +681,6 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
                         </tbody>
                       </table>
                     </div>
-                  )}
                 </div>
               )}
 
