@@ -147,22 +147,30 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { city: str, state: '', zip: '' };
   };
 
-  // Parse Edmunds data: owner_city is "City, State" or "City State" or "City, S S" (like "RIVERTON, N J")
+  // Parse Edmunds owner_city: split on comma or double space
+  // "NEWARK, NJ" → city: "NEWARK", state: "NJ"
+  // "RIVERTON, N J" → city: "RIVERTON", state: "N J" → "NJ" (normalized)
   const parseEdmundsCity = (ownerCity) => {
     if (!ownerCity) return { city: '', state: '' };
     const str = String(ownerCity).trim();
 
-    // Try to match state at the end: "XX" or "X X" (with space)
-    // Pattern: city, then comma or spaces, then 1-2 letter state (possibly with space)
-    const match = str.match(/^(.+?)[,\s]+([A-Z])(?:\s+([A-Z]))?\s*$/i);
-    if (match) {
-      const city = match[1].trim();
-      // Handle both "NJ" and "N J" formats
-      const state = (match[2] + (match[3] ? match[3] : '')).toUpperCase();
+    // Split on comma first
+    if (str.includes(',')) {
+      const parts = str.split(',').map(p => p.trim());
+      const city = parts[0];
+      const state = parts[1] ? parts[1].replace(/\s+/g, '') : ''; // Normalize spaces in state
       return { city, state };
     }
 
-    // If no state found, assume whole thing is city
+    // Split on double space
+    if (str.includes('  ')) {
+      const parts = str.split(/\s{2,}/).map(p => p.trim());
+      const city = parts[0];
+      const state = parts[1] ? parts[1].replace(/\s+/g, '') : '';
+      return { city, state };
+    }
+
+    // No separator found, assume whole thing is city
     return { city: str, state: '' };
   };
 
