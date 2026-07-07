@@ -128,23 +128,40 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
-  // Parse Copilot's owner_csz field (format: "City State Zip" or "City, State Zip")
+  // Parse Copilot's owner_csz field: split on comma or double space
+  // "RIVERTON, N J 08077" → city: "RIVERTON", state: "NJ", zip: "08077"
   const parseCszCopilot = (csz) => {
     if (!csz) return { city: '', state: '', zip: '' };
     const str = String(csz).trim();
 
-    // Try to match state and zip at the end: "XX ##### " or "XX-#####"
-    const stateZipMatch = str.match(/([A-Z]{2})\s+([\d\-]{5,10})\s*$/i);
+    let remainder = str;
+    let city = '';
 
-    if (stateZipMatch) {
-      const state = stateZipMatch[1].toUpperCase();
-      const zip = stateZipMatch[2];
-      // Everything before state/zip is the city (remove trailing spaces and commas)
-      const city = str.substring(0, stateZipMatch.index).trim().replace(/,\s*$/, '').trim();
+    // Split on comma first
+    if (str.includes(',')) {
+      const parts = str.split(',').map(p => p.trim());
+      city = parts[0];
+      remainder = parts[1] || '';
+    } else if (str.includes('  ')) {
+      // Split on double space
+      const parts = str.split(/\s{2,}/).map(p => p.trim());
+      city = parts[0];
+      remainder = parts[1] || '';
+    } else {
+      // No separator, whole thing is city
+      return { city: str, state: '', zip: '' };
+    }
+
+    // From remainder, extract ZIP (ends with digits) and state (before ZIP)
+    const zipMatch = remainder.match(/([A-Z\s]+?)\s+([\d\-]{5,10})\s*$/i);
+    if (zipMatch) {
+      const state = zipMatch[1].trim().replace(/\s+/g, ''); // Normalize spaces
+      const zip = zipMatch[2];
       return { city, state, zip };
     }
 
-    return { city: str, state: '', zip: '' };
+    // If no ZIP found, everything is state
+    return { city, state: remainder.replace(/\s+/g, ''), zip: '' };
   };
 
   // Parse Edmunds owner_city: split on comma or double space
