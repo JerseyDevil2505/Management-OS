@@ -509,21 +509,37 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
     const workbook = XLSX.utils.book_new();
 
-    // Define styles for all sheets
+    // Define styles
     const headerStyle = {
-      font: { name: 'Leelawadee', size: 10, bold: true, color: { rgb: 'FFFFFF' } },
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
       fill: { fgColor: { rgb: '1F2937' } },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+        top: { style: 'thin' },
+        bottom: { style: 'thin' }
+      }
     };
 
     const cellStyle = {
-      font: { name: 'Leelawadee', size: 10 },
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
       border: {
-        left: { style: 'thin', color: { rgb: 'CCCCCC' } },
-        right: { style: 'thin', color: { rgb: 'CCCCCC' } },
-        top: { style: 'thin', color: { rgb: 'CCCCCC' } },
-        bottom: { style: 'thin', color: { rgb: 'CCCCCC' } }
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+        top: { style: 'thin' },
+        bottom: { style: 'thin' }
+      }
+    };
+
+    const modIvStyle = {
+      font: { color: { rgb: '1F2937' }, sz: 10 }, // Dark blue color for MOD IV columns
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+        top: { style: 'thin' },
+        bottom: { style: 'thin' }
       }
     };
 
@@ -560,10 +576,26 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     discSheet['!cols'] = colWidths;
 
     // Apply styling to discrepancy sheet
+    // First pass: identify MOD IV columns
+    const modIvColumns = new Set();
+    Object.keys(discSheet).forEach(cell => {
+      if (cell.match(/^[A-Z]+1$/) && discSheet[cell]?.v?.includes('MOD IV')) {
+        modIvColumns.add(cell.replace(/1$/, ''));
+      }
+    });
+
+    // Second pass: apply styles
     Object.keys(discSheet).forEach(cell => {
       if (cell.startsWith('!')) return;
-      if (cell.match(/^[A-Z]+1$/)) {  // All header cells (row 1)
+
+      const colLetter = cell.replace(/\d+$/, '');
+      const isHeader = cell.match(/^[A-Z]+1$/);
+      const isMODIV = modIvColumns.has(colLetter);
+
+      if (isHeader) {
         discSheet[cell].s = headerStyle;
+      } else if (isMODIV) {
+        discSheet[cell].s = modIvStyle;
       } else {
         discSheet[cell].s = cellStyle;
       }
