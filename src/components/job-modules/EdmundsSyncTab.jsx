@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, AlertCircle, CheckCircle, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   const [isUploading, setIsUploading] = useState(false);
