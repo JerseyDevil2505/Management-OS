@@ -509,39 +509,23 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
 
     const workbook = XLSX.utils.book_new();
 
-    // Discrepancies sheet
-    const discrepanciesData = scanResults.detailedDiscrepancies.map(match => ({
-      'Block': match.edmunds.block,
-      'Lot': match.edmunds.lot,
-      'Qualifier': match.edmunds.qualifier,
-      'Status': match.severity === 'critical' ? 'REVIEW' : 'FUZZY',
-      'Issue': match.discrepancies.map(d => `${d.field}`).join('; '),
-      'Your Value': match.discrepancies.map(d => `${d.field}: ${d.copilot}`).join(' | '),
-      'Edmunds Value': match.discrepancies.map(d => `${d.field}: ${d.edmunds}`).join(' | ')
-    }));
+    // Define styles for all sheets
+    const headerStyle = {
+      font: { name: 'Leelawadee', size: 10, bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '1F2937' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+    };
 
-    const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
-    XLSX.utils.book_append_sheet(workbook, discSheet, 'Discrepancies');
-
-    // Phantom Properties sheet
-    const phantomData = scanResults.detailedGhosts.map(ghost => ({
-      'Block': ghost.edmunds.block,
-      'Lot': ghost.edmunds.lot,
-      'Qualifier': ghost.edmunds.qualifier,
-      'Category': ghost.category,
-      'Details': ghost.details,
-      'Edmunds Owner': ghost.edmunds.owner,
-      'Edmunds Address': ghost.edmunds.property_location,
-      'Recommended Action':
-        ghost.category === 'Subdivided'
-          ? 'Update lot numbers to reflect subdivision'
-          : ghost.category === 'Additional Lot'
-          ? 'Already exists as additional card - no action needed'
-          : 'Review and delete if invalid'
-    }));
-
-    const phantomSheet = XLSX.utils.json_to_sheet(phantomData);
-    XLSX.utils.book_append_sheet(workbook, phantomSheet, 'Phantom Properties');
+    const cellStyle = {
+      font: { name: 'Leelawadee', size: 10 },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+        right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+        top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+        bottom: { style: 'thin', color: { rgb: 'CCCCCC' } }
+      }
+    };
 
     // Summary sheet
     const summaryData = [
@@ -551,9 +535,84 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       { Metric: 'Ghost Records', Value: scanResults.ghosts },
       { Metric: 'Scan Date', Value: new Date(scanResults.timestamp).toLocaleString() }
     ];
-
     const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    summarySheet['!cols'] = [{ wch: 35 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary', 0);
+
+    // Discrepancies sheet
+    const discrepanciesData = scanResults.detailedDiscrepancies.map(match => ({
+      'Block': match.edmunds.block,
+      'Lot': match.edmunds.lot,
+      'Qualifier': match.edmunds.qualifier || '-',
+      'Status': match.severity === 'critical' ? 'REVIEW' : 'FUZZY',
+      'Issue': match.discrepancies.map(d => `${d.field}`).join('; '),
+      'Your Value': match.discrepancies.map(d => `${d.field}: ${d.copilot}`).join(' | '),
+      'Edmunds Value': match.discrepancies.map(d => `${d.field}: ${d.edmunds}`).join(' | ')
+    }));
+
+    const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
+    discSheet['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 12 },  // Qualifier
+      { wch: 12 },  // Status
+      { wch: 25 },  // Issue
+      { wch: 35 },  // Your Value
+      { wch: 35 }   // Edmunds Value
+    ];
+
+    // Apply styling to discrepancy sheet
+    Object.keys(discSheet).forEach(cell => {
+      if (cell.startsWith('!')) return;
+      if (cell.match(/^[A-G]1$/)) {
+        discSheet[cell].s = headerStyle;
+      } else {
+        discSheet[cell].s = cellStyle;
+      }
+    });
+
+    XLSX.utils.book_append_sheet(workbook, discSheet, 'Discrepancies');
+
+    // Phantom Properties sheet
+    const phantomData = scanResults.detailedGhosts.map(ghost => ({
+      'Block': ghost.edmunds.block,
+      'Lot': ghost.edmunds.lot,
+      'Qualifier': ghost.edmunds.qualifier || '-',
+      'Category': ghost.category,
+      'Edmunds Owner': ghost.edmunds.owner,
+      'Edmunds Address': ghost.edmunds.property_location,
+      'Details': ghost.details,
+      'Recommended Action':
+        ghost.category === 'Subdivided'
+          ? 'Update lot numbers to reflect subdivision'
+          : ghost.category === 'Additional Lot'
+          ? 'Already exists as additional card'
+          : 'Review and delete if invalid'
+    }));
+
+    const phantomSheet = XLSX.utils.json_to_sheet(phantomData);
+    phantomSheet['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 12 },  // Qualifier
+      { wch: 18 },  // Category
+      { wch: 35 },  // Owner
+      { wch: 35 },  // Address
+      { wch: 25 },  // Details
+      { wch: 30 }   // Recommended Action
+    ];
+
+    // Apply styling to phantom sheet
+    Object.keys(phantomSheet).forEach(cell => {
+      if (cell.startsWith('!')) return;
+      if (cell.match(/^[A-H]1$/)) {
+        phantomSheet[cell].s = headerStyle;
+      } else {
+        phantomSheet[cell].s = cellStyle;
+      }
+    });
+
+    XLSX.utils.book_append_sheet(workbook, phantomSheet, 'Phantom Properties');
 
     XLSX.writeFile(workbook, `Edmunds-Reconciliation-${jobData?.job_name || 'Job'}-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
