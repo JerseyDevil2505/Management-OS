@@ -131,13 +131,6 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
   // Compare fields and find discrepancies
   const compareRecords = (edmundsRecord, copilotRecord) => {
     const discrepancies = [];
-    const fieldMap = {
-      owner: ['owner', 'owner_name'],
-      address: ['property_location', 'owner_street'],
-      city: ['owner_csz'],
-      zip: ['owner_csz'],
-      class: ['property_m4_class']
-    };
 
     // Owner comparison
     const edmundsOwner = (edmundsRecord.owner || '').toString().trim();
@@ -153,17 +146,71 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       });
     }
 
-    // Address comparison
+    // Property Location comparison
     const edmundsAddr = (edmundsRecord.property_location || '').toString().trim();
     const copilotAddr = (copilotRecord.property_location || '').toString().trim();
     const addrSim = stringSimilarity(edmundsAddr, copilotAddr);
     if (addrSim < 0.95 && edmundsAddr && copilotAddr) {
       discrepancies.push({
-        field: 'address',
+        field: 'property_location',
         edmunds: edmundsAddr,
         copilot: copilotAddr,
         similarity: addrSim,
         severity: addrSim < 0.7 ? 'critical' : 'fuzzy'
+      });
+    }
+
+    // Owner Address comparison
+    const edmundsOwnerAddr = (edmundsRecord.owner_street || '').toString().trim();
+    const copilotOwnerAddr = (copilotRecord.owner_street || '').toString().trim();
+    const ownerAddrSim = stringSimilarity(edmundsOwnerAddr, copilotOwnerAddr);
+    if (ownerAddrSim < 0.95 && edmundsOwnerAddr && copilotOwnerAddr) {
+      discrepancies.push({
+        field: 'owner_address',
+        edmunds: edmundsOwnerAddr,
+        copilot: copilotOwnerAddr,
+        similarity: ownerAddrSim,
+        severity: ownerAddrSim < 0.7 ? 'critical' : 'fuzzy'
+      });
+    }
+
+    // Owner City comparison
+    const edmundsCity = (edmundsRecord.owner_city || '').toString().trim();
+    const copilotCity = (copilotRecord.owner_csz || '').toString().trim().split(',')[0] || ''; // Extract city from csz
+    const citySim = stringSimilarity(edmundsCity, copilotCity);
+    if (citySim < 0.95 && edmundsCity && copilotCity) {
+      discrepancies.push({
+        field: 'owner_city',
+        edmunds: edmundsCity,
+        copilot: copilotCity,
+        similarity: citySim,
+        severity: citySim < 0.7 ? 'critical' : 'fuzzy'
+      });
+    }
+
+    // State comparison
+    const edmundsState = (edmundsRecord.state || '').toString().trim();
+    const copilotState = (copilotRecord.owner_csz || '').toString().trim().split(',')[1]?.trim().split(' ')[0] || ''; // Extract state from csz
+    if (edmundsState && copilotState && edmundsState.toUpperCase() !== copilotState.toUpperCase()) {
+      discrepancies.push({
+        field: 'state',
+        edmunds: edmundsState,
+        copilot: copilotState,
+        similarity: 0,
+        severity: 'critical'
+      });
+    }
+
+    // ZIP comparison
+    const edmundsZip = (edmundsRecord.zip || '').toString().trim();
+    const copilotZip = (copilotRecord.owner_csz || '').toString().trim().split(' ').pop() || ''; // Extract zip from csz
+    if (edmundsZip && copilotZip && edmundsZip !== copilotZip) {
+      discrepancies.push({
+        field: 'zip',
+        edmunds: edmundsZip,
+        copilot: copilotZip,
+        similarity: 0,
+        severity: 'critical'
       });
     }
 
@@ -172,7 +219,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const copilotClass = (copilotRecord.property_m4_class || '').toString().trim();
     if (edmundsClass && copilotClass && edmundsClass !== copilotClass) {
       discrepancies.push({
-        field: 'class',
+        field: 'property_class',
         edmunds: edmundsClass,
         copilot: copilotClass,
         similarity: 0,
