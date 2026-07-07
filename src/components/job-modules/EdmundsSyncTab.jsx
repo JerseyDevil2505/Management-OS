@@ -60,23 +60,38 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     });
   };
 
+  // Build composite key like the rest of the system
+  const buildCompositeKey = (block, lot, qualifier = '', card = '', address = '') => {
+    const ccdd = jobData?.ccdd_code || jobData?.ccdd || '';
+    const year = jobData?.year_of_value || new Date().getFullYear();
+    const blockStr = String(block || '').trim();
+    const lotStr = String(lot || '').trim();
+    const qualStr = String(qualifier || '').trim();
+    const cardStr = String(card || '').trim();
+    const addrStr = String(address || '').trim().substring(0, 20); // Truncate for matching
+    return `${ccdd}_${year}_${blockStr}_${lotStr}_${qualStr}_${cardStr}_${addrStr}`.toUpperCase();
+  };
+
   // Detect if lot is subdivided (e.g., lot "1" split into "1.01", "1.02")
   const checkSubdivision = (edmundsBlock, edmundsLot, copilotProps) => {
     const edmundsLotStr = String(edmundsLot).trim();
+    const blockStr = String(edmundsBlock).trim();
     const matches = copilotProps.filter(p => {
       const pBlock = String(p.property_block || '').trim();
       const pLot = String(p.property_lot || '').trim();
-      return pBlock === edmundsBlock && pLot.startsWith(edmundsLotStr + '.');
+      return pBlock === blockStr && pLot.startsWith(edmundsLotStr + '.');
     });
     return matches.length > 0 ? matches : null;
   };
 
-  // Check if lot exists as additional card
+  // Check if lot exists as additional card (different card numbers for same block/lot)
   const checkAdditionalCard = (edmundsBlock, edmundsLot, edmundsQual) => {
+    const blockStr = String(edmundsBlock || '').trim();
+    const lotStr = String(edmundsLot || '').trim();
     const allPropsForLot = properties.filter(p => {
       const pBlock = String(p.property_block || '').trim();
       const pLot = String(p.property_lot || '').trim();
-      return pBlock === edmundsBlock && pLot === edmundsLot;
+      return pBlock === blockStr && pLot === lotStr;
     });
     return allPropsForLot.length > 0 ? allPropsForLot : null;
   };
@@ -87,7 +102,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const blockStr = String(block || '').trim();
     const lotStr = String(lot || '').trim();
 
-    // Check for subdivisions
+    // Check for subdivisions first (lot 1 became 1.01, 1.02)
     const subdivisions = checkSubdivision(blockStr, lotStr, primaryProps);
     if (subdivisions) {
       return {
@@ -96,7 +111,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       };
     }
 
-    // Check for additional cards
+    // Check if exists as additional card (multiple cards for same lot)
     const additionalCards = checkAdditionalCard(blockStr, lotStr, qualifier);
     if (additionalCards && additionalCards.length > 0) {
       const nonPrimary = additionalCards.filter(p => {
@@ -112,21 +127,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       }
     }
 
-    // Check if bad block/lot
-    const similarLots = allProps.filter(p => {
-      const pBlock = String(p.property_block || '').trim();
-      const pLot = String(p.property_lot || '').trim();
-      return stringSimilarity(pBlock, blockStr) > 0.7 || stringSimilarity(pLot, lotStr) > 0.7;
-    });
-
-    if (similarLots.length > 0) {
-      return {
-        category: 'Potential Match',
-        details: `Similar lots exist: ${similarLots.slice(0, 2).map(p => `${p.property_block}/${p.property_lot}`).join(', ')}`
-      };
-    }
-
-    return { category: 'Bad Block/Lot', details: 'No matching or similar records found' };
+    return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
   // Compare fields and find discrepancies
@@ -221,11 +222,22 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       const primaryCopilot = getPrimaryProperties();
       const allCopilot = properties;
 
-      // Build composite key map for Copilot
+      // Build composite key map for Copilot using: ccdd_year_block_lot_qualifier_card_address
       const copilotMap = new Map();
       primaryCopilot.forEach(p => {
-        const key = `${p.property_block}_${p.property_lot}_${p.property_qualifier || ''}`.trim();
+        // Use abbreviated address for matching
+        const addr = String(p.property_location || '').trim().substring(0, 20).toUpperCase();
+        const card = getPrimaryCardIndicator(); // Primary card only
+        const key = buildCompositeKey(p.property_block, p.property_lot, p.property_qualifier, card, addr);
         copilotMap.set(key, p);
+      });
+
+      // Also build a block/lot only map for ghost detection
+      const blockLotMap = new Map();
+      primaryCopilot.forEach(p => {
+        const key = `${String(p.property_block || '').trim()}_${String(p.property_lot || '').trim()}_${String(p.property_qualifier || '').trim()}`;
+        if (!blockLotMap.has(key)) blockLotMap.set(key, []);
+        blockLotMap.get(key).push(p);
       });
 
       // Match records
@@ -234,10 +246,8 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       const ghostRecords = [];
 
       edmundsRecords.forEach(edmundsRec => {
-        const blockStr = String(edmundsRec.block || '').trim();
-        const lotStr = String(edmundsRec.lot || '').trim();
-        const qualStr = String(edmundsRec.qualifier || '').trim();
-        const key = `${blockStr}_${lotStr}_${qualStr}`;
+        const addr = String(edmundsRec.property_location || '').trim().substring(0, 20).toUpperCase();
+        const key = buildCompositeKey(edmundsRec.block, edmundsRec.lot, edmundsRec.qualifier, getPrimaryCardIndicator(), addr);
 
         const copilotRec = copilotMap.get(key);
 
@@ -319,7 +329,13 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       'Category': ghost.category,
       'Details': ghost.details,
       'Edmunds Owner': ghost.edmunds.owner,
-      'Recommended Action': ghost.category === 'Subdivided' ? 'Update lot numbers' : ghost.category === 'Additional Lot' ? 'Already exists as additional card' : 'Review and delete if invalid'
+      'Edmunds Address': ghost.edmunds.property_location,
+      'Recommended Action':
+        ghost.category === 'Subdivided'
+          ? 'Update lot numbers to reflect subdivision'
+          : ghost.category === 'Additional Lot'
+          ? 'Already exists as additional card - no action needed'
+          : 'Review and delete if invalid'
     }));
 
     const phantomSheet = XLSX.utils.json_to_sheet(phantomData);
