@@ -128,61 +128,24 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     return { category: 'Orphaned', details: 'No matching record in current system' };
   };
 
-  // Parse Copilot's owner_csz field: handle various formats
-  // "RIVERTON NJ 08077" → city: "RIVERTON", state: "NJ", zip: "08077"
-  // "RIVERTON, N J 08077" → city: "RIVERTON", state: "NJ", zip: "08077"
-  const parseCszCopilot = (csz) => {
-    if (!csz) return { city: '', state: '', zip: '' };
+  // Extract ZIP from owner_csz: last space-separated token if it's numeric
+  // "RIVERTON NJ 08077" → csz: "RIVERTON NJ", zip: "08077"
+  // "POINT PLEASANT, NJ 07756" → csz: "POINT PLEASANT, NJ", zip: "07756"
+  const extractZipFromCsz = (csz) => {
+    if (!csz) return { csz: '', zip: '' };
     const str = String(csz).trim();
+    const parts = str.split(/\s+/);
 
-    // Try to extract ZIP from the end first (5 or 9 digits)
-    const zipMatch = str.match(/([\d\-]{5,10})\s*$/);
-    if (!zipMatch) {
-      // No ZIP, treat whole thing as city or return empty
-      return { city: str, state: '', zip: '' };
+    // Check if last part is numeric (ZIP code)
+    const lastPart = parts[parts.length - 1];
+    if (/^\d{5}(?:-\d{4})?$/.test(lastPart)) {
+      const zip = lastPart;
+      const csz = parts.slice(0, -1).join(' ');
+      return { csz, zip };
     }
 
-    const zip = zipMatch[1];
-    const beforeZip = str.substring(0, zipMatch.index).trim();
-
-    // Now extract state and city from beforeZip
-    // State is the last 1-2 letters (possibly with space like "N J")
-    const stateMatch = beforeZip.match(/([A-Z])(?:\s+([A-Z]))?\s*$/i);
-    if (stateMatch) {
-      const state = (stateMatch[1] + (stateMatch[2] ? stateMatch[2] : '')).toUpperCase();
-      const city = beforeZip.substring(0, stateMatch.index).trim().replace(/,\s*$/, '').trim();
-      return { city, state, zip };
-    }
-
-    // If can't parse state, everything before ZIP is city
-    return { city: beforeZip, state: '', zip };
-  };
-
-  // Parse Edmunds owner_city: split on comma or double space
-  // "NEWARK, NJ" → city: "NEWARK", state: "NJ"
-  // "RIVERTON, N J" → city: "RIVERTON", state: "N J" → "NJ" (normalized)
-  const parseEdmundsCity = (ownerCity) => {
-    if (!ownerCity) return { city: '', state: '' };
-    const str = String(ownerCity).trim();
-
-    // Split on comma first
-    if (str.includes(',')) {
-      const parts = str.split(',').map(p => p.trim());
-      const city = parts[0];
-      const state = parts[1] ? parts[1].replace(/\s+/g, '') : ''; // Normalize spaces in state
-      return { city, state };
-    }
-
-    // Split on double space
-    if (str.includes('  ')) {
-      const parts = str.split(/\s{2,}/).map(p => p.trim());
-      const city = parts[0];
-      const state = parts[1] ? parts[1].replace(/\s+/g, '') : '';
-      return { city, state };
-    }
-
-    // No separator found, assume whole thing is city
-    return { city: str, state: '' };
+    // No ZIP found, entire string is csz
+    return { csz: str, zip: '' };
   };
 
   // Format ZIP code to standard format (XXXXX or XXXXX-XXXX)
@@ -190,7 +153,7 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     if (!zip) return '';
     const str = String(zip).trim();
     // Remove any non-digit/hyphen characters and extra spaces
-    const cleaned = str.replace(/[^\d\-]/g, '');
+    const cleaned = str.replace(/[^\d-]/g, '');
     // If 9 digits, format as XXXXX-XXXX; if 5 digits, format as XXXXX
     if (cleaned.length === 9) {
       return `${cleaned.substring(0, 5)}-${cleaned.substring(5)}`;
@@ -240,36 +203,26 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     const ownerAddrDisc = compareTextField('owner_address', edmundsOwnerAddr, copilotOwnerAddr);
     if (ownerAddrDisc) discrepancies.push(ownerAddrDisc);
 
-    // Parse Copilot owner_csz field (has city, state, zip all together)
-    const parsedCopilot = parseCszCopilot(copilotRecord.owner_csz);
-
-    // Parse Edmunds owner_city field (has city, state) and zip is separate column
-    const parsedEdmunds = parseEdmundsCity(edmundsRecord.owner_city);
+    // Extract city/state and zip from both sources
+    // Edmunds: owner_city is "NEWARK, NJ" and zip is separate "07105"
+    const edmundsOwnerCsz = (edmundsRecord.owner_city || '').toString().trim();
     const edmundsZip = (edmundsRecord.zip || '').toString().trim();
+    const edmundsCszAndZip = edmundsOwnerCsz + (edmundsZip ? ' ' + edmundsZip : '');
 
-    // Owner City
-    const edmundsCity = parsedEdmunds.city;
-    const copilotCity = parsedCopilot.city;
-    const cityDisc = compareTextField('owner_city', edmundsCity, copilotCity);
-    if (cityDisc) discrepancies.push(cityDisc);
+    // Copilot: owner_csz is "RIVERTON NJ 08077"
+    const copilotCsz = (copilotRecord.owner_csz || '').toString().trim();
 
-    // State — compare directly (Edmunds state from "City, State" and Copilot from owner_csz)
-    const edmundsState = parsedEdmunds.state || '';
-    const copilotState = parsedCopilot.state || '';
-    if (edmundsState !== copilotState) {
-      discrepancies.push({
-        field: 'state',
-        edmunds: edmundsState || '(empty)',
-        copilot: copilotState || '(empty)',
-        similarity: 0,
-        severity: 'critical'
-      });
-    }
+    // Extract ZIP from both
+    const { csz: edmundsCszParsed, zip: edmundsZipParsed } = extractZipFromCsz(edmundsCszAndZip);
+    const { csz: copilotCszParsed, zip: copilotZipParsed } = extractZipFromCsz(copilotCsz);
+
+    // Compare owner_city/state combined (without ZIP)
+    const cszDisc = compareTextField('owner_city_state', edmundsCszParsed, copilotCszParsed);
+    if (cszDisc) discrepancies.push(cszDisc);
 
     // ZIP — exact match, format both to standard format (XXXXX or XXXXX-XXXX)
-    const copilotZip = (parsedCopilot.zip || '').toString().trim();
-    const edmundsZipFormatted = formatZip(edmundsZip);
-    const copilotZipFormatted = formatZip(copilotZip);
+    const edmundsZipFormatted = formatZip(edmundsZipParsed);
+    const copilotZipFormatted = formatZip(copilotZipParsed);
     if (edmundsZipFormatted !== copilotZipFormatted) {
       discrepancies.push({
         field: 'zip',
