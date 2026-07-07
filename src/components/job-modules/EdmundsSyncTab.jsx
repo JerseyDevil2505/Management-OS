@@ -562,44 +562,79 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     });
 
     const discSheet = XLSX.utils.json_to_sheet(discrepanciesData);
-    // Dynamic columns: 4 base + 2 per discrepancy field
+
+    // Set column widths
     const colWidths = [
       { wch: 10 },  // Block
       { wch: 10 },  // Lot
       { wch: 12 },  // Qualifier
       { wch: 12 }   // Status
     ];
-    // Add columns for each field (estimate max 10 fields, 2 cols each = 20 more cols)
     for (let i = 0; i < 20; i++) {
       colWidths.push({ wch: 30 });
     }
     discSheet['!cols'] = colWidths;
 
-    // Apply styling to discrepancy sheet
-    // First pass: identify MOD IV columns
+    // Apply styling using proper XLSX iteration (like ManagementChecklist)
+    const range = XLSX.utils.decode_range(discSheet['!ref']);
+
+    // First pass: identify MOD IV columns from header
     const modIvColumns = new Set();
-    Object.keys(discSheet).forEach(cell => {
-      if (cell.match(/^[A-Z]+1$/) && discSheet[cell]?.v?.includes('MOD IV')) {
-        modIvColumns.add(cell.replace(/1$/, ''));
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (discSheet[cellAddress]?.v?.includes('MOD IV')) {
+        modIvColumns.add(C);
       }
-    });
+    }
 
-    // Second pass: apply styles
-    Object.keys(discSheet).forEach(cell => {
-      if (cell.startsWith('!')) return;
+    // Second pass: apply styles to all cells
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!discSheet[cellAddress]) continue;
 
-      const colLetter = cell.replace(/\d+$/, '');
-      const isHeader = cell.match(/^[A-Z]+1$/);
-      const isMODIV = modIvColumns.has(colLetter);
+        if (!discSheet[cellAddress].s) discSheet[cellAddress].s = {};
 
-      if (isHeader) {
-        discSheet[cell].s = headerStyle;
-      } else if (isMODIV) {
-        discSheet[cell].s = modIvStyle;
-      } else {
-        discSheet[cell].s = cellStyle;
+        if (R === 0) {
+          // Header row
+          discSheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '1F2937' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              left: { style: 'thin' },
+              right: { style: 'thin' },
+              top: { style: 'thin' },
+              bottom: { style: 'thin' }
+            }
+          };
+        } else if (modIvColumns.has(C)) {
+          // MOD IV columns - dark blue
+          discSheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, color: { rgb: '1F2937' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              left: { style: 'thin' },
+              right: { style: 'thin' },
+              top: { style: 'thin' },
+              bottom: { style: 'thin' }
+            }
+          };
+        } else {
+          // Regular data cells
+          discSheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: {
+              left: { style: 'thin' },
+              right: { style: 'thin' },
+              top: { style: 'thin' },
+              bottom: { style: 'thin' }
+            }
+          };
+        }
       }
-    });
+    }
 
     XLSX.utils.book_append_sheet(workbook, discSheet, 'Discrepancies');
 
@@ -633,14 +668,30 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     ];
 
     // Apply styling to phantom sheet
-    Object.keys(phantomSheet).forEach(cell => {
-      if (cell.startsWith('!')) return;
-      if (cell.match(/^[A-H]1$/)) {
-        phantomSheet[cell].s = headerStyle;
-      } else {
-        phantomSheet[cell].s = cellStyle;
+    const phantomRange = XLSX.utils.decode_range(phantomSheet['!ref']);
+    for (let R = phantomRange.s.r; R <= phantomRange.e.r; ++R) {
+      for (let C = phantomRange.s.c; C <= phantomRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!phantomSheet[cellAddress]) continue;
+
+        if (!phantomSheet[cellAddress].s) phantomSheet[cellAddress].s = {};
+
+        if (R === 0) {
+          phantomSheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '1F2937' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
+          };
+        } else {
+          phantomSheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
+          };
+        }
       }
-    });
+    }
 
     XLSX.utils.book_append_sheet(workbook, phantomSheet, 'Phantom Properties');
 
@@ -656,14 +707,30 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
     summarySheet['!cols'] = [{ wch: 35 }, { wch: 20 }];
 
     // Apply styling to summary sheet
-    Object.keys(summarySheet).forEach(cell => {
-      if (cell.startsWith('!')) return;
-      if (cell.match(/^[A-B]1$/)) {
-        summarySheet[cell].s = headerStyle;
-      } else {
-        summarySheet[cell].s = cellStyle;
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        if (!summarySheet[cellAddress].s) summarySheet[cellAddress].s = {};
+
+        if (R === 0) {
+          summarySheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '1F2937' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
+          };
+        } else {
+          summarySheet[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10 },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: { left: { style: 'thin' }, right: { style: 'thin' }, top: { style: 'thin' }, bottom: { style: 'thin' } }
+          };
+        }
       }
-    });
+    }
 
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
