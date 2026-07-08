@@ -1763,6 +1763,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       const idxAddr      = col('Addl Contact Address');
       const idxCityState = col('Addl Contact City, State');
       const idxStatus    = col('Appeal Status');
+      const idxJudgCode  = col('Judg. Code 1');
+      const idxJudgTotal = col('Judg. Total');
 
       // Parse a CSV line respecting quoted fields
       const parseCSVLine = (line) => {
@@ -1812,15 +1814,17 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         return { block: blq, lot: '', qualifier: '' };
       };
 
-      // Fetch existing appeal numbers for this job to detect duplicates
+      // Fetch full existing rows so we can refresh judgment fields on re-import
+      // (rather than skipping) — MyNJAppeal now supplies judgment code/total.
       const { data: existingAppeals } = await supabase
         .from('appeal_log')
-        .select('appeal_number')
+        .select('id, appeal_number, current_assessment')
         .eq('job_id', jobData.id);
 
-      const existingNumbers = new Set(
-        (existingAppeals || []).map(a => a.appeal_number)
-      );
+      const existingByNumber = new Map();
+      (existingAppeals || []).forEach(a => {
+        if (a.appeal_number) existingByNumber.set(String(a.appeal_number).trim(), a);
+      });
 
       // Fetch DRAFT rows (no appeal_number yet) so we can merge proactive
       // appellant-evidence drafts into the official import instead of duplicating.
@@ -1835,11 +1839,12 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       });
 
       let imported = 0;
-      let skipped = 0;
+      let refreshed = 0;
       let unmatched = 0;
       let mergedDrafts = 0;
       const records = [];
       const draftUpdates = []; // { id, payload }
+      const refreshUpdates = []; // { id, payload } - judgment refresh on existing rows
 
       // Process data rows (skip header row 0)
       for (let i = 1; i < lines.length; i++) {
@@ -1854,12 +1859,6 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         const appealNumber = rawAppealNumber.startsWith('20@')
           ? rawAppealNumber.slice(3)
           : rawAppealNumber;
-
-        // Skip duplicates
-        if (existingNumbers.has(appealNumber)) {
-          skipped++;
-          continue;
-        }
 
         const blqRaw = getValue(idxBLQ);
         const { block, lot, qualifier } = parseBLQ(blqRaw);
@@ -1901,6 +1900,20 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         // Property class — stored as-is (2, 1, 6A, 15D etc.)
         const propertyClass = getValue(idxClass);
 
+        // Judgment fields — MyNJAppeal supplies "Judg. Code 1" and "Judg. Total"
+        const judgmentTotalRaw = getValue(idxJudgTotal).replace(/,/g, '');
+        const judgmentValue = judgmentTotalRaw !== '' && !isNaN(Number(judgmentTotalRaw))
+          ? Number(judgmentTotalRaw)
+          : null;
+        const judgmentCodeNJ = getValue(idxJudgCode) || null;
+        const baseAssessment = matchedProperty?.values_mod_total || currentAssessment || 0;
+        let loss = null;
+        let lossPct = null;
+        if (judgmentValue !== null && baseAssessment) {
+          loss = baseAssessment - judgmentValue;
+          lossPct = (loss / baseAssessment) * 100;
+        }
+
         const record = {
           job_id: jobData.id,
           appeal_number: appealNumber,
@@ -1915,6 +1928,10 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           attorney_city_state: attorneyCityState,
           current_assessment: matchedProperty?.values_mod_total || currentAssessment || 0,
           requested_value: 0,
+          judgment_value: judgmentValue,
+          judgment_code_nj: judgmentCodeNJ,
+          loss,
+          loss_pct: lossPct,
           property_block: block,
           property_lot: lot,
           property_qualifier: qualifier,
@@ -1952,11 +1969,45 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
           continue;
         }
 
+        // Re-import path: row already exists for this appeal_number.
+        // Refresh judgment fields (code/value/loss) in place — leave user-managed
+        // fields (status, comments, appellant evidence, etc.) untouched.
+        const existingRow = existingByNumber.get(appealNumber);
+        if (existingRow) {
+          const refBase = baseAssessment || existingRow.current_assessment || 0;
+          let refLoss = null;
+          let refLossPct = null;
+          if (judgmentValue !== null && refBase) {
+            refLoss = refBase - judgmentValue;
+            refLossPct = (refLoss / refBase) * 100;
+          }
+          refreshUpdates.push({
+            id: existingRow.id,
+            payload: {
+              judgment_value: judgmentValue,
+              judgment_code_nj: judgmentCodeNJ,
+              loss: refLoss,
+              loss_pct: refLossPct
+            }
+          });
+          refreshed++;
+          continue;
+        }
+
         records.push(record);
       }
 
       // Apply draft merges (one update per draft to preserve evidence fields)
       for (const { id, payload } of draftUpdates) {
+        const { error } = await supabase
+          .from('appeal_log')
+          .update(payload)
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      // Apply judgment refreshes on existing appeal rows
+      for (const { id, payload } of refreshUpdates) {
         const { error } = await supabase
           .from('appeal_log')
           .update(payload)
@@ -2012,7 +2063,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       setAppeals(enrichedAppeals);
       computeAndEmitStats(enrichedAppeals);
       saveSnapshot(enrichedAppeals);
-      setImportResult({ imported, skipped, unmatched, mergedDrafts });
+      setImportResult({ imported, refreshed, unmatched, mergedDrafts });
       setImportFile(null);
 
       // Stamp last-import timestamp for the MyNJAppeal source
@@ -5241,8 +5292,9 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Supports the BRT online appeal system CSV export format.
-                Duplicate appeal numbers will be skipped automatically.
+                Supports the MyNJAppeal CSV export format. Re-importing an existing
+                appeal refreshes its <strong>judgment code</strong> and <strong>judgment total</strong> in
+                place — no manual entry needed for bulk judgment loads.
               </p>
 
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
@@ -5265,8 +5317,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
                 <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
                   <p className="font-semibold text-gray-800">Import Complete</p>
                   <p className="text-green-700">✓ {importResult.imported} records imported</p>
-                  {importResult.skipped > 0 && (
-                    <p className="text-amber-700">⚠ {importResult.skipped} skipped (duplicates)</p>
+                  {importResult.refreshed > 0 && (
+                    <p className="text-emerald-700">✓ {importResult.refreshed} existing appeal{importResult.refreshed === 1 ? '' : 's'} refreshed (judgment code / total updated)</p>
                   )}
                   {importResult.unmatched > 0 && (
                     <p className="text-blue-700">ℹ {importResult.unmatched} unmatched to property records</p>
