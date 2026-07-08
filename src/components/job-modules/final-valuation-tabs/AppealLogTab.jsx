@@ -1744,29 +1744,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       const text = await importFile.text();
       const lines = text.split('\n');
 
-      // Parse header row — strip BOM if present
-      const rawHeader = lines[0].replace(/^\uFEFF/, '');
-      const headers = rawHeader.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-
-      // Column index helpers
-      const col = (name) => headers.findIndex(h => h === name);
-
-      const idxBLQ       = col('BLQ');
-      const idxAppealNum = col('Appeal #');
-      const idxName      = col('Name');
-      const idxLocation  = col('Location');
-      const idxClass     = col('Class.');
-      const idxAssess    = col('Assessment');
-      const idxTaxCrt    = col('Tax Crt?');
-      const idxEntry     = col('Entry');
-      const idxContact   = col('Adtl. Contact');
-      const idxAddr      = col('Addl Contact Address');
-      const idxCityState = col('Addl Contact City, State');
-      const idxStatus    = col('Appeal Status');
-      const idxJudgCode  = col('Judg. Code 1');
-      const idxJudgTotal = col('Judg. Total');
-
-      // Parse a CSV line respecting quoted fields
+      // Parse a CSV line respecting quoted fields (e.g. "Owner City, State")
       const parseCSVLine = (line) => {
         const result = [];
         let current = '';
@@ -1785,6 +1763,30 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
         result.push(current.trim());
         return result;
       };
+
+      // Parse header row with the SAME quote-aware parser so quoted headers
+      // ("Owner City, State") don't shift downstream column indices. Collapse
+      // internal whitespace so "Judg. Code  1" (double space) matches "Judg. Code 1".
+      const normalizeHeader = (h) => h.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim();
+      const headers = parseCSVLine(lines[0].replace(/^\uFEFF/, '')).map(normalizeHeader);
+
+      // Column index helpers
+      const col = (name) => headers.findIndex(h => h === normalizeHeader(name));
+
+      const idxBLQ       = col('BLQ');
+      const idxAppealNum = col('Appeal #');
+      const idxName      = col('Name');
+      const idxLocation  = col('Location');
+      const idxClass     = col('Class.');
+      const idxAssess    = col('Assessment');
+      const idxTaxCrt    = col('Tax Crt?');
+      const idxEntry     = col('Entry');
+      const idxContact   = col('Adtl. Contact');
+      const idxAddr      = col('Addl Contact Address');
+      const idxCityState = col('Addl Contact City, State');
+      const idxStatus    = col('Appeal Status');
+      const idxJudgCode  = col('Judg. Code 1');
+      const idxJudgTotal = col('Judg. Total');
 
       // Parse BLQ — format: "188-26", "155-7.01", "96-4-C0102"
       const parseBLQ = (blq) => {
