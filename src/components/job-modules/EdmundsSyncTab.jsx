@@ -550,6 +550,10 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
       discHeaders.push(`${field} - MOD IV`, `${field} - Edmunds`);
     });
 
+    // Append most-recent-sale columns from Copilot (Edmunds can't share sales)
+    const saleHeaders = ['Last Sale Date', 'Last Sale Price', 'Last Sale Book', 'Last Sale Page'];
+    saleHeaders.forEach(h => discHeaders.push(h));
+
     // Build data rows
     const discData = scanResults.detailedDiscrepancies.map(match => {
       const row = [
@@ -565,6 +569,16 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         row.push(disc?.copilot || '');
         row.push(disc?.edmunds || '');
       });
+
+      // Most-recent-sale info from the Copilot property record
+      const cp = match.copilot || {};
+      const salePrice = cp.sales_price != null && cp.sales_price !== ''
+        ? `$${Number(cp.sales_price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+        : '';
+      row.push(cp.sales_date || '');
+      row.push(salePrice);
+      row.push(cp.sales_book || '');
+      row.push(cp.sales_page || '');
 
       return row;
     });
@@ -585,6 +599,10 @@ const EdmundsSyncTab = ({ jobData, properties = [] }) => {
         modIvColumns.add(i);
       }
     });
+    // Sale columns are Copilot/MOD IV data too — style them dark blue
+    for (let i = discHeaders.length - saleHeaders.length; i < discHeaders.length; i++) {
+      modIvColumns.add(i);
+    }
     console.log('[Edmunds Export] Disc headers:', discHeaders);
     console.log('[Edmunds Export] MOD IV columns:', Array.from(modIvColumns));
 
