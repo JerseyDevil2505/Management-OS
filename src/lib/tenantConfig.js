@@ -34,6 +34,7 @@ const TENANT_CONFIGS = {
       checklist: true,
       production: true,         // Full ProductionTracker with employee DB
       inspectionInfo: false,
+      edmundsSync: true,        // Edmunds reconciliation
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,
@@ -75,6 +76,7 @@ const TENANT_CONFIGS = {
       checklist: false,                // Internal PPA workflow - not visible to assessor clients
       production: true,                // Enable for assessor clients (e.g., Rich's reassessments)
       inspectionInfo: true,            // Simplified inspection view with staff hints
+      edmundsSync: true,               // Edmunds reconciliation (available to assessor clients too)
       dataVisualizations: true,
       marketAnalysis: true,
       finalValuation: true,

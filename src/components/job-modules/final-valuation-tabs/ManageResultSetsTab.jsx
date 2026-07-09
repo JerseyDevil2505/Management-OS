@@ -141,6 +141,19 @@ const ManageResultSetsTab = ({ jobData }) => {
     });
   };
 
+  const allFilteredSelected =
+    filteredSets.length > 0 && filteredSets.every(rs => selectedIds.has(rs.id));
+
+  const toggleSelectAllFiltered = () => {
+    const ids = filteredSets.map(rs => rs.id);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
   const toggleSelectAllInGroup = (rows) => {
     const rowIds = rows.map(r => r.id);
     const allSelected = rowIds.every(id => selectedIds.has(id));
@@ -350,6 +363,13 @@ const ManageResultSetsTab = ({ jobData }) => {
       </div>
 
       <div className="action-bar flex flex-wrap items-center gap-2">
+        <button
+          onClick={toggleSelectAllFiltered}
+          disabled={filteredSets.length === 0 || busy}
+          className="action-btn select-all-btn px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {allFilteredSelected ? 'Deselect All' : `Select All (${filteredSets.length})`}
+        </button>
         <button
           onClick={handleArchiveSelected}
           disabled={selectedActiveCount === 0 || busy}

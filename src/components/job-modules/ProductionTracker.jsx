@@ -536,9 +536,18 @@ const ProductionTracker = ({
     };
 
     try {
+      // Fetch existing workflow_stats to preserve checklist completion flags and other metadata
+      const { data: existingJob } = await supabase
+        .from('jobs')
+        .select('workflow_stats')
+        .eq('id', jobData.id)
+        .single();
+
+      const existingStats = existingJob?.workflow_stats || {};
+
       const { error } = await supabase
         .from('jobs')
-        .update({ 
+        .update({
           infoby_category_config: {
             ...configToSave,
             vendor_type: jobData.vendor_type,
@@ -547,6 +556,7 @@ const ProductionTracker = ({
           external_inspectors: externalInspectorsList,
           // Persist fresh analytics data for navigation survival
       workflow_stats: analyticsToSave.analytics ? {
+        ...existingStats,
         ...analyticsToSave.analytics,
         billingAnalytics: analyticsToSave.billingAnalytics,
         validationReport: analyticsToSave.validationReport,
