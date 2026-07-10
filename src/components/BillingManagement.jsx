@@ -3540,14 +3540,14 @@ const calculateDistributionMetrics = async () => {
       {/* Contract Setup Modal */}
       {showContractSetup && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg contract-modal-box">
             <div className="p-6 pb-4 flex-shrink-0">
               <h3 className="text-lg font-semibold">
                 {selectedJob.job_contracts && selectedJob.job_contracts.length > 0 ? 'Edit' : 'Setup'} Contract: {selectedJob.job_name}
               </h3>
             </div>
 
-            <div className="px-6 overflow-y-auto flex-1 min-h-0">
+            <div className="px-6 contract-modal-scroll">
               <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

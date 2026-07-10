@@ -438,9 +438,25 @@ const AdminJobManagement = ({
 
       // Parse CSV and create composite keys
       const assignments = [];
-      // Use job's year_created instead of current year
-      const year = job.year_created || new Date().getFullYear();
-      const ccdd = job.ccdd || job.ccddCode;
+      // Derive the year+ccdd prefix from an actual property record so assignment
+      // keys always match how the source file was processed. The previous
+      // `job.year_created` fallback resolved to the current calendar year (the
+      // column doesn't exist), silently breaking the match on off-year jobs.
+      let keyPrefix = null;
+      const { data: sampleProp } = await supabase
+        .from('property_records')
+        .select('property_composite_key')
+        .eq('job_id', job.id)
+        .limit(1)
+        .maybeSingle();
+      if (sampleProp?.property_composite_key) {
+        keyPrefix = sampleProp.property_composite_key.split('-')[0];
+      }
+      if (!keyPrefix) {
+        const year = job.year_created || new Date().getFullYear();
+        const ccdd = job.ccdd || job.ccddCode;
+        keyPrefix = `${year}${ccdd}`;
+      }
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(delimiter).map(v => v.trim());
@@ -466,7 +482,7 @@ const AdminJobManagement = ({
         if (!block && !lot) continue;
        
         // Ensure consistent composite key format matching processors
-        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
+        const compositeKey = `${keyPrefix}-${block}-${lot}_${qual || 'NONE'}-${card || 'NONE'}-${location || 'NONE'}`;
         
         assignments.push({
           property_composite_key: compositeKey,
