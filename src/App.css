@@ -43,6 +43,25 @@
   overflow-x: auto;
 }
 
+/* Contract setup modal — same Tailwind v2 CDN limitation as the CSV export
+   modal above: arbitrary values like max-h-[90vh] are ignored, so the shell
+   grows past the viewport and hides the footer buttons. Constrain it here with
+   a fixed-size flex shell + scrollable body (both axes). */
+.contract-modal-box {
+  width: 100%;
+  max-width: 42rem;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.contract-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
 /* Management OS Color Variables */
 :root {
   /* Primary Blues from Management OS */
