@@ -531,6 +531,7 @@ const ProductionTracker = ({
       billingAnalytics,
       validationReport,
       missingPropertiesReport,
+      missingPricedReport,
       validationOverrides,
       overrideMap
     };
@@ -561,6 +562,7 @@ const ProductionTracker = ({
         billingAnalytics: analyticsToSave.billingAnalytics,
         validationReport: analyticsToSave.validationReport,
         missingPropertiesReport: analyticsToSave.missingPropertiesReport,
+        missingPricedReport: analyticsToSave.missingPricedReport,
         validationOverrides: analyticsToSave.validationOverrides,
         overrideMap: analyticsToSave.overrideMap,
         lastProcessed: new Date().toISOString(),
@@ -650,6 +652,9 @@ const ProductionTracker = ({
 
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
+        }
+        if (job.workflow_stats.missingPricedReport) {
+          setMissingPricedReport(job.workflow_stats.missingPricedReport);
         }
         // Always use fresh overrides from DB (queried above on lines 596-601)
         // instead of stale persisted ones — overrides may have been added/removed
@@ -2206,7 +2211,7 @@ const ProductionTracker = ({
         hasAssignments: jobData.has_property_assignments
       });
 
-      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
+      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData, missingPricedReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
@@ -2337,10 +2342,11 @@ const ProductionTracker = ({
       }
 
       // Use the actual results data
-      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData } = results;
-      
+      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData, missingPricedReportData } = results;
+
       // Set the fresh missing properties report in state
       setMissingPropertiesReport(missingPropertiesReportData);
+      setMissingPricedReport(missingPricedReportData);
 
       // Save with complete data structure
       await saveCategoriesToDatabase(infoByCategoryConfig, {
@@ -2348,6 +2354,7 @@ const ProductionTracker = ({
         billingAnalytics: billingResult,
         validationReport: validationReportData,
         missingPropertiesReport: missingPropertiesReportData,
+        missingPricedReport: missingPricedReportData,
         validationOverrides: validationOverrides,
         overrideMap: overrideMap
       });
@@ -2392,6 +2399,7 @@ const ProductionTracker = ({
           billingAnalytics: billingResult,
           validationReport: validationReportData,
           missingPropertiesReport: missingPropertiesReportData,
+          missingPricedReport: missingPricedReportData,
           validationOverrides: freshOverrides,
           overrideMap: freshOverrideMap,
           totalValidationOverrides: freshOverrides.length,
