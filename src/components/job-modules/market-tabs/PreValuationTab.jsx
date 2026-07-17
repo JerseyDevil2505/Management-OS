@@ -3172,7 +3172,7 @@ const analyzeImportFile = async (file) => {
         // Handle card/bldg based on vendor
         let card;
         if (vendorType === 'Microsystems') {
-          card = (row.Bldg || row.BLDG)?.toString().trim() || 'NONE';
+          card = (row.Card || row.CARD || row.Bldg || row.BLDG)?.toString().trim() || 'NONE';
         } else { // BRT
           card = (row.Card || row.CARD)?.toString().trim() || 'NONE';
         }

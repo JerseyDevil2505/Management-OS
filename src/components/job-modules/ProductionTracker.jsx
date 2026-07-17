@@ -43,7 +43,8 @@ const ProductionTracker = ({
   const [commercialCounts, setCommercialCounts] = useState({
     total: 0,
     inspected: 0,
-    priced: 0
+    priced: 0,
+    entry: 0
   });
 
   // Commercial counts state tracking
@@ -150,6 +151,23 @@ const ProductionTracker = ({
     const currentVendor = jobData.vendor_type;
     let priced = 0;
 
+    // Vendor-specific commercial entry:
+    // BRT uses the manager's InfoBy entry config; Microsystems uses a valid list_by
+    // (inspected-by) that resolves to an internal or external inspector, because the
+    // entry code is overwritten when a commercial record is priced.
+    const entryCodes = infoByCategoryConfig.entry || [];
+    let entry = 0;
+    if (currentVendor === 'Microsystems') {
+      entry = commercialProps.filter(d => {
+        const lb = (d.list_by || '').trim();
+        return lb !== '' && !!employeeData[lb];
+      }).length;
+    } else {
+      entry = commercialProps.filter(d =>
+        d.info_by_code && entryCodes.includes(d.info_by_code)
+      ).length;
+    }
+
     if (currentVendor === 'BRT') {
       // BRT: Check for price_by and price_date fields
       priced = commercialProps.filter(d =>
@@ -164,7 +182,8 @@ const ProductionTracker = ({
         setCommercialCounts({
           total: commercialProps.length,
           inspected: inspected,
-          priced: 0  // Will be recalculated when config loads
+          priced: 0,  // Will be recalculated when config loads
+          entry: entry
         });
         return;
       }
@@ -177,7 +196,8 @@ const ProductionTracker = ({
     setCommercialCounts({
       total: commercialProps.length,
       inspected: inspected,
-      priced: priced
+      priced: priced,
+      entry: entry
     });
 
   };
@@ -531,6 +551,7 @@ const ProductionTracker = ({
       billingAnalytics,
       validationReport,
       missingPropertiesReport,
+      missingPricedReport,
       validationOverrides,
       overrideMap
     };
@@ -561,6 +582,7 @@ const ProductionTracker = ({
         billingAnalytics: analyticsToSave.billingAnalytics,
         validationReport: analyticsToSave.validationReport,
         missingPropertiesReport: analyticsToSave.missingPropertiesReport,
+        missingPricedReport: analyticsToSave.missingPricedReport,
         validationOverrides: analyticsToSave.validationOverrides,
         overrideMap: analyticsToSave.overrideMap,
         lastProcessed: new Date().toISOString(),
@@ -644,12 +666,16 @@ const ProductionTracker = ({
           setCommercialCounts({
             total: loadedAnalytics.totalCommercialProperties,
             inspected: loadedAnalytics.commercialInspections || 0,
-            priced: loadedAnalytics.commercialPricing || 0
+            priced: loadedAnalytics.commercialPricing || 0,
+            entry: loadedAnalytics.commercialEntry || 0
           });
         }
 
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
+        }
+        if (job.workflow_stats.missingPricedReport) {
+          setMissingPricedReport(job.workflow_stats.missingPricedReport);
         }
         // Always use fresh overrides from DB (queried above on lines 596-601)
         // instead of stale persisted ones — overrides may have been added/removed
@@ -1021,7 +1047,7 @@ const ProductionTracker = ({
     setAnalytics(null);
     setBillingAnalytics(null);
     setValidationReport(null);
-    setCommercialCounts({ total: 0, inspected: 0, priced: 0 });
+    setCommercialCounts({ total: 0, inspected: 0, priced: 0, entry: 0 });
     setMissingPropertiesReport(null);
     setMissingPricedReport(null);
     setValidationOverrides([]);
@@ -1223,7 +1249,7 @@ const ProductionTracker = ({
       // Initialize class counters - Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
       allClasses.forEach(cls => {
-        classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0 };
+        classBreakdown[cls] = { total: 0, inspected: 0, entry: 0, refusal: 0, priced: 0, commercialEntry: 0 };
         billingByClass[cls] = { total: 0, inspected: 0, billable: 0 };
         mainCardsPriced[cls] = 0; // NEW: Only count priced main cards
       });
@@ -1561,8 +1587,8 @@ const ProductionTracker = ({
         
         // Check for list_by with invalid employee or invalid date
         if (listByValue && listByValue.trim() !== '') {
-          // Check if list_by is valid employee
-          if (!employeeData[listByValue]) {
+          // Check if list_by is valid employee or external inspector
+          if (!employeeData[listByValue] && !externalInspectors.includes(listByValue.trim())) {
             addValidationIssue(`Invalid list_by employee: ${listByValue}`);
           }
           // Check for missing or old date
@@ -1621,8 +1647,8 @@ const ProductionTracker = ({
           
           // Check for price_by with invalid employee or invalid date
           if (priceByValue && priceByValue.trim() !== '') {
-            // Check if price_by is valid employee
-            if (!employeeData[priceByValue]) {
+            // Check if price_by is valid employee or external inspector
+            if (!employeeData[priceByValue] && !externalInspectors.includes(priceByValue.trim())) {
               addValidationIssue(`Invalid price_by employee: ${priceByValue}`);
             }
             // Check for missing or old date
@@ -1699,6 +1725,21 @@ const ProductionTracker = ({
           if (isCommercialProperty) {
             inspectorStats[inspector].commercialInspected++;
             inspectorStats[inspector].commercialWorkDays.add(workDayString);
+
+            // Commercial entry rate - vendor-specific:
+            // BRT uses the manager's InfoBy entry config; Microsystems uses a valid
+            // list_by (inspected-by) because the entry code is overwritten when priced.
+            let hasCommercialEntry;
+            if (actualVendor === 'Microsystems') {
+              const listBy = (record.inspection_list_by || '').trim();
+              hasCommercialEntry = listBy !== '' &&
+                (!!employeeData[listBy] || externalInspectors.includes(listBy));
+            } else {
+              hasCommercialEntry = isEntryCode;
+            }
+            if (hasCommercialEntry && classBreakdown[propertyClass]) {
+              classBreakdown[propertyClass].commercialEntry++;
+            }
           }
 
           // Pricing logic with vendor detection
@@ -2041,6 +2082,7 @@ const ProductionTracker = ({
       // FIX: Use classBreakdown for commercial pricing (fresh data from processing loop)
       // NOT commercialCounts.priced which uses stale inspectionData prop
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+      const totalCommercialEntry = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.commercialEntry || 0), 0);
 
       const validationReportData = {
         summary: {
@@ -2130,8 +2172,10 @@ const ProductionTracker = ({
         // Commercial metrics using class breakdown for accuracy
         commercialInspections: totalCommercialInspected,
         commercialPricing: totalCommercialPriced,
+        commercialEntry: totalCommercialEntry,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
+        commercialEntryRate: totalCommercialProperties > 0 ? Math.round((totalCommercialEntry / totalCommercialProperties) * 100) : 0,
         pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
 
         // Track overrides applied during processing
@@ -2206,7 +2250,7 @@ const ProductionTracker = ({
         hasAssignments: jobData.has_property_assignments
       });
 
-      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData };
+      return { analyticsResult, billingResult, validationReportData, missingPropertiesReportData, missingPricedReportData };
 
     } catch (error) {
       console.error('Error processing analytics:', error);
@@ -2337,10 +2381,11 @@ const ProductionTracker = ({
       }
 
       // Use the actual results data
-      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData } = results;
-      
+      const { analyticsResult, billingResult, validationReportData, missingPropertiesReportData, missingPricedReportData } = results;
+
       // Set the fresh missing properties report in state
       setMissingPropertiesReport(missingPropertiesReportData);
+      setMissingPricedReport(missingPricedReportData);
 
       // Save with complete data structure
       await saveCategoriesToDatabase(infoByCategoryConfig, {
@@ -2348,6 +2393,7 @@ const ProductionTracker = ({
         billingAnalytics: billingResult,
         validationReport: validationReportData,
         missingPropertiesReport: missingPropertiesReportData,
+        missingPricedReport: missingPricedReportData,
         validationOverrides: validationOverrides,
         overrideMap: overrideMap
       });
@@ -2392,6 +2438,7 @@ const ProductionTracker = ({
           billingAnalytics: billingResult,
           validationReport: validationReportData,
           missingPropertiesReport: missingPropertiesReportData,
+          missingPricedReport: missingPricedReportData,
           validationOverrides: freshOverrides,
           overrideMap: freshOverrideMap,
           totalValidationOverrides: freshOverrides.length,
@@ -2408,7 +2455,8 @@ const ProductionTracker = ({
       setCommercialCounts({
         total: analyticsResult.totalCommercialProperties,
         inspected: analyticsResult.commercialInspections,
-        priced: analyticsResult.commercialPricing
+        priced: analyticsResult.commercialPricing,
+        entry: analyticsResult.commercialEntry
       });
 
       setProcessed(true);
@@ -3047,7 +3095,7 @@ const exportMissingPropertiesReport = () => {
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Job Entry Rate</p>
+                  <p className="text-sm text-gray-600">Residential Entry Rate</p>
                   <p className="text-2xl font-bold text-green-600">{analytics.jobEntryRate || 0}%</p>
                 </div>
                 <Users className="w-8 h-8 text-green-500" />
@@ -3068,7 +3116,7 @@ const exportMissingPropertiesReport = () => {
 
         {/* Commercial metrics */}
         {(analytics || commercialCounts.total > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -3084,7 +3132,23 @@ const exportMissingPropertiesReport = () => {
                 <Factory className="w-8 h-8 text-blue-500" />
               </div>
             </div>
-            
+
+            <div className="bg-white p-4 rounded-lg border shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Commercial Entry Rate</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {commercialCounts.total > 0 ?
+                      Math.round(((commercialCounts.entry || 0) / commercialCounts.total) * 100) : 0}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {`${(commercialCounts.entry || 0).toLocaleString()} of ${commercialCounts.total.toLocaleString()} properties`}
+                  </p>
+                </div>
+                <Users className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
