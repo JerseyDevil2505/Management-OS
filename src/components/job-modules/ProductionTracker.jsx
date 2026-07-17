@@ -1566,8 +1566,8 @@ const ProductionTracker = ({
         
         // Check for list_by with invalid employee or invalid date
         if (listByValue && listByValue.trim() !== '') {
-          // Check if list_by is valid employee
-          if (!employeeData[listByValue]) {
+          // Check if list_by is valid employee or external inspector
+          if (!employeeData[listByValue] && !externalInspectors.includes(listByValue.trim())) {
             addValidationIssue(`Invalid list_by employee: ${listByValue}`);
           }
           // Check for missing or old date
@@ -1626,8 +1626,8 @@ const ProductionTracker = ({
           
           // Check for price_by with invalid employee or invalid date
           if (priceByValue && priceByValue.trim() !== '') {
-            // Check if price_by is valid employee
-            if (!employeeData[priceByValue]) {
+            // Check if price_by is valid employee or external inspector
+            if (!employeeData[priceByValue] && !externalInspectors.includes(priceByValue.trim())) {
               addValidationIssue(`Invalid price_by employee: ${priceByValue}`);
             }
             // Check for missing or old date
