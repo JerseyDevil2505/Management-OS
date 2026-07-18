@@ -2898,29 +2898,31 @@ export async function generateLotSizesForJob(jobId) {
       newVcs = p.property_market_analysis?.new_vcs;
     }
 
-    const rawVcs = newVcs || p.property_vcs;
-    let vcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
-
-    // Try to resolve VCS name to numeric key
-    let mapForVcs = null;
-
-    // Direct numeric match
-    if (vcs && mappings[vcs]) {
-      mapForVcs = mappings[vcs];
-    }
-    // VCS name lookup
-    else if (vcs && vcsNameToKey.has(vcs)) {
-      const numericKey = vcsNameToKey.get(vcs);
-      if (mappings[numericKey]) {
-        mapForVcs = mappings[numericKey];
+    // Resolve a raw VCS value to its unit-rate mapping (direct numeric key or VCS name lookup)
+    const resolveVcsMapping = (rawValue) => {
+      if (!rawValue) return null;
+      const norm = String(rawValue).trim().replace(/^0+/, '');
+      if (!norm) return null;
+      if (mappings[norm]) return { vcs: norm, map: mappings[norm] };
+      if (vcsNameToKey.has(norm)) {
+        const numericKey = vcsNameToKey.get(norm);
+        if (mappings[numericKey]) return { vcs: norm, map: mappings[numericKey] };
       }
-    }
+      return null;
+    };
 
-    if (!mapForVcs) {
+    // New VCS always takes priority; fall back to original property VCS when the
+    // new one hasn't been staged/configured yet (reval codes not in code definitions).
+    const resolved = resolveVcsMapping(newVcs) || resolveVcsMapping(p.property_vcs);
+
+    if (!resolved) {
       diagnostics.skipped++;
       diagnostics.noVcsMapping++;
       continue; // Skip if no mapping found
     }
+
+    const vcs = resolved.vcs;
+    const mapForVcs = resolved.map;
 
     let totalAcres = 0;
     let totalSf = 0;
