@@ -27,6 +27,25 @@ const mergeFill = (v) =>
 const classFill = (cls) =>
   cls === '4A' ? 'BDD7EE' : cls === '4B' ? 'C6EFCE' : cls === '4C' ? 'FFEB9C' : 'FFFFFF';
 
+// Canonical type/use labels from the Type/Use Mapper (STANDARD_TARGETS). Used as a
+// fallback when the town's parsed code file doesn't define a code (e.g. 60/6 = Condo).
+const STANDARD_TYPE_LABELS = {
+  BRT: {
+    '00': 'Vacant / Other', '10': 'Single Family', '20': 'Semi-Detached',
+    '30': 'Row/Townhouse', '31': 'End Row', '42': 'MultiFamily Duplex',
+    '43': 'MultiFamily Triplex', '44': 'MultiFamily Quad+',
+    '51': 'Conversion 2-Fam', '52': 'Conversion 3-Fam', '53': 'Conversion 4-Fam',
+    '60': 'Condo',
+  },
+  Microsystems: {
+    '1': 'Single Family', '2': 'Semi-Detached', '3E': 'End Row',
+    '3I': 'Row/Townhouse (Interior)', '42': 'MultiFamily Duplex',
+    '43': 'MultiFamily Triplex', '44': 'MultiFamily Quad+', '6': 'Condo',
+  },
+};
+const standardTypeLabel = (code, vt) =>
+  (STANDARD_TYPE_LABELS[vt] || {})[(code || '').toString().trim()] || null;
+
 // Detect a single-family type from the town's own decoded label (or common raw codes),
 // so tier/outlier math doesn't depend on a hardcoded vendor code map.
 const isSFType = (label, code) => {
@@ -124,7 +143,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           codeDefinitions && vendorType
             ? interpretCodes.getTypeName(p, codeDefinitions, vendorType)
             : null;
-        codeToType[raw] = decoded || raw;
+        codeToType[raw] = decoded || standardTypeLabel(raw, vendorType) || raw;
       }
     }
     // --- Class 2 residential ---
@@ -628,12 +647,16 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
                     </td>
                   )}
                   {idx === 0 && (
-                    <td rowSpan={row.types.length} className="px-2 py-1.5 border-l">
+                    <td
+                      rowSpan={row.types.length}
+                      className="px-2 py-1.5 border-l text-center"
+                      style={{ backgroundColor: mc.bg, color: mc.fg }}
+                    >
+                      <div className="text-sm font-bold mb-1">{mergeVal}</div>
                       <select
                         value={mergeVal}
                         onChange={(e) => setOverride(row.vcs, 'merge', e.target.value)}
                         className="text-xs font-semibold rounded px-1 py-1 border"
-                        style={{ backgroundColor: mc.bg, color: mc.fg }}
                       >
                         {MERGE_OPTIONS.map((o) => (
                           <option key={o} value={o}>
