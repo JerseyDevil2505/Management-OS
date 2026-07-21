@@ -3091,6 +3091,12 @@ const processSelectedProperties = async () => {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
+
+          // Column G (Improvement) - currency, no decimals ($1,234)
+          if (C === 6 && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '$#,##0';
+          }
         }
       }
     }
