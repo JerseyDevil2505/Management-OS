@@ -135,13 +135,16 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     }
 
     // Map raw type/use code -> decoded label, also per-town via interpretCodes.
+    // Decode from the town's original (unmapped) code so the town's own table
+    // definition is used (e.g. 60 = Condo), not the app-normalized code (6).
     const codeToType = {};
     for (const p of props) {
-      const raw = (p.asset_type_use || '').toString().trim();
+      const raw = (p.asset_type_use_raw || p.asset_type_use || '').toString().trim();
       if (raw && !(raw in codeToType)) {
+        const probe = { ...p, asset_type_use: raw };
         const decoded =
           codeDefinitions && vendorType
-            ? interpretCodes.getTypeName(p, codeDefinitions, vendorType)
+            ? interpretCodes.getTypeName(probe, codeDefinitions, vendorType)
             : null;
         codeToType[raw] = decoded || standardTypeLabel(raw, vendorType) || raw;
       }
@@ -175,10 +178,11 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         ? Math.round((streetEntries[0][1] / parcels.length) * 100)
         : 0;
 
-      // per-type breakdown, grouped by the town's own raw type/use code
+      // per-type breakdown, grouped by the town's own original (unmapped) code
       const typeMap = new Map();
       for (const p of parcels) {
-        const code = (p.asset_type_use || '').toString().trim() || 'Unknown';
+        const code =
+          (p.asset_type_use_raw || p.asset_type_use || '').toString().trim() || 'Unknown';
         if (!typeMap.has(code)) typeMap.set(code, []);
         typeMap.get(code).push(p);
       }
@@ -232,8 +236,10 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           avgNormTime: avg(normTimes),
           avgNormSize: avg(normSizes),
           avgSfla: avg(sflas),
+          sflaGap: sflas.length ? Math.max(...sflas) - Math.min(...sflas) : null,
           yrMin: years.length ? Math.min(...years) : null,
           yrMax: years.length ? Math.max(...years) : null,
+          ageGap: years.length ? Math.max(...years) - Math.min(...years) : null,
           styleMix,
         });
       }
@@ -247,7 +253,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       // SF-only norm size (for tier/outlier detection), using town-decoded labels
       const sfNormSizes = parcels
         .filter((p) => {
-          const code = (p.asset_type_use || '').toString().trim();
+          const code = (p.asset_type_use_raw || p.asset_type_use || '').toString().trim();
           return isSFType(codeToType[code], code);
         })
         .map((p) => Number(p.values_norm_size))
@@ -293,7 +299,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       const typeSet = [
         ...new Set(
           cp.map((p) => {
-            const code = (p.asset_type_use || '').toString().trim();
+            const code = (p.asset_type_use_raw || p.asset_type_use || '').toString().trim();
             const nm = codeToType[code];
             return nm && nm !== code ? code + ' — ' + nm : code || 'Unknown';
           })
@@ -405,14 +411,17 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       'Norm Time',
       'Norm Size',
       'Avg SFLA',
+      'SFLA Gap',
       'Yr Min',
       'Yr Max',
+      'Age Gap',
       'Style/Mix',
       'Commentary',
       'Merge?',
     ];
     const resAoa = [resHeaders];
     const resMerges = [];
+    const rowFills = []; // fill hex per data row, for whole-row coloring
     let r = 1;
     for (const row of residential) {
       const { suggested, autoCommentary } = enrichVcs(row);
@@ -430,44 +439,52 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           t.avgNormTime ? Math.round(t.avgNormTime) : '',
           t.avgNormSize ? Math.round(t.avgNormSize) : '',
           t.avgSfla ? Math.round(t.avgSfla) : '',
+          t.sflaGap != null ? Math.round(t.sflaGap) : '',
           t.yrMin || '',
           t.yrMax || '',
+          t.ageGap != null ? t.ageGap : '',
           t.styleMix,
           idx === 0 ? commentary : '',
           idx === 0 ? mergeVal : '',
         ]);
+        rowFills.push(mergeFill(mergeVal));
         r++;
       }
       const endRow = r - 1;
       if (endRow > startRow) {
         // merge VCS / Commentary / Merge? cells across the type rows
         resMerges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
-        resMerges.push({ s: { r: startRow, c: 10 }, e: { r: endRow, c: 10 } });
-        resMerges.push({ s: { r: startRow, c: 11 }, e: { r: endRow, c: 11 } });
+        resMerges.push({ s: { r: startRow, c: 12 }, e: { r: endRow, c: 12 } });
+        resMerges.push({ s: { r: startRow, c: 13 }, e: { r: endRow, c: 13 } });
       }
     }
     const resWs = XLSX.utils.aoa_to_sheet(resAoa);
     resWs['!merges'] = resMerges;
     resWs['!cols'] = [
       { wch: 8 }, { wch: 22 }, { wch: 8 }, { wch: 11 }, { wch: 11 },
-      { wch: 11 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 22 },
-      { wch: 40 }, { wch: 9 },
+      { wch: 11 }, { wch: 10 }, { wch: 9 }, { wch: 8 }, { wch: 8 },
+      { wch: 8 }, { wch: 22 }, { wch: 40 }, { wch: 9 },
     ];
-    // style header row + Merge? cells
+    // style header row
     for (let c = 0; c < resHeaders.length; c++) {
       const addr = XLSX.utils.encode_cell({ r: 0, c });
       if (resWs[addr]) resWs[addr].s = headerStyle;
     }
+    // color the whole row by its Merge? recommendation so export matches the UI
     for (let i = 1; i < resAoa.length; i++) {
-      const mv = resAoa[i][11];
-      if (mv) {
-        const addr = XLSX.utils.encode_cell({ r: i, c: 11 });
-        if (resWs[addr])
-          resWs[addr].s = {
-            fill: { fgColor: { rgb: mergeFill(mv) } },
-            alignment: { horizontal: 'center', vertical: 'center' },
-            font: { bold: true },
-          };
+      const fill = rowFills[i - 1];
+      if (!fill) continue;
+      for (let c = 0; c < resHeaders.length; c++) {
+        const addr = XLSX.utils.encode_cell({ r: i, c });
+        if (!resWs[addr]) continue;
+        resWs[addr].s = {
+          fill: { fgColor: { rgb: fill } },
+          alignment:
+            c === 13
+              ? { horizontal: 'center', vertical: 'center' }
+              : { vertical: 'center' },
+          font: c === 13 ? { bold: true } : undefined,
+        };
       }
     }
     XLSX.utils.book_append_sheet(wb, resWs, 'Class 2 Residential');
@@ -598,7 +615,8 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
             <tr>
               {[
                 'VCS', 'Type', 'Parcels', 'Usable Sales', 'Norm Time', 'Norm Size',
-                'Avg SFLA', 'Yr Min', 'Yr Max', 'Style/Mix', 'Commentary', 'Merge?',
+                'Avg SFLA', 'SFLA Gap', 'Yr Min', 'Yr Max', 'Age Gap', 'Style/Mix',
+                'Commentary', 'Merge?',
               ].map((h) => (
                 <th key={h} className="px-2 py-2 text-left font-semibold whitespace-nowrap">
                   {h}
@@ -615,7 +633,11 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
               const commentaryVal =
                 ov.commentary != null ? ov.commentary : autoCommentary;
               return row.types.map((t, idx) => (
-                <tr key={`${row.vcs}-${t.typeLabel}`} className="border-t align-top">
+                <tr
+                  key={`${row.vcs}-${t.typeLabel}`}
+                  className="border-t align-top"
+                  style={{ backgroundColor: mc.bg }}
+                >
                   {idx === 0 && (
                     <td
                       rowSpan={row.types.length}
@@ -630,8 +652,10 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
                   <td className="px-2 py-1.5 text-right">{fmtMoney(t.avgNormTime)}</td>
                   <td className="px-2 py-1.5 text-right">{fmtMoney(t.avgNormSize)}</td>
                   <td className="px-2 py-1.5 text-right">{fmtNum(t.avgSfla)}</td>
+                  <td className="px-2 py-1.5 text-right">{fmtNum(t.sflaGap)}</td>
                   <td className="px-2 py-1.5 text-right">{t.yrMin || '—'}</td>
                   <td className="px-2 py-1.5 text-right">{t.yrMax || '—'}</td>
+                  <td className="px-2 py-1.5 text-right">{t.ageGap != null ? t.ageGap : '—'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{t.styleMix}</td>
                   {idx === 0 && (
                     <td rowSpan={row.types.length} className="px-2 py-1.5 border-l">
@@ -650,9 +674,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
                     <td
                       rowSpan={row.types.length}
                       className="px-2 py-1.5 border-l text-center"
-                      style={{ backgroundColor: mc.bg, color: mc.fg }}
                     >
-                      <div className="text-sm font-bold mb-1">{mergeVal}</div>
                       <select
                         value={mergeVal}
                         onChange={(e) => setOverride(row.vcs, 'merge', e.target.value)}
@@ -676,7 +698,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
             })}
             {residential.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={14} className="px-4 py-6 text-center text-gray-400">
                   No Class 2 residential parcels found for this job.
                 </td>
               </tr>
