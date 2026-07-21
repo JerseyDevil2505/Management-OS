@@ -10,13 +10,15 @@ const EXCLUDED_VCS = new Set(['NOVC', 'FF01']);
 
 const MERGE_OPTIONS = ['Yes', 'No', 'Review'];
 
-// Merge? color legend: Yes = consolidate (red), No = keep (green), Review = check (yellow).
-const mergeClass = (v) =>
-  v === 'Yes'
-    ? 'bg-red-100 text-red-800'
-    : v === 'No'
-    ? 'bg-green-100 text-green-800'
-    : 'bg-yellow-100 text-yellow-800';
+// Merge? colors: Yes = consolidate (red), No = keep (green), Review = check (yellow).
+// Inline hex is used everywhere (not Tailwind utility classes) because the v2 CDN
+// build + native select styling make dynamic color classes unreliable.
+const MERGE_COLORS = {
+  Yes: { bg: '#FECACA', fg: '#991B1B' },
+  No: { bg: '#BBF7D0', fg: '#166534' },
+  Review: { bg: '#FEF9C3', fg: '#854D0E' },
+};
+const mergeColor = (v) => MERGE_COLORS[v] || MERGE_COLORS.Review;
 
 const mergeFill = (v) =>
   v === 'Yes' ? 'FFC7CE' : v === 'No' ? 'C6EFCE' : 'FFEB9C';
@@ -25,16 +27,12 @@ const mergeFill = (v) =>
 const classFill = (cls) =>
   cls === '4A' ? 'BDD7EE' : cls === '4B' ? 'C6EFCE' : cls === '4C' ? 'FFEB9C' : 'FFFFFF';
 
-// Group raw asset_type_use codes into the residential type buckets used in the guide.
-const typeLabel = (code) => {
+// Detect a single-family type from the town's own decoded label (or common raw codes),
+// so tier/outlier math doesn't depend on a hardcoded vendor code map.
+const isSFType = (label, code) => {
+  if ((label || '').toLowerCase().includes('single')) return true;
   const c = (code || '').toString().trim().toUpperCase();
-  if (['1', '10'].includes(c)) return 'SF';
-  if (['2', '20'].includes(c)) return 'Semi-Detached';
-  if (['3E', '31'].includes(c)) return 'Row/Townhome (End)';
-  if (['3I', '30'].includes(c)) return 'Row/Townhome (Interior)';
-  if (['42', '43', '44'].includes(c)) return 'Multifamily';
-  if (['6', '60'].includes(c)) return 'Condo';
-  return c ? `Other (${c})` : 'Unknown';
+  return c === '1' || c === '10';
 };
 
 const streetName = (loc) => {
@@ -109,13 +107,26 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     const props = properties || [];
     const vcsOf = (p) => (p.property_vcs || '').toString().trim();
 
-    // Map raw design code -> decoded label for predominant-style display.
+    // Map raw design code -> decoded label for predominant-style display,
+    // decoded per-town via interpretCodes (definitions vary by municipality).
     const codeToLabel = {};
     for (const p of props) {
       const raw = (p.asset_design_style || '').toString().trim();
       if (raw && !codeToLabel[raw]) codeToLabel[raw] = designName(p) || raw;
     }
 
+    // Map raw type/use code -> decoded label, also per-town via interpretCodes.
+    const codeToType = {};
+    for (const p of props) {
+      const raw = (p.asset_type_use || '').toString().trim();
+      if (raw && !(raw in codeToType)) {
+        const decoded =
+          codeDefinitions && vendorType
+            ? interpretCodes.getTypeName(p, codeDefinitions, vendorType)
+            : null;
+        codeToType[raw] = decoded || raw;
+      }
+    }
     // --- Class 2 residential ---
     const class2 = props.filter((p) => {
       const cls = (p.property_m4_class || '').toString().trim();
@@ -145,12 +156,12 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         ? Math.round((streetEntries[0][1] / parcels.length) * 100)
         : 0;
 
-      // per-type breakdown
+      // per-type breakdown, grouped by the town's own raw type/use code
       const typeMap = new Map();
       for (const p of parcels) {
-        const t = typeLabel(p.asset_type_use);
-        if (!typeMap.has(t)) typeMap.set(t, []);
-        typeMap.get(t).push(p);
+        const code = (p.asset_type_use || '').toString().trim() || 'Unknown';
+        if (!typeMap.has(code)) typeMap.set(code, []);
+        typeMap.get(code).push(p);
       }
 
       const types = [];
@@ -193,7 +204,10 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         }
 
         types.push({
-          typeLabel: tLabel,
+          typeLabel:
+            codeToType[tLabel] && codeToType[tLabel] !== tLabel
+              ? tLabel + ' — ' + codeToType[tLabel]
+              : tLabel || 'Unknown',
           parcels: tProps.length,
           usableSales: normTimes.length,
           avgNormTime: avg(normTimes),
@@ -211,9 +225,12 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         .filter((n) => n > 0);
       const vcsAvgNormSize = avg(allNormSizes);
 
-      // SF-only norm size (for tier/outlier detection)
+      // SF-only norm size (for tier/outlier detection), using town-decoded labels
       const sfNormSizes = parcels
-        .filter((p) => ['SF'].includes(typeLabel(p.asset_type_use)))
+        .filter((p) => {
+          const code = (p.asset_type_use || '').toString().trim();
+          return isSFType(codeToType[code], code);
+        })
         .map((p) => Number(p.values_norm_size))
         .filter((n) => n > 0);
       const sfAvgNormSize = avg(sfNormSizes);
@@ -254,7 +271,15 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     for (const { vcs, cls, props: cp } of commMap.values()) {
       const sflas = cp.map((p) => Number(p.asset_sfla)).filter((n) => n > 0);
       const years = cp.map((p) => parseInt(p.asset_year_built, 10)).filter((n) => n > 0);
-      const typeSet = [...new Set(cp.map((p) => typeLabel(p.asset_type_use)))];
+      const typeSet = [
+        ...new Set(
+          cp.map((p) => {
+            const code = (p.asset_type_use || '').toString().trim();
+            const nm = codeToType[code];
+            return nm && nm !== code ? code + ' — ' + nm : code || 'Unknown';
+          })
+        ),
+      ];
       commercial.push({
         vcs,
         cls,
@@ -270,7 +295,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     );
 
     return { residential, commercial, townMedianSF };
-  }, [properties, designName]);
+  }, [properties, designName, codeDefinitions, vendorType]);
 
   // ---- Heuristic suggestion + auto commentary ------------------------------
   const enrichVcs = useCallback(
@@ -519,13 +544,25 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-gray-600">
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-red-200" /> Yes — consolidate
+          <span
+            className="inline-block w-3 h-3 rounded"
+            style={{ backgroundColor: MERGE_COLORS.Yes.bg }}
+          />{' '}
+          Yes — consolidate
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-green-200" /> No — keep
+          <span
+            className="inline-block w-3 h-3 rounded"
+            style={{ backgroundColor: MERGE_COLORS.No.bg }}
+          />{' '}
+          No — keep
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-yellow-200" /> Review
+          <span
+            className="inline-block w-3 h-3 rounded"
+            style={{ backgroundColor: MERGE_COLORS.Review.bg }}
+          />{' '}
+          Review
         </span>
         <span className="ml-4">
           {residential.length} Class 2 VCS · {commercial.length} commercial rows
@@ -555,6 +592,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
               const { suggested, autoCommentary } = enrichVcs(row);
               const ov = overrides[row.vcs] || {};
               const mergeVal = ov.merge || suggested;
+              const mc = mergeColor(mergeVal);
               const commentaryVal =
                 ov.commentary != null ? ov.commentary : autoCommentary;
               return row.types.map((t, idx) => (
@@ -594,9 +632,8 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
                       <select
                         value={mergeVal}
                         onChange={(e) => setOverride(row.vcs, 'merge', e.target.value)}
-                        className={`text-xs font-semibold rounded px-1 py-1 border ${mergeClass(
-                          mergeVal
-                        )}`}
+                        className="text-xs font-semibold rounded px-1 py-1 border"
+                        style={{ backgroundColor: mc.bg, color: mc.fg }}
                       >
                         {MERGE_OPTIONS.map((o) => (
                           <option key={o} value={o}>
