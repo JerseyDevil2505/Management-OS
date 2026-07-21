@@ -982,7 +982,7 @@ const generateQCFormPDF = () => {
           validBuildingClasses = ['11','12','13','14','15','16','17','18','19','20','21','22','23'];
           break;
         case '2':  // Semi-Detached (20, 21, etc.)
-          validBuildingClasses = ['25','27','29','31'];
+          validBuildingClasses = ['27','28','29','30'];
           break;
         case '3':  // Row/Townhouse (30, 31, 3E, 3I, etc.)
           validBuildingClasses = ['33','35','37','39'];
