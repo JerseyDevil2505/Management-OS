@@ -3,6 +3,7 @@ import { supabase, interpretCodes, worksheetService, checklistService, runUnitRa
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import TypeUseNormalizationSubTab from './TypeUseNormalizationSubTab';
+import VcsAnalyzerSubTab from './VcsAnalyzerSubTab';
 import { 
   TrendingUp, 
   Download, 
@@ -3513,6 +3514,13 @@ const analyzeImportFile = async (file) => {
       Market Analysis
     </button>
     <button
+      onClick={() => setActiveSubTab('vcsAnalyzer')}
+      className={`mls-subtab-btn ${activeSubTab === 'vcsAnalyzer' ? 'mls-subtab-btn--active' : ''}`}
+      title="VCS consolidation guide — merge vs keep recommendations"
+    >
+      VCS Analyzer
+    </button>
+    <button
       onClick={() => setActiveSubTab('unitRates')}
       disabled={vendorType !== 'BRT'}
       title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
@@ -3541,6 +3549,16 @@ const analyzeImportFile = async (file) => {
           properties={properties}
           vendorType={vendorType}
           onSaved={() => { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData?.id, { forceRefresh: true }); }}
+        />
+      )}
+
+      {/* VCS Analyzer Tab Content */}
+      {activeSubTab === 'vcsAnalyzer' && (
+        <VcsAnalyzerSubTab
+          jobData={jobData}
+          properties={properties}
+          vendorType={vendorType}
+          codeDefinitions={codeDefinitions}
         />
       )}
 
