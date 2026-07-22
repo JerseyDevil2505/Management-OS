@@ -3,6 +3,7 @@ import { supabase, interpretCodes, worksheetService, checklistService, runUnitRa
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import TypeUseNormalizationSubTab from './TypeUseNormalizationSubTab';
+import VcsAnalyzerSubTab from './VcsAnalyzerSubTab';
 import { 
   TrendingUp, 
   Download, 
@@ -1362,6 +1363,8 @@ useEffect(() => {
           ...parsed,
           property_location: prop.property_location,
           property_class: prop.property_m4_class,
+          values_mod_improvement: prop.values_mod_improvement,
+          property_facility: prop.property_facility,
           property_vcs: prop.property_vcs || prop.current_vcs || '',
           new_vcs: prop.new_vcs || '',
           location_analysis: prop.location_analysis || '',
@@ -3014,6 +3017,8 @@ const processSelectedProperties = async () => {
       'Card',
       'Property Location',
       'Class',
+      'Improvement',
+      'Facility',
       'Current VCS',
       'Building',
       'Type/Use',
@@ -3036,6 +3041,8 @@ const processSelectedProperties = async () => {
       prop.card || '',
       prop.property_location || '',
       prop.property_class || '',
+      prop.values_mod_improvement || '',
+      prop.property_facility || '',
       prop.property_vcs || '',
       prop.building_class_display || '',
       prop.type_use_display || '',
@@ -3085,6 +3092,12 @@ const processSelectedProperties = async () => {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
+
+          // Column G (Improvement) - currency, no decimals ($1,234)
+          if (C === 6 && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '$#,##0';
+          }
         }
       }
     }
@@ -3097,6 +3110,8 @@ const processSelectedProperties = async () => {
       { wch: 8 },   // Card
       { wch: 30 },  // Property Location
       { wch: 10 },  // Class
+      { wch: 14 },  // Improvement
+      { wch: 12 },  // Facility
       { wch: 12 },  // Current VCS
       { wch: 15 },  // Building
       { wch: 15 },  // Type/Use
@@ -3499,6 +3514,13 @@ const analyzeImportFile = async (file) => {
       Market Analysis
     </button>
     <button
+      onClick={() => setActiveSubTab('vcsAnalyzer')}
+      className={`mls-subtab-btn ${activeSubTab === 'vcsAnalyzer' ? 'mls-subtab-btn--active' : ''}`}
+      title="VCS consolidation guide — merge vs keep recommendations"
+    >
+      VCS Analyzer
+    </button>
+    <button
       onClick={() => setActiveSubTab('unitRates')}
       disabled={vendorType !== 'BRT'}
       title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
@@ -3527,6 +3549,16 @@ const analyzeImportFile = async (file) => {
           properties={properties}
           vendorType={vendorType}
           onSaved={() => { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData?.id, { forceRefresh: true }); }}
+        />
+      )}
+
+      {/* VCS Analyzer Tab Content */}
+      {activeSubTab === 'vcsAnalyzer' && (
+        <VcsAnalyzerSubTab
+          jobData={jobData}
+          properties={properties}
+          vendorType={vendorType}
+          codeDefinitions={codeDefinitions}
         />
       )}
 
