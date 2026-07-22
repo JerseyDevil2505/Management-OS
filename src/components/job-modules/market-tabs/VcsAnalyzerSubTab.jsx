@@ -10,23 +10,6 @@ const EXCLUDED_VCS = new Set(['NOVC', 'FF01']);
 
 const MERGE_OPTIONS = ['Yes', 'No', 'Review'];
 
-// Merge? colors: Yes = consolidate (red), No = keep (green), Review = check (yellow).
-// Inline hex is used everywhere (not Tailwind utility classes) because the v2 CDN
-// build + native select styling make dynamic color classes unreliable.
-const MERGE_COLORS = {
-  Yes: { bg: '#FECACA', fg: '#991B1B' },
-  No: { bg: '#BBF7D0', fg: '#166534' },
-  Review: { bg: '#FEF9C3', fg: '#854D0E' },
-};
-const mergeColor = (v) => MERGE_COLORS[v] || MERGE_COLORS.Review;
-
-const mergeFill = (v) =>
-  v === 'Yes' ? 'FFC7CE' : v === 'No' ? 'C6EFCE' : 'FFEB9C';
-
-// Commercial class colors: blue=4A, green=4B, yellow=4C.
-const classFill = (cls) =>
-  cls === '4A' ? 'BDD7EE' : cls === '4B' ? 'C6EFCE' : cls === '4C' ? 'FFEB9C' : 'FFFFFF';
-
 // Canonical type/use labels from the Type/Use Mapper (STANDARD_TARGETS). Used as a
 // fallback when the town's parsed code file doesn't define a code (e.g. 60/6 = Condo).
 const STANDARD_TYPE_LABELS = {
@@ -279,45 +262,68 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       residential.map((r) => r.sfAvgNormSize).filter((n) => n > 0)
     );
 
-    // --- Commercial 4A/4B/4C ---
-    const commClasses = new Set(['4A', '4B', '4C']);
-    const comm = props.filter((p) =>
-      commClasses.has((p.property_m4_class || '').toString().trim().toUpperCase())
+    // --- Commercial 4A/4B/4C, one row per VCS ---
+    // Main concern: is a commercial VCS standalone (only 4A/4B/4C, plus exempt
+    // and vacant parcels are OK) or does it have residential mixed in?
+    const classOf = (p) => (p.property_m4_class || '').toString().trim().toUpperCase();
+    const isCommercial = (c) => c === '4A' || c === '4B' || c === '4C';
+
+    const commVcsSet = new Set(
+      props.filter((p) => isCommercial(classOf(p))).map((p) => vcsOf(p) || 'NOVC')
     );
-    const commMap = new Map();
-    for (const p of comm) {
-      const vcs = vcsOf(p) || 'NOVC';
-      const cls = (p.property_m4_class || '').toString().trim().toUpperCase();
-      const key = `${vcs}||${cls}`;
-      if (!commMap.has(key)) commMap.set(key, { vcs, cls, props: [] });
-      commMap.get(key).props.push(p);
-    }
+
     const commercial = [];
-    for (const { vcs, cls, props: cp } of commMap.values()) {
-      const sflas = cp.map((p) => Number(p.asset_sfla)).filter((n) => n > 0);
-      const years = cp.map((p) => parseInt(p.asset_year_built, 10)).filter((n) => n > 0);
-      const typeSet = [
-        ...new Set(
-          cp.map((p) => {
-            const code = (p.asset_type_use_raw || p.asset_type_use || '').toString().trim();
-            const nm = codeToType[code];
-            return nm && nm !== code ? code + ' — ' + nm : code || 'Unknown';
-          })
-        ),
-      ];
-      commercial.push({
+    for (const vcs of commVcsSet) {
+      const inVcs = props.filter((p) => (vcsOf(p) || 'NOVC') === vcs);
+      const commParcels = inVcs.filter((p) => isCommercial(classOf(p)));
+
+      const clsCounts = {};
+      for (const p of commParcels) {
+        const c = classOf(p);
+        clsCounts[c] = (clsCounts[c] || 0) + 1;
+      }
+      const classesLabel = Object.entries(clsCounts)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([c, n]) => `${c} (${n})`)
+        .join(', ');
+
+      // composition of everything else in the VCS
+      let residentialN = 0;
+      let vacantN = 0;
+      let exemptN = 0;
+      let otherN = 0;
+      for (const p of inVcs) {
+        const c = classOf(p);
+        if (isCommercial(c)) continue;
+        if (c === '2' || c.startsWith('3')) residentialN++;
+        else if (c === '1') vacantN++;
+        else if (c.startsWith('15') || c === '5A' || c === '5B') exemptN++;
+        else otherN++;
+      }
+      let composition = residentialN > 0 ? `Mixed — residential ${residentialN}` : 'Standalone';
+      const extras = [];
+      if (vacantN) extras.push(`vacant ${vacantN}`);
+      if (exemptN) extras.push(`exempt ${exemptN}`);
+      if (otherN) extras.push(`other ${otherN}`);
+      if (extras.length) composition += ` (${extras.join(', ')})`;
+
+      const sflas = commParcels.map((p) => Number(p.asset_sfla)).filter((n) => n > 0);
+      const years = commParcels
+        .map((p) => parseInt(p.asset_year_built, 10))
+        .filter((n) => n > 0);
+
+      const rec = {
         vcs,
-        cls,
-        type: typeSet.join(', '),
-        parcels: cp.length,
+        classes: classesLabel,
+        parcels: commParcels.length,
         avgSfla: avg(sflas),
-        yrMin: years.length ? Math.min(...years) : null,
-        yrMax: years.length ? Math.max(...years) : null,
-      });
+        avgYear: years.length ? Math.round(avg(years)) : null,
+        composition,
+        standalone: residentialN === 0,
+      };
+      commercial.push(rec);
     }
-    commercial.sort(
-      (a, b) => a.vcs.localeCompare(b.vcs) || a.cls.localeCompare(b.cls)
-    );
+    commercial.sort((a, b) => a.vcs.localeCompare(b.vcs));
 
     return { residential, commercial, townMedianSF };
   }, [properties, designName, codeDefinitions, vendorType]);
@@ -421,7 +427,6 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     ];
     const resAoa = [resHeaders];
     const resMerges = [];
-    const rowFills = []; // fill hex per data row, for whole-row coloring
     let r = 1;
     for (const row of residential) {
       const { suggested, autoCommentary } = enrichVcs(row);
@@ -447,7 +452,6 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           idx === 0 ? commentary : '',
           idx === 0 ? mergeVal : '',
         ]);
-        rowFills.push(mergeFill(mergeVal));
         r++;
       }
       const endRow = r - 1;
@@ -465,66 +469,38 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       { wch: 11 }, { wch: 10 }, { wch: 9 }, { wch: 8 }, { wch: 8 },
       { wch: 8 }, { wch: 22 }, { wch: 40 }, { wch: 9 },
     ];
-    // style header row
+    // style header row only (no data-row coloring)
     for (let c = 0; c < resHeaders.length; c++) {
       const addr = XLSX.utils.encode_cell({ r: 0, c });
       if (resWs[addr]) resWs[addr].s = headerStyle;
     }
-    // color the whole row by its Merge? recommendation so export matches the UI
-    for (let i = 1; i < resAoa.length; i++) {
-      const fill = rowFills[i - 1];
-      if (!fill) continue;
-      for (let c = 0; c < resHeaders.length; c++) {
-        const addr = XLSX.utils.encode_cell({ r: i, c });
-        if (!resWs[addr]) continue;
-        resWs[addr].s = {
-          fill: { fgColor: { rgb: fill } },
-          alignment:
-            c === 13
-              ? { horizontal: 'center', vertical: 'center' }
-              : { vertical: 'center' },
-          font: c === 13 ? { bold: true } : undefined,
-        };
-      }
-    }
     XLSX.utils.book_append_sheet(wb, resWs, 'Class 2 Residential');
 
-    // Tab 2: Commercial 4A-4C
+    // Tab 2: Commercial 4A-4C (one row per VCS)
     const commHeaders = [
-      'VCS', 'Class', 'Type', 'Parcels', 'Avg SFLA', 'Yr Min', 'Yr Max', 'Commentary',
+      'VCS', 'Class(es)', 'Parcels', 'Avg SFLA', 'Avg Year', 'Standalone?', 'Commentary',
     ];
     const commAoa = [commHeaders];
     for (const row of commercial) {
-      const ov = overrides[`COMM::${row.vcs}::${row.cls}`] || {};
+      const ov = overrides[`COMM::${row.vcs}`] || {};
       commAoa.push([
         row.vcs,
-        row.cls,
-        row.type,
+        row.classes,
         row.parcels,
         row.avgSfla ? Math.round(row.avgSfla) : '',
-        row.yrMin || '',
-        row.yrMax || '',
+        row.avgYear || '',
+        row.composition,
         (ov.commentary || '').trim(),
       ]);
     }
     const commWs = XLSX.utils.aoa_to_sheet(commAoa);
     commWs['!cols'] = [
-      { wch: 8 }, { wch: 7 }, { wch: 20 }, { wch: 8 }, { wch: 10 },
-      { wch: 8 }, { wch: 8 }, { wch: 40 },
+      { wch: 8 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 9 },
+      { wch: 28 }, { wch: 40 },
     ];
     for (let c = 0; c < commHeaders.length; c++) {
       const addr = XLSX.utils.encode_cell({ r: 0, c });
       if (commWs[addr]) commWs[addr].s = headerStyle;
-    }
-    for (let i = 1; i < commAoa.length; i++) {
-      const cls = commAoa[i][1];
-      const addr = XLSX.utils.encode_cell({ r: i, c: 1 });
-      if (commWs[addr])
-        commWs[addr].s = {
-          fill: { fgColor: { rgb: classFill(cls) } },
-          alignment: { horizontal: 'center' },
-          font: { bold: true },
-        };
     }
     XLSX.utils.book_append_sheet(wb, commWs, 'Commercial 4A-4C');
 
@@ -577,32 +553,8 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-600">
-        <span className="flex items-center gap-1">
-          <span
-            className="inline-block w-3 h-3 rounded"
-            style={{ backgroundColor: MERGE_COLORS.Yes.bg }}
-          />{' '}
-          Yes — consolidate
-        </span>
-        <span className="flex items-center gap-1">
-          <span
-            className="inline-block w-3 h-3 rounded"
-            style={{ backgroundColor: MERGE_COLORS.No.bg }}
-          />{' '}
-          No — keep
-        </span>
-        <span className="flex items-center gap-1">
-          <span
-            className="inline-block w-3 h-3 rounded"
-            style={{ backgroundColor: MERGE_COLORS.Review.bg }}
-          />{' '}
-          Review
-        </span>
-        <span className="ml-4">
-          {residential.length} Class 2 VCS · {commercial.length} commercial rows
-        </span>
+      <div className="text-xs text-gray-600">
+        {residential.length} Class 2 VCS · {commercial.length} commercial VCS
       </div>
 
       {/* Class 2 Residential */}
@@ -629,14 +581,12 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
               const { suggested, autoCommentary } = enrichVcs(row);
               const ov = overrides[row.vcs] || {};
               const mergeVal = ov.merge || suggested;
-              const mc = mergeColor(mergeVal);
               const commentaryVal =
                 ov.commentary != null ? ov.commentary : autoCommentary;
               return row.types.map((t, idx) => (
                 <tr
                   key={`${row.vcs}-${t.typeLabel}`}
                   className="border-t align-top"
-                  style={{ backgroundColor: mc.bg }}
                 >
                   {idx === 0 && (
                     <td
@@ -715,7 +665,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         <table className="min-w-full text-xs">
           <thead className="bg-gray-100 text-gray-700">
             <tr>
-              {['VCS', 'Class', 'Type', 'Parcels', 'Avg SFLA', 'Yr Min', 'Yr Max', 'Commentary'].map(
+              {['VCS', 'Class(es)', 'Parcels', 'Avg SFLA', 'Avg Year', 'Standalone?', 'Commentary'].map(
                 (h) => (
                   <th key={h} className="px-2 py-2 text-left font-semibold whitespace-nowrap">
                     {h}
@@ -726,24 +676,20 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           </thead>
           <tbody>
             {commercial.map((row) => {
-              const key = `COMM::${row.vcs}::${row.cls}`;
+              const key = `COMM::${row.vcs}`;
               const ov = overrides[key] || {};
               return (
-                <tr key={key} className="border-t">
+                <tr key={key} className="border-t align-top">
                   <td className="px-2 py-1.5 font-semibold">{row.vcs}</td>
-                  <td className="px-2 py-1.5">
-                    <span
-                      className="px-1.5 py-0.5 rounded text-xs font-semibold"
-                      style={{ backgroundColor: `#${classFill(row.cls)}` }}
-                    >
-                      {row.cls}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">{row.type}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{row.classes}</td>
                   <td className="px-2 py-1.5 text-right">{row.parcels}</td>
                   <td className="px-2 py-1.5 text-right">{fmtNum(row.avgSfla)}</td>
-                  <td className="px-2 py-1.5 text-right">{row.yrMin || '—'}</td>
-                  <td className="px-2 py-1.5 text-right">{row.yrMax || '—'}</td>
+                  <td className="px-2 py-1.5 text-right">{row.avgYear || '—'}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <span className={row.standalone ? '' : 'font-semibold'}>
+                      {row.composition}
+                    </span>
+                  </td>
                   <td className="px-2 py-1.5">
                     <textarea
                       value={ov.commentary || ''}
@@ -758,7 +704,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
             })}
             {commercial.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                   No commercial 4A–4C parcels found for this job.
                 </td>
               </tr>
