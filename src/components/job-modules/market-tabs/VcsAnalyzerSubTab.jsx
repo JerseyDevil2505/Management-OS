@@ -209,6 +209,29 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           }
         }
 
+        // building class variability - raw numeric grade code + parcel count,
+        // dominant when one code covers >=80% (mirrors the Style/Mix pattern).
+        const classCounts = {};
+        for (const p of tProps) {
+          const raw = (p.asset_building_class || '').toString().trim() || '-';
+          classCounts[raw] = (classCounts[raw] || 0) + 1;
+        }
+        const classSorted = Object.entries(classCounts).sort((a, b) => b[1] - a[1]);
+        let classMix = '-';
+        if (classSorted.length) {
+          const topPct = Math.round((classSorted[0][1] / tProps.length) * 100);
+          if (topPct >= 80) {
+            classMix = `${classSorted[0][0]} (${classSorted[0][1]})`;
+          } else {
+            classMix =
+              'Mixed: ' +
+              classSorted
+                .slice(0, 3)
+                .map(([code, n]) => `${code}:${n}`)
+                .join('/');
+          }
+        }
+
         types.push({
           typeLabel:
             codeToType[tLabel] && codeToType[tLabel] !== tLabel
@@ -223,6 +246,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           yrMin: years.length ? Math.min(...years) : null,
           yrMax: years.length ? Math.max(...years) : null,
           ageGap: years.length ? Math.max(...years) - Math.min(...years) : null,
+          classMix,
           styleMix,
         });
       }
@@ -434,6 +458,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
     const resHeaders = [
       'VCS',
       'Type',
+      'Bldg Class',
       'Parcels',
       'Usable Sales',
       'Norm Time',
@@ -461,6 +486,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
         resAoa.push([
           idx === 0 ? row.vcs : '',
           t.typeLabel,
+          t.classMix,
           t.parcels,
           t.usableSales,
           t.avgNormTime ? Math.round(t.avgNormTime) : '',
@@ -480,20 +506,20 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       if (endRow > startRow) {
         // merge VCS / Commentary / Merge? cells across the type rows
         resMerges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
-        resMerges.push({ s: { r: startRow, c: 12 }, e: { r: endRow, c: 12 } });
         resMerges.push({ s: { r: startRow, c: 13 }, e: { r: endRow, c: 13 } });
+        resMerges.push({ s: { r: startRow, c: 14 }, e: { r: endRow, c: 14 } });
       }
     }
     const resWs = XLSX.utils.aoa_to_sheet(resAoa);
     resWs['!merges'] = resMerges;
     resWs['!cols'] = [
-      { wch: 8 }, { wch: 22 }, { wch: 8 }, { wch: 11 }, { wch: 11 },
+      { wch: 8 }, { wch: 22 }, { wch: 14 }, { wch: 8 }, { wch: 11 }, { wch: 11 },
       { wch: 11 }, { wch: 10 }, { wch: 9 }, { wch: 8 }, { wch: 8 },
       { wch: 8 }, { wch: 22 }, { wch: 40 }, { wch: 9 },
     ];
     styleSheet(resWs, resAoa, {
-      2: NUM, 3: NUM, 4: CURRENCY, 5: CURRENCY, 6: NUM, 7: NUM,
-      8: YEAR, 9: YEAR, 10: NUM,
+      3: NUM, 4: NUM, 5: CURRENCY, 6: CURRENCY, 7: NUM, 8: NUM,
+      9: YEAR, 10: YEAR, 11: NUM,
     });
     XLSX.utils.book_append_sheet(wb, resWs, 'Class 2 Residential');
 
@@ -584,7 +610,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
           <thead className="bg-gray-100 text-gray-700">
             <tr>
               {[
-                'VCS', 'Type', 'Parcels', 'Usable Sales', 'Norm Time', 'Norm Size',
+                'VCS', 'Type', 'Bldg Class', 'Parcels', 'Usable Sales', 'Norm Time', 'Norm Size',
                 'Avg SFLA', 'SFLA Gap', 'Yr Min', 'Yr Max', 'Age Gap', 'Style/Mix',
                 'Commentary', 'Merge?',
               ].map((h) => (
@@ -615,6 +641,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
                     </td>
                   )}
                   <td className="px-2 py-1.5 whitespace-nowrap">{t.typeLabel}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{t.classMix}</td>
                   <td className="px-2 py-1.5 text-right">{t.parcels}</td>
                   <td className="px-2 py-1.5 text-right">{t.usableSales}</td>
                   <td className="px-2 py-1.5 text-right">{fmtMoney(t.avgNormTime)}</td>
@@ -666,7 +693,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
             })}
             {residential.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={15} className="px-4 py-6 text-center text-gray-400">
                   No Class 2 residential parcels found for this job.
                 </td>
               </tr>
