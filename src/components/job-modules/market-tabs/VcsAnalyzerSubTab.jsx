@@ -402,10 +402,32 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
   const exportWorkbook = () => {
     const wb = XLSX.utils.book_new();
 
+    // Shared styling — Leelawadee 10, centered, wrap-to-fit (matches Cost / Overall /
+    // Land exports). Currency = $#,##0, SFLA/counts = #,##0, years = plain 0.
+    const FONT = { name: 'Leelawadee', sz: 10 };
+    const baseAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
     const headerStyle = {
-      font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { fgColor: { rgb: '374151' } },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: baseAlign,
+    };
+    const CURRENCY = '$#,##0';
+    const NUM = '#,##0';
+    const YEAR = '0';
+    const styleSheet = (ws, aoa, numFmtByCol) => {
+      for (let R = 0; R < aoa.length; R++) {
+        for (let C = 0; C < aoa[R].length; C++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+          if (!cell) continue;
+          if (R === 0) {
+            cell.s = headerStyle;
+            continue;
+          }
+          const s = { font: FONT, alignment: baseAlign };
+          const nf = numFmtByCol[C];
+          if (nf && typeof cell.v === 'number') s.numFmt = nf;
+          cell.s = s;
+        }
+      }
     };
 
     // Tab 1: Class 2 Residential
@@ -469,11 +491,10 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       { wch: 11 }, { wch: 10 }, { wch: 9 }, { wch: 8 }, { wch: 8 },
       { wch: 8 }, { wch: 22 }, { wch: 40 }, { wch: 9 },
     ];
-    // style header row only (no data-row coloring)
-    for (let c = 0; c < resHeaders.length; c++) {
-      const addr = XLSX.utils.encode_cell({ r: 0, c });
-      if (resWs[addr]) resWs[addr].s = headerStyle;
-    }
+    styleSheet(resWs, resAoa, {
+      2: NUM, 3: NUM, 4: CURRENCY, 5: CURRENCY, 6: NUM, 7: NUM,
+      8: YEAR, 9: YEAR, 10: NUM,
+    });
     XLSX.utils.book_append_sheet(wb, resWs, 'Class 2 Residential');
 
     // Tab 2: Commercial 4A-4C (one row per VCS)
@@ -498,10 +519,7 @@ const VcsAnalyzerSubTab = ({ jobData, properties, vendorType, codeDefinitions })
       { wch: 8 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 9 },
       { wch: 28 }, { wch: 40 },
     ];
-    for (let c = 0; c < commHeaders.length; c++) {
-      const addr = XLSX.utils.encode_cell({ r: 0, c });
-      if (commWs[addr]) commWs[addr].s = headerStyle;
-    }
+    styleSheet(commWs, commAoa, { 2: NUM, 3: NUM, 4: YEAR });
     XLSX.utils.book_append_sheet(wb, commWs, 'Commercial 4A-4C');
 
     const safeName = (jobData?.job_name || 'job').replace(/[^a-zA-Z0-9._-]/g, '_');
