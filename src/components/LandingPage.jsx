@@ -84,9 +84,6 @@ const LandingPage = ({ onLogin }) => {
         <div className="header-content">
           <div className="logo-title-group">
             <LogoImage />
-            <div className="title-group">
-              <p className="tagline">For<br />Professional Property Appraisers</p>
-            </div>
           </div>
         </div>
       </header>
