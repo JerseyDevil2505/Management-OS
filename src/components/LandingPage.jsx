@@ -49,8 +49,9 @@ const LandingPage = ({ onLogin }) => {
       const { data: employee, error: empError } = await supabase
         .from('employees')
         .select('*')
-        .eq('email', email.toLowerCase())
-        .single();
+        .or(`auth_user_id.eq.${authData.user.id},email.eq.${email.toLowerCase()}`)
+        .limit(1)
+        .maybeSingle();
 
       if (empError || !employee) {
         throw new Error('Employee record not found. Please contact your administrator.');
