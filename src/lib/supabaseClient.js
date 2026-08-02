@@ -4891,8 +4891,9 @@ export const authHelpers = {
       const { data: employee } = await supabase
         .from('employees')
         .select('*')
-        .eq('email', session.user.email.toLowerCase())
-        .single();
+        .or(`auth_user_id.eq.${session.user.id},email.eq.${session.user.email.toLowerCase()}`)
+        .limit(1)
+        .maybeSingle();
 
       return {
         ...session.user,
