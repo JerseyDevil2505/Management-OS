@@ -1151,18 +1151,11 @@ const App = () => {
 
   const checkSession = async () => {
     try {
-      // Development auto-login - expanded conditions
-      if (process.env.NODE_ENV === 'development' ||
-          window.location.hostname.includes('production-black-seven') ||
-          window.location.hostname === 'localhost' ||
-          window.location.hostname.includes('github.dev') ||
-          window.location.hostname.includes('preview') ||
-          window.location.hostname.includes('fly.dev') ||
-          window.location.hostname.includes('builder.io') ||
-          window.location.hostname.includes('0.0.0.0') ||
-          window.location.hostname.includes('127.0.0.1') ||
-          window.location.port === '3001' ||
-          window.location.search.includes('dev=true')) {
+      // Development auto-login. Gated on the build type rather than hostname,
+      // so a deployed production build can never be entered without real
+      // credentials, and the query-string escape hatch is explicitly refused.
+      if (process.env.NODE_ENV !== 'production' &&
+          !window.location.search.includes('dev=true')) {
         setUser({
           id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
           email: 'dev@lojik.com',
