@@ -262,12 +262,6 @@ const UserManagement = ({ onViewAs }) => {
       });
       if (authError) throw authError;
 
-      // Store the initial password on the employee record for admin reference
-      await supabase
-        .from('employees')
-        .update({ initial_password: newUser.password })
-        .eq('id', employeeId);
-
       // Save all organization links in junction table
       const orgIdsToLink = isPpaUser ? [] : lojikOrgIds;
       if (orgIdsToLink.length > 0) {
@@ -329,12 +323,6 @@ const UserManagement = ({ onViewAs }) => {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to update password');
-
-      // Store the new password on the employee record
-      await supabase
-        .from('employees')
-        .update({ initial_password: resetPassword })
-        .eq('id', selectedUser.id);
 
       setSuccessMessage(`Password updated for ${selectedUser.first_name} ${selectedUser.last_name}`);
       setShowResetModal(false);

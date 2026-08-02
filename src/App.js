@@ -9,6 +9,7 @@ import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
+import ResetPassword from './components/ResetPassword';
 import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
@@ -207,6 +208,13 @@ const App = () => {
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
 
+  // Supabase recovery links land on the app with a #type=recovery hash and an
+  // active session. Without this the user is silently signed in and never gets
+  // the chance to set a new password.
+  const [recoveryMode, setRecoveryMode] = useState(
+    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
+  );
+
   // Help modal state
   const [showHelp, setShowHelp] = useState(false);
   const [helpTab, setHelpTab] = useState('navigating-os');
@@ -289,14 +297,6 @@ const App = () => {
         password: cpNewPwd,
       });
       if (updateError) throw updateError;
-
-      // Update stored password on employee record for admin visibility
-      if (user.employeeData?.id) {
-        await supabase
-          .from('employees')
-          .update({ initial_password: cpNewPwd })
-          .eq('id', user.employeeData.id);
-      }
 
       setCpSuccess('Password updated successfully');
       setCpCurrentPwd('');
@@ -1136,9 +1136,17 @@ const App = () => {
     };
   };
 
+  // Session bootstrap
   // Check for existing session or dev mode on mount
   useEffect(() => {
     checkSession();
+  }, []);
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+    });
+    return () => sub?.subscription?.unsubscribe();
   }, []);
 
   const checkSession = async () => {
@@ -1280,6 +1288,7 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
+  if (recoveryMode) return <ResetPassword />;
   
   // Show loading state
   if (loading) {
