@@ -2,9 +2,13 @@
 
 > Lean reference for the NJ property-assessment management platform.
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.
-> Updated April 2025 (rev. — geocoder, appeal map, distance filter, PowerComp PDF round-trip,
-> user-facing Coordinates cleanup sub-tab, sales-pool chip filter w/ Lojik year adjustment,
-> ties-only ZIP variant CSV, numbered-street ordinal variants, AppealLog→CME bracket label parity).
+> Updated August 2026.
+>
+> Recent revisions: RLS enabled on all 48 `public` tables with `private`-schema
+> scoping helpers (§ RLS), storage buckets made private, direct local-folder
+> photo workflow replacing the PowerComp print-time merge (§ 11), geocoder +
+> appeal map + distance filter, Coordinates cleanup sub-tab, sales-pool chip
+> filter w/ Lojik year adjustment, AppealLog→CME bracket label parity.
 
 ---
 
@@ -82,7 +86,7 @@ src/
 │       ├── FinalValuation.jsx      (182)    Orchestrator → final-valuation-tabs/
 │       └── final-valuation-tabs/
 │           ├── SalesComparisonTab.jsx      (5,684)  CME comparable search + evaluation (incl. distance-from-subject filter)
-│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + import + PowerComp PDF merge + CSV export to BRT
+│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + legacy PowerComp import + PDF export (direct photos) + CSV export to BRT
 │           ├── DetailedAppraisalGrid.jsx   (2,532)  Manual appraisal + PDF export (uploads to `appeal-reports` bucket)
 │           ├── AdjustmentsTab.jsx          (2,277)  CME grid + bracket mapping
 │           ├── SalesReviewTab.jsx          (1,870)  Sales history review
@@ -132,9 +136,56 @@ Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 
 ---
 
-## 3. Database Schema (Live — April 2025)
+## 3. Database Schema & RLS (Live — August 2026)
 
-All tables in `public` schema. RLS is enabled on `job_cme_result_sets`, `job_cme_bracket_mappings`, and `job_sales_pool_overrides`. Other tables rely on application-level auth.
+All tables in `public` schema.
+
+**RLS is enabled on all 48 public tables as of 2026-08-03.** See
+`SECURITY-REMEDIATION.md` for the full policy map. Summary: money tables
+(billing/payroll/contracts/expenses/receivables/distributions/proposals) are
+admin-only; job-scoped tables use `staff or own job`; identity tables use
+`staff or own org`. Scoping is resolved by four SECURITY DEFINER helpers that
+live in the **`private` schema**, not `public`: `private.app_is_admin()`,
+`private.app_is_staff()`, `private.app_org_ids()`, `private.app_job_ids()`.
+
+Five rules when touching policies:
+
+1. **Never call a helper bare in a predicate.** Use
+   `(select private.app_is_staff())` and
+   `job_id in (select unnest(private.app_job_ids()))`. A bare call is evaluated
+   per row — it made `select count(*)` on `property_records` time out.
+2. **New helpers go in `private`, not `public`.** PostgREST exposes `public`, so
+   anything there becomes a `/rest/v1/rpc/` endpoint and draws a weekly advisory
+   email that cannot be muted.
+3. **New tables need an explicit policy**, or they are invisible to the app. They
+   also need explicit grants after the Oct 30 2026 Data API change (see
+   `SUPABASE_RESOURCE_FIX.md`). And any new **view** needs
+   `security_invoker = true`, or it bypasses RLS entirely.
+4. **Never write `FOR ALL` next to a separate SELECT policy.** `ALL` includes
+   SELECT, so both run on every read and Postgres ORs them. Write the admin side
+   as explicit INSERT / UPDATE / DELETE (see `organizations`, `profiles`).
+5. **New RPCs should be SECURITY INVOKER.** Now that RLS is on, a definer
+   function is escalation the database does not need, and every definer function
+   reachable at `/rest/v1/rpc` draws an advisory. `delete_organization_cascade`
+   is invoker with an `private.app_is_admin()` guard — copy that shape.
+
+### Never count in a loop
+
+`count: 'exact'` per row/org/job is the single worst pattern in this codebase's
+history. Revenue ran two counts per organization inside an `await` loop (30
+serial requests); the Geocoder ran three per job across 55 jobs (165 requests).
+The queries were 6–50 ms each — the cost was entirely round-trip latency
+(100–200 ms apiece), so both pages took seconds while Billing, which reads small
+tables, was instant.
+
+Fixed by two grouped RPCs — `revenue_line_item_counts()` and
+`geocode_coverage_by_job()` — each one query returning every row at once.
+**If you need a count per N things, write one grouped query, not N counts.**
+
+Note: `SET search_path` blocks SQL-function inlining, so these run as a
+`Function Scan` (~650 ms) rather than an inlined parallel aggregate (~360 ms).
+Worth it — keeping `search_path` pinned avoids a security advisory, and one
+650 ms call still beats 165 round trips by a wide margin.
 
 ### Core Tables
 
@@ -655,18 +706,24 @@ PPA's appeal reports lack property photos. BRT PowerComp's "Batch Taxpayer Repor
   2. Parser produces packets; matched against this job's properties by normalized BLQ.
   3. For each match, the photo pages are extracted with `pdf-lib` into a small per-subject sub-PDF, uploaded to the `powercomp-photos` storage bucket, and a metadata row upserted into `appeal_powercomp_photos` (composite key, storage path, page count, source filename, imported_at).
   4. The photo packet pages get a footer crediting **BRT Technologies PowerComp** (attribution is mandatory — they generated the photos).
-- **Print/merge flow** — `buildPrintablePdfForAppeal(appeal)` in `AppealLogTab.jsx:2163`:
+- **Print flow** — `buildPrintablePdfForAppeal(appeal)` in `AppealLogTab.jsx:2548`:
   1. Downloads the saved appeal report from `appeal-reports` bucket.
-  2. Downloads the PowerComp photo packet from `powercomp-photos` bucket (if any).
-  3. Uses `pdfjs-dist` to **scan and classify each report page** by keyword (`detailed evaluation`, `dynamic adjustments`, `subject & comps location map`, `appellant evidence summary`, `chapter 123`) into buckets.
-  4. Re-emits the merged PDF in the canonical section order:
+  2. Uses `pdfjs-dist` to **scan and classify each report page** by keyword (`detailed evaluation`, `dynamic adjustments`, `subject & comps location map`, `appellant evidence summary`, `chapter 123`) into buckets.
+  3. Re-emits the PDF in the canonical section order:
      1. Static comp grid (Detailed Evaluation)
      2. Dynamic Adjustments
-     3. **PowerComp photo packet** (if present)
+     3. **Direct-from-folder Photos page** (from `appeal_photos`, see section 11)
      4. Subject & Comps Location Map (if present)
      5. Appellant Evidence Summary (if present)
      6. Chapter 123 Test (Director's Ratio)
-  5. Anything that can't be classified is appended at the end in original order (we never silently drop a page). If the pdfjs scan fails, we fall back to original-order with photos appended at the end.
+  4. Anything that can't be classified is appended at the end in original order (we never silently drop a page).
+
+> **PowerComp packets are no longer merged at print time.** The Photos page from
+> the local-folder picker (section 11) is the sole source of subject and comp
+> photos. Old `appeal_powercomp_photos` rows and `powercomp-photos` blobs may
+> still exist for legacy subjects and are deliberately ignored
+> (`AppealLogTab.jsx:2561`). The import button and the CSV export in 10.2 both
+> still work.
 
 ### 10.2 Selective CME → BRT PowerComp CSV Export
 
@@ -727,8 +784,7 @@ order is now:
 
 1. Static comp grid
 2. Dynamic Adjustments
-3. **Direct-from-folder Photos page** (new — preferred)
-4. Legacy PowerComp packet (fallback only when (3) is absent)
+3. **Direct-from-folder Photos page** (the only photo source)
 5. Subject & Comps Location Map
 6. Appellant Evidence Summary
 7. Chapter 123 Test

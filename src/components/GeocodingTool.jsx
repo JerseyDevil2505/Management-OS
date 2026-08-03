@@ -454,22 +454,29 @@ const GeocodingTool = () => {
     };
   }, []);
 
-  // Load coverage for all jobs once jobs are loaded
+  // Load coverage for all jobs once jobs are loaded. One grouped query for
+  // every job — this was three sequential COUNTs per job (165 requests across
+  // 55 jobs), which is why the overview took seconds to appear.
   const loadCoverage = useCallback(async (jobsList) => {
     if (!jobsList || jobsList.length === 0) return;
     setCoverageLoading(true);
     try {
-      const CHUNK = 6;
-      const next = {};
-      for (let i = 0; i < jobsList.length; i += CHUNK) {
-        const slice = jobsList.slice(i, i + CHUNK);
-        // eslint-disable-next-line no-await-in-loop
-        const results = await Promise.all(
-          slice.map((j) => fetchCoverageForJob(j.id).then((c) => [j.id, c]))
-        );
-        for (const [id, c] of results) next[id] = c;
-        setCoverage((prev) => ({ ...prev, ...next }));
+      const { data, error } = await supabase.rpc('geocode_coverage_by_job');
+      if (error) throw error;
+
+      const byJob = {};
+      for (const row of data || []) {
+        byJob[row.job_id] = {
+          total: Number(row.total) || 0,
+          geocoded: Number(row.geocoded) || 0,
+          skipped: Number(row.skipped) || 0,
+        };
       }
+      // Jobs with no property records still need a row in the overview.
+      for (const j of jobsList) {
+        if (!byJob[j.id]) byJob[j.id] = { total: 0, geocoded: 0, skipped: 0 };
+      }
+      setCoverage((prev) => ({ ...prev, ...byJob }));
     } catch (e) {
       // non-fatal — overview can fail silently
       // eslint-disable-next-line no-console

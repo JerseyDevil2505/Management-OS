@@ -24,7 +24,7 @@ const UserManagement = ({ onViewAs }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'Admin',
+    role: 'Management',
     organizationId: '',
     selectedOrgIds: []
   });
@@ -89,7 +89,7 @@ const UserManagement = ({ onViewAs }) => {
         .from('employees')
         .select('*')
         .in('employment_status', ['full_time', 'inactive'])
-        .in('role', ['Management', 'Admin', 'Owner', 'client_user'])
+        .in('role', ['Management', 'Owner', 'lojik_user'])
         .order('last_name');
 
       if (error) throw error;
@@ -181,6 +181,9 @@ const UserManagement = ({ onViewAs }) => {
     // For LOJIK clients, require at least one org selected
     const lojikOrgIds = newUser.selectedOrgIds.filter(id => id !== PPA_ORG_ID);
     const isPpaUser = newUser.organizationId === PPA_ORG_ID;
+    // The Role dropdown is only rendered for PPA orgs, so a client-town account
+    // would otherwise silently inherit whatever the form default happened to be.
+    const roleToSave = isPpaUser ? newUser.role : 'lojik_user';
 
     if (!isPpaUser && lojikOrgIds.length === 0 && !newUser.organizationId) {
       setError('Please select at least one organization');
@@ -215,7 +218,7 @@ const UserManagement = ({ onViewAs }) => {
           .update({
             first_name: newUser.firstName.trim(),
             last_name: newUser.lastName.trim(),
-            role: newUser.role,
+            role: roleToSave,
             organization_id: selectedOrgId,
             has_account: true
           })
@@ -237,7 +240,7 @@ const UserManagement = ({ onViewAs }) => {
             email: emailTrimmed,
             employee_number: empNumber,
             initials: initials,
-            role: newUser.role,
+            role: roleToSave,
             organization_id: selectedOrgId,
             employment_status: 'full_time',
             has_account: true,
@@ -286,7 +289,7 @@ const UserManagement = ({ onViewAs }) => {
       setSuccessMessage(`Account created for ${fullName}. They should check their email to confirm.`);
       loadEmployeeOrgLinks();
       setShowCreateModal(false);
-      setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Admin', organizationId: '', selectedOrgIds: [] });
+      setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Management', organizationId: '', selectedOrgIds: [] });
       loadUsers();
     } catch (err) {
       console.error('Error creating user:', err);
@@ -477,7 +480,7 @@ const UserManagement = ({ onViewAs }) => {
   const getRoleBadgeClass = (role) => {
     switch (role) {
       case 'Owner': return 'badge-owner';
-      case 'Admin': return 'badge-admin';
+      case 'lojik_user': return 'badge-admin';
       case 'Management': return 'badge-manager';
       default: return 'badge-inspector';
     }
@@ -547,8 +550,8 @@ const UserManagement = ({ onViewAs }) => {
                           className={`role-select ${getRoleBadgeClass(user.role)}`}
                         >
                           <option value="Owner">Owner</option>
-                          <option value="Admin">Admin</option>
                           <option value="Management">Management</option>
+                          <option value="lojik_user">LOJIK User</option>
                         </select>
                       </td>
                       <td>
@@ -885,7 +888,6 @@ const UserManagement = ({ onViewAs }) => {
                     value={newUser.role}
                     onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                   >
-                    <option value="Admin">Admin</option>
                     <option value="Management">Management</option>
                     <option value="Owner">Owner</option>
                   </select>

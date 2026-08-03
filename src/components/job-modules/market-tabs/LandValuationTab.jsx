@@ -5330,8 +5330,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
     const salesHeaders = valuationMode === 'ff'
-      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
-      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -5341,6 +5341,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
       const included = includedSales.has(sale.id) ? 'Y' : 'N';
       const notes = landNotes[sale.id] || '';
+      const location = sale.location_analysis || '';
 
       const acres = sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '';
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
@@ -5371,6 +5372,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               return entry ? (entry.depth_table || entry.depthTable || entry.depth_table_name || '') : '';
             } catch (e) { return ''; }
           })(),
+          location,
           region,
           category,
           sale.sales_date || '',
@@ -5394,6 +5396,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           sale.asset_design_style || '',
           sale.new_vcs || '',
           sale.asset_zoning || '',
+          location,
           region,
           category,
           sale.sales_date || '',
@@ -5425,6 +5428,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 8 }, // Design
       { wch: 10 }, // VCS
       { wch: 12 }, // Zoning
+      { wch: 20 }, // Location
       { wch: 12 }, // Special Region
       { wch: 12 }, // Category
       { wch: 12 }, // Sale Date
@@ -6013,7 +6017,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Individual Sales
     csv += '\n\nMETHOD 1: VACANT LAND SALES DETAIL\n';
-    csv += 'Block,Lot,Address,VCS,Special Region,Category,Sale Date,Sale Price,Size,Price/Unit,Package,Included,Notes\n';
+    csv += 'Block,Lot,Address,VCS,Location,Special Region,Category,Sale Date,Sale Price,Size,Price/Unit,Package,Included,Notes\n';
     
     vacantSales.forEach(sale => {
       const category = saleCategories[sale.id] || 'Uncategorized';
@@ -6024,7 +6028,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const sizeLabel = valuationMode === 'acre' ? sale.totalAcres?.toFixed(2) : 
                        valuationMode === 'sf' ? Math.round(sale.totalAcres * 43560) : sale.totalAcres;
       
-      csv += `"${sale.property_block}","${sale.property_lot}","${sale.property_location}","${sale.new_vcs || ''}","${region}","${category}","${sale.sales_date}",${sale.sales_price},${sizeLabel},${sale.pricePerAcre},"${isPackage}","${included}","${notes}"\n`;
+      const location = sale.location_analysis || '';
+
+      csv += `"${sale.property_block}","${sale.property_lot}","${sale.property_location}","${sale.new_vcs || ''}","${location}","${region}","${category}","${sale.sales_date}",${sale.sales_price},${sizeLabel},${sale.pricePerAcre},"${isPackage}","${included}","${notes}"\n`;
     });
     
     // Method 2 Analysis
@@ -7458,6 +7464,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {valuationMode === 'ff' && (
                   <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Depth Table</th>
                 )}
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Location</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Special Region</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Category</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
@@ -7563,6 +7570,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         })()}
                       </td>
                     )}
+
+                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '11px' }}>
+                      {sale.location_analysis || '-'}
+                    </td>
 
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
