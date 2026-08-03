@@ -137,9 +137,33 @@ a hardcoded `user` object and returned early.
 - [x] Site URL → `https://lojikre.com`; added to Redirect URLs.
       (`www` handled by a GoDaddy redirect. `production-black-seven.vercel.app`
       stays in the list — it is the main-branch deployment, not dead.)
-- [ ] Email OTP expiration → 3600s or less (`auth_otp_long_expiry`)
+- [x] **Anonymous sign-ins → disabled.** It was **enabled**. An anonymous
+      session carries the `authenticated` role, so anyone could have minted one
+      and passed every `to authenticated` policy — during the Phase A window
+      that meant full read of all 331k property records. Phase B independently
+      closed it (an anonymous user has no `employees` row, so `app_is_staff()`
+      is false and `app_job_ids()` is empty), but it was open before today.
+      Checked `auth.users`: **0 anonymous users ever created**, so nothing was
+      exploited.
+- [x] Email OTP expiration → was **86400** (24 hours), set to 3600.
+      This governs all email one-time tokens: magic links, signup confirmation,
+      email change, and **password recovery**. Recovery links were live for a
+      full day in the recipient's inbox.
 - [ ] Leaked password protection → on (`auth_leaked_password_protection`)
 - [ ] Postgres security upgrade — has downtime, schedule deliberately
+
+### ⚠️ Noted, not changed — `handle_new_user` defaults new profiles to PPA
+
+```sql
+coalesce((new.raw_user_meta_data->>'organization_id')::uuid,
+         '00000000-0000-0000-0000-000000000001'::uuid)
+```
+
+Any auth account created without an explicit `organization_id` in its metadata
+gets a `profiles` row inside **PPA Inc**. Harmless today because access is
+resolved from `employees`, not `profiles` — but it becomes a privilege-escalation
+path the moment a policy keys off `profiles.organization_id`. Left as-is rather
+than change working signup behavior; revisit before writing any such policy.
 
 ---
 
@@ -470,11 +494,8 @@ filters UPDATE silently, no error).
 
 **Zero ERROR-level lints.** Remaining WARNs:
 
-- `auth_allow_anonymous_sign_ins` on ~40 tables — a lint artifact. It fires on
-  any policy targeting `authenticated` because Supabase's optional anonymous
-  sign-in feature produces users who are also `authenticated`. If that feature
-  is off (it is off by default), this is noise. Worth confirming once in
-  Dashboard → Authentication → Providers.
+- `auth_allow_anonymous_sign_ins` on ~40 tables — now noise, but see below; the
+  feature was actually enabled and has since been turned off.
 - `authenticated_security_definer_function_executable` on the four helpers and
   `delete_organization_cascade` — expected and required. The helpers must be
   callable by `authenticated` for policies to evaluate; the cascade delete has
