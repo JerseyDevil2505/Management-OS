@@ -417,6 +417,71 @@ array value.
 Catherine seeing 2 employees is correct — she and John Gillooly are both
 Franklin.
 
+#### Step 4 — `secure_delete_organization_cascade` (the worst find of the day)
+
+`delete_organization_cascade(org_id)` deletes an entire tenant: every job and
+all its `property_records`, `inspection_data`, appeals, valuations, CME data,
+then the employees, profiles and the organization row. It is SECURITY DEFINER,
+so **RLS never applied to it**, and `EXECUTE` was granted to `anon`.
+
+An unauthenticated caller with the publishable key could have destroyed
+Atlantic City (16,826 properties, 1,269 appeals) via
+`/rest/v1/rpc/delete_organization_cascade`. Any signed-in client assessor could
+have targeted PPA's org id and taken out all 41 jobs.
+
+Three fixes: a hard `app_is_admin()` guard inside the function body (so the
+protection does not depend on the UI gate or on grants staying correct),
+`EXECUTE` revoked from `anon`/`public`, and `search_path` pinned. Verified: Dawn
+attempting to cascade-delete PPA Inc raises `insufficient_privilege`, and all
+15 orgs / 55 jobs / 331,447 properties remained intact.
+
+`handle_new_user()` had `EXECUTE` to anon too. It is an auth trigger — triggers
+fire regardless of grants — so exposing it as an RPC endpoint had no purpose.
+Revoked from all API roles.
+
+#### Step 5 — `harden_view_and_function_search_paths`
+
+`job_assignments_with_employee` was a SECURITY DEFINER view joining
+`job_assignments` to `employees`. Views run with their creator's rights by
+default, so it **bypassed every policy in Phase B** — a client assessor could
+have listed every assignment and employee name across all 15 orgs through it.
+Not referenced anywhere in `src/`, so it was switched to
+`security_invoker = true` rather than dropped.
+
+Lesson: a view is a hole in RLS unless it is explicitly `security_invoker`.
+Audit `pg_class.reloptions` for any new view.
+
+`search_path` pinned on the remaining 10 functions.
+
+#### Step 6 — `tighten_helper_grants_and_reference_tables`
+
+`revoke execute ... from anon` on the helpers was **not sufficient** — Postgres
+grants `EXECUTE` to `PUBLIC` on every new function and `anon` inherits it. Had
+to `revoke ... from public` then `grant ... to authenticated`. Authenticated
+must keep EXECUTE: policy expressions are evaluated as the calling role.
+
+`county_hpi_data`, `nu_code_dictionary` and `planning_jobs` had blanket
+read+write for any signed-in user. Split: read stays open (all three feed
+screens everyone uses), writes narrowed to staff. Verified — all roles read 545
+HPI rows; admin and staff update 1 row; Dawn's update affects 0 rows (RLS
+filters UPDATE silently, no error).
+
+#### Advisor state after all of the above
+
+**Zero ERROR-level lints.** Remaining WARNs:
+
+- `auth_allow_anonymous_sign_ins` on ~40 tables — a lint artifact. It fires on
+  any policy targeting `authenticated` because Supabase's optional anonymous
+  sign-in feature produces users who are also `authenticated`. If that feature
+  is off (it is off by default), this is noise. Worth confirming once in
+  Dashboard → Authentication → Providers.
+- `authenticated_security_definer_function_executable` on the four helpers and
+  `delete_organization_cascade` — expected and required. The helpers must be
+  callable by `authenticated` for policies to evaluate; the cascade delete has
+  its own internal admin guard.
+- Three dashboard toggles, still open: OTP expiry, leaked-password protection,
+  Postgres security patch.
+
 #### Testing note — "View As" does NOT exercise RLS
 
 `handleViewAs` swaps the user in React state; the Supabase session is still the
