@@ -490,18 +490,40 @@ screens everyone uses), writes narrowed to staff. Verified — all roles read 54
 HPI rows; admin and staff update 1 row; Dawn's update affects 0 rows (RLS
 filters UPDATE silently, no error).
 
-#### Advisor state after all of the above
+#### Step 7 — `move_rls_helpers_to_private_schema`
 
-**Zero ERROR-level lints.** Remaining WARNs:
+The four helpers lived in `public`, so PostgREST published them as
+`/rest/v1/rpc/app_is_admin` etc. No data leak — each only reports the caller's
+own standing — but Supabase emails org owners a weekly advisory summary that
+[includes warnings](https://supabase.com/blog/hardening-supabase) and offers no
+way to acknowledge or mute a finding.
 
-- `auth_allow_anonymous_sign_ins` on ~40 tables — now noise, but see below; the
-  feature was actually enabled and has since been turned off.
-- `authenticated_security_definer_function_executable` on the four helpers and
-  `delete_organization_cascade` — expected and required. The helpers must be
-  callable by `authenticated` for policies to evaluate; the cascade delete has
-  its own internal admin guard.
-- Three dashboard toggles, still open: OTP expiry, leaked-password protection,
-  Postgres security patch.
+Moved to a `private` schema, which PostgREST does not expose. `usage` granted to
+`authenticated` only; `execute` revoked from `public` and `anon`. Policies still
+resolve them normally. All ~45 policies repointed, then the `public` copies
+dropped (they cannot be dropped while a policy depends on them).
+
+`delete_organization_cascade` stays in `public` — the app calls it via
+`supabase.rpc()` — so its advisory is permanent and expected. Its guard now
+calls `private.app_is_admin()`.
+
+Re-verified after the move, identical to before: same per-user counts, same
+plan (`InitPlan` + `hashed SubPlan`, 118 ms on property_records), Dawn's
+cascade-delete attempt still blocked, 0 leftover `public.app_*` functions.
+
+#### Advisor state — final
+
+**Zero ERROR-level lints.** Two WARNs remain:
+
+1. `delete_organization_cascade` callable by `authenticated` — **permanent and
+   correct.** It must be reachable over the API for the Organizations screen;
+   the internal `private.app_is_admin()` guard is the actual protection.
+2. `vulnerable_postgres_version` — clears when the patch is scheduled.
+
+Cleared along the way: 45 `rls_disabled_in_public` ERRORs, the SECURITY DEFINER
+view, 10 mutable `search_path` functions, 2 anon-executable SECURITY DEFINER
+functions, 4 helper-function advisories, and all
+`auth_allow_anonymous_sign_ins` (anonymous sign-ins were enabled; now off).
 
 #### Testing note — "View As" does NOT exercise RLS
 

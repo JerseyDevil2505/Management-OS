@@ -140,17 +140,23 @@ All tables in `public` schema.
 `SECURITY-REMEDIATION-STATUS.md` for the full policy map. Summary: money tables
 (billing/payroll/contracts/expenses/receivables/distributions/proposals) are
 admin-only; job-scoped tables use `staff or own job`; identity tables use
-`staff or own org`. Scoping is resolved by the `app_is_admin()` /
-`app_is_staff()` / `app_org_ids()` / `app_job_ids()` SECURITY DEFINER helpers.
+`staff or own org`. Scoping is resolved by four SECURITY DEFINER helpers that
+live in the **`private` schema**, not `public`: `private.app_is_admin()`,
+`private.app_is_staff()`, `private.app_org_ids()`, `private.app_job_ids()`.
 
-Two rules when touching policies:
+Three rules when touching policies:
 
-1. **Never call a helper bare in a predicate.** Use `(select app_is_staff())` and
-   `job_id in (select unnest(app_job_ids()))`. A bare call is evaluated per row —
-   it made `select count(*)` on `property_records` time out.
-2. **New tables need an explicit policy**, or they are invisible to the app. They
+1. **Never call a helper bare in a predicate.** Use
+   `(select private.app_is_staff())` and
+   `job_id in (select unnest(private.app_job_ids()))`. A bare call is evaluated
+   per row — it made `select count(*)` on `property_records` time out.
+2. **New helpers go in `private`, not `public`.** PostgREST exposes `public`, so
+   anything there becomes a `/rest/v1/rpc/` endpoint and draws a weekly advisory
+   email that cannot be muted.
+3. **New tables need an explicit policy**, or they are invisible to the app. They
    also need explicit grants after the Oct 30 2026 Data API change (see
-   `SUPABASE_RESOURCE_FIX.md`).
+   `SUPABASE_RESOURCE_FIX.md`). And any new **view** needs
+   `security_invoker = true`, or it bypasses RLS entirely.
 
 ### Core Tables
 
