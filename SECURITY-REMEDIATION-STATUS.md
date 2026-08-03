@@ -325,12 +325,105 @@ write them. Same for the `appeal_photos_*` policies on `storage.objects` and the
 `checklist-documents` bucket's broad SELECT. These need rewriting in Phase A,
 not just left alone because the table shows "RLS enabled".
 
-### Phase B — org scoping
+### Phase B — ✅ APPLIED (2026-08-03)
 
-Backfill `employees.auth_user_id` (only Jim's is set today), add a
-`SECURITY DEFINER` helper resolving `auth.uid()` → org set + admin flag, then
-scope the tenant tables. Test each with JWT impersonation
-(`set local role authenticated` + `request.jwt.claims`) before committing.
+#### Step 1 — `phase_b_backfill_employee_auth_user_id`
+
+Only 1 of 81 employees had `auth_user_id` set, so the DB could not resolve
+`auth.uid()` → employee → org. All 20 unlinked auth users matched exactly one
+employee by email (verified before running). Now 21/21 linked, 0 orphans, 0
+duplicates. Side benefit: `App.js:1180`'s `.or(auth_user_id, email)` lookup now
+hits the ID branch for everyone instead of falling through to email.
+
+#### Step 2 — `phase_b_identity_helper_functions`
+
+`app_is_admin()`, `app_is_staff()`, `app_org_ids()`, `app_job_ids()`. All
+`stable security definer set search_path = public, pg_temp`, `execute` revoked
+from `anon`.
+
+SECURITY DEFINER is load-bearing, not decorative: these read `profiles` and
+`employees`, which themselves carry policies that call these functions. Running
+as the owner (who bypasses RLS) is what prevents infinite recursion.
+
+`app_org_ids()` unions the primary `organization_id`, the
+`employee_organizations` junction, and the legacy `accessible_organization_ids`
+array. All three are live: Dawn → Dunellen + Middlesex via the junction, Rich's
+`rbuscemi29@` → Waterford + Runnemede + Springfield, Ron → +Maplewood +Jackson
+via the array.
+
+#### Step 3 — the policies
+
+| Group | Tables | Rule |
+|---|---|---|
+| Money | billing_events, job_contracts, payroll_periods, expenses, office_receivables, shareholder_distributions, proposals | admin only |
+| Job data | 30 tables incl. property_records, property_market_analysis, inspection_data, appeal_log, all `job_cme_*`, checklist, market_land_valuation | staff, or own job |
+| Identity | jobs, employees, employee_organizations | staff, or own org |
+| organizations | | read: staff or own org · write: admin |
+| profiles | | read: self or admin · write: admin |
+| user_billed_jobs | | self or admin |
+| No tenant column | employee_status_history, job_access_grants | staff only |
+| Reference | county_hpi_data, nu_code_dictionary | any authenticated |
+
+`planning_jobs` deliberately stays open to all authenticated — it drives the
+"Planning Jobs" tab on the Jobs screen that staff use, even though `App.js:725`
+loads it inside the billing block. Confirmed with Jim.
+
+`user_billed_jobs` is named like a billing table but is the per-user "I billed
+this" toggle on `AppealsSummary` (`user_id = auth.uid()`). Admin-only would have
+broken every staffer's checkboxes.
+
+#### ⚠️ The performance trap — `phase_b_fix_rls_per_row_function_calls`
+
+The first version of these policies was **correct and unusable**. Written as:
+
+```sql
+using (public.app_is_staff() or job_id = any (public.app_job_ids()))
+```
+
+the planner emitted `Filter: (app_is_staff() OR (job_id = ANY (app_job_ids())))`
+— a **per-row** call. On `property_records` that is 331,447 invocations of two
+SECURITY DEFINER functions, each running its own subqueries. A plain
+`select count(*)` as a client user **timed out**.
+
+`STABLE` is not sufficient. A SECURITY DEFINER function cannot be inlined, so
+the planner leaves it in the row filter. The fix is to force an InitPlan by
+putting each call behind an uncorrelated subquery:
+
+```sql
+using ((select public.app_is_staff()) or job_id in (select unnest(public.app_job_ids())))
+```
+
+Result: `InitPlan 1` + `hashed SubPlan 2`, both evaluated once. Same query,
+**121 ms**.
+
+Do not write a helper call bare in a policy predicate. Always
+`(select fn())`, and `in (select unnest(fn()))` for the array case — note
+`= any((select fn()))` fails outright with `operator does not exist: uuid =
+uuid[]`, because ANY-over-subquery expects rows and the function returns one
+array value.
+
+#### Verification (JWT impersonation)
+
+| Person | jobs | employees | properties | appeals | billing |
+|---|---|---|---|---|---|
+| Jim (admin) | 55 | 81 | 331,447 | 2,487 | 275 |
+| Ron (PPA staff) | 55 | 81 | 331,447 | 2,487 | **0** |
+| Jim @ Riverton | 1 | 1 | 2,024 | 0 | 0 |
+| Dawn (2 towns) | 2 | 1 | 7,376 | 32 | 0 |
+| Rich @ Waterford (3 towns) | 3 | 1 | — | — | 0 |
+| Catherine @ Franklin | 1 | **2** | — | — | 0 |
+| Novelette @ Atlantic City | 1 | 1 | 16,826 | 1,269 | 0 |
+
+Catherine seeing 2 employees is correct — she and John Gillooly are both
+Franklin.
+
+#### Testing note — "View As" does NOT exercise RLS
+
+`handleViewAs` swaps the user in React state; the Supabase session is still the
+admin's, so the database still answers as admin. The only real tests are a
+genuine sign-in or the `set local role authenticated` + `request.jwt.claims`
+probe used above. Jim has a real client account (`jduda@riverton-nj.com`,
+Borough of Riverton, 1 job) that can be used for a true end-to-end check.
 
 ### Access model (confirmed with Jim)
 

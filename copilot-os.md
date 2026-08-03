@@ -134,7 +134,23 @@ Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 
 ## 3. Database Schema (Live — April 2025)
 
-All tables in `public` schema. RLS is enabled on `job_cme_result_sets`, `job_cme_bracket_mappings`, and `job_sales_pool_overrides`. Other tables rely on application-level auth.
+All tables in `public` schema.
+
+**RLS is enabled on all 48 public tables as of 2026-08-03.** See
+`SECURITY-REMEDIATION-STATUS.md` for the full policy map. Summary: money tables
+(billing/payroll/contracts/expenses/receivables/distributions/proposals) are
+admin-only; job-scoped tables use `staff or own job`; identity tables use
+`staff or own org`. Scoping is resolved by the `app_is_admin()` /
+`app_is_staff()` / `app_org_ids()` / `app_job_ids()` SECURITY DEFINER helpers.
+
+Two rules when touching policies:
+
+1. **Never call a helper bare in a predicate.** Use `(select app_is_staff())` and
+   `job_id in (select unnest(app_job_ids()))`. A bare call is evaluated per row —
+   it made `select count(*)` on `property_records` time out.
+2. **New tables need an explicit policy**, or they are invisible to the app. They
+   also need explicit grants after the Oct 30 2026 Data API change (see
+   `SUPABASE_RESOURCE_FIX.md`).
 
 ### Core Tables
 
