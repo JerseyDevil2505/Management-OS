@@ -12090,69 +12090,47 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   };
 
-  // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
-  // When explicit positive/negative provided, set parts accordingly and aggregate to compound row
+  // Which applied sides a specific worksheet row accepts. Mirrors the enable/disable
+  // rule on that row's own inputs so we never write a value into a cell the user
+  // can't then edit or clear.
+  const rowAppliedSides = (vcs, location) => {
+    const mapVal = mappedLocationCodes[`${vcs}_${location}`] || '';
+    const codes = mapVal ? mapVal.split('/').map(c => c.trim()).filter(Boolean) : [];
+    if (codes.length === 0) return { positive: false, negative: false };
+    return {
+      positive: codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive)),
+      negative: codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive))
+    };
+  };
+
+  // Apply positive and/or negative values for a location to every VCS row whose
+  // locational analysis is exactly that location. A compound description sets only
+  // the compound rows — its component standalone rows are set from their own summary
+  // rows, so an explicit standalone assignment is never overwritten by a compound.
   const applySummarySet = (location, positive, negative) => {
     // Skip tentative locations
     if (/\bpossible|possibly\b|\?/i.test(location)) {
       debug(`applySummarySet skipped tentative location: ${location}`);
       return;
     }
-    const parts = splitLocationParts(location);
-    debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
+
+    const pos = positive !== null && positive !== undefined && positive !== '' && !isNaN(Number(positive)) ? Math.abs(Number(positive)) : null;
+    const neg = negative !== null && negative !== undefined && negative !== '' && !isNaN(Number(negative)) ? Math.abs(Number(negative)) : null;
+    if (pos === null && neg === null) return;
+
+    debug(`applySummarySet called for location: ${location} positive: ${pos} negative: ${neg}`);
 
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      const partPosVals = [];
-      const partNegVals = [];
+      if (!ecoObsFactors[vcs] || !ecoObsFactors[vcs][location]) return;
 
-      // First, update parts where they exist in this VCS
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
-          const polarity = getPartPolarity(part);
-
-          if (polarity === 'positive') {
-            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-              const val = Math.abs(Number(positive));
-              updateActualAdjustment(vcs, `${part}_positive`, val);
-              partPosVals.push(val);
-            }
-          } else if (polarity === 'negative') {
-            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-              const val = Math.abs(Number(negative));
-              updateActualAdjustment(vcs, `${part}_negative`, val);
-              partNegVals.push(val);
-            }
-          } else {
-            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-              const val = Math.abs(Number(positive));
-              updateActualAdjustment(vcs, `${part}_positive`, val);
-              partPosVals.push(val);
-            }
-            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-              const val = Math.abs(Number(negative));
-              updateActualAdjustment(vcs, `${part}_negative`, val);
-              partNegVals.push(val);
-            }
-          }
-        }
-        // If the part does not exist for this VCS but we have a standaloneAvg for the part, use that to influence compound aggregation
-        else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
-          const pAvg = Number(standaloneAvg[part].avg);
-          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
-          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
-        }
-      });
-
-      // Aggregate to compound row (even if parts weren't present in this VCS)
-      const compoundKey = `${vcs}_${location}`;
-      if (partPosVals.length > 0) {
-        const maxPos = Math.max(...partPosVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
+      const sides = rowAppliedSides(vcs, location);
+      if (!sides.positive && !sides.negative) {
+        debug(`applySummarySet skipped ${vcs}_${location} — no code mapped`);
+        return;
       }
-      if (partNegVals.length > 0) {
-        const maxNeg = Math.max(...partNegVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
-      }
+
+      if (pos !== null && sides.positive) updateActualAdjustment(vcs, `${location}_positive`, pos);
+      if (neg !== null && sides.negative) updateActualAdjustment(vcs, `${location}_negative`, neg);
     });
   };
 
@@ -12507,12 +12485,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
             <button onClick={() => {
-              // Apply inputs for all summary rows; if no input for an item, apply avgPercent if available
+              // Only applies values you entered. A blank Applied+/Applied- means leave that
+              // location alone — the Recommended % is never auto-applied.
               const tentativeRegex = /\bpossible|possibly\b|\?/i;
+              let appliedCount = 0;
               summaryList.forEach(item => {
                 const entry = summaryInputs[item.location] || {};
                 const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
                 const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                if (pos === null && neg === null) return;
 
                 // Skip tentative locations or tentative parts inside a compound
                 const parts = splitLocationParts(item.location || '');
@@ -12521,21 +12502,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   return;
                 }
 
-                if (pos !== null || neg !== null) {
-                  debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
-                  applySummarySet(item.location, pos, neg);
-                } else if (item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(Number(item.avgPercent))) {
-                  // Use avgPercent to populate appropriate side(s)
-                  const avg = Number(item.avgPercent);
-                  const posVal = avg > 0 ? Math.abs(avg) : null;
-                  const negVal = avg < 0 ? Math.abs(avg) : null;
-                  if (posVal !== null || negVal !== null) {
-                    debug(`Set All applying avgPercent for ${item.location}: ${avg}`);
-                    applySummarySet(item.location, posVal, negVal);
-                  }
-                }
+                debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
+                applySummarySet(item.location, pos, neg);
+                appliedCount++;
               });
-              alert('Set applied for all visible summary rows (skipped tentative locations)');
+              alert(appliedCount > 0
+                ? `Set applied for ${appliedCount} location${appliedCount === 1 ? '' : 's'} with entered values (skipped tentative locations)`
+                : 'Nothing applied — enter an Applied+ or Applied- value on the locations you want to set.');
             }} style={{ padding: '8px 12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Set All</button>
           </div>
         </div>
