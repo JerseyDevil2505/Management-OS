@@ -194,6 +194,29 @@ alter table public.<t> disable row level security;
 drop policy if exists "authenticated_full_access" on public.<t>;
 ```
 
+#### Storage — `phase_a_storage_authenticated_only`
+
+Tables were only half the exposure. All 16 `storage.objects` policies granted
+`anon` select/insert/update/**delete** on every bucket, and
+`checklist-documents` was a **public** bucket (reachable by URL with no key at
+all). Four of the policies were named `Allow All For Testing eh7235_*`.
+
+What was open: 1,562 files / ~2.1 GB — 386 appeal report PDFs (1.6 GB, the
+valuation and appeal-strategy work product), 992 appeal photos, 97 checklist
+documents (tax maps, zoning maps, brochures, contact letters), 87 PowerComp
+packets. Readable *and deletable* by anyone who pulled the publishable key out
+of the JS bundle.
+
+Now one `for all to authenticated` policy per bucket, and all four buckets
+private. Verified: anon sees 0 objects, authenticated sees 1,562.
+
+Safe because every read path already uses `createSignedUrl`, which works on
+private buckets — `AppealLogTab` (appeal-photos, powercomp-photos),
+`ParcelPhotoStrip` (appeal-photos), `ManagementChecklist` (checklist-documents,
+1h expiry). The one `getPublicUrl` call (`ManagementChecklist.jsx:1446`) is a
+third-resort fallback behind `createSignedUrl` and `.download()`; it is now dead
+but harmless, and was left in place rather than churn working code.
+
 Current advisor state: 40 tables with RLS disabled, 8 more with policies written
 but RLS never enabled (dead weight — the source of the resource warning), 1
 SECURITY DEFINER view (`job_assignments_with_employee`), 10 functions with
