@@ -267,6 +267,40 @@
   background: linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%);
 }
 
+.forgot-password-link {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+}
+
+.forgot-password-link:hover:not(:disabled) {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.forgot-password-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reset-sent-message {
+  background-color: #f0fdf4;
+  color: #166534;
+  padding: 0.875rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  border: 1px solid #bbf7d0;
+}
+
 /* Login Footer */
 .login-footer {
   text-align: center;

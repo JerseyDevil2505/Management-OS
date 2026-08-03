@@ -9,6 +9,7 @@ import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
+import ResetPassword from './components/ResetPassword';
 import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
@@ -207,6 +208,13 @@ const App = () => {
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
 
+  // Supabase recovery links land on the app with a #type=recovery hash and an
+  // active session. Without this the user is silently signed in and never gets
+  // the chance to set a new password.
+  const [recoveryMode, setRecoveryMode] = useState(
+    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
+  );
+
   // Help modal state
   const [showHelp, setShowHelp] = useState(false);
   const [helpTab, setHelpTab] = useState('navigating-os');
@@ -289,14 +297,6 @@ const App = () => {
         password: cpNewPwd,
       });
       if (updateError) throw updateError;
-
-      // Update stored password on employee record for admin visibility
-      if (user.employeeData?.id) {
-        await supabase
-          .from('employees')
-          .update({ initial_password: cpNewPwd })
-          .eq('id', user.employeeData.id);
-      }
 
       setCpSuccess('Password updated successfully');
       setCpCurrentPwd('');
@@ -1136,39 +1136,25 @@ const App = () => {
     };
   };
 
+  // Session bootstrap
   // Check for existing session or dev mode on mount
   useEffect(() => {
     checkSession();
   }, []);
 
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+    });
+    return () => sub?.subscription?.unsubscribe();
+  }, []);
+
   const checkSession = async () => {
     try {
-      // Development auto-login - expanded conditions
-      if (process.env.NODE_ENV === 'development' ||
-          window.location.hostname.includes('production-black-seven') ||
-          window.location.hostname === 'localhost' ||
-          window.location.hostname.includes('github.dev') ||
-          window.location.hostname.includes('preview') ||
-          window.location.hostname.includes('fly.dev') ||
-          window.location.hostname.includes('builder.io') ||
-          window.location.hostname.includes('0.0.0.0') ||
-          window.location.hostname.includes('127.0.0.1') ||
-          window.location.port === '3001' ||
-          window.location.search.includes('dev=true')) {
-        setUser({
-          id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
-          email: 'dev@lojik.com',
-          role: 'admin',
-          employeeData: {
-            name: 'Development Mode',
-            role: 'admin'
-          }
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Production - check for real session
+      // Every environment requires a real Supabase session. Dev mode used to
+      // fake one in React state, which left the database connection running as
+      // the anonymous role — RLS policies scoped to `authenticated` would have
+      // returned nothing in the preview while working fine in production.
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -1176,8 +1162,9 @@ const App = () => {
         const { data: employee } = await supabase
           .from('employees')
           .select('*')
-          .eq('email', session.user.email.toLowerCase())
-          .single();
+          .or(`auth_user_id.eq.${session.user.id},email.eq.${session.user.email.toLowerCase()}`)
+          .limit(1)
+          .maybeSingle();
 
         if (employee) {
           setUser({
@@ -1280,6 +1267,7 @@ const App = () => {
   // ==========================================
   // RENDER UI
   // ==========================================
+  if (recoveryMode) return <ResetPassword />;
   
   // Show loading state
   if (loading) {
@@ -1724,7 +1712,7 @@ const App = () => {
         ))}
 
 
-        {activeView === 'users' && (isAdmin ? (
+        {activeView === 'users' && (canManageUsers ? (
           <UserManagement onViewAs={handleViewAs} />
         ) : (
           <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">

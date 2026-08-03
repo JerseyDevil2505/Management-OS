@@ -789,6 +789,35 @@ const calculateDistributionMetrics = async () => {
     };
   };
   
+  // A legacy job is "satisfied" only when all three hold: nothing left to bill,
+  // nothing left excluding the retainer, and no billing event still open.
+  // The third check matters on its own — Glen Gardner, Jackson and West Orange
+  // all sit at 0 remaining but still carry an open invoice.
+  const isBillingSatisfied = (job) => {
+    const totals = calculateBillingTotals(job);
+    if (!totals) return false;
+
+    const contract = job.job_contracts?.[0];
+    if (!contract) return false;
+
+    const remainingNoRet =
+      (totals.contractAmount - (contract.retainer_amount || 0)) - totals.totalAmountBilled;
+    const hasOpenEvent = (job.billing_events || []).some(e => e.status === 'O');
+
+    return totals.remainingDue <= 0 && remainingNoRet <= 0 && !hasOpenEvent;
+  };
+
+  // Jobs with open work float to the top; fully satisfied ones sink. Array.sort
+  // is stable, so order within each group is left alone.
+  const sortedLegacyJobs = useMemo(() => {
+    return [...legacyJobsState].sort((a, b) => {
+      const aDone = isBillingSatisfied(a) ? 1 : 0;
+      const bDone = isBillingSatisfied(b) ? 1 : 0;
+      return aDone - bDone;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacyJobsState]);
+
   // Memoized job counts calculation
   const jobCounts = useMemo(() => ({
     active: activeJobs.length,
@@ -2686,7 +2715,7 @@ const calculateDistributionMetrics = async () => {
                   <p className="text-gray-600">No legacy billing jobs found. Click "Add Legacy Job" to create one.</p>
                 </div>
               ) : (
-                legacyJobsState.map(job => {
+                sortedLegacyJobs.map(job => {
                   const totals = calculateBillingTotals(job);
                   const needsContractSetup = !job.job_contracts || job.job_contracts.length === 0;
                   

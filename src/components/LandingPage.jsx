@@ -7,6 +7,31 @@ const LandingPage = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setResetSent(false);
+
+    if (!email) {
+      setError('Enter your email address first, then click Forgot password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const target = email.trim().toLowerCase();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(target, {
+        redirectTo: window.location.origin
+      });
+      if (resetError) throw resetError;
+      setResetSent(true);
+    } catch (err) {
+      setError(err.message || 'Could not send the reset email. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,8 +49,9 @@ const LandingPage = ({ onLogin }) => {
       const { data: employee, error: empError } = await supabase
         .from('employees')
         .select('*')
-        .eq('email', email.toLowerCase())
-        .single();
+        .or(`auth_user_id.eq.${authData.user.id},email.eq.${email.toLowerCase()}`)
+        .limit(1)
+        .maybeSingle();
 
       if (empError || !employee) {
         throw new Error('Employee record not found. Please contact your administrator.');
@@ -59,9 +85,6 @@ const LandingPage = ({ onLogin }) => {
         <div className="header-content">
           <div className="logo-title-group">
             <LogoImage />
-            <div className="title-group">
-              <p className="tagline">For<br />Professional Property Appraisers</p>
-            </div>
           </div>
         </div>
       </header>
@@ -105,11 +128,25 @@ const LandingPage = ({ onLogin }) => {
               </div>
 
               {error && <div className="error-message">{error}</div>}
+              {resetSent && (
+                <div className="reset-sent-message">
+                  Check your email for a link to set a new password.
+                </div>
+              )}
 
               <button type="submit" className="login-button" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
             </form>
+
+            <button
+              type="button"
+              className="forgot-password-link"
+              onClick={handleForgotPassword}
+              disabled={loading}
+            >
+              Forgot password?
+            </button>
 
             <div className="login-footer">
               <p>Need help? Contact your system administrator</p>
