@@ -1712,7 +1712,7 @@ const App = () => {
         ))}
 
 
-        {activeView === 'users' && (isAdmin ? (
+        {activeView === 'users' && (canManageUsers ? (
           <UserManagement onViewAs={handleViewAs} />
         ) : (
           <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">

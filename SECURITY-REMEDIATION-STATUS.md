@@ -168,6 +168,25 @@ Peter Maher/Jackson, Lisa Stephens/Piscataway, …). Any policy keyed off
 (`ppalead1@gmail.com` = Jim, auth email `dudj23@gmail.com`), all other 20 are
 `viewer`. Phase B policies key off `profiles.role`.
 
+**Resolved** — migration `rename_assessor_employee_role_to_lojik_user` collapsed
+`Admin` (11) and `client_user` (1) into `lojik_user` (12). Internal staff keep
+their job-function roles (Residential 40, Commercial 10, Management 8, Clerical
+8, Owner 3), so `employees.role` no longer contains any value that `isAdmin`
+matches for a non-PPA user. Rollback SQL is in the migration body.
+
+Code landed with it, and the DB change is not safe without it:
+
+- `UserManagement.jsx:92` filters the Users list by
+  `role in ('Management','Admin','Owner','client_user')`. Renaming without this
+  edit would have silently dropped all 12 client accounts off the Users screen
+  while leaving them able to sign in.
+- `UserManagement` create flow only renders the Role dropdown for PPA orgs, so
+  client accounts inherited the form default (`'Admin'`) — that is how all 11
+  got the value. Now forced to `lojik_user` via `roleToSave`, and `Admin` is
+  gone from both dropdowns.
+- `App.js:1720` rendered `<UserManagement>` behind `isAdmin` while its nav
+  button used `canManageUsers`. Two rules on one door; now both `canManageUsers`.
+
 Owners, for the record: Jim Duda (only one who signs in), Brian Schneider (last
 sign-in 2025-09-16), Tom Davis (employee row, no auth account at all). User
 Management is additionally gated to Jim's UUID alone.
