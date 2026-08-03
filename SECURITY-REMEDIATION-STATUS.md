@@ -111,9 +111,24 @@ signed in as `dudj23@gmail.com` with admin access. This closes 1.2 and 1.3
 (the `.or(auth_user_id, email)` lookup resolves the Jim Duda employee row, and
 self-service password recovery works end to end).
 
-**Rollback:** restore the old condition in `App.js:checkSession` and redeploy.
-The Builder dev environment keeps auto-logging in as admin regardless, so there
-is no lock-out scenario.
+### 3.1 Dev auto-login removed entirely
+
+`src/App.js` (`checkSession`) no longer fakes a session in dev. It used to set
+`user` in React state without ever calling Supabase auth, which meant the
+database connection ran as **anon** in the Builder preview and on localhost.
+That is fine while RLS is off, but any `authenticated`-scoped policy would have
+returned zero rows in the preview while working correctly in production —
+untestable, and the kind of gap that gets discovered after deploy.
+
+All environments now require a real sign-in. Verified in the preview: signing in
+as `dudj23@gmail.com` loads the full job list and the complete nav.
+
+No access regression for Jim: `isAdmin` (`App.js:231`) already accepts `owner`,
+and `canManageUsers` (`App.js:235`) keys off the user UUID, which matches the
+auth ID.
+
+**Rollback:** re-add the `process.env.NODE_ENV !== 'production'` block that set
+a hardcoded `user` object and returned early.
 
 ---
 
@@ -141,6 +156,90 @@ Current advisor state: 40 tables with RLS disabled, 8 more with policies written
 but RLS never enabled (dead weight — the source of the resource warning), 1
 SECURITY DEFINER view (`job_assignments_with_employee`), 10 functions with
 mutable `search_path`, and `delete_organization_cascade` executable by `anon`.
+
+#### ⚠️ `employees.role` is NOT a valid admin signal
+
+Audited 2026-08-03. `employees.role` contains `Admin` for **11 rows**, and all
+eleven are assessor clients (Dawn Guttschall/Dunellen, Chris Murray/Orange,
+Peter Maher/Jackson, Lisa Stephens/Piscataway, …). Any policy keyed off
+`employees.role = 'Admin'` hands every town assessor full cross-tenant access.
+
+`profiles.role` is the trustworthy field: exactly one `admin`
+(`ppalead1@gmail.com` = Jim, auth email `dudj23@gmail.com`), all other 20 are
+`viewer`. Phase B policies key off `profiles.role`.
+
+Owners, for the record: Jim Duda (only one who signs in), Brian Schneider (last
+sign-in 2025-09-16), Tom Davis (employee row, no auth account at all). User
+Management is additionally gated to Jim's UUID alone.
+
+#### Step 1 (applied) — drop the 18 inert legacy policies
+
+All 18 sat on tables with RLS **disabled**, so they were never enforced and
+dropping them changed no runtime behavior. Seven granted write access to
+`PUBLIC` (which includes `anon`) — including insert and update on `employees`,
+the table sign-in reads to resolve a user's role. They would have become live
+grants the moment RLS was enabled on those tables.
+
+**Restore SQL** (only needed to undo this step; Phase A replaces them anyway):
+
+```sql
+create policy "Authenticated users can manage appeal_log" on public.appeal_log
+  as permissive for all to authenticated using (true) with check (true);
+
+create policy "Allow all access to employees" on public.employees
+  as permissive for all to authenticated using (true);
+create policy "Allow authenticated reads" on public.employees
+  as permissive for select to authenticated using (true);
+create policy "Allow authenticated inserts" on public.employees
+  as permissive for insert to authenticated with check (true);
+create policy "Allow authenticated updates" on public.employees
+  as permissive for update to authenticated using (true);
+create policy "Allow authenticated deletes" on public.employees
+  as permissive for delete to authenticated using (true);
+create policy "Allow public insert" on public.employees
+  as permissive for insert to public with check (true);
+create policy "Allow public update" on public.employees
+  as permissive for update to public using (true);
+
+create policy "Users can view job assignments" on public.job_assignments
+  as permissive for select to public using (true);
+create policy "Managers can create job assignments" on public.job_assignments
+  as permissive for insert to public with check (auth.role() = 'authenticated');
+
+create policy "Users can view PPAs" on public.jobs
+  as permissive for select to public using (true);
+create policy "Users can update jobs" on public.jobs
+  as permissive for update to public using (true) with check (true);
+create policy "Authenticated users can create PPAs" on public.jobs
+  as permissive for insert to public with check (auth.role() = 'authenticated');
+
+create policy "Allow all access to payroll_periods" on public.payroll_periods
+  as permissive for all to authenticated using (true);
+
+create policy "Allow public read access" on public.planning_jobs
+  as permissive for select to public using (true);
+
+create policy "Users can view own profile" on public.profiles
+  as permissive for select to public using (auth.uid() = id);
+create policy "Users can update own profile" on public.profiles
+  as permissive for update to public using (auth.uid() = id);
+
+create policy "Allow all access to property_records" on public.property_records
+  as permissive for all to authenticated using (true);
+```
+
+Note for Phase A: `profiles` only ever had own-row policies. Enabling RLS there
+without a replacement breaks `UserManagement`, which lists all 21 profiles.
+
+Post-cleanup advisor state: 45 `rls_disabled_in_public` ERRORs (Phase A's job),
+and zero policies remain on RLS-disabled tables.
+
+Also surfaced — the three tables that *do* have RLS on are not actually closed.
+`job_cme_result_sets`, `job_cme_bracket_mappings`, and `job_sales_pool_overrides`
+each have `USING (true)` policies granted to `public`, so `anon` can read and
+write them. Same for the `appeal_photos_*` policies on `storage.objects` and the
+`checklist-documents` bucket's broad SELECT. These need rewriting in Phase A,
+not just left alone because the table shows "RLS enabled".
 
 ### Phase B — org scoping
 
