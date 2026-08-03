@@ -12123,6 +12123,94 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   };
 
+  // Second pass over a worksheet that already has standalone values entered:
+  // promote a rated road from the generic BS code to the traffic code its value
+  // implies, then compose each compound row from its parts. Compound codes are the
+  // part codes joined; compound values are the sum of the parts, capped the same way
+  // the summary's Recommended % is. A compound with any part unset is left alone so
+  // the blank stays visible as unfinished work.
+  const deriveCodesAndCompounds = () => {
+    const COMPOUND_CAP = 25;
+
+    // value -> traffic code, derived from this job's editable defaults. A value shared
+    // by two codes is ambiguous, so it is dropped rather than guessed at.
+    const trafficByValue = {};
+    const claimed = {};
+    ['LT', 'MT', 'HT'].forEach(code => {
+      const val = codeDefaultFor(code);
+      if (val === null) return;
+      if (claimed[val]) {
+        trafficByValue[val] = null;
+        return;
+      }
+      claimed[val] = true;
+      trafficByValue[val] = code;
+    });
+
+    const hasValue = (v) => v !== null && v !== undefined && v !== '';
+    const newMap = { ...mappedLocationCodes };
+    const updates = {};
+    let promoted = 0;
+    let compounded = 0;
+    let skipped = 0;
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        if (splitLocationParts(location).length > 1) return;
+        const key = `${vcs}_${location}`;
+        if ((newMap[key] || '').trim().toUpperCase() !== 'BS') return;
+        const val = actualAdjustments[`${key}_negative`];
+        if (!hasValue(val)) return;
+        const code = trafficByValue[Math.abs(Number(val))];
+        if (!code) return;
+        newMap[key] = code;
+        promoted++;
+      });
+    });
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        const parts = splitLocationParts(location);
+        if (parts.length < 2) return;
+
+        const partCodes = [];
+        let posSum = 0;
+        let negSum = 0;
+        let complete = true;
+
+        parts.forEach(part => {
+          const partKey = `${vcs}_${part}`;
+          const code = (newMap[partKey] || '').trim();
+          const pos = actualAdjustments[`${partKey}_positive`];
+          const neg = actualAdjustments[`${partKey}_negative`];
+          if (!code || (!hasValue(pos) && !hasValue(neg))) {
+            complete = false;
+            return;
+          }
+          partCodes.push(code);
+          if (hasValue(pos)) posSum += Math.abs(Number(pos));
+          if (hasValue(neg)) negSum += Math.abs(Number(neg));
+        });
+
+        if (!complete) {
+          skipped++;
+          return;
+        }
+
+        const key = `${vcs}_${location}`;
+        newMap[key] = partCodes.join('/');
+        if (posSum > 0) updates[`${key}_positive`] = Math.min(posSum, COMPOUND_CAP);
+        if (negSum > 0) updates[`${key}_negative`] = Math.min(negSum, COMPOUND_CAP);
+        compounded++;
+      });
+    });
+
+    setMappedLocationCodes(newMap);
+    if (Object.keys(updates).length > 0) setActualAdjustments(prev => ({ ...prev, ...updates }));
+
+    alert(`Promoted ${promoted} road row${promoted === 1 ? '' : 's'} from BS to a traffic code.\nComposed ${compounded} compound row${compounded === 1 ? '' : 's'} (parts summed, capped at ${COMPOUND_CAP}%).\nSkipped ${skipped} compound row${skipped === 1 ? '' : 's'} with an unset part.`);
+  };
+
   // Editable default percent per code. Blank means the code contributes nothing
   // to Apply Defaults.
   const renderCodeDefaultChips = () => (
@@ -12505,6 +12593,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 ? `Set applied for ${appliedCount} location${appliedCount === 1 ? '' : 's'} with entered values (skipped tentative locations)`
                 : 'Nothing applied — enter an Applied+ or Applied- value on the locations you want to set.');
             }} style={{ padding: '8px 12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Set All</button>
+            <button
+              onClick={deriveCodesAndCompounds}
+              title="Promote rated roads from BS to LT/MT/HT, then build compound rows from their parts"
+              style={{ padding: '8px 12px', background: '#0F766E', color: 'white', border: 'none', borderRadius: '6px' }}
+            >
+              Derive Codes + Compounds
+            </button>
           </div>
         </div>
       </div>
