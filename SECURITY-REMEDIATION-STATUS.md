@@ -513,12 +513,33 @@ cascade-delete attempt still blocked, 0 leftover `public.app_*` functions.
 
 #### Advisor state — final
 
-**Zero ERROR-level lints.** Two WARNs remain:
+**Zero ERROR-level lints.** One WARN remains:
 
-1. `delete_organization_cascade` callable by `authenticated` — **permanent and
-   correct.** It must be reachable over the API for the Organizations screen;
-   the internal `private.app_is_admin()` guard is the actual protection.
-2. `vulnerable_postgres_version` — clears when the patch is scheduled.
+1. `vulnerable_postgres_version` — clears when the patch is scheduled.
+
+`delete_organization_cascade` callable by `authenticated` is **expected and
+correct** — it must be reachable over the API for the Organizations screen to
+work, since `supabase.rpc()` can only reach the `public` schema. The actual
+protection is the internal `private.app_is_admin()` guard, verified by having a
+client account attempt to cascade-delete PPA Inc (raised
+`insufficient_privilege`, nothing touched).
+
+That advisory has been **suppressed at the Supabase platform level** (2026-08-03,
+via the dashboard). Note what that does and does not mean:
+
+- It is **not** stored in the database — `pg_description` on the function is
+  null, so this is not a `comment on function` style lint hint. It lives in
+  Supabase's project config.
+- It therefore **does not appear in migrations or this repo**, will not carry to
+  a new project or a database branch, and is invisible to anyone reading the
+  schema. Hence this note.
+- It **only hides the notice**. It changes nothing about access. If the guard is
+  ever removed from the function body, nothing will warn you.
+
+The UI gate (`App.js:1724`, Organizations screen restricted to Jim's UUID) is
+*not* the protection either — any signed-in user can POST to
+`/rest/v1/rpc/delete_organization_cascade` without ever loading the UI. Keep the
+in-function guard.
 
 Cleared along the way: 45 `rls_disabled_in_public` ERRORs, the SECURITY DEFINER
 view, 10 mutable `search_path` functions, 2 anon-executable SECURITY DEFINER
