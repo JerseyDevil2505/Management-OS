@@ -504,23 +504,56 @@ resolve them normally. All ~45 policies repointed, then the `public` copies
 dropped (they cannot be dropped while a policy depends on them).
 
 `delete_organization_cascade` stays in `public` — the app calls it via
-`supabase.rpc()` — so its advisory is permanent and expected. Its guard now
-calls `private.app_is_admin()`.
+`supabase.rpc()`. Its guard now calls `private.app_is_admin()`. It was later
+converted to SECURITY INVOKER (see below), which cleared its advisory too.
 
 Re-verified after the move, identical to before: same per-user counts, same
 plan (`InitPlan` + `hashed SubPlan`, 118 ms on property_records), Dawn's
 cascade-delete attempt still blocked, 0 leftover `public.app_*` functions.
 
+#### Step 5 — `delete_organization_cascade` → SECURITY INVOKER
+
+The last function advisory was not about the grant, it was about the
+combination: SECURITY DEFINER **and** reachable at `/rest/v1/rpc`. Deleting a
+job raises no advisory because it is a plain `DELETE` that RLS evaluates
+normally; only the org delete went through a definer function that ran as the
+owner and skipped RLS entirely.
+
+That privilege escalation was unnecessary. Every one of the 32 tables the
+function touches already has an admin-passing policy for `ALL`/`DELETE`
+(`app_is_admin` implies `app_is_staff`), so an admin caller can perform each
+delete under their own rights. Converted with
+`delete_organization_cascade_security_invoker`:
+
+```sql
+CREATE OR REPLACE FUNCTION public.delete_organization_cascade(org_id uuid)
+  ... SECURITY INVOKER SET search_path TO 'public','pg_temp'
+```
+
+The in-function `private.app_is_admin()` guard was kept. Without it a PPA staff
+user would delete the jobs and their property records but stall on
+`organizations`/`profiles` (admin-only), leaving a half-deleted tenant. The
+guard fails the whole call before anything is touched.
+
+RLS is now the real enforcement rather than a hand-written check inside a
+privileged function — the delete behaves exactly like deleting a job.
+
+Verified end to end on two throwaway orgs (both cleaned up):
+
+| Caller | Outcome |
+|---|---|
+| Jim (admin, impersonated) | org deleted, 0 rows remaining |
+| Client assessor (impersonated) | rejected, org still present |
+| anon | `42501` at the grant level |
+
+Grants unchanged: `authenticated` + `service_role` + owner, `anon` revoked.
+
 #### Advisor state — final
 
-**Zero ERROR-level lints.** Two WARNs remain, both expected:
+**Zero ERROR-level lints. One WARN:** `vulnerable_postgres_version`, which
+clears when the patch is scheduled. Nothing else outstanding.
 
-1. `vulnerable_postgres_version` — clears when the patch is scheduled.
-2. `delete_organization_cascade` callable by `authenticated` — permanent. It
-   must be reachable over the API for the Organizations screen, since
-   `supabase.rpc()` can only reach the `public` schema.
-
-##### ⚠️ Do not try to silence advisory #2 — it drifted twice in one afternoon
+##### ⚠️ History: the cascade advisory drifted twice before being fixed properly
 
 Both times via the Supabase dashboard AI:
 
@@ -542,9 +575,8 @@ Corrected by `restore_cascade_delete_authenticated_only_grant`. Verified:
 | anon | `42501` — rejected at the grant level |
 
 **Correct grant set: `authenticated` + `service_role` + owner. Leave it.** No
-grant change removes this advisory while keeping the button working. The only
-real alternatives are accepting it (current choice) or moving the call behind an
-Edge Function using the service key.
+*grant* change removes the advisory while keeping the button working — that is
+why the fix was the SECURITY INVOKER conversion above, not a revoke.
 
 The UI gate (`App.js:1724`, Organizations restricted to Jim's UUID) is **not**
 the protection. Any signed-in user can POST to
