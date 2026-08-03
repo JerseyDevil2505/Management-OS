@@ -584,7 +584,70 @@ clears when the patch is scheduled. Nothing else outstanding.
 
 Performance advisor: zero WARNs. What remains is all INFO and pre-dates this
 work — unindexed foreign keys, unused indexes, and the Auth connection
-allocation strategy. None are caused by RLS.
+allocation strategy. None are caused by RLS. Triaged below.
+
+### Index triage (INFO-level performance lints)
+
+#### `unindexed_foreign_keys` (18) — ignore permanently
+
+The linter does not weigh table size. Every table it flags is tiny:
+`job_cme_evaluations` 4,331 rows, `appeal_photos` 992, `checklist_item_status`
+549, `appeal_reports` 386, `appeal_log_archives` 23, `user_billed_jobs` 8, and
+`job_access_grants` / `proposals` / `property_class_changes` /
+`appeal_powercomp_photos` are all **0**. The columns are `*_by` audit fields
+nothing searches on. Indexing them would add write cost for a scan the planner
+would skip anyway. Revisit only if one of these tables grows.
+
+#### `unused_index` — six dropped, the rest kept
+
+`property_records` carried 17 indexes / 263 MB against 331k rows and 1.09M
+writes, so every import maintained all 17. Six indexes had **0 scans over the
+full history of the database** (`pg_stat_database.stats_reset` is null, so the
+counters are complete) and were dropped in
+`drop_six_never_used_indexes`:
+
+| Index | Size | Why dead |
+|---|---|---|
+| `idx_property_records_ncovr_pct` | 54 MB | `net_condition_pct` is read off already-fetched rows (`DetailedAppraisalGrid`, `conditionRanking.js`); never a filter |
+| `idx_property_records_bedrooms` | 15 MB | `asset_bedrooms` is displayed and compared, never searched |
+| `idx_property_records_file_version` | 8.5 MB | Bare `(file_version)`; queries always include `job_id`, so `idx_property_records_job_file_version` (72,203 scans) wins |
+| `idx_property_records_is_assigned` | 168 kB | Superseded by `idx_property_records_job_assigned` (159 scans) |
+| `idx_property_market_analysis_new_vcs` | 4 MB | That table's reads go through `idx_property_market_analysis_composite_key` (829M scans) |
+| `idx_property_market_analysis_location` | 760 kB | Same |
+
+Result: `property_records` indexes 263 MB → 186 MB (17 → 13), database
+1,196 MB → 1,113 MB. Verified after: the latest-file_version lookup runs
+0.19 ms on an Index Only Scan of `idx_property_records_job_file_version`, and a
+full 331k-row aggregate under an admin session runs 147 ms with the RLS
+predicate still hoisted (`InitPlan` + `hashed SubPlan`, never executed).
+
+**Rebuild statements**, if any of these ever turns out to be needed:
+
+```sql
+CREATE INDEX idx_property_records_ncovr_pct ON public.property_records
+  USING btree (job_id, net_condition_pct) WHERE (net_condition_pct IS NOT NULL);
+CREATE INDEX idx_property_records_bedrooms ON public.property_records
+  USING btree (job_id, asset_bedrooms);
+CREATE INDEX idx_property_records_file_version ON public.property_records
+  USING btree (file_version);
+CREATE INDEX idx_property_records_is_assigned ON public.property_records
+  USING btree (is_assigned_property) WHERE (is_assigned_property = true);
+CREATE INDEX idx_property_market_analysis_new_vcs ON public.property_market_analysis
+  USING btree (new_vcs) WHERE (new_vcs IS NOT NULL);
+CREATE INDEX idx_property_market_analysis_location ON public.property_market_analysis
+  USING btree (location_analysis) WHERE (location_analysis IS NOT NULL);
+```
+
+Kept despite being flagged: everything on `jobs` and `market_land_valuation`
+(16–208 kB on 52- and 55-row tables — dropping them changes nothing).
+
+**"0 scans" is not by itself a verdict.** `property_market_analysis_pkey` also
+reports 0 scans at 11 MB. Always read `pg_get_indexdef` and check for a
+composite that supersedes the flagged index before dropping.
+
+**The Postgres upgrade resets these counters.** Everything will look unused for
+weeks afterward. Do not re-run this triage until the database has been through a
+full busy cycle post-upgrade.
 
 ##### ⚠️ History: the cascade advisory drifted twice before being fixed properly
 
