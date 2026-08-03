@@ -2542,9 +2542,8 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     return new Uint8Array(await data.arrayBuffer());
   };
 
-  // Download the saved appeal report PDF for this subject from the bucket and,
-  // if a PowerComp photo packet exists, append its pages using pdf-lib.
-  // Returns Uint8Array of the merged PDF, or null if no report exists.
+  // Download the saved appeal report PDF for this subject and re-emit its pages
+  // in canonical order. Returns null if no report exists.
   const buildPrintablePdfForAppeal = async (appeal) => {
     const reportMeta = getReportForAppeal(appeal);
     if (!reportMeta) return { bytes: null, hasPhotos: false };
@@ -2569,7 +2568,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
     // order in the saved report:
     //   1. Static comp grid (Detailed Evaluation)
     //   2. Dynamic Adjustments
-    //   3. PowerComp photo packet (if present)
+    //   3. Subject & Comps Photos page (from appeal_photos, if present)
     //   4. Subject & Comps Location Map (if present)
     //   5. Appellant Evidence Summary (if present)
     //   6. Chapter 123 Test (Director's Ratio)

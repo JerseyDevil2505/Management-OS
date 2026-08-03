@@ -57,9 +57,7 @@ restriction. **You must push to a real deploy to test the full flow.**
     static order falls), 3×2 grid with role labels under each photo.
 14. Click **Send to Appeal Log**. Open the appeal in Appeal Log and click
     Print/Download — `buildPrintablePdfForAppeal` re-emits in canonical
-    order with the new Photos page in the right slot. Legacy PowerComp
-    packet path still works as a fallback for appeals that don't have any
-    `appeal_photos` rows.
+    order with the new Photos page in the right slot.
 
 ---
 
@@ -186,11 +184,12 @@ a Comp in another shares the same picked photo. Re-picking replaces.
 - New `buckets.photos` — recognizes pages whose text contains
   `subject & comps photos`.
 - Canonical order is now: static grid → dynamic adjustments →
-  **direct-from-folder photos page** → legacy PowerComp packet (only if no
-  direct photos page exists) → map → appellant evidence → Chapter 123 →
+  **direct-from-folder photos page** → map → appellant evidence → Chapter 123 →
   unclassified other.
-- The PowerComp `appeal_powercomp_photos` path is preserved as a
-  **fallback** for legacy reports that pre-date this branch.
+- **The PowerComp fallback was removed** (`AppealLogTab.jsx:2561`). Legacy
+  `appeal_powercomp_photos` rows and `powercomp-photos` blobs may still exist
+  for old subjects, but they are no longer merged at print time — the direct
+  Photos page is the sole photo source. The import button still works.
 
 ---
 

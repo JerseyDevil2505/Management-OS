@@ -6,10 +6,22 @@
 
 **This application processes sensitive payroll and employee data. Please review the following:**
 
-- **Client-Side Processing**: All data processing occurs within your browser. No data is transmitted to external servers.
-- **No Data Storage**: This application does not store, save, or retain any uploaded files or processed data.
-- **User Responsibility**: You are solely responsible for ensuring the security and confidentiality of your data.
-- **Data Validation**: Always verify the accuracy of processed data before using for payroll or business decisions.
+- **Server-Backed Application**: This application stores data on hosted
+  infrastructure (Supabase). Property records, appeals, employee records,
+  payroll data, and uploaded files are transmitted to and retained on those
+  servers. It is not a browser-only tool.
+- **Data Storage and Retention**: Uploaded source files, checklist documents,
+  appeal photos, and generated reports are stored in private cloud storage and
+  retained until explicitly deleted.
+- **Access Control**: Access is restricted per user account and enforced at the
+  database level. Client assessor accounts can reach only their own
+  municipality's data; billing, payroll, and revenue data are restricted to
+  administrators.
+- **User Responsibility**: You remain responsible for the confidentiality of
+  your account credentials and for how exported data is handled once it leaves
+  the application.
+- **Data Validation**: Always verify the accuracy of processed data before using
+  for payroll or business decisions.
 
 ### Payroll and Financial Calculations
 
@@ -22,12 +34,15 @@
 
 ### Technical Limitations
 
-**Browser-Based Application:**
-
-- **File Size Limitations**: Large files may cause performance issues or browser crashes.
-- **Browser Compatibility**: Requires modern browser with JavaScript enabled.
-- **No Backup**: Processed files are not automatically backed up. Save your work frequently.
-- **Version Control**: This application does not track file versions or changes.
+- **File Size Limitations**: Very large source files may cause performance
+  issues during import.
+- **Browser Compatibility**: Requires a modern browser with JavaScript enabled.
+- **Backups**: Database backups are handled by the hosting platform. Retention
+  depends on the current plan and is not a substitute for keeping your own
+  copies of original source files.
+- **Version Control**: Source file imports are versioned per job
+  (`file_version`), so successive uploads for the same municipality are tracked
+  rather than overwritten.
 
 ### Usage Guidelines
 
@@ -97,4 +112,4 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMA
 
 ---
 
-*Last Updated: July 2025*
+*Last Updated: August 2026*

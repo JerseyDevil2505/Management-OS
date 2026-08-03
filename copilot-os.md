@@ -684,18 +684,24 @@ PPA's appeal reports lack property photos. BRT PowerComp's "Batch Taxpayer Repor
   2. Parser produces packets; matched against this job's properties by normalized BLQ.
   3. For each match, the photo pages are extracted with `pdf-lib` into a small per-subject sub-PDF, uploaded to the `powercomp-photos` storage bucket, and a metadata row upserted into `appeal_powercomp_photos` (composite key, storage path, page count, source filename, imported_at).
   4. The photo packet pages get a footer crediting **BRT Technologies PowerComp** (attribution is mandatory — they generated the photos).
-- **Print/merge flow** — `buildPrintablePdfForAppeal(appeal)` in `AppealLogTab.jsx:2163`:
+- **Print flow** — `buildPrintablePdfForAppeal(appeal)` in `AppealLogTab.jsx:2548`:
   1. Downloads the saved appeal report from `appeal-reports` bucket.
-  2. Downloads the PowerComp photo packet from `powercomp-photos` bucket (if any).
-  3. Uses `pdfjs-dist` to **scan and classify each report page** by keyword (`detailed evaluation`, `dynamic adjustments`, `subject & comps location map`, `appellant evidence summary`, `chapter 123`) into buckets.
-  4. Re-emits the merged PDF in the canonical section order:
+  2. Uses `pdfjs-dist` to **scan and classify each report page** by keyword (`detailed evaluation`, `dynamic adjustments`, `subject & comps location map`, `appellant evidence summary`, `chapter 123`) into buckets.
+  3. Re-emits the PDF in the canonical section order:
      1. Static comp grid (Detailed Evaluation)
      2. Dynamic Adjustments
-     3. **PowerComp photo packet** (if present)
+     3. **Direct-from-folder Photos page** (from `appeal_photos`, see section 11)
      4. Subject & Comps Location Map (if present)
      5. Appellant Evidence Summary (if present)
      6. Chapter 123 Test (Director's Ratio)
-  5. Anything that can't be classified is appended at the end in original order (we never silently drop a page). If the pdfjs scan fails, we fall back to original-order with photos appended at the end.
+  4. Anything that can't be classified is appended at the end in original order (we never silently drop a page).
+
+> **PowerComp packets are no longer merged at print time.** The Photos page from
+> the local-folder picker (section 11) is the sole source of subject and comp
+> photos. Old `appeal_powercomp_photos` rows and `powercomp-photos` blobs may
+> still exist for legacy subjects and are deliberately ignored
+> (`AppealLogTab.jsx:2561`). The import button and the CSV export in 10.2 both
+> still work.
 
 ### 10.2 Selective CME → BRT PowerComp CSV Export
 
@@ -756,8 +762,7 @@ order is now:
 
 1. Static comp grid
 2. Dynamic Adjustments
-3. **Direct-from-folder Photos page** (new — preferred)
-4. Legacy PowerComp packet (fallback only when (3) is absent)
+3. **Direct-from-folder Photos page** (the only photo source)
 5. Subject & Comps Location Map
 6. Appellant Evidence Summary
 7. Chapter 123 Test
