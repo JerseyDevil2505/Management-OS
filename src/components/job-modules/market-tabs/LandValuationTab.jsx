@@ -31,6 +31,11 @@ const safeLocaleDate = (d) => {
   return date ? date.toLocaleDateString() : 'N/A';
 };
 
+// Seed percentages for codes that have a conventional starting value. Editable
+// per job and persisted to eco_obs_code_config.code_defaults, so this map is only
+// the fallback for a job that has never set them.
+const DEFAULT_CODE_PERCENTS = { LT: 5, MT: 10, HT: 15 };
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -212,6 +217,9 @@ const LandValuationTab = ({
   // Default Economic Obsolescence Codes (editable via UI)
   const DEFAULT_ECO_OBS_CODES = [
     { code: 'BS', description: 'Busy Street', isPositive: false },
+    { code: 'LT', description: 'Light Traffic', isPositive: false },
+    { code: 'MT', description: 'Medium Traffic', isPositive: false },
+    { code: 'HT', description: 'Heavy Traffic', isPositive: false },
     { code: 'CM', description: 'Commercial', isPositive: false },
     { code: 'PL', description: 'Power Lines', isPositive: false },
     { code: 'RR', description: 'Railroad', isPositive: false },
@@ -407,6 +415,7 @@ const LandValuationTab = ({
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
+  const [codeDefaults, setCodeDefaults] = useState(DEFAULT_CODE_PERCENTS);
   const [summaryInputs, setSummaryInputs] = useState({});
   const [includeCompounded, setIncludeCompounded] = useState(false);
   // Sorting for the worksheet table (vcs, location, code)
@@ -497,8 +506,11 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('����� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
+
+    // Caller needs the fresh map: setMappedLocationCodes has not landed yet.
+    return newMap;
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
 const hasInitialized = useRef(false);
@@ -849,6 +861,7 @@ useEffect(() => {
     setMappedLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
     setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
     setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+    setCodeDefaults({ ...DEFAULT_CODE_PERCENTS, ...(marketLandData.eco_obs_code_config.code_defaults || {}) });
     setSummaryInputs(marketLandData.eco_obs_code_config.summary_inputs || {});
   }
   if (marketLandData.eco_obs_applied_adjustments) {
@@ -4325,6 +4338,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           location_codes: mappedLocationCodes,
           traffic_levels: trafficLevels,
           custom_codes: customLocationCodes,
+          code_defaults: codeDefaults,
           summary_inputs: summaryInputs
         },
         eco_obs_compound_overrides: computedAdjustments,
@@ -4458,7 +4472,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
     vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
     vcsDescriptions, vcsTypes, vcsRecommendedSites, vcsMethodOverrides, vcsRateOverrides, vcsStepdownOverrides, ecoObsFactors,
-    mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
+    mappedLocationCodes, trafficLevels, customLocationCodes, codeDefaults, summaryInputs,
     actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
     onAnalysisUpdate, updateSessionState
   ]);
@@ -12029,6 +12043,55 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     };
   };
 
+  // Default percent carried by a code, if any. Falls back to the seed map for codes
+  // this job has never tuned.
+  const codeDefaultFor = (code) => {
+    const raw = codeDefaults[code];
+    if (raw === undefined || raw === null || raw === '') return null;
+    const num = Number(raw);
+    return isNaN(num) ? null : Math.abs(num);
+  };
+
+  // Fill Applied+/Applied- from the mapped code's default percent. Only touches cells
+  // that are currently empty, so anything you set by hand or via Set All wins.
+  // A row mapped to several codes takes the largest default on each side.
+  const applyCodeDefaults = (codeMap) => {
+    const updates = {};
+    let filled = 0;
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        const mapVal = (codeMap || mappedLocationCodes)[`${vcs}_${location}`] || '';
+        const codes = mapVal ? mapVal.split('/').map(c => c.trim()).filter(Boolean) : [];
+        if (codes.length === 0) return;
+
+        const posDefaults = [];
+        const negDefaults = [];
+        codes.forEach(code => {
+          const val = codeDefaultFor(code);
+          if (val === null) return;
+          const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
+          const custom = customLocationCodes.find(d => d.code === code);
+          const isPos = def?.isPositive ?? custom?.isPositive ?? false;
+          (isPos ? posDefaults : negDefaults).push(val);
+        });
+
+        const key = `${vcs}_${location}`;
+        if (posDefaults.length > 0 && !actualAdjustments[`${key}_positive`]) {
+          updates[`${key}_positive`] = Math.max(...posDefaults);
+          filled++;
+        }
+        if (negDefaults.length > 0 && !actualAdjustments[`${key}_negative`]) {
+          updates[`${key}_negative`] = Math.max(...negDefaults);
+          filled++;
+        }
+      });
+    });
+
+    if (filled > 0) setActualAdjustments(prev => ({ ...prev, ...updates }));
+    return filled;
+  };
+
   // Apply positive and/or negative values for a location to every VCS row whose
   // locational analysis is exactly that location. A compound description sets only
   // the compound rows — its component standalone rows are set from their own summary
@@ -12060,7 +12123,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   };
 
-  // Use component-level inputs/handlers for adding custom codes
+  // Editable default percent per code. Blank means the code contributes nothing
+  // to Apply Defaults.
+  const renderCodeDefaultChips = () => (
+    <div style={{ marginTop: '8px' }}>
+      <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+        Default % per code. Apply Defaults uses these to fill empty Applied% cells. Saved with this job.
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {combinedLocationCodes.map(c => (
+          <div key={c.code} style={{ padding: '4px 8px', borderRadius: '6px', background: '#FFFFFF', border: '1px solid #E5E7EB', display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <strong style={{ fontSize: '12px' }}>{c.code}</strong>
+            <span style={{ fontSize: '11px', color: c.isPositive ? '#10B981' : '#DC2626' }}>{c.isPositive ? '+' : '-'}</span>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              placeholder="-"
+              value={codeDefaults[c.code] === undefined || codeDefaults[c.code] === null ? '' : codeDefaults[c.code]}
+              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              onWheel={(e) => e.currentTarget.blur()}
+              onChange={(e) => setCodeDefaults(prev => ({ ...prev, [c.code]: e.target.value === '' ? '' : Math.abs(Number(e.target.value)) }))}
+              style={{ width: '48px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '11px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding: '20px' }}>
@@ -12097,6 +12187,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </label>
               <button onClick={handleAddCustomCode} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Add</button>
             </div>
+
+            {renderCodeDefaultChips()}
 
             {customLocationCodes.length > 0 && (
               <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -12157,8 +12249,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
               <button
                 onClick={() => {
-                  applyDefaultMapping();
-                  alert('Applied default mappings to empty code fields. Review highlighted entries.');
+                  const newMap = applyDefaultMapping();
+                  const filled = applyCodeDefaults(newMap);
+                  alert(`Applied default mappings to empty code fields. Review highlighted entries.\nFilled ${filled} empty Applied% cell${filled === 1 ? '' : 's'} from code defaults.`);
                 }}
                 style={{
                   backgroundColor: '#3B82F6',
