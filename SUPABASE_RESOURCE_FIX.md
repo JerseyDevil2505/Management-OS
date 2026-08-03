@@ -42,3 +42,45 @@ In Supabase's role model:
 
 That last point is why the anon key shipping in the browser bundle is safe now
 and was not before.
+
+---
+
+## Still active: Supabase Data API default-grant change (May 30 / Oct 30, 2026)
+
+This part of the original document is **not** superseded. Supabase is changing
+the default so that **new** tables in `public` are no longer exposed to the Data
+API (supabase-js, PostgREST, GraphQL) unless an explicit `GRANT` is added.
+
+- **May 30, 2026:** default for newly-created Supabase projects.
+- **Oct 30, 2026:** enforced on **all existing projects**, including ours.
+
+**What stays safe:** every table that already exists keeps its current grants —
+nothing breaks on the cutover.
+
+**What changes for us:** any new `public.*` table created on or after Oct 30,
+2026 must include explicit grants in its migration, or supabase-js returns
+`42501` from the client.
+
+### Required boilerplate for new-table migrations going forward
+
+```sql
+create table public.your_new_table ( ... );
+
+-- Required: expose it to the Data API roles the app uses.
+-- (anon is only needed if the table should be readable without auth — it
+-- should not be, for anything in this app.)
+grant select, insert, update, delete on public.your_new_table to authenticated;
+grant select, insert, update, delete on public.your_new_table to service_role;
+
+-- Enable RLS at create time so the table is never briefly world-writable.
+alter table public.your_new_table enable row level security;
+
+-- Add at least one policy (example — replace with real scope):
+create policy "tenant scoped read"
+  on public.your_new_table
+  for select to authenticated
+  using ( /* org/job scoping check — see copilot-os.md § 3 */ );
+```
+
+If a grant is missing in production, PostgREST returns `42501` with the exact
+GRANT statement to fix it — run the grant, don't paper over the error.

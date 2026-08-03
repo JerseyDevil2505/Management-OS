@@ -141,28 +141,25 @@ const RevenueManagement = () => {
         }
       });
 
-      // Count primary cards per org (BRT='1', Microsystems='M')
+      // Count primary cards per org (BRT='1', Microsystems='M') in one round
+      // trip. This used to be two sequential COUNT queries per organization,
+      // which meant ~30 serial requests before the page could render.
       const lineItemMap = {};
-      for (const [orgId, jobIds] of Object.entries(jobsByOrg)) {
-        if (jobIds.length > 0) {
-          // Count BRT primary cards (card = '1')
-          const { count: brtCount } = await supabase
-            .from('property_records')
-            .select('*', { count: 'exact', head: true })
-            .in('job_id', jobIds)
-            .eq('property_addl_card', '1');
+      const { data: lineItemRows, error: lineItemError } = await supabase
+        .rpc('revenue_line_item_counts');
 
-          // Count Microsystems primary cards (card = 'M')
-          const { count: microCount } = await supabase
-            .from('property_records')
-            .select('*', { count: 'exact', head: true })
-            .in('job_id', jobIds)
-            .eq('property_addl_card', 'M');
-
-          const total = (brtCount || 0) + (microCount || 0);
-          lineItemMap[orgId] = total;
-        }
+      if (lineItemError) {
+        console.error('Error loading line item counts:', lineItemError);
+      } else {
+        (lineItemRows || []).forEach(row => {
+          lineItemMap[row.organization_id] = Number(row.line_items) || 0;
+        });
       }
+
+      // Orgs with jobs but no matching property records still need a zero.
+      Object.keys(jobsByOrg).forEach(orgId => {
+        if (lineItemMap[orgId] === undefined) lineItemMap[orgId] = 0;
+      });
 
       // Load proposals
       const { data: proposalData, error: proposalError } = await supabase

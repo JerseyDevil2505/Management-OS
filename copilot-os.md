@@ -169,6 +169,24 @@ Five rules when touching policies:
    reachable at `/rest/v1/rpc` draws an advisory. `delete_organization_cascade`
    is invoker with an `private.app_is_admin()` guard — copy that shape.
 
+### Never count in a loop
+
+`count: 'exact'` per row/org/job is the single worst pattern in this codebase's
+history. Revenue ran two counts per organization inside an `await` loop (30
+serial requests); the Geocoder ran three per job across 55 jobs (165 requests).
+The queries were 6–50 ms each — the cost was entirely round-trip latency
+(100–200 ms apiece), so both pages took seconds while Billing, which reads small
+tables, was instant.
+
+Fixed by two grouped RPCs — `revenue_line_item_counts()` and
+`geocode_coverage_by_job()` — each one query returning every row at once.
+**If you need a count per N things, write one grouped query, not N counts.**
+
+Note: `SET search_path` blocks SQL-function inlining, so these run as a
+`Function Scan` (~650 ms) rather than an inlined parallel aggregate (~360 ms).
+Worth it — keeping `search_path` pinned avoids a security advisory, and one
+650 ms call still beats 165 round trips by a wide margin.
+
 ### Core Tables
 
 #### `organizations`
