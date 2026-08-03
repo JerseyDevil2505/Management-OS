@@ -513,33 +513,44 @@ cascade-delete attempt still blocked, 0 leftover `public.app_*` functions.
 
 #### Advisor state — final
 
-**Zero ERROR-level lints.** One WARN remains:
+**Zero ERROR-level lints.** Two WARNs remain, both expected:
 
 1. `vulnerable_postgres_version` — clears when the patch is scheduled.
+2. `delete_organization_cascade` callable by `authenticated` — permanent. It
+   must be reachable over the API for the Organizations screen, since
+   `supabase.rpc()` can only reach the `public` schema.
 
-`delete_organization_cascade` callable by `authenticated` is **expected and
-correct** — it must be reachable over the API for the Organizations screen to
-work, since `supabase.rpc()` can only reach the `public` schema. The actual
-protection is the internal `private.app_is_admin()` guard, verified by having a
-client account attempt to cascade-delete PPA Inc (raised
-`insufficient_privilege`, nothing touched).
+##### ⚠️ Do not try to silence advisory #2 — it drifted twice in one afternoon
 
-That advisory has been **suppressed at the Supabase platform level** (2026-08-03,
-via the dashboard). Note what that does and does not mean:
+Both times via the Supabase dashboard AI:
 
-- It is **not** stored in the database — `pg_description` on the function is
-  null, so this is not a `comment on function` style lint hint. It lives in
-  Supabase's project config.
-- It therefore **does not appear in migrations or this repo**, will not carry to
-  a new project or a database branch, and is invisible to anyone reading the
-  schema. Hence this note.
-- It **only hides the notice**. It changes nothing about access. If the guard is
-  ever removed from the function body, nothing will warn you.
+1. **`REVOKE EXECUTE ... FROM anon, authenticated`.** The advisory disappeared,
+   but so did the feature — the Organizations delete button then failed for
+   *everyone including the admin* (verified: `42501 permission denied for
+   function delete_organization_cascade`). The warning went away because the
+   capability went away.
+2. **Re-granting** restored `anon:EXECUTE` alongside `authenticated`, reopening
+   the unauthenticated `/rest/v1/rpc` surface closed earlier the same day, and
+   producing *two* advisories instead of one.
 
-The UI gate (`App.js:1724`, Organizations screen restricted to Jim's UUID) is
-*not* the protection either — any signed-in user can POST to
-`/rest/v1/rpc/delete_organization_cascade` without ever loading the UI. Keep the
-in-function guard.
+Corrected by `restore_cascade_delete_authenticated_only_grant`. Verified:
+
+| Caller | Outcome |
+|---|---|
+| Jim (admin) | reaches the function, guard passes |
+| Dawn (client) | `42501` — rejected by the in-function guard |
+| anon | `42501` — rejected at the grant level |
+
+**Correct grant set: `authenticated` + `service_role` + owner. Leave it.** No
+grant change removes this advisory while keeping the button working. The only
+real alternatives are accepting it (current choice) or moving the call behind an
+Edge Function using the service key.
+
+The UI gate (`App.js:1724`, Organizations restricted to Jim's UUID) is **not**
+the protection. Any signed-in user can POST to
+`/rest/v1/rpc/delete_organization_cascade` without ever loading the UI. The
+in-function `private.app_is_admin()` guard is the only thing between a client
+assessor and deleting all 41 PPA jobs. Never remove it.
 
 Cleared along the way: 45 `rls_disabled_in_public` ERRORs, the SECURITY DEFINER
 view, 10 mutable `search_path` functions, 2 anon-executable SECURITY DEFINER
