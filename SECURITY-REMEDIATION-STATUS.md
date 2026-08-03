@@ -145,12 +145,54 @@ a hardcoded `user` object and returned early.
 
 ## 5. Next: RLS
 
-### Phase A — enable everywhere, authenticated-only
+### Phase A — ✅ APPLIED (2026-08-03)
 
-One tracked migration: RLS on across all public tables with an
-authenticated-only policy each. Clears every ERROR-level advisor and shuts off
-anon access. Signed-in behavior is unchanged because the app already scopes its
-own queries. Reversible per table.
+RLS is on across **all 48** public tables, each with a single
+`authenticated_full_access` policy (`for all to authenticated using (true) with
+check (true)`). The anon role now has no table access. Signed-in behavior is
+unchanged because the app already scopes its own queries. Org/job scoping is
+Phase B.
+
+Two migrations:
+
+1. `phase_a_rls_canary_county_hpi_data` — one table first, to prove the pattern.
+   Verified by role-switch probe: anon saw 0 rows, authenticated saw 541. Jim
+   confirmed the County HPI tab still reads *and* writes.
+2. `phase_a_rls_all_public_tables` — the remaining 47. Driven off `pg_class` in
+   a `DO` loop rather than a hand-typed list, so nothing was missed.
+
+That second migration also **replaced the policies on the three tables that
+already had RLS enabled**. `job_cme_result_sets`, `job_cme_bracket_mappings`,
+and `job_sales_pool_overrides` each had `USING (true)` policies targeting
+`public` — so they read as protected on the dashboard while anon could read and
+write them. Do not assume "RLS enabled" means closed; check `polroles`.
+
+Post-migration verification (role-switch probe, `set local role`):
+
+| Table | anon sees | signed-in sees |
+|---|---|---|
+| property_records | 0 | 331,447 |
+| appeal_log | 0 | 2,487 |
+| employees | 0 | 81 |
+| jobs | 0 | 55 |
+| billing_events | 0 | 275 |
+| profiles | 0 | 21 |
+
+Writes confirmed blocked too: `insert into employees` as `anon` raised, and no
+row landed.
+
+Catalog check after: 0 tables unprotected, 48 protected, 0 unexpected policies.
+
+Both edge functions (`recalculate-amenities`, `update-user-password`) use
+`SUPABASE_SERVICE_ROLE_KEY`, which bypasses RLS — unaffected. The anon key in
+`update-user-password` is only used to verify the caller's JWT.
+
+**Rollback per table:**
+
+```sql
+alter table public.<t> disable row level security;
+drop policy if exists "authenticated_full_access" on public.<t>;
+```
 
 Current advisor state: 40 tables with RLS disabled, 8 more with policies written
 but RLS never enabled (dead weight — the source of the resource warning), 1
