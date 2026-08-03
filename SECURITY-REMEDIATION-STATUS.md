@@ -104,17 +104,12 @@ All 81 employee rows otherwise intact.
 
 ---
 
-## 3. Blocking next step — deploy and verify login
+## 3. ✅ Deployed and verified — login works
 
-1. Push, merge to main, let Vercel build **black-seven**.
-2. Get a password onto `dudj23@gmail.com`: Supabase dashboard →
-   Authentication → Users → row menu. If it only offers "send recovery email",
-   that works too *once the code above is live* (not before — the old build has
-   no set-password screen).
-3. Sign into black-seven. Expect: admin, full nav incl. Billing/Payroll, all 31
-   jobs.
-
-If it fails with "Employee record not found", the `.or()` lookup is the suspect.
+Verified live: recovery email → `ResetPassword` screen → new password →
+signed in as `dudj23@gmail.com` with admin access. This closes 1.2 and 1.3
+(the `.or(auth_user_id, email)` lookup resolves the Jim Duda employee row, and
+self-service password recovery works end to end).
 
 **Rollback:** restore the old condition in `App.js:checkSession` and redeploy.
 The Builder dev environment keeps auto-logging in as admin regardless, so there
