@@ -137,7 +137,7 @@ Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 All tables in `public` schema.
 
 **RLS is enabled on all 48 public tables as of 2026-08-03.** See
-`SECURITY-REMEDIATION-STATUS.md` for the full policy map. Summary: money tables
+`SECURITY-REMEDIATION.md` for the full policy map. Summary: money tables
 (billing/payroll/contracts/expenses/receivables/distributions/proposals) are
 admin-only; job-scoped tables use `staff or own job`; identity tables use
 `staff or own org`. Scoping is resolved by four SECURITY DEFINER helpers that

@@ -1,17 +1,22 @@
-# Security Remediation — Status & Next Steps
+# Security Remediation
 
-Session date: 2026-08-02. Supabase project `zxvavttfvpsagzluqqwn`.
-Companion to `SUPABASE_RESOURCE_FIX.md` (the original RLS plan, still accurate
-on the advisor inventory).
+Supabase project `zxvavttfvpsagzluqqwn`. Started 2026-08-02, completed
+2026-08-03. Companion to `SUPABASE_RESOURCE_FIX.md` (the original RLS plan).
 
-Everything below is committed to the branch but **not yet deployed**. Nothing in
-the RLS project has started.
+**The work is done.** RLS is live on all 48 public tables, storage is private,
+the scoping helpers live in the `private` schema, and both advisors are clear
+apart from the Postgres patch. This document is now the reference for *why* the
+access model looks the way it does — read it before adding a policy, view, or
+RPC. The short version of the rules is in `copilot-os.md`.
+
+One item remains open: **schedule the Postgres upgrade** when the towns are
+quiet. It is a platform-side patch with a few minutes of downtime.
 
 ---
 
-## 1. Shipped in this branch (code)
+## 1. Code changes
 
-### 1.1 Dev auto-login no longer bypasses authentication
+### 1.1 Dev auto-login removed entirely
 
 `src/App.js` (`checkSession`)
 
@@ -20,12 +25,15 @@ Was: auto-login as the primary owner when the hostname matched any of a list
 carried `?dev=true`. That made `<any-deployed-url>/?dev=true` a full admin
 session for anyone, with no password.
 
-Now: gated on `process.env.NODE_ENV !== 'production'` only, and the query-string
-escape hatch is explicitly refused.
+First fix: gated on `process.env.NODE_ENV !== 'production'`, keeping auto-login
+in preview and localhost. That turned out to be the wrong call once RLS landed —
+the fake session only existed in React state, so the database connection was
+still running as `anon`. Policies scoped to `authenticated` returned nothing in
+the preview while working fine in production, which made the preview useless for
+testing the very thing being built.
 
-- Builder preview and localhost still auto-login (they run `npm start`).
-- Any Vercel production build now requires a real sign-in. **This includes
-  black-seven**, which previously relied on the hostname match.
+Final state: **no auto-login anywhere.** Every environment calls
+`supabase.auth.getSession()` and requires a real session (`src/App.js:1152`).
 
 ### 1.2 Login resolves identity by auth ID, then email
 
