@@ -2,9 +2,13 @@
 
 > Lean reference for the NJ property-assessment management platform.
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.
-> Updated April 2025 (rev. — geocoder, appeal map, distance filter, PowerComp PDF round-trip,
-> user-facing Coordinates cleanup sub-tab, sales-pool chip filter w/ Lojik year adjustment,
-> ties-only ZIP variant CSV, numbered-street ordinal variants, AppealLog→CME bracket label parity).
+> Updated August 2026.
+>
+> Recent revisions: RLS enabled on all 48 `public` tables with `private`-schema
+> scoping helpers (§ RLS), storage buckets made private, direct local-folder
+> photo workflow replacing the PowerComp print-time merge (§ 11), geocoder +
+> appeal map + distance filter, Coordinates cleanup sub-tab, sales-pool chip
+> filter w/ Lojik year adjustment, AppealLog→CME bracket label parity.
 
 ---
 
@@ -82,7 +86,7 @@ src/
 │       ├── FinalValuation.jsx      (182)    Orchestrator → final-valuation-tabs/
 │       └── final-valuation-tabs/
 │           ├── SalesComparisonTab.jsx      (5,684)  CME comparable search + evaluation (incl. distance-from-subject filter)
-│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + import + PowerComp PDF merge + CSV export to BRT
+│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + legacy PowerComp import + PDF export (direct photos) + CSV export to BRT
 │           ├── DetailedAppraisalGrid.jsx   (2,532)  Manual appraisal + PDF export (uploads to `appeal-reports` bucket)
 │           ├── AdjustmentsTab.jsx          (2,277)  CME grid + bracket mapping
 │           ├── SalesReviewTab.jsx          (1,870)  Sales history review
@@ -132,7 +136,7 @@ Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 
 ---
 
-## 3. Database Schema (Live — April 2025)
+## 3. Database Schema & RLS (Live — August 2026)
 
 All tables in `public` schema.
 
