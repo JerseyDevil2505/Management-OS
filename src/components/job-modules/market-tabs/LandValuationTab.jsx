@@ -5341,7 +5341,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
       const included = includedSales.has(sale.id) ? 'Y' : 'N';
       const notes = landNotes[sale.id] || '';
-      const location = (sale.location_analysis || '').trim();
+      const location = sale.location_analysis || '';
 
       const acres = sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '';
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
@@ -6028,7 +6028,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const sizeLabel = valuationMode === 'acre' ? sale.totalAcres?.toFixed(2) : 
                        valuationMode === 'sf' ? Math.round(sale.totalAcres * 43560) : sale.totalAcres;
       
-      const location = (sale.location_analysis || '').trim();
+      const location = sale.location_analysis || '';
 
       csv += `"${sale.property_block}","${sale.property_lot}","${sale.property_location}","${sale.new_vcs || ''}","${location}","${region}","${category}","${sale.sales_date}",${sale.sales_price},${sizeLabel},${sale.pricePerAcre},"${isPackage}","${included}","${notes}"\n`;
     });
@@ -7572,7 +7572,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     )}
 
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '11px' }}>
-                      {(sale.location_analysis || '').trim() || '-'}
+                      {sale.location_analysis || '-'}
                     </td>
 
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
