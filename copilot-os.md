@@ -144,7 +144,7 @@ admin-only; job-scoped tables use `staff or own job`; identity tables use
 live in the **`private` schema**, not `public`: `private.app_is_admin()`,
 `private.app_is_staff()`, `private.app_org_ids()`, `private.app_job_ids()`.
 
-Three rules when touching policies:
+Five rules when touching policies:
 
 1. **Never call a helper bare in a predicate.** Use
    `(select private.app_is_staff())` and
@@ -157,6 +157,13 @@ Three rules when touching policies:
    also need explicit grants after the Oct 30 2026 Data API change (see
    `SUPABASE_RESOURCE_FIX.md`). And any new **view** needs
    `security_invoker = true`, or it bypasses RLS entirely.
+4. **Never write `FOR ALL` next to a separate SELECT policy.** `ALL` includes
+   SELECT, so both run on every read and Postgres ORs them. Write the admin side
+   as explicit INSERT / UPDATE / DELETE (see `organizations`, `profiles`).
+5. **New RPCs should be SECURITY INVOKER.** Now that RLS is on, a definer
+   function is escalation the database does not need, and every definer function
+   reachable at `/rest/v1/rpc` draws an advisory. `delete_organization_cascade`
+   is invoker with an `private.app_is_admin()` guard — copy that shape.
 
 ### Core Tables
 

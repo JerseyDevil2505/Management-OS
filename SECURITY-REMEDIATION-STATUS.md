@@ -548,10 +548,43 @@ Verified end to end on two throwaway orgs (both cleaned up):
 
 Grants unchanged: `authenticated` + `service_role` + owner, `anon` revoked.
 
+#### Step 6 — split the admin `FOR ALL` policies off SELECT
+
+`organizations` and `profiles` each carried two permissive policies that
+overlapped on SELECT: a read policy plus an admin policy declared `FOR ALL`
+(which includes SELECT). Postgres must evaluate every permissive policy and OR
+the results, so each read paid for a redundant `app_is_admin()` check that the
+read policy already covered.
+
+Fixed by `split_admin_all_policies_off_select` — the two `FOR ALL` policies were
+replaced with explicit INSERT / UPDATE / DELETE policies (same
+`(select private.app_is_admin())` predicate, `USING` + `WITH CHECK` on UPDATE).
+SELECT is now served by exactly one policy per table.
+
+No access change — both read policies already admitted admins
+(`app_is_admin` implies `app_is_staff`; `profiles_self_read` is
+`id = auth.uid() OR app_is_admin()`). Re-verified by impersonation:
+
+| Caller | organizations | profiles |
+|---|---|---|
+| Jim (admin) | 15 | 21 |
+| PPA staff | 15 | 1 |
+| Client assessor | 1 | 1 |
+
+Admin insert/update/delete on `organizations` all succeed; client insert is
+rejected. Test rows cleaned up.
+
+**Apply this shape to any new table:** never use `FOR ALL` alongside a separate
+SELECT policy. Write the admin side as INSERT/UPDATE/DELETE.
+
 #### Advisor state — final
 
 **Zero ERROR-level lints. One WARN:** `vulnerable_postgres_version`, which
 clears when the patch is scheduled. Nothing else outstanding.
+
+Performance advisor: zero WARNs. What remains is all INFO and pre-dates this
+work — unindexed foreign keys, unused indexes, and the Auth connection
+allocation strategy. None are caused by RLS.
 
 ##### ⚠️ History: the cascade advisory drifted twice before being fixed properly
 
