@@ -1151,25 +1151,10 @@ const App = () => {
 
   const checkSession = async () => {
     try {
-      // Development auto-login. Gated on the build type rather than hostname,
-      // so a deployed production build can never be entered without real
-      // credentials, and the query-string escape hatch is explicitly refused.
-      if (process.env.NODE_ENV !== 'production' &&
-          !window.location.search.includes('dev=true')) {
-        setUser({
-          id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
-          email: 'dev@lojik.com',
-          role: 'admin',
-          employeeData: {
-            name: 'Development Mode',
-            role: 'admin'
-          }
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Production - check for real session
+      // Every environment requires a real Supabase session. Dev mode used to
+      // fake one in React state, which left the database connection running as
+      // the anonymous role — RLS policies scoped to `authenticated` would have
+      // returned nothing in the preview while working fine in production.
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
