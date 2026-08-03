@@ -12016,80 +12016,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return loc.split(/\s*(?:\/|\||,|\band\b|&)\s*/i).map(p => p.trim()).filter(Boolean);
   };
 
-  // Helper: determine polarity of a location part from mappedLocationCodes and code definitions
-  const getPartPolarity = (part) => {
-    // returns 'positive', 'negative', or null if unknown/mixed
-    const codes = new Set();
-    Object.keys(mappedLocationCodes || {}).forEach(k => {
-      if (k.endsWith(`_${part}`)) {
-        const val = (mappedLocationCodes[k] || '').toString().toUpperCase();
-        val.split('/').map(s => s.trim()).filter(Boolean).forEach(c => codes.add(c));
-      }
-    });
-    if (codes.size === 0) return null;
-    let hasPos = false;
-    let hasNeg = false;
-    codes.forEach(code => {
-      const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
-      const custom = customLocationCodes.find(d => d.code === code);
-      const isPos = def?.isPositive ?? custom?.isPositive ?? null;
-      if (isPos === true) hasPos = true;
-      if (isPos === false) hasNeg = true;
-    });
-    if (hasPos && !hasNeg) return 'positive';
-    if (hasNeg && !hasPos) return 'negative';
-    return null; // mixed or unknown
-  };
-
-  // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
-  // Update per-part matches and populate the compound row with aggregated values (max of part values per side)
-  const applySummaryToWorksheet = (location, value) => {
-    if (value === null || value === undefined || isNaN(Number(value))) return;
-    const numeric = Number(value);
-    if (!isFinite(numeric)) return;
-    // Skip locations that are tentative (contain 'possible' or '?') unless user explicitly provided inputs
-    if (/\bpossible|possibly\b|\?/i.test(location)) return;
-
-    const parts = splitLocationParts(location);
-
-    Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      const partPosVals = [];
-      const partNegVals = [];
-
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
-          const polarity = getPartPolarity(part);
-          if (numeric >= 0) {
-            if (polarity !== 'negative') {
-              updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
-              partPosVals.push(Math.abs(numeric));
-            }
-          } else {
-            if (polarity !== 'positive') {
-              updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
-              partNegVals.push(Math.abs(numeric));
-            }
-          }
-        } else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
-          const pAvg = Number(standaloneAvg[part].avg);
-          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
-          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
-        }
-      });
-
-      // After updating parts (or collecting part averages), set compound row values
-      const compoundKey = `${vcs}_${location}`;
-      if (partPosVals.length > 0) {
-        const maxPos = Math.max(...partPosVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
-      }
-      if (partNegVals.length > 0) {
-        const maxNeg = Math.max(...partNegVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
-      }
-    });
-  };
-
   // Which applied sides a specific worksheet row accepts. Mirrors the enable/disable
   // rule on that row's own inputs so we never write a value into a cell the user
   // can't then edit or clear.
@@ -12132,30 +12058,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (pos !== null && sides.positive) updateActualAdjustment(vcs, `${location}_positive`, pos);
       if (neg !== null && sides.negative) updateActualAdjustment(vcs, `${location}_negative`, neg);
     });
-  };
-
-  // Special helper for BS traffic levels - apply to compound and part keys
-  const applyBSTraffic = (location, levelKey) => {
-    const levelMap = { light: -5, medium: -10, heavy: -15 };
-    const val = levelMap[levelKey];
-    if (val === undefined) return;
-    const parts = splitLocationParts(location);
-    Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(val));
-      });
-    });
-  };
-
-  // Helper to check if any mapped code for this location includes a particular code (e.g., BS)
-  const locationHasCode = (location, code) => {
-    // check exact mapped keys
-    const exact = Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
-    if (exact) return true;
-    // also check parts
-    const parts = splitLocationParts(location);
-    return parts.some(part => Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${part}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code)));
   };
 
   // Use component-level inputs/handlers for adding custom codes
