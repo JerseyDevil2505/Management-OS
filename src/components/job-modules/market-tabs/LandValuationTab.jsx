@@ -31,6 +31,11 @@ const safeLocaleDate = (d) => {
   return date ? date.toLocaleDateString() : 'N/A';
 };
 
+// Seed percentages for codes that have a conventional starting value. Editable
+// per job and persisted to eco_obs_code_config.code_defaults, so this map is only
+// the fallback for a job that has never set them.
+const DEFAULT_CODE_PERCENTS = { LT: 5, MT: 10, HT: 15 };
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -212,6 +217,9 @@ const LandValuationTab = ({
   // Default Economic Obsolescence Codes (editable via UI)
   const DEFAULT_ECO_OBS_CODES = [
     { code: 'BS', description: 'Busy Street', isPositive: false },
+    { code: 'LT', description: 'Light Traffic', isPositive: false },
+    { code: 'MT', description: 'Medium Traffic', isPositive: false },
+    { code: 'HT', description: 'Heavy Traffic', isPositive: false },
     { code: 'CM', description: 'Commercial', isPositive: false },
     { code: 'PL', description: 'Power Lines', isPositive: false },
     { code: 'RR', description: 'Railroad', isPositive: false },
@@ -407,6 +415,7 @@ const LandValuationTab = ({
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
+  const [codeDefaults, setCodeDefaults] = useState(DEFAULT_CODE_PERCENTS);
   const [summaryInputs, setSummaryInputs] = useState({});
   const [includeCompounded, setIncludeCompounded] = useState(false);
   // Sorting for the worksheet table (vcs, location, code)
@@ -497,8 +506,11 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('����� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
+
+    // Caller needs the fresh map: setMappedLocationCodes has not landed yet.
+    return newMap;
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
 const hasInitialized = useRef(false);
@@ -849,6 +861,7 @@ useEffect(() => {
     setMappedLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
     setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
     setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+    setCodeDefaults({ ...DEFAULT_CODE_PERCENTS, ...(marketLandData.eco_obs_code_config.code_defaults || {}) });
     setSummaryInputs(marketLandData.eco_obs_code_config.summary_inputs || {});
   }
   if (marketLandData.eco_obs_applied_adjustments) {
@@ -4325,6 +4338,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           location_codes: mappedLocationCodes,
           traffic_levels: trafficLevels,
           custom_codes: customLocationCodes,
+          code_defaults: codeDefaults,
           summary_inputs: summaryInputs
         },
         eco_obs_compound_overrides: computedAdjustments,
@@ -4458,7 +4472,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
     vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
     vcsDescriptions, vcsTypes, vcsRecommendedSites, vcsMethodOverrides, vcsRateOverrides, vcsStepdownOverrides, ecoObsFactors,
-    mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
+    mappedLocationCodes, trafficLevels, customLocationCodes, codeDefaults, summaryInputs,
     actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
     onAnalysisUpdate, updateSessionState
   ]);
@@ -12016,171 +12030,215 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return loc.split(/\s*(?:\/|\||,|\band\b|&)\s*/i).map(p => p.trim()).filter(Boolean);
   };
 
-  // Helper: determine polarity of a location part from mappedLocationCodes and code definitions
-  const getPartPolarity = (part) => {
-    // returns 'positive', 'negative', or null if unknown/mixed
-    const codes = new Set();
-    Object.keys(mappedLocationCodes || {}).forEach(k => {
-      if (k.endsWith(`_${part}`)) {
-        const val = (mappedLocationCodes[k] || '').toString().toUpperCase();
-        val.split('/').map(s => s.trim()).filter(Boolean).forEach(c => codes.add(c));
-      }
-    });
-    if (codes.size === 0) return null;
-    let hasPos = false;
-    let hasNeg = false;
-    codes.forEach(code => {
-      const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
-      const custom = customLocationCodes.find(d => d.code === code);
-      const isPos = def?.isPositive ?? custom?.isPositive ?? null;
-      if (isPos === true) hasPos = true;
-      if (isPos === false) hasNeg = true;
-    });
-    if (hasPos && !hasNeg) return 'positive';
-    if (hasNeg && !hasPos) return 'negative';
-    return null; // mixed or unknown
+  // Which applied sides a specific worksheet row accepts. Mirrors the enable/disable
+  // rule on that row's own inputs so we never write a value into a cell the user
+  // can't then edit or clear.
+  const rowAppliedSides = (vcs, location) => {
+    const mapVal = mappedLocationCodes[`${vcs}_${location}`] || '';
+    const codes = mapVal ? mapVal.split('/').map(c => c.trim()).filter(Boolean) : [];
+    if (codes.length === 0) return { positive: false, negative: false };
+    return {
+      positive: codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive)),
+      negative: codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive))
+    };
   };
 
-  // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
-  // Update per-part matches and populate the compound row with aggregated values (max of part values per side)
-  const applySummaryToWorksheet = (location, value) => {
-    if (value === null || value === undefined || isNaN(Number(value))) return;
-    const numeric = Number(value);
-    if (!isFinite(numeric)) return;
-    // Skip locations that are tentative (contain 'possible' or '?') unless user explicitly provided inputs
-    if (/\bpossible|possibly\b|\?/i.test(location)) return;
+  // Default percent carried by a code, if any. Falls back to the seed map for codes
+  // this job has never tuned.
+  const codeDefaultFor = (code) => {
+    const raw = codeDefaults[code];
+    if (raw === undefined || raw === null || raw === '') return null;
+    const num = Number(raw);
+    return isNaN(num) ? null : Math.abs(num);
+  };
 
-    const parts = splitLocationParts(location);
+  // Fill Applied+/Applied- from the mapped code's default percent. Only touches cells
+  // that are currently empty, so anything you set by hand or via Set All wins.
+  // A row mapped to several codes takes the largest default on each side.
+  const applyCodeDefaults = (codeMap) => {
+    const updates = {};
+    let filled = 0;
 
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      const partPosVals = [];
-      const partNegVals = [];
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        const mapVal = (codeMap || mappedLocationCodes)[`${vcs}_${location}`] || '';
+        const codes = mapVal ? mapVal.split('/').map(c => c.trim()).filter(Boolean) : [];
+        if (codes.length === 0) return;
 
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
-          const polarity = getPartPolarity(part);
-          if (numeric >= 0) {
-            if (polarity !== 'negative') {
-              updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
-              partPosVals.push(Math.abs(numeric));
-            }
-          } else {
-            if (polarity !== 'positive') {
-              updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
-              partNegVals.push(Math.abs(numeric));
-            }
-          }
-        } else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
-          const pAvg = Number(standaloneAvg[part].avg);
-          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
-          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
+        const posDefaults = [];
+        const negDefaults = [];
+        codes.forEach(code => {
+          const val = codeDefaultFor(code);
+          if (val === null) return;
+          const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
+          const custom = customLocationCodes.find(d => d.code === code);
+          const isPos = def?.isPositive ?? custom?.isPositive ?? false;
+          (isPos ? posDefaults : negDefaults).push(val);
+        });
+
+        const key = `${vcs}_${location}`;
+        if (posDefaults.length > 0 && !actualAdjustments[`${key}_positive`]) {
+          updates[`${key}_positive`] = Math.max(...posDefaults);
+          filled++;
+        }
+        if (negDefaults.length > 0 && !actualAdjustments[`${key}_negative`]) {
+          updates[`${key}_negative`] = Math.max(...negDefaults);
+          filled++;
         }
       });
-
-      // After updating parts (or collecting part averages), set compound row values
-      const compoundKey = `${vcs}_${location}`;
-      if (partPosVals.length > 0) {
-        const maxPos = Math.max(...partPosVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
-      }
-      if (partNegVals.length > 0) {
-        const maxNeg = Math.max(...partNegVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
-      }
     });
+
+    if (filled > 0) setActualAdjustments(prev => ({ ...prev, ...updates }));
+    return filled;
   };
 
-  // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
-  // When explicit positive/negative provided, set parts accordingly and aggregate to compound row
+  // Apply positive and/or negative values for a location to every VCS row whose
+  // locational analysis is exactly that location. A compound description sets only
+  // the compound rows — its component standalone rows are set from their own summary
+  // rows, so an explicit standalone assignment is never overwritten by a compound.
   const applySummarySet = (location, positive, negative) => {
     // Skip tentative locations
     if (/\bpossible|possibly\b|\?/i.test(location)) {
       debug(`applySummarySet skipped tentative location: ${location}`);
       return;
     }
-    const parts = splitLocationParts(location);
-    debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
+
+    const pos = positive !== null && positive !== undefined && positive !== '' && !isNaN(Number(positive)) ? Math.abs(Number(positive)) : null;
+    const neg = negative !== null && negative !== undefined && negative !== '' && !isNaN(Number(negative)) ? Math.abs(Number(negative)) : null;
+    if (pos === null && neg === null) return;
+
+    debug(`applySummarySet called for location: ${location} positive: ${pos} negative: ${neg}`);
 
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      const partPosVals = [];
-      const partNegVals = [];
+      if (!ecoObsFactors[vcs] || !ecoObsFactors[vcs][location]) return;
 
-      // First, update parts where they exist in this VCS
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
-          const polarity = getPartPolarity(part);
+      const sides = rowAppliedSides(vcs, location);
+      if (!sides.positive && !sides.negative) {
+        debug(`applySummarySet skipped ${vcs}_${location} — no code mapped`);
+        return;
+      }
 
-          if (polarity === 'positive') {
-            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-              const val = Math.abs(Number(positive));
-              updateActualAdjustment(vcs, `${part}_positive`, val);
-              partPosVals.push(val);
-            }
-          } else if (polarity === 'negative') {
-            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-              const val = Math.abs(Number(negative));
-              updateActualAdjustment(vcs, `${part}_negative`, val);
-              partNegVals.push(val);
-            }
-          } else {
-            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-              const val = Math.abs(Number(positive));
-              updateActualAdjustment(vcs, `${part}_positive`, val);
-              partPosVals.push(val);
-            }
-            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-              const val = Math.abs(Number(negative));
-              updateActualAdjustment(vcs, `${part}_negative`, val);
-              partNegVals.push(val);
-            }
+      if (pos !== null && sides.positive) updateActualAdjustment(vcs, `${location}_positive`, pos);
+      if (neg !== null && sides.negative) updateActualAdjustment(vcs, `${location}_negative`, neg);
+    });
+  };
+
+  // Second pass over a worksheet that already has standalone values entered:
+  // promote a rated road from the generic BS code to the traffic code its value
+  // implies, then compose each compound row from its parts. Compound codes are the
+  // part codes joined; compound values are the sum of the parts, capped the same way
+  // the summary's Recommended % is. A compound with any part unset is left alone so
+  // the blank stays visible as unfinished work.
+  const deriveCodesAndCompounds = () => {
+    const COMPOUND_CAP = 25;
+
+    // value -> traffic code, derived from this job's editable defaults. A value shared
+    // by two codes is ambiguous, so it is dropped rather than guessed at.
+    const trafficByValue = {};
+    const claimed = {};
+    ['LT', 'MT', 'HT'].forEach(code => {
+      const val = codeDefaultFor(code);
+      if (val === null) return;
+      if (claimed[val]) {
+        trafficByValue[val] = null;
+        return;
+      }
+      claimed[val] = true;
+      trafficByValue[val] = code;
+    });
+
+    const hasValue = (v) => v !== null && v !== undefined && v !== '';
+    const newMap = { ...mappedLocationCodes };
+    const updates = {};
+    let promoted = 0;
+    let compounded = 0;
+    let skipped = 0;
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        if (splitLocationParts(location).length > 1) return;
+        const key = `${vcs}_${location}`;
+        if ((newMap[key] || '').trim().toUpperCase() !== 'BS') return;
+        const val = actualAdjustments[`${key}_negative`];
+        if (!hasValue(val)) return;
+        const code = trafficByValue[Math.abs(Number(val))];
+        if (!code) return;
+        newMap[key] = code;
+        promoted++;
+      });
+    });
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(location => {
+        const parts = splitLocationParts(location);
+        if (parts.length < 2) return;
+
+        const partCodes = [];
+        let posSum = 0;
+        let negSum = 0;
+        let complete = true;
+
+        parts.forEach(part => {
+          const partKey = `${vcs}_${part}`;
+          const code = (newMap[partKey] || '').trim();
+          const pos = actualAdjustments[`${partKey}_positive`];
+          const neg = actualAdjustments[`${partKey}_negative`];
+          if (!code || (!hasValue(pos) && !hasValue(neg))) {
+            complete = false;
+            return;
           }
-        }
-        // If the part does not exist for this VCS but we have a standaloneAvg for the part, use that to influence compound aggregation
-        else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
-          const pAvg = Number(standaloneAvg[part].avg);
-          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
-          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
-        }
-      });
+          partCodes.push(code);
+          if (hasValue(pos)) posSum += Math.abs(Number(pos));
+          if (hasValue(neg)) negSum += Math.abs(Number(neg));
+        });
 
-      // Aggregate to compound row (even if parts weren't present in this VCS)
-      const compoundKey = `${vcs}_${location}`;
-      if (partPosVals.length > 0) {
-        const maxPos = Math.max(...partPosVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
-      }
-      if (partNegVals.length > 0) {
-        const maxNeg = Math.max(...partNegVals);
-        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
-      }
-    });
-  };
+        if (!complete) {
+          skipped++;
+          return;
+        }
 
-  // Special helper for BS traffic levels - apply to compound and part keys
-  const applyBSTraffic = (location, levelKey) => {
-    const levelMap = { light: -5, medium: -10, heavy: -15 };
-    const val = levelMap[levelKey];
-    if (val === undefined) return;
-    const parts = splitLocationParts(location);
-    Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
-      parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(val));
+        const key = `${vcs}_${location}`;
+        newMap[key] = partCodes.join('/');
+        if (posSum > 0) updates[`${key}_positive`] = Math.min(posSum, COMPOUND_CAP);
+        if (negSum > 0) updates[`${key}_negative`] = Math.min(negSum, COMPOUND_CAP);
+        compounded++;
       });
     });
+
+    setMappedLocationCodes(newMap);
+    if (Object.keys(updates).length > 0) setActualAdjustments(prev => ({ ...prev, ...updates }));
+
+    alert(`Promoted ${promoted} road row${promoted === 1 ? '' : 's'} from BS to a traffic code.\nComposed ${compounded} compound row${compounded === 1 ? '' : 's'} (parts summed, capped at ${COMPOUND_CAP}%).\nSkipped ${skipped} compound row${skipped === 1 ? '' : 's'} with an unset part.`);
   };
 
-  // Helper to check if any mapped code for this location includes a particular code (e.g., BS)
-  const locationHasCode = (location, code) => {
-    // check exact mapped keys
-    const exact = Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
-    if (exact) return true;
-    // also check parts
-    const parts = splitLocationParts(location);
-    return parts.some(part => Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${part}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code)));
-  };
-
-  // Use component-level inputs/handlers for adding custom codes
+  // Editable default percent per code. Blank means the code contributes nothing
+  // to Apply Defaults.
+  const renderCodeDefaultChips = () => (
+    <div style={{ marginTop: '8px' }}>
+      <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+        Default % per code. Apply Defaults uses these to fill empty Applied% cells. Saved with this job.
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {combinedLocationCodes.map(c => (
+          <div key={c.code} style={{ padding: '4px 8px', borderRadius: '6px', background: '#FFFFFF', border: '1px solid #E5E7EB', display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <strong style={{ fontSize: '12px' }}>{c.code}</strong>
+            <span style={{ fontSize: '11px', color: c.isPositive ? '#10B981' : '#DC2626' }}>{c.isPositive ? '+' : '-'}</span>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              placeholder="-"
+              value={codeDefaults[c.code] === undefined || codeDefaults[c.code] === null ? '' : codeDefaults[c.code]}
+              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              onWheel={(e) => e.currentTarget.blur()}
+              onChange={(e) => setCodeDefaults(prev => ({ ...prev, [c.code]: e.target.value === '' ? '' : Math.abs(Number(e.target.value)) }))}
+              style={{ width: '48px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '11px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding: '20px' }}>
@@ -12217,6 +12275,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </label>
               <button onClick={handleAddCustomCode} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Add</button>
             </div>
+
+            {renderCodeDefaultChips()}
 
             {customLocationCodes.length > 0 && (
               <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -12277,8 +12337,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
               <button
                 onClick={() => {
-                  applyDefaultMapping();
-                  alert('Applied default mappings to empty code fields. Review highlighted entries.');
+                  const newMap = applyDefaultMapping();
+                  const filled = applyCodeDefaults(newMap);
+                  alert(`Applied default mappings to empty code fields. Review highlighted entries.\nFilled ${filled} empty Applied% cell${filled === 1 ? '' : 's'} from code defaults.`);
                 }}
                 style={{
                   backgroundColor: '#3B82F6',
@@ -12507,12 +12568,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
             <button onClick={() => {
-              // Apply inputs for all summary rows; if no input for an item, apply avgPercent if available
+              // Only applies values you entered. A blank Applied+/Applied- means leave that
+              // location alone — the Recommended % is never auto-applied.
               const tentativeRegex = /\bpossible|possibly\b|\?/i;
+              let appliedCount = 0;
               summaryList.forEach(item => {
                 const entry = summaryInputs[item.location] || {};
                 const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
                 const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                if (pos === null && neg === null) return;
 
                 // Skip tentative locations or tentative parts inside a compound
                 const parts = splitLocationParts(item.location || '');
@@ -12521,22 +12585,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   return;
                 }
 
-                if (pos !== null || neg !== null) {
-                  debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
-                  applySummarySet(item.location, pos, neg);
-                } else if (item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(Number(item.avgPercent))) {
-                  // Use avgPercent to populate appropriate side(s)
-                  const avg = Number(item.avgPercent);
-                  const posVal = avg > 0 ? Math.abs(avg) : null;
-                  const negVal = avg < 0 ? Math.abs(avg) : null;
-                  if (posVal !== null || negVal !== null) {
-                    debug(`Set All applying avgPercent for ${item.location}: ${avg}`);
-                    applySummarySet(item.location, posVal, negVal);
-                  }
-                }
+                debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
+                applySummarySet(item.location, pos, neg);
+                appliedCount++;
               });
-              alert('Set applied for all visible summary rows (skipped tentative locations)');
+              alert(appliedCount > 0
+                ? `Set applied for ${appliedCount} location${appliedCount === 1 ? '' : 's'} with entered values (skipped tentative locations)`
+                : 'Nothing applied — enter an Applied+ or Applied- value on the locations you want to set.');
             }} style={{ padding: '8px 12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Set All</button>
+            <button
+              onClick={deriveCodesAndCompounds}
+              title="Promote rated roads from BS to LT/MT/HT, then build compound rows from their parts"
+              style={{ padding: '8px 12px', background: '#0F766E', color: 'white', border: 'none', borderRadius: '6px' }}
+            >
+              Derive Codes + Compounds
+            </button>
           </div>
         </div>
       </div>
