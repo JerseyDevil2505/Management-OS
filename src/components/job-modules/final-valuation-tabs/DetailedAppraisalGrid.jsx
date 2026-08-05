@@ -1061,7 +1061,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'prev_assessment',
-      label: `Prev. Assessment (${assmtSource.toUpperCase()})`,
+      label: `Current Assessment (${assmtSource.toUpperCase()})`,
       render: (prop) => {
         const value = getCurrentAssmt(prop);
         return value ? `$${value.toLocaleString()}` : 'N/A';
