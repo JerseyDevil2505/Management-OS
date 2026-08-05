@@ -273,8 +273,8 @@ const OverallAnalysisTab = ({
     
     if (age <= 10) return 'New';
     if (age <= 20) return 'Newer';
-    if (age <= 35) return 'Moderate';
-    if (age <= 50) return 'Older';
+    if (yearBuilt >= 1990) return 'Moderate';
+    if (yearBuilt >= 1950) return 'Older';
     return 'Historic';
   };
 
@@ -673,8 +673,8 @@ const OverallAnalysisTab = ({
         isBaseline: false
       },
       'Moderate': {
-        label: 'Moderate (21-35 years)',
-        minYear: currentYear - 35,
+        label: `Moderate (1990-${currentYear - 21})`,
+        minYear: 1990,
         maxYear: currentYear - 21,
         allProperties: [],
         salesProperties: [],
@@ -694,9 +694,9 @@ const OverallAnalysisTab = ({
         isBaseline: false
       },
       'Older': {
-        label: 'Older (36-50 years)',
-        minYear: currentYear - 50,
-        maxYear: currentYear - 36,
+        label: 'Older (1950-1989)',
+        minYear: 1950,
+        maxYear: 1989,
         allProperties: [],
         salesProperties: [],
         totalSizeAll: 0,
@@ -715,8 +715,8 @@ const OverallAnalysisTab = ({
         isBaseline: false
       },
       'Historic': {
-        label: 'Historic (50+ years)',
-        maxYear: currentYear - 51,
+        label: 'Historic (pre-1950)',
+        maxYear: 1949,
         allProperties: [],
         salesProperties: [],
         totalSizeAll: 0,
