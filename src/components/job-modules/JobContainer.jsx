@@ -574,7 +574,10 @@ const JobContainer = ({
                   calculated_lot_acre: (() => {
                     try {
                       const vendor = (jobData && (jobData.vendor_source || jobData.vendor)) || 'BRT';
-                      const val = interpretCodes.getCalculatedAcreage(propertyData, vendor);
+                      const val = interpretCodes.getCalculatedAcreage(
+                        { ...propertyData, property_market_analysis: marketAnalysis },
+                        vendor
+                      );
                       const num = parseFloat(val);
                       return !isNaN(num) && num > 0 ? num : null;
                     } catch (e) {

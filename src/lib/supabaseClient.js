@@ -2260,44 +2260,39 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
 
     // ===== NEW CORRECT WORKFLOW FOR BRT =====
     if (vendorType === 'BRT') {
-      // 1. FIRST: Check for lot dimensions (frontage × depth)
-      const frontage = marketAnalysis?.asset_lot_frontage ?? property.asset_lot_frontage;
-      const depth = marketAnalysis?.asset_lot_depth ?? property.asset_lot_depth;
+      // BRT source files ship only frontage/depth. Acre and SF come from the
+      // Unit Rate Config tool, so the manual values are authoritative and
+      // frontage × depth is the last resort for jobs where it hasn't been run.
 
-      if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
-        const sf = parseFloat(frontage) * parseFloat(depth);
-        const acres = (sf / 43560).toFixed(2);
-        // Calculated from frontage × depth
-        return acres;
-      }
-
-      // 2. FALLBACK: Use Unit Rate Config results (market_manual_lot_acre)
+      // 1. Unit Rate Config results (market_manual_lot_acre)
       const manualAcre = marketAnalysis?.market_manual_lot_acre ?? property.market_manual_lot_acre;
       if (manualAcre && parseFloat(manualAcre) > 0) {
-        // Using Unit Rate Config manual acres
         return parseFloat(manualAcre).toFixed(2);
       }
 
-      // 3. Check if we can derive from market_manual_lot_sf
+      // 2. Unit Rate Config results (market_manual_lot_sf)
       const manualSf = marketAnalysis?.market_manual_lot_sf ?? property.market_manual_lot_sf;
       if (manualSf && parseFloat(manualSf) > 0) {
-        const acres = (parseFloat(manualSf) / 43560).toFixed(2);
-        // Calculated from Unit Rate Config SF
-        return acres;
+        return (parseFloat(manualSf) / 43560).toFixed(2);
       }
 
-      // 4. Final fallback: Check for pre-calculated fields (unlikely for BRT but just in case)
+      // 3. Pre-calculated asset fields (unlikely for BRT but just in case)
       const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
       if (acreField && parseFloat(acreField) > 0) {
-        // Using pre-calculated asset_lot_acre field
         return parseFloat(acreField).toFixed(2);
       }
 
       const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
       if (sfField && parseFloat(sfField) > 0) {
-        const acres = (parseFloat(sfField) / 43560).toFixed(2);
-        // Calculated from asset_lot_sf field
-        return acres;
+        return (parseFloat(sfField) / 43560).toFixed(2);
+      }
+
+      // 4. Last resort: lot dimensions (frontage × depth)
+      const frontage = marketAnalysis?.asset_lot_frontage ?? property.asset_lot_frontage;
+      const depth = marketAnalysis?.asset_lot_depth ?? property.asset_lot_depth;
+      if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
+        const sf = parseFloat(frontage) * parseFloat(depth);
+        return (sf / 43560).toFixed(2);
       }
 
       // BRT: No more LANDUR summation - that was the old incorrect way
