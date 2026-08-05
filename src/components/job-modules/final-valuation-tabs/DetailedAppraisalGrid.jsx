@@ -495,6 +495,65 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [hasEdits, setHasEdits] = useState(false);
   const [recalculatedProjectedAssessment, setRecalculatedProjectedAssessment] = useState(null);
 
+  // Current Assessment source: 'mod' (values_mod_total, default) or 'cama' (values_cama_total).
+  // Persisted to job_settings under key 'current_assessment_source' and shared with
+  // SalesComparisonTab and AppellantEvidencePanel via the 'assmt-source-changed' event.
+  const [assmtSource, setAssmtSource] = useState('mod');
+  const getCurrentAssmt = useCallback((prop) => {
+    if (!prop) return 0;
+    if (assmtSource === 'cama') return Number(prop.values_cama_total || prop.values_mod_total || 0);
+    return Number(prop.values_mod_total || prop.values_cama_total || 0);
+  }, [assmtSource]);
+
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    supabase
+      .from('job_settings')
+      .select('setting_value')
+      .eq('job_id', jobData.id)
+      .eq('setting_key', 'current_assessment_source')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const v = data?.setting_value;
+        if (v === 'mod' || v === 'cama') setAssmtSource(v);
+      });
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (jobData?.id && e.detail.jobId !== jobData.id) return;
+      const v = e.detail.value;
+      if (v === 'mod' || v === 'cama') setAssmtSource(v);
+    };
+    window.addEventListener('assmt-source-changed', handler);
+    return () => window.removeEventListener('assmt-source-changed', handler);
+  }, [jobData?.id]);
+
+  const updateAssmtSource = async (next) => {
+    if (next !== 'mod' && next !== 'cama') return;
+    setAssmtSource(next);
+    if (!jobData?.id) return;
+    try {
+      window.dispatchEvent(new CustomEvent('assmt-source-changed', {
+        detail: { jobId: jobData.id, value: next }
+      }));
+    } catch (e) {}
+    try {
+      await supabase
+        .from('job_settings')
+        .upsert(
+          { job_id: jobData.id, setting_key: 'current_assessment_source', setting_value: next },
+          { onConflict: 'job_id,setting_key' }
+        );
+    } catch (e) {
+      console.warn('Failed to persist current_assessment_source:', e);
+    }
+  };
+
   // Miscellaneous Adjustment (PowerComp-style freeform row). Captured at PDF-
   // export time only — not persisted, not shown in the Detailed grid behind the
   // modal. One description label + a per-comp dollar value (signed). When the
@@ -1002,9 +1061,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'prev_assessment',
-      label: 'Prev. Assessment',
+      label: `Prev. Assessment (${assmtSource.toUpperCase()})`,
       render: (prop) => {
-        const value = prop.values_mod4_total || prop.values_mod_total || prop.values_cama_total || 0;
+        const value = getCurrentAssmt(prop);
         return value ? `$${value.toLocaleString()}` : 'N/A';
       },
       adjustmentName: null,
@@ -1591,7 +1650,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     })), [adjustmentGrid, vendorType]);
 
   // Combine static and dynamic attributes
-  const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes]);
+  // assmtSource is a dep because ATTRIBUTE_ORDER's prev_assessment row closes over it.
+  const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes, assmtSource]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate a storage key based on job data to persist visibility per job
   const storageKey = useMemo(() => {
@@ -2799,28 +2859,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               evRatioSource = 'Equalization';
             }
           }
-          // Load Current Assessment source preference (synced with Detailed and Search & Results).
-          let evAssmtSource = 'mod';
-          try {
-            const { data: srcRow } = await supabase
-              .from('job_settings')
-              .select('setting_value')
-              .eq('job_id', jobData.id)
-              .eq('setting_key', 'current_assessment_source')
-              .maybeSingle();
-            if (srcRow?.setting_value === 'cama' || srcRow?.setting_value === 'mod') {
-              evAssmtSource = srcRow.setting_value;
-            }
-          } catch (e) { /* default to mod */ }
-          const subjAssmtRaw = evAssmtSource === 'cama'
-            ? (subject?.values_cama_total ?? subject?.values_mod_total ?? null)
-            : (subject?.values_mod_total ?? subject?.values_cama_total ?? null);
+          const subjAssmtRaw = getCurrentAssmt(subject) || null;
           const fmvByRatio = (subjAssmtRaw && evRatioDecimal)
             ? Math.round(Number(subjAssmtRaw) / evRatioDecimal)
             : null;
 
           const currentAsmt = subjAssmtRaw
-            ? `$${Number(subjAssmtRaw).toLocaleString()} (${evAssmtSource.toUpperCase()})`
+            ? `$${Number(subjAssmtRaw).toLocaleString()} (${assmtSource.toUpperCase()})`
             : '\u2014';
           const fmvStr = fmvByRatio ? `$${fmvByRatio.toLocaleString()}` : '\u2014';
           const ratioStr = evRatioDecimal ? `${(evRatioDecimal * 100).toFixed(2)}% ${evRatioSource}` : 'n/a';
@@ -3117,7 +3162,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     doc.text('N.J.S.A. 54:51A-6 — Common Level Range Analysis', margin, ch123StartY + 16);
 
     // Gather data for the Chapter 123 test
-    const currentAssessment = subject.values_mod4_total || subject.values_mod_total || subject.values_cama_total || 0;
+    const currentAssessment = getCurrentAssmt(subject);
     const projectedValue = (recalculatedProjectedAssessment || result.projectedAssessment) || 0;
 
     // Get comparable adjusted prices for the weighted average
@@ -3169,7 +3214,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // Build Chapter 123 summary table
     const ch123Rows = [
-      ['Current Assessment', currentAssessment > 0 ? `$${currentAssessment.toLocaleString()}` : 'N/A'],
+      [`Current Assessment (${assmtSource.toUpperCase()})`, currentAssessment > 0 ? `$${currentAssessment.toLocaleString()}` : 'N/A'],
       ['CME Projected Value', projectedValue > 0 ? `$${Math.round(projectedValue).toLocaleString()}` : 'N/A'],
       ['Avg. Adjusted Price (Comps)', avgAdjustedPrice > 0 ? `$${Math.round(avgAdjustedPrice).toLocaleString()}` : 'N/A'],
       ['Median Adjusted Price (Comps)', medianAdjustedPrice > 0 ? `$${Math.round(medianAdjustedPrice).toLocaleString()}` : 'N/A'],
@@ -3747,7 +3792,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       setShowExportModal(false);
       setDetailedTabBracket(null);
     }
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscRows, activeMiscRows, miscIsActive]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, recalculatedProjectedAssessment, getAdjustment, GARAGE_OPTIONS, jobData, marketLandData, allProperties, codeDefinitions, vendorType, includeMap, includePhotos, photoStripParcels, hideAppellantEvidence, hideDirectorsRatio, hideWeightedValuation, mapHasSubject, mapData, compDistances, appellantDistances, aggregatedSubject, aggregatedComps, applyGeocodePatch, miscRows, activeMiscRows, miscIsActive, assmtSource, getCurrentAssmt]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -3758,6 +3803,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             <div className="text-sm text-blue-100">
               <span className="font-medium">Adjustment Bracket:</span>{' '}
               <span className="font-semibold text-white">{getBracketLabel()}</span>
+            </div>
+            <div
+              className="flex items-center gap-2 text-sm text-blue-100"
+              title="Source for Current Assessment. Drives the Prev. Assessment row, the % change, and the Chapter 123 ratio. Persists per job and syncs with Search & Results."
+            >
+              <span className="font-medium">Current Assmt:</span>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="detailed-assmt-src" value="mod" checked={assmtSource === 'mod'} onChange={() => updateAssmtSource('mod')} className="w-3 h-3" />
+                MOD
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="detailed-assmt-src" value="cama" checked={assmtSource === 'cama'} onChange={() => updateAssmtSource('cama')} className="w-3 h-3" />
+                CAMA
+              </label>
             </div>
             <button
               onClick={openExportModal}
@@ -4046,7 +4105,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </div>
                     <div className="text-sm font-semibold text-green-600 mt-1">
                       {(() => {
-                        const current = subject.values_mod_total || subject.values_cama_total || 0;
+                        const current = getCurrentAssmt(subject);
                         if (current === 0) return '';
                         const changePercent = ((result.projectedAssessment - current) / current) * 100;
                         const isCloserToZero = Math.abs(changePercent) < 5;
