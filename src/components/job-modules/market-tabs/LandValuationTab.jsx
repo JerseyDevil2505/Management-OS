@@ -994,7 +994,14 @@ useEffect(() => {
 
   // ========== CALCULATE ACREAGE HELPER - ENHANCED ==========
   const calculateAcreage = useCallback((property) => {
-    // Always return acres - don't convert here
+    // Always return acres - don't convert here.
+    // Unit Rate Config writes the exact total for the VCS's configured method and a
+    // rounded companion in the other unit, so derive from SF when it's present —
+    // market_manual_lot_acre is rounded to 2 decimals and loses ~4,356 SF of
+    // resolution, which shows up as wrong lot sizes on small lots in SF mode.
+    const manualSf = parseFloat(property?.market_manual_lot_sf);
+    if (manualSf > 0) return manualSf / 43560;
+
     const acres = interpretCodes.getCalculatedAcreage(property, vendorType);
     return parseFloat(acres);
   }, [vendorType]);
