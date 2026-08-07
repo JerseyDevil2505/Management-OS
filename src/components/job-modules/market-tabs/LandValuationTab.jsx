@@ -4,9 +4,10 @@ import {
   X, Plus, Search, TrendingUp,
   Calculator, Download, Trash2,
   Save, FileDown, MapPin,
-  Home
+  Home, History
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
+import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
 import * as XLSX from 'xlsx-js-style';
 import './LandValuationTab.css';
 import './sharedTabNav.css';
@@ -241,6 +242,12 @@ const LandValuationTab = ({
   const [specialRegions, setSpecialRegions] = useState({});
   const [newSpecialRegionName, setNewSpecialRegionName] = useState('');
   const [landNotes, setLandNotes] = useState({});
+  // Method 1 prior sales (BRT prev_sales). priorSalePicks maps a base property id
+  // to a sale the user chose by hand; that row then values the chosen sale instead
+  // of the current one. Method 1 scope only — nothing is written to property_records.
+  const [priorSalePicks, setPriorSalePicks] = useState({});
+  const [salesHistoryTarget, setSalesHistoryTarget] = useState(null);
+  const [hpi, setHpi] = useState({ fn: null, normalizeToYear: 2025 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
   // Notification for saved land rates
@@ -745,6 +752,11 @@ useEffect(() => {
     });
   }
 
+  // Restore hand-picked prior sales (Method 1 scope only)
+  if (marketLandData.vacant_sales_analysis?.prior_sale_picks) {
+    setPriorSalePicks(marketLandData.vacant_sales_analysis.prior_sale_picks);
+  }
+
   // Also restore Method 1 excluded sales from new field (like Method 2)
   if (marketLandData.vacant_sales_analysis?.excluded_sales) {
     const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
@@ -1170,7 +1182,7 @@ const getPricePerUnit = useCallback((price, size) => {
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete, priorSalePicks, hpi]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -1196,6 +1208,30 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('📊 Using default depth tables:', Object.keys(defaultTables));
     }
   }, [jobData?.parsed_code_definitions, vendorType]);
+
+  // ========== HPI FOR PRIOR SALES ==========
+  // Prior sales never went through the normalization pass, so they carry no
+  // values_norm_time. Method 1 prices off values_norm_time, so a prior sale has
+  // to be HPI-adjusted here to sit on the same footing as a current sale.
+  useEffect(() => {
+    let cancelled = false;
+    const normalizeToYear = marketLandData?.normalization_config?.normalizeToYear || 2025;
+    (async () => {
+      const fn = await loadHpiMultiplier(jobData?.county, normalizeToYear);
+      if (!cancelled) setHpi({ fn, normalizeToYear });
+    })();
+    return () => { cancelled = true; };
+  }, [jobData?.county, marketLandData?.normalization_config?.normalizeToYear]);
+
+  const normalizePriorSalePrice = useCallback((price, dateStr) => {
+    const amount = Number(price) || 0;
+    if (!hpi.fn || !amount || !dateStr) return amount;
+    return timeNormalizeUnmasked(
+      { sales_price: amount, sales_date: dateStr },
+      hpi.fn,
+      hpi.normalizeToYear
+    ).values_norm_time;
+  }, [hpi]);
 
   useEffect(() => {
     debug('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
@@ -1297,8 +1333,27 @@ const getPricePerUnit = useCallback((price, size) => {
     const finalSales = [];
     const manuallyAddedIds = window._method1ManuallyAdded || new Set();
 
+    // A hand-picked prior sale replaces the parcel's current sale for every Method 1
+    // test below (date range, price, categorization, rate math). Book/page are dropped
+    // with it - a prior sale's package peers aren't in the file, so it stands alone.
+    const workingProperties = properties.map(prop => {
+      const pick = priorSalePicks[prop.id];
+      if (!pick || !pick.date) return prop;
+      return {
+        ...prop,
+        sales_date: pick.date,
+        sales_price: Number(pick.price) || 0,
+        sales_nu: null,
+        sales_book: null,
+        sales_page: null,
+        values_norm_time: normalizePriorSalePrice(pick.price, pick.date),
+        _priorSalePick: pick,
+        _currentSale: { date: prop.sales_date || null, price: Number(prop.sales_price) || null }
+      };
+    });
+
     if (manuallyAddedIds.size > 0) {
-      const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
+      const manuallyAddedProps = workingProperties.filter(prop => manuallyAddedIds.has(prop.id));
       debug('🔄 Restoring manually added properties:', {
         found: manuallyAddedProps.length,
         expected: manuallyAddedIds.size,
@@ -1402,7 +1457,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }
 
     // Now identify naturally qualifying vacant/teardown/pre-construction sales (excluding manually added)
-    const allSales = properties.filter(prop => {
+    const allSales = workingProperties.filter(prop => {
       // Skip if this is a manually added property - we already processed it
       if (manuallyAddedIds.has(prop.id)) {
         return false;
@@ -1457,10 +1512,99 @@ const getPricePerUnit = useCallback((price, size) => {
                                prop.asset_type_use &&
                                prop.asset_year_built &&
                                prop.sales_date &&
-                               new Date(prop.sales_date).getFullYear() < prop.asset_year_built;
+                               new Date(prop.sales_date).getFullYear() <= prop.asset_year_built;
 
       return hasValidSale && inDateRange && validNu && (isVacantClass || isTeardown || isPreConstruction);
     });
+
+    // Prior-sale scan (BRT only). BRT ships up to ~4 prior sales per parcel in
+    // prev_sales; the scan above only ever sees the current sale, so a land sale
+    // later covered by an improved sale never reached this table.
+    const priorSaleRows = [];
+    if (vendorType === 'BRT') {
+      const startTime = safeDateObj(dateRange.start)
+        ? new Date(safeDateObj(dateRange.start)).setHours(0, 0, 0, 0)
+        : 0;
+      const endTime = safeDateObj(dateRange.end)
+        ? new Date(safeDateObj(dateRange.end)).setHours(23, 59, 59, 999)
+        : 8640000000000000;
+
+      properties.forEach(prop => {
+        const prev = Array.isArray(prop.prev_sales) ? prop.prev_sales : null;
+        if (!prev || prev.length === 0) return;
+        if (manuallyAddedIds.has(prop.id)) return;
+
+        const card = prop.property_addl_card ? String(prop.property_addl_card).trim().toUpperCase() : '';
+        if (card && card !== 'NONE' && !card.startsWith('1')) return;
+
+        const pick = priorSalePicks[prop.id];
+        const m4 = String(prop.property_m4_class || '').toUpperCase();
+        const yearBuilt = parseInt(prop.asset_year_built) || null;
+        const buildingClass = parseInt(prop.asset_building_class) || 0;
+
+        prev.forEach((entry, idx) => {
+          const price = Number(entry && entry.price) || 0;
+          const dateStr = (entry && entry.date) || null;
+          if (!dateStr || price <= 10) return;
+
+          const saleDateObj = new Date(dateStr);
+          if (isNaN(saleDateObj.getTime())) return;
+          const saleYear = saleDateObj.getFullYear();
+          if (saleYear < 1950) return; // BRT 1901-01-01 placeholders
+          const saleTime = saleDateObj.getTime();
+          if (saleTime < startTime || saleTime > endTime) return;
+
+          // Already on the table as this parcel's current sale, or hand-picked -
+          // a pick is valued through workingProperties instead.
+          if (dateStr === prop.sales_date && price === Number(prop.sales_price)) return;
+          if (pick && pick.date === dateStr && Number(pick.price) === price) return;
+
+          const isVacantClass = m4 === '1' || m4 === '3B';
+          // Class 2 today, but the improvement either carries no value (teardown)
+          // or did not exist yet on the sale date - either way this bought land.
+          const isImprovedLandSale = m4 === '2' &&
+            buildingClass > 10 &&
+            prop.asset_design_style &&
+            prop.asset_type_use &&
+            (Number(prop.values_mod_improvement) < 10000 || (yearBuilt && saleYear <= yearBuilt));
+          if (!isVacantClass && !isImprovedLandSale) return;
+
+          priorSaleRows.push({
+            ...prop,
+            id: prop.id + '::prev' + idx,
+            sales_date: dateStr,
+            sales_price: price,
+            // BRT withholds NU codes on prior sales, so there is nothing to gate on.
+            sales_nu: null,
+            sales_book: null,
+            sales_page: null,
+            values_norm_time: normalizePriorSalePrice(price, dateStr),
+            _isPriorSale: true,
+            _priorSaleSource: (entry && entry.source) || ('prev_sale_' + (idx + 1)),
+            _basePropertyId: prop.id,
+            _currentSale: { date: prop.sales_date || null, price: Number(prop.sales_price) || null }
+          });
+        });
+      });
+
+      // prev_sales carries no book/page, so a package deed split across lots shows
+      // up once per lot at the full package price. Tag the collisions - grouping
+      // them automatically would guess at a lot combination we can't verify.
+      const priorGroups = {};
+      priorSaleRows.forEach(row => {
+        const key = row.sales_date + '|' + row.sales_price;
+        if (!priorGroups[key]) priorGroups[key] = [];
+        priorGroups[key].push(row);
+      });
+      Object.values(priorGroups).forEach(group => {
+        if (group.length < 2) return;
+        const peers = group.map(g => g.property_block + '/' + g.property_lot).join(', ');
+        group.forEach(row => {
+          row._priorPackageCount = group.length;
+          row._priorPackagePeers = peers;
+        });
+      });
+    }
 
     // Group by book/page for package handling
     const packageGroups = {};
@@ -1507,7 +1651,7 @@ const getPricePerUnit = useCallback((price, size) => {
           category = 'teardown';
         } else if (prop.property_m4_class === '2' &&
                    prop.asset_year_built &&
-                   new Date(prop.sales_date).getFullYear() < prop.asset_year_built) {
+                   new Date(prop.sales_date).getFullYear() <= prop.asset_year_built) {
           category = 'pre-construction';
         } else if (prop.property_m4_class === '1' || prop.property_m4_class === '3B') {
           // Default vacant land sales to Building Lots
@@ -1703,6 +1847,15 @@ const getPricePerUnit = useCallback((price, size) => {
       }
     });
 
+    // Prior-sale rows have no book/page to pair on, so they never group as packages.
+    priorSaleRows.forEach(row => {
+      const enriched = enrichProperty(row);
+      finalSales.push(enriched);
+      if (enriched.autoCategory && !saleCategories[row.id]) {
+        setSaleCategories(prev => ({ ...prev, [row.id]: enriched.autoCategory }));
+      }
+    });
+
     // Keep all sales in UI - method1ExcludedSales only affects calculations, not visibility
     let filteredSales = finalSales;
 
@@ -1775,7 +1928,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
       return preservedIncluded;
     });
-  }, [properties, dateRange, calculateAcreage, getPricePerUnit]);
+  }, [properties, dateRange, calculateAcreage, getPricePerUnit, vendorType, priorSalePicks, normalizePriorSalePrice]);
 
   // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
   // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
@@ -2601,7 +2754,7 @@ const getPricePerUnit = useCallback((price, size) => {
                p.asset_type_use &&
                p.asset_year_built &&
                p.sales_date &&
-               new Date(p.sales_date).getFullYear() < p.asset_year_built) {
+               new Date(p.sales_date).getFullYear() <= p.asset_year_built) {
         autoCategory = 'pre-construction';
       }
       // General Class 2 fallback to building lot
@@ -4306,6 +4459,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             package_properties: s.packageData?.properties || []
           })),
           excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
+          prior_sale_picks: priorSalePicks,
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
             region,
@@ -7651,6 +7805,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       {sale.sales_date}
+                      {(sale._isPriorSale || sale._priorSalePick) && (
+                        <span
+                          title={sale._priorSalePick
+                            ? 'Hand-picked prior sale. Current file sale: ' + (sale._currentSale?.date || 'n/a') + ' $' + (sale._currentSale?.price || 0).toLocaleString()
+                            : 'Prior sale (' + (sale._priorSaleSource || 'prev_sales') + '). BRT supplies no NU code for prior sales.'}
+                          style={{
+                            marginLeft: '6px',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            backgroundColor: sale._priorSalePick ? '#DBEAFE' : '#FEF3C7',
+                            color: sale._priorSalePick ? '#1D4ED8' : '#92400E'
+                          }}
+                        >
+                          {sale._priorSalePick ? 'PICKED' : 'PRIOR'}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
                       ${sale.sales_price?.toLocaleString()}
@@ -7684,6 +7856,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         (valuationMode === 'sf' ? `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` : `$${sale.pricePerAcre?.toLocaleString()}`)}
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
+                      {sale._priorPackageCount && (
+                        <span
+                          title={'Same prior sale date and price on ' + sale._priorPackageCount + ' parcels (' + sale._priorPackagePeers + ') - likely one deed split across lots, so this price is the whole package.'}
+                          style={{
+                            backgroundColor: '#FEE2E2',
+                            color: '#DC2626',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}
+                        >
+                          PKG? {sale._priorPackageCount}
+                        </span>
+                      )}
                       {sale.packageData && (
                         <span style={{
                           backgroundColor: '#FEE2E2',
@@ -7713,6 +7900,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => setSalesHistoryTarget(sale)}
+                          title="Sales history - choose which sale this row uses"
+                          style={{
+                            padding: '4px',
+                            backgroundColor: '#0EA5E9',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <History size={14} />
+                        </button>
                         <button
                           onClick={() => handlePropertyResearch(sale)}
                           title="Research with AI"
@@ -9892,6 +10093,135 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
         </div>
       </div>
+
+      {/* Sales History Modal - picks which sale a Method 1 row values */}
+      {salesHistoryTarget && (() => {
+        const baseId = salesHistoryTarget._basePropertyId || salesHistoryTarget.id;
+        const baseProp = properties.find(p => p.id === baseId);
+        const currentSale = {
+          date: baseProp?.sales_date || salesHistoryTarget._currentSale?.date || null,
+          price: Number(baseProp?.sales_price) || salesHistoryTarget._currentSale?.price || null
+        };
+        const pick = priorSalePicks[baseId] || null;
+        const priors = (Array.isArray(baseProp?.prev_sales) ? baseProp.prev_sales : []).filter(s => {
+          if (!s || !s.date) return false;
+          const yr = parseInt(String(s.date).slice(0, 4), 10);
+          return yr >= 1950 && Number(s.price) > 10;
+        });
+
+        const choose = (entry) => {
+          setPriorSalePicks(prev => ({
+            ...prev,
+            [baseId]: { date: entry.date, price: Number(entry.price) || 0, source: entry.source || null }
+          }));
+          setSalesHistoryTarget(null);
+        };
+        const useCurrent = () => {
+          setPriorSalePicks(prev => {
+            const next = { ...prev };
+            delete next[baseId];
+            return next;
+          });
+          setSalesHistoryTarget(null);
+        };
+
+        const rowStyle = (active) => ({
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '8px 10px',
+          border: '1px solid ' + (active ? '#3B82F6' : '#E5E7EB'),
+          backgroundColor: active ? '#EFF6FF' : 'white',
+          borderRadius: '6px',
+          marginBottom: '6px'
+        });
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '8px', width: '560px', maxHeight: '80vh', overflowY: 'auto', padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Sales History</h3>
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
+                    Block {salesHistoryTarget.property_block} Lot {salesHistoryTarget.property_lot}
+                    {salesHistoryTarget.property_qualifier && salesHistoryTarget.property_qualifier !== 'NONE'
+                      ? ' Qual ' + salesHistoryTarget.property_qualifier
+                      : ''}
+                    {salesHistoryTarget.property_location ? ' - ' + salesHistoryTarget.property_location : ''}
+                  </div>
+                </div>
+                <button onClick={() => setSalesHistoryTarget(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '10px' }}>
+                Applies to Method 1 land rates only. Nothing is written back to the property record.
+              </div>
+
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Current file sale</div>
+              <div style={rowStyle(!pick)}>
+                <div style={{ fontSize: '13px' }}>
+                  <span style={{ fontWeight: 600 }}>{currentSale.date || '-'}</span>
+                  <span style={{ marginLeft: '12px' }}>${(currentSale.price || 0).toLocaleString()}</span>
+                  <span style={{ marginLeft: '12px', color: '#6B7280' }}>NU {baseProp?.sales_nu || '-'}</span>
+                </div>
+                {pick ? (
+                  <button onClick={useCurrent} style={{ fontSize: '12px', padding: '4px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', backgroundColor: 'white', cursor: 'pointer' }}>
+                    Use this sale
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '11px', color: '#1D4ED8', fontWeight: 600 }}>In use</span>
+                )}
+              </div>
+
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', margin: '14px 0 6px' }}>
+                Prior sales {priors.length > 0 ? '(' + priors.length + ')' : ''}
+              </div>
+              {priors.length === 0 ? (
+                <div style={{ fontSize: '12px', color: '#6B7280', fontStyle: 'italic', border: '1px dashed #E5E7EB', borderRadius: '6px', padding: '12px', textAlign: 'center' }}>
+                  No prior sales on file for this parcel.
+                </div>
+              ) : (
+                priors.map((s, i) => {
+                  const active = !!pick && pick.date === s.date && Number(pick.price) === Number(s.price);
+                  return (
+                    <div key={i} style={rowStyle(active)}>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ fontWeight: 600 }}>{s.date}</span>
+                        <span style={{ marginLeft: '12px' }}>${Number(s.price).toLocaleString()}</span>
+                        <span style={{ marginLeft: '12px', fontSize: '11px', color: '#9CA3AF' }}>{s.source}</span>
+                        <span style={{ marginLeft: '12px', fontSize: '11px', color: '#6B7280' }}>
+                          norm ${normalizePriorSalePrice(s.price, s.date).toLocaleString()}
+                        </span>
+                      </div>
+                      {active ? (
+                        <span style={{ fontSize: '11px', color: '#1D4ED8', fontWeight: 600 }}>In use</span>
+                      ) : (
+                        <button onClick={() => choose(s)} style={{ fontSize: '12px', padding: '4px 8px', border: 'none', borderRadius: '4px', backgroundColor: '#3B82F6', color: 'white', cursor: 'pointer' }}>
+                          Use this sale
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add Property Modal */}
       {showAddModal && (
