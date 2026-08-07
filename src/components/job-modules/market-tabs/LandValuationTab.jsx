@@ -42,6 +42,22 @@ const DEFAULT_CODE_PERCENTS = { LT: 5, MT: 10, HT: 15 };
 // keep reading the names they always have.
 const LEGACY_BRACKET_KEYS = ['small', 'medium', 'large', 'xlarge', 'residual'];
 
+// Implied $/acre between two brackets. Reads avgSize, which is in the job's own
+// unit at full precision - avgAcres is rounded to two decimals, which turns a
+// 762 sf delta into 0.01 acres and inflates the rate by ~75%.
+const impliedPerAcre = (target, comparison, unitIsSf) => {
+  if (!target || !comparison) return null;
+  const priceDiff = target.avgAdjusted - comparison.avgAdjusted;
+  if (!(priceDiff > 0)) return null;
+  const haveSize = target.avgSize != null && comparison.avgSize != null;
+  const sizeDiff = haveSize
+    ? target.avgSize - comparison.avgSize
+    : target.avgAcres - comparison.avgAcres;
+  if (!(sizeDiff > 0)) return null;
+  const acresDiff = haveSize && unitIsSf ? sizeDiff / 43560 : sizeDiff;
+  return Math.round(priceDiff / acresDiff);
+};
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -2382,7 +2398,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           return {
             count: arr.length,
-            avgSize: Math.round(avgSize * 100) / 100,
+            avgSize: avgSize, // full precision - rounding avgSize would distort lot deltas
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
@@ -2403,11 +2419,7 @@ const getPricePerUnit = useCallback((price, size) => {
         // Calculate implied rate from bracket differences
         let impliedRate = null;
         if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
-          const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
-          const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            impliedRate = Math.round(priceDiff / acresDiff);
-          }
+          impliedRate = impliedPerAcre(bracketStats.medium, bracketStats.small, bracketUnit === 'sf');
         }
 
         return {
@@ -2503,7 +2515,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           return {
             count: arr.length,
-            avgSize: Math.round(avgSize * 100) / 100,
+            avgSize: avgSize, // full precision - rounding avgSize would distort lot deltas
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
@@ -2524,12 +2536,8 @@ const getPricePerUnit = useCallback((price, size) => {
         // Calculate implied rate from bracket differences
         let impliedRate = null;
         if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
-          const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
-          const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            impliedRate = Math.round(priceDiff / acresDiff);
-            validRates.push(impliedRate);
-          }
+          impliedRate = impliedPerAcre(bracketStats.medium, bracketStats.small, bracketUnit === 'sf');
+          if (impliedRate !== null) validRates.push(impliedRate);
         }
 
         analysis[vcs] = {
@@ -2591,10 +2599,8 @@ const getPricePerUnit = useCallback((price, size) => {
         if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
           const comparison = findBestComparison(brackets.medium, 1);
           if (comparison) {
-            const priceDiff = brackets.medium.avgAdjusted - comparison.avgAdjusted;
-            const acresDiff = brackets.medium.avgAcres - comparison.avgAcres;
-            if (acresDiff > 0 && priceDiff > 0) {
-              const rate = Math.round(priceDiff / acresDiff);
+            const rate = impliedPerAcre(brackets.medium, comparison, bracketUnit === 'sf');
+            if (rate !== null) {
               bracketRates.mediumRange.push(rate);
               bracketAcres.mediumRange.push(brackets.medium.avgAcres);
             }
@@ -2605,10 +2611,8 @@ const getPricePerUnit = useCallback((price, size) => {
         if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
           const comparison = findBestComparison(brackets.large, 2);
           if (comparison) {
-            const priceDiff = brackets.large.avgAdjusted - comparison.avgAdjusted;
-            const acresDiff = brackets.large.avgAcres - comparison.avgAcres;
-            if (acresDiff > 0 && priceDiff > 0) {
-              const rate = Math.round(priceDiff / acresDiff);
+            const rate = impliedPerAcre(brackets.large, comparison, bracketUnit === 'sf');
+            if (rate !== null) {
               bracketRates.largeRange.push(rate);
               bracketAcres.largeRange.push(brackets.large.avgAcres);
             }
@@ -2619,10 +2623,8 @@ const getPricePerUnit = useCallback((price, size) => {
         if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
           const comparison = findBestComparison(brackets.xlarge, 3);
           if (comparison) {
-            const priceDiff = brackets.xlarge.avgAdjusted - comparison.avgAdjusted;
-            const acresDiff = brackets.xlarge.avgAcres - comparison.avgAcres;
-            if (acresDiff > 0 && priceDiff > 0) {
-              const rate = Math.round(priceDiff / acresDiff);
+            const rate = impliedPerAcre(brackets.xlarge, comparison, bracketUnit === 'sf');
+            if (rate !== null) {
               bracketRates.xlargeRange.push(rate);
               bracketAcres.xlargeRange.push(brackets.xlarge.avgAcres);
             }
@@ -2697,12 +2699,8 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
             const comparison = findBestComparison(brackets.medium, 1);
             if (comparison) {
-              const priceDiff = brackets.medium.avgAdjusted - comparison.avgAdjusted;
-              const acresDiff = brackets.medium.avgAcres - comparison.avgAcres;
-              if (acresDiff > 0 && priceDiff > 0) {
-                const rate = Math.round(priceDiff / acresDiff);
-                regionBracketRates.mediumRange.push(rate);
-              }
+              const rate = impliedPerAcre(brackets.medium, comparison, bracketUnit === 'sf');
+              if (rate !== null) regionBracketRates.mediumRange.push(rate);
             }
           }
 
@@ -2710,12 +2708,8 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
             const comparison = findBestComparison(brackets.large, 2);
             if (comparison) {
-              const priceDiff = brackets.large.avgAdjusted - comparison.avgAdjusted;
-              const acresDiff = brackets.large.avgAcres - comparison.avgAcres;
-              if (acresDiff > 0 && priceDiff > 0) {
-                const rate = Math.round(priceDiff / acresDiff);
-                regionBracketRates.largeRange.push(rate);
-              }
+              const rate = impliedPerAcre(brackets.large, comparison, bracketUnit === 'sf');
+              if (rate !== null) regionBracketRates.largeRange.push(rate);
             }
           }
 
@@ -2723,12 +2717,8 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
             const comparison = findBestComparison(brackets.xlarge, 3);
             if (comparison) {
-              const priceDiff = brackets.xlarge.avgAdjusted - comparison.avgAdjusted;
-              const acresDiff = brackets.xlarge.avgAcres - comparison.avgAcres;
-              if (acresDiff > 0 && priceDiff > 0) {
-                const rate = Math.round(priceDiff / acresDiff);
-                regionBracketRates.xlargeRange.push(rate);
-              }
+              const rate = impliedPerAcre(brackets.xlarge, comparison, bracketUnit === 'sf');
+              if (rate !== null) regionBracketRates.xlargeRange.push(rate);
             }
           }
         });
@@ -8814,11 +8804,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                               if (comparisonBracket) {
                                 adjustedDelta = bracket.data.avgAdjusted - comparisonBracket.avgAdjusted;
-                                lotDelta = bracket.data.avgAcres - comparisonBracket.avgAcres;
+
+                                // Derive the rate from the lot delta in the unit the job is
+                                // using. Going through the 2-decimal avgAcres turned a 762 sf
+                                // delta into 0.01 acres and inflated the rate ~75%.
+                                const sizeA = bracket.data.avgSize;
+                                const sizeB = comparisonBracket.avgSize;
+                                const haveSize = sizeA != null && sizeB != null;
+                                lotDelta = haveSize
+                                  ? sizeA - sizeB
+                                  : bracket.data.avgAcres - comparisonBracket.avgAcres;
 
                                 if (adjustedDelta > 0 && lotDelta > 0) {
-                                  perAcre = adjustedDelta / lotDelta;
-                                  perSqFt = perAcre / 43560;
+                                  if (haveSize && bracketUnit === 'sf') {
+                                    perSqFt = adjustedDelta / lotDelta;
+                                    perAcre = perSqFt * 43560;
+                                  } else {
+                                    perAcre = adjustedDelta / lotDelta;
+                                    perSqFt = perAcre / 43560;
+                                  }
                                 }
                               }
 
@@ -8844,9 +8848,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                     {adjustedDelta !== null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {comparisonBracket && bracket.data.avgSize != null && comparisonBracket.avgSize != null
-                                      ? formatBracketValue(bracket.data.avgSize - comparisonBracket.avgSize)
-                                      : (lotDelta !== null ? lotDelta.toFixed(2) : '-')}
+                                    {lotDelta !== null ? formatBracketValue(lotDelta) : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
                                     {perAcre !== null ? `$${Math.round(perAcre).toLocaleString()}` : 'N/A'}
@@ -8885,20 +8887,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                 {/* dynamic bracket labels based on cascadeConfig */}
                 {(() => {
-                  const p = cascadeConfig.normal?.prime?.max ?? 1;
-                  const s = cascadeConfig.normal?.secondary?.max ?? 5;
-                  const e = cascadeConfig.normal?.excess?.max ?? 10;
-                  const r = cascadeConfig.normal?.residual?.max ?? null;
-
-                  const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
-                  const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
-                  const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
+                  // The summary tiles report brackets 2-4, so label them from the
+                  // live bracket list rather than the legacy acre maxima.
+                  const unit = bracketUnitLabel;
+                  const labelFor = (i) => (landBrackets[i] ? `${describeBracket(landBrackets[i])} ${unit}` : '-');
+                  const labelMedium = labelFor(1);
+                  const labelLarge = labelFor(2);
+                  const labelXlarge = labelFor(3);
 
                   return (
                     <>
                       {/* medium */}
                       <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelMedium} Acres</div>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelMedium}</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
                           {valuationMode === 'sf' ?
                             (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A') :
@@ -8918,7 +8919,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       {/* large */}
                       <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelLarge} Acres</div>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelLarge}</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
                           {valuationMode === 'sf' ?
                             (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A') :
