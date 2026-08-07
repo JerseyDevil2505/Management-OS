@@ -37,6 +37,11 @@ const safeLocaleDate = (d) => {
 // the fallback for a job that has never set them.
 const DEFAULT_CODE_PERCENTS = { LT: 5, MT: 10, HT: 15 };
 
+// Method 2 buckets used to be exactly these five. They are kept as aliases for
+// the first five user-defined brackets so the summary, exports and rate math
+// keep reading the names they always have.
+const LEGACY_BRACKET_KEYS = ['small', 'medium', 'large', 'xlarge', 'residual'];
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -249,6 +254,8 @@ const LandValuationTab = ({
   const [salesHistoryTarget, setSalesHistoryTarget] = useState(null);
   // Method 1 table sort. field null = the order filterVacantSales produced.
   const [method1Sort, setMethod1Sort] = useState({ field: null, direction: 'asc' });
+  // Working copy of the bracket definitions while the editor is open.
+  const [bracketDraft, setBracketDraft] = useState([]);
   const [hpi, setHpi] = useState({ fn: null, normalizeToYear: 2025 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
@@ -288,75 +295,6 @@ const LandValuationTab = ({
 
   // Bracket editor UI state (allows per-job overrides of bracket boundaries)
   const [showBracketEditor, setShowBracketEditor] = useState(false);
-  const [bracketInputs, setBracketInputs] = useState(() => ({
-    primeMax: cascadeConfig.normal?.prime?.max ?? 1,
-    secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
-    excessMax: cascadeConfig.normal?.excess?.max ?? 10,
-    residualMax: cascadeConfig.normal?.residual?.max ?? null
-  }));
-
-  useEffect(() => {
-    // Keep bracket inputs in sync when cascadeConfig loads from saved data
-    setBracketInputs({
-      primeMax: cascadeConfig.normal?.prime?.max ?? 1,
-      secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
-      excessMax: cascadeConfig.normal?.excess?.max ?? 10,
-      residualMax: cascadeConfig.normal?.residual?.max ?? null
-    });
-  }, [cascadeConfig]);
-
-  const validateAndApplyBrackets = (opts = { recalc: true }) => {
-    // Parse numeric values
-    const p = parseFloat(bracketInputs.primeMax);
-    const s = parseFloat(bracketInputs.secondaryMax);
-    const e = parseFloat(bracketInputs.excessMax);
-    const r = bracketInputs.residualMax === null || bracketInputs.residualMax === '' ? null : parseFloat(bracketInputs.residualMax);
-
-    if (isNaN(p) || isNaN(s) || isNaN(e) || (r !== null && isNaN(r))) {
-      return alert('Please enter valid numeric bracket maximums. Use decimals for fractions (e.g. 0.25).');
-    }
-    if (!(p > 0 && s > p && e > s && (r === null || r > e))) {
-      return alert('Brackets must increase: prime < secondary < excess < residual (residual may be empty).');
-    }
-
-    setCascadeConfig(prev => ({
-      ...prev,
-      normal: {
-        ...prev.normal,
-        prime: { ...prev.normal.prime, max: p },
-        secondary: { ...prev.normal.secondary, max: s },
-        excess: { ...prev.normal.excess, max: e },
-        residual: { ...prev.normal.residual, max: r }
-      }
-    }));
-
-    // Optionally re-run the bracket analysis immediately
-    if (opts.recalc) {
-      try {
-        performBracketAnalysis();
-      } catch (e) {
-        // ignore errors from recalculation
-      }
-    }
-  };
-
-  const applyDefaultQuartileBrackets = () => {
-    // Example quartile defaults for built-up towns (in acres)
-    const defaults = { primeMax: 0.25, secondaryMax: 0.5, excessMax: 0.75, residualMax: 1 };
-    setBracketInputs(defaults);
-    setCascadeConfig(prev => ({
-      ...prev,
-      normal: {
-        ...prev.normal,
-        prime: { ...prev.normal.prime, max: defaults.primeMax },
-        secondary: { ...prev.normal.secondary, max: defaults.secondaryMax },
-        excess: { ...prev.normal.excess, max: defaults.excessMax },
-        residual: { ...prev.normal.residual, max: defaults.residualMax }
-      }
-    }));
-    // Recompute
-    try { performBracketAnalysis(); } catch (e) {}
-  };
   
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
@@ -669,6 +607,7 @@ useEffect(() => {
         residual: savedConfig.normal?.residual || { max: null, rate: null },
         standard: savedConfig.normal?.standard || { max: 100, rate: null }
       },
+      brackets: savedConfig.brackets || null,
       special: savedConfig.special || {},
       vcsSpecific: savedConfig.vcsSpecific || {},
       specialCategories: savedConfig.specialCategories || {
@@ -1044,6 +983,199 @@ const getPricePerUnit = useCallback((price, size) => {
     if (valuationMode === 'ff') return '$/FF';
     return '$/Unit';
   }, [valuationMode]);
+
+  // ========== METHOD 2 LOT-SIZE BRACKETS ==========
+  // Brackets are compared in the unit the user picked. Square-foot jobs compare
+  // raw SF so an 'equal to' bracket can match a lot size exactly - going through
+  // acres would divide by 43560 and make equality meaningless. Front foot keeps
+  // acres, since frontage is not derivable from area.
+  const bracketUnit = valuationMode === 'sf' ? 'sf' : 'acre';
+  const bracketUnitLabel = bracketUnit === 'sf' ? 'sq ft' : 'acres';
+  // Tolerance for the 'equal to' operator: half a square foot, or the acre
+  // equivalent. Guards against float drift without matching a genuinely
+  // different lot.
+  const BRACKET_EPSILON = bracketUnit === 'sf' ? 0.5 : 0.5 / 43560;
+
+  const getBracketSize = useCallback((prop) => {
+    if (valuationMode !== 'sf') return parseFloat(calculateAcreage(prop)) || 0;
+
+    // Read SF straight from the source rather than round-tripping through acres.
+    const manualSf = parseFloat(prop?.market_manual_lot_sf);
+    if (manualSf > 0) return manualSf;
+    const assetSf = parseFloat(prop?.asset_lot_sf);
+    if (assetSf > 0) return assetSf;
+    const frontage = parseFloat(prop?.asset_lot_frontage);
+    const depth = parseFloat(prop?.asset_lot_depth);
+    if (frontage > 0 && depth > 0) return frontage * depth;
+    return (parseFloat(calculateAcreage(prop)) || 0) * 43560;
+  }, [valuationMode, calculateAcreage]);
+
+  const formatBracketValue = useCallback((value) => {
+    const n = Number(value);
+    if (!isFinite(n)) return '';
+    return bracketUnit === 'sf'
+      ? Math.round(n).toLocaleString()
+      : n.toFixed(2);
+  }, [bracketUnit]);
+
+  const describeBracket = useCallback((def) => {
+    if (!def) return '';
+    const a = formatBracketValue(def.value);
+    const b = formatBracketValue(def.value2);
+    switch (def.op) {
+      case 'lt': return 'Under ' + a;
+      case 'le': return a + ' and under';
+      case 'eq': return 'Exactly ' + a;
+      case 'ge': return a + ' and over';
+      case 'gt': return 'Over ' + a;
+      case 'range': return a + ' - ' + b;
+      default: return a;
+    }
+  }, [formatBracketValue]);
+
+  const bracketMatches = useCallback((size, def) => {
+    if (!def) return false;
+    const n = Number(size);
+    const v = Number(def.value);
+    if (!isFinite(n) || !isFinite(v)) return false;
+    switch (def.op) {
+      case 'lt': return n < v;
+      case 'le': return n <= v;
+      case 'eq': return Math.abs(n - v) <= BRACKET_EPSILON;
+      case 'ge': return n >= v;
+      case 'gt': return n > v;
+      case 'range': {
+        const v2 = Number(def.value2);
+        if (!isFinite(v2)) return false;
+        return n >= v && n < v2;
+      }
+      default: return false;
+    }
+  }, [BRACKET_EPSILON]);
+
+  // Fall back to the legacy four-max cascade shape so jobs saved before brackets
+  // became user-defined keep bucketing exactly as they did.
+  const legacyBracketList = useCallback((normal) => {
+    const toUnit = (acres) => (bracketUnit === 'sf' ? acres * 43560 : acres);
+    const p = normal?.prime?.max;
+    const s = normal?.secondary?.max;
+    const e = normal?.excess?.max;
+    const r = normal?.residual?.max;
+    const list = [];
+    if (p > 0) list.push({ id: 'b0', op: 'lt', value: toUnit(p) });
+    if (p > 0 && s > p) list.push({ id: 'b1', op: 'range', value: toUnit(p), value2: toUnit(s) });
+    if (s > 0 && e > s) list.push({ id: 'b2', op: 'range', value: toUnit(s), value2: toUnit(e) });
+    if (e > 0) {
+      if (r > e) {
+        list.push({ id: 'b3', op: 'range', value: toUnit(e), value2: toUnit(r) });
+        list.push({ id: 'b4', op: 'ge', value: toUnit(r) });
+      } else {
+        list.push({ id: 'b3', op: 'ge', value: toUnit(e) });
+      }
+    }
+    return list;
+  }, [bracketUnit]);
+
+  const landBrackets = useMemo(() => {
+    const saved = cascadeConfig.brackets;
+    if (saved && Array.isArray(saved.list) && saved.list.length > 0) {
+      // Values are stored in the unit they were authored in. If the job's mode
+      // changed since, convert rather than silently comparing wrong numbers.
+      if (saved.unit === bracketUnit) return saved.list;
+      const factor = saved.unit === 'sf' ? 1 / 43560 : 43560;
+      return saved.list.map(def => ({
+        ...def,
+        value: def.value == null ? def.value : def.value * factor,
+        value2: def.value2 == null ? def.value2 : def.value2 * factor
+      }));
+    }
+    return legacyBracketList(cascadeConfig.normal);
+  }, [cascadeConfig.brackets, cascadeConfig.normal, bracketUnit, legacyBracketList]);
+
+  // A special region can carry its own legacy cascade maxima. Once the job has an
+  // explicit bracket list that list wins everywhere; until then each region
+  // derives its own from its own maxima, as it did before.
+  const getRegionBrackets = useCallback((region) => {
+    if (cascadeConfig.brackets?.list?.length > 0) return landBrackets;
+    const config = region === 'Normal'
+      ? cascadeConfig.normal
+      : (cascadeConfig.special?.[region] || cascadeConfig.normal);
+    return legacyBracketList(config);
+  }, [cascadeConfig.brackets, cascadeConfig.normal, cascadeConfig.special, landBrackets, legacyBracketList]);
+
+  const bucketSalesByBracket = useCallback((sales, bracketDefs) => {
+    const buckets = bracketDefs.map((def, i) => ({
+      key: LEGACY_BRACKET_KEYS[i] || ('b' + i),
+      def,
+      label: describeBracket(def),
+      sales: sales.filter(s => bracketMatches(s.bracketSize, def))
+    }));
+    const byKey = {};
+    buckets.forEach(b => { byKey[b.key] = b.sales; });
+    // Absent brackets still resolve to an empty array so older readers keying off
+    // the fixed names never hit undefined.
+    LEGACY_BRACKET_KEYS.forEach(k => { if (!byKey[k]) byKey[k] = []; });
+    return { buckets, byKey };
+  }, [bracketMatches, describeBracket]);
+
+  // Seed the editor from the live brackets each time it opens. Deliberately not
+  // keyed on landBrackets, so an in-progress edit is never clobbered.
+  useEffect(() => {
+    if (!showBracketEditor) return;
+    setBracketDraft(landBrackets.map(function (def, i) {
+      return { id: def.id || ('b' + i), op: def.op, value: def.value, value2: def.value2 };
+    }));
+  }, [showBracketEditor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateBracketRow = (index, patch) => {
+    setBracketDraft(prev => prev.map(function (row, i) {
+      return i === index ? { ...row, ...patch } : row;
+    }));
+  };
+
+  const addBracketRow = () => {
+    setBracketDraft(prev => prev.concat([{
+      id: 'b' + Date.now(),
+      op: prev.length === 0 ? 'lt' : 'gt',
+      value: '',
+      value2: ''
+    }]));
+  };
+
+  const removeBracketRow = (index) => {
+    setBracketDraft(prev => prev.filter(function (row, i) { return i !== index; }));
+  };
+
+  const applyBracketDraft = (opts) => {
+    const list = [];
+    for (let i = 0; i < bracketDraft.length; i++) {
+      const row = bracketDraft[i];
+      const value = parseFloat(row.value);
+      if (!isFinite(value)) {
+        return alert('Bracket ' + (i + 1) + ' needs a numeric value in ' + bracketUnitLabel + '.');
+      }
+      const def = { id: row.id, op: row.op, value };
+      if (row.op === 'range') {
+        const value2 = parseFloat(row.value2);
+        if (!isFinite(value2) || value2 <= value) {
+          return alert('Bracket ' + (i + 1) + ' is a range, so the upper value must be greater than the lower one.');
+        }
+        def.value2 = value2;
+      }
+      list.push(def);
+    }
+    if (list.length === 0) {
+      return alert('Define at least one bracket.');
+    }
+
+    // Stored with the unit they were authored in so a later mode change can
+    // convert rather than silently comparing the wrong numbers.
+    setCascadeConfig(prev => ({ ...prev, brackets: { unit: bracketUnit, list } }));
+
+    if (!opts || opts.recalc !== false) {
+      try { performBracketAnalysis(); } catch (err) { /* recalculation is best effort */ }
+    }
+  };
 
   // ========== GENERATE VCS COLORS ==========
   const generateVCSColor = useCallback((vcs, index) => {
@@ -2123,6 +2255,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const saleData = {
           id: prop.id,
           acres,
+          bracketSize: getBracketSize(prop),
           salesPrice: timeNormData.values_norm_time,
           normalizedTime: timeNormData.values_norm_time,
           sfla,
@@ -2157,19 +2290,16 @@ const getPricePerUnit = useCallback((price, size) => {
       const performRegionBracketAnalysis = (sales, region, vcs) => {
         if (sales.length < 3) return null; // Need minimum sales for analysis
 
-        // Sort by acreage for bracketing
-        sales.sort((a, b) => a.acres - b.acres);
+        // Sort by size for bracketing
+        sales.sort((a, b) => a.bracketSize - b.bracketSize);
 
-        // Use region-specific cascade boundaries
+        // Retained for the analysis payload consumers still read
         const { pMax, sMax, eMax, rMax } = getCascadeBoundaries(region);
 
-        const brackets = {
-          small: sales.filter(s => s.acres < pMax),
-          medium: sales.filter(s => s.acres >= pMax && s.acres < sMax),
-          large: sales.filter(s => s.acres >= sMax && s.acres < eMax),
-          xlarge: rMax ? sales.filter(s => s.acres >= eMax && s.acres < rMax) : sales.filter(s => s.acres >= eMax),
-          residual: rMax ? sales.filter(s => s.acres >= rMax) : []
-        };
+        const bracketDefs = getRegionBrackets(region);
+        const bucketResult = bucketSalesByBracket(sales, bracketDefs);
+        const bracketBuckets = bucketResult.buckets;
+        const brackets = bucketResult.byKey;
 
         // Calculate overall VCS average SFLA for size adjustment (Method 2 uses SFLA)
         const allValidSFLA = sales.filter(s => s.sfla > 0);
@@ -2180,6 +2310,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const calcBracketStats = (arr) => {
           if (arr.length === 0) return {
             count: 0,
+            avgSize: null,
             avgAcres: null,
             avgSalePrice: null,
             avgNormTime: null,
@@ -2190,6 +2321,7 @@ const getPricePerUnit = useCallback((price, size) => {
           // Use time-normalized values for Method 2
           const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
           const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
+          const avgSize = arr.reduce(function (sum, s) { return sum + (s.bracketSize || 0); }, 0) / arr.length;
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
@@ -2205,6 +2337,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           return {
             count: arr.length,
+            avgSize: Math.round(avgSize * 100) / 100,
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
@@ -2212,6 +2345,8 @@ const getPricePerUnit = useCallback((price, size) => {
             avgAdjusted: Math.round(avgAdjusted)
           };
         };
+
+        bracketBuckets.forEach(function (bucket) { bucket.stats = calcBracketStats(bucket.sales); });
 
         const bracketStats = {
           small: calcBracketStats(brackets.small),
@@ -2237,6 +2372,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
+          bracketBuckets,
           impliedRate,
           region,
           cascadeBoundaries: { pMax, sMax, eMax, rMax }
@@ -2264,22 +2400,18 @@ const getPricePerUnit = useCallback((price, size) => {
         const sales = vcsSales[vcs];
         if (sales.length < 3) return; // Need minimum sales for analysis
 
-        // Sort by acreage for bracketing
-        sales.sort((a, b) => a.acres - b.acres);
+        // Sort by size for bracketing
+        sales.sort((a, b) => a.bracketSize - b.bracketSize);
 
-        // Use normal cascade boundaries for legacy analysis
+        // Retained for the analysis payload consumers still read
         const pMax = cascadeConfig.normal?.prime?.max ?? 1;
         const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
         const eMax = cascadeConfig.normal?.excess?.max ?? 10;
         const rMax = cascadeConfig.normal?.residual?.max ?? null;
 
-        const brackets = {
-          small: sales.filter(s => s.acres < pMax),
-          medium: sales.filter(s => s.acres >= pMax && s.acres < sMax),
-          large: sales.filter(s => s.acres >= sMax && s.acres < eMax),
-          xlarge: rMax ? sales.filter(s => s.acres >= eMax && s.acres < rMax) : sales.filter(s => s.acres >= eMax),
-          residual: rMax ? sales.filter(s => s.acres >= rMax) : []
-        };
+        const bucketResult = bucketSalesByBracket(sales, getRegionBrackets('Normal'));
+        const bracketBuckets = bucketResult.buckets;
+        const brackets = bucketResult.byKey;
 
         // Calculate overall VCS average SFLA for size adjustment (Method 2 uses SFLA)
         const allValidSFLA = sales.filter(s => s.sfla > 0);
@@ -2295,6 +2427,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const calcBracketStats = (arr) => {
           if (arr.length === 0) return {
             count: 0,
+            avgSize: null,
             avgAcres: null,
             avgSalePrice: null,
             avgNormTime: null,
@@ -2305,6 +2438,7 @@ const getPricePerUnit = useCallback((price, size) => {
           // Use time-normalized values for Method 2
           const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
           const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
+          const avgSize = arr.reduce(function (sum, s) { return sum + (s.bracketSize || 0); }, 0) / arr.length;
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
@@ -2324,6 +2458,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           return {
             count: arr.length,
+            avgSize: Math.round(avgSize * 100) / 100,
             avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
@@ -2331,6 +2466,8 @@ const getPricePerUnit = useCallback((price, size) => {
             avgAdjusted: Math.round(avgAdjusted)
           };
         };
+
+        bracketBuckets.forEach(function (bucket) { bucket.stats = calcBracketStats(bucket.sales); });
 
         const bracketStats = {
           small: calcBracketStats(brackets.small),
@@ -2357,6 +2494,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
+          bracketBuckets,
           impliedRate
         };
       });
@@ -8272,58 +8410,77 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           {showBracketEditor && (
             <div style={{ marginTop: '12px', padding: '12px', borderRadius: '6px', backgroundColor: 'white', border: '1px solid #E5E7EB', width: '90%', maxWidth: '980px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Prime max (acres)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={bracketInputs.primeMax ?? ''}
-                    onChange={(e) => setBracketInputs(prev => ({ ...prev, primeMax: e.target.value }))}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Secondary max (acres)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={bracketInputs.secondaryMax ?? ''}
-                    onChange={(e) => setBracketInputs(prev => ({ ...prev, secondaryMax: e.target.value }))}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Excess max (acres)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={bracketInputs.excessMax ?? ''}
-                    onChange={(e) => setBracketInputs(prev => ({ ...prev, excessMax: e.target.value }))}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Residual max (acres)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={bracketInputs.residualMax ?? ''}
-                    onChange={(e) => setBracketInputs(prev => ({ ...prev, residualMax: e.target.value }))}
-                    placeholder="leave empty for open-ended"
-                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
-                  />
-                </div>
+              <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
+                Define as many brackets as this town needs. Values are in <strong>{bracketUnitLabel}</strong>, matching the land method selected above.
               </div>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {bracketDraft.map(function (row, index) {
+                  return (
+                    <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#9CA3AF', width: '18px' }}>{index + 1}</span>
+                      <select
+                        value={row.op}
+                        onChange={(e) => updateBracketRow(index, { op: e.target.value })}
+                        style={{ padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '13px' }}
+                      >
+                        <option value="lt">Less than</option>
+                        <option value="le">Less than or equal to</option>
+                        <option value="eq">Equal to</option>
+                        <option value="range">Between</option>
+                        <option value="ge">Greater than or equal to</option>
+                        <option value="gt">Greater than</option>
+                      </select>
+                      <input
+                        type="number"
+                        step={bracketUnit === 'sf' ? '1' : '0.01'}
+                        value={row.value ?? ''}
+                        onChange={(e) => updateBracketRow(index, { value: e.target.value })}
+                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                      />
+                      {row.op === 'range' && (
+                        <span style={{ fontSize: '12px', color: '#6B7280' }}>and under</span>
+                      )}
+                      {row.op === 'range' && (
+                        <input
+                          type="number"
+                          step={bracketUnit === 'sf' ? '1' : '0.01'}
+                          value={row.value2 ?? ''}
+                          onChange={(e) => updateBracketRow(index, { value2: e.target.value })}
+                          style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                        />
+                      )}
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>{bracketUnitLabel}</span>
+                      <button
+                        onClick={() => removeBracketRow(index)}
+                        title="Remove this bracket"
+                        style={{ padding: '6px 8px', backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                onClick={addBracketRow}
+                style={{ marginTop: '10px', padding: '6px 10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+              >
+                + Add bracket
+              </button>
               <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button
-                  onClick={() => { applyDefaultQuartileBrackets(); /* keep editor open to show changes */ }}
+                  onClick={() => setBracketDraft(legacyBracketList({
+                    prime: { max: 0.25 },
+                    secondary: { max: 0.5 },
+                    excess: { max: 0.75 },
+                    residual: { max: 1 }
+                  }))}
                   style={{ padding: '8px 12px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Apply Quartile Defaults
                 </button>
                 <button
-                  onClick={() => { validateAndApplyBrackets({ recalc: true }); setShowBracketEditor(false); }}
+                  onClick={() => { applyBracketDraft({ recalc: true }); setShowBracketEditor(false); }}
                   style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Apply
@@ -8335,7 +8492,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   Close
                 </button>
                 <button
-                  onClick={() => { validateAndApplyBrackets({ recalc: true }); saveRates(); }}
+                  onClick={() => { applyBracketDraft({ recalc: true }); saveRates(); }}
                   style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Save Brackets
@@ -8557,7 +8714,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <tr style={{ backgroundColor: '#F8F9FA' }}>
                             <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Bracket</th>
                             <th style={{ padding: '8px', textAlign: 'center', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Count</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size ({bracketUnitLabel})</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price (t)</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg SFLA</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
@@ -8569,18 +8726,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </thead>
                         <tbody>
                           {(() => {
-                            const pMax = cascadeConfig.normal?.prime?.max ?? 1;
-                            const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
-                            const eMax = cascadeConfig.normal?.excess?.max ?? 10;
-                            const rMax = cascadeConfig.normal?.residual?.max ?? null;
-
-                            const brackets = [
-                              { key: 'small', label: `<${pMax.toFixed(2)}`, data: data.brackets.small },
-                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, data: data.brackets.medium },
-                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, data: data.brackets.large },
-                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, data: data.brackets.xlarge }
-                            ];
-
+                            const brackets = (data.bracketBuckets || []).map(function (bucket) {
+                              return { key: bucket.key, label: bucket.label, data: bucket.stats };
+                            });
                             return brackets.map((bracket, index) => {
                               if (!bracket.data || bracket.data.count === 0) return null;
 
@@ -8621,7 +8769,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{bracket.label}</td>
                                   <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{bracket.data.count}</td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {bracket.data.avgAcres ? bracket.data.avgAcres.toFixed(2) : '-'}
+                                    {bracket.data.avgSize != null
+                                      ? formatBracketValue(bracket.data.avgSize)
+                                      : (bracket.data.avgAcres ? bracket.data.avgAcres.toFixed(2) : '-')}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                     {bracket.data.avgSalePrice ? `$${Math.round(bracket.data.avgSalePrice).toLocaleString()}` : '-'}
@@ -8636,7 +8786,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                     {adjustedDelta !== null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {lotDelta !== null ? lotDelta.toFixed(2) : '-'}
+                                    {comparisonBracket && bracket.data.avgSize != null && comparisonBracket.avgSize != null
+                                      ? formatBracketValue(bracket.data.avgSize - comparisonBracket.avgSize)
+                                      : (lotDelta !== null ? lotDelta.toFixed(2) : '-')}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
                                     {perAcre !== null ? `$${Math.round(perAcre).toLocaleString()}` : 'N/A'}
