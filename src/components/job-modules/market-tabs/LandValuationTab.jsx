@@ -2376,6 +2376,7 @@ const getPricePerUnit = useCallback((price, size) => {
             avgSalePrice: null,
             avgNormTime: null,
             avgSFLA: null,
+            avgYearBuilt: null,
             avgAdjusted: null
           };
 
@@ -2386,6 +2387,10 @@ const getPricePerUnit = useCallback((price, size) => {
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+          const validYears = arr.filter(s => Number(s.yearBuilt) > 1500);
+          const avgYearBuilt = validYears.length > 0 ?
+            Math.round(validYears.reduce((sum, s) => sum + Number(s.yearBuilt), 0) / validYears.length) : null;
 
           // Jim's Magic Formula for size adjustment - METHOD 2 USES SFLA, NOT LOT SIZE
           let avgAdjusted = avgNormTime;
@@ -2403,6 +2408,7 @@ const getPricePerUnit = useCallback((price, size) => {
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
             avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
+            avgYearBuilt,
             avgAdjusted: Math.round(avgAdjusted)
           };
         };
@@ -2489,6 +2495,7 @@ const getPricePerUnit = useCallback((price, size) => {
             avgSalePrice: null,
             avgNormTime: null,
             avgSFLA: null,
+            avgYearBuilt: null,
             avgAdjusted: null
           };
 
@@ -2499,6 +2506,10 @@ const getPricePerUnit = useCallback((price, size) => {
           const validSFLA = arr.filter(s => s.sfla > 0);
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+          const validYears = arr.filter(s => Number(s.yearBuilt) > 1500);
+          const avgYearBuilt = validYears.length > 0 ?
+            Math.round(validYears.reduce((sum, s) => sum + Number(s.yearBuilt), 0) / validYears.length) : null;
 
           // Compute average lot SF for this bracket (only used for Front Foot Rates table)
           const validLotSF = arr.filter(s => s.acres > 0).map(s => (s.acres * 43560));
@@ -2520,6 +2531,7 @@ const getPricePerUnit = useCallback((price, size) => {
             avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
             avgNormTime: Math.round(avgNormTime), // Keep for compatibility
             avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
+            avgYearBuilt,
             avgAdjusted: Math.round(avgAdjusted)
           };
         };
@@ -5938,19 +5950,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const method2Rows = [];
 
     // Single global header row
-    const method2Headers = ['VCS','Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','$ ADJUSTED','$ DELTA','LOT DELTA','$ PER ACRE','PER SQ FT'];
+    const lotSizeHeader = `Avg Lot Size (${bracketUnitLabel})`;
+    const method2Headers = ['VCS','Bracket','Count',lotSizeHeader,'Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','Avg Yr Built','$ ADJUSTED','$ DELTA','LOT DELTA','$ PER ACRE','PER SQ FT'];
     method2Rows.push(method2Headers);
-
-    // Build bracket labels dynamically from cascadeConfig
-    const p = cascadeConfig.normal?.prime?.max ?? 1;
-    const s = cascadeConfig.normal?.secondary?.max ?? 5;
-    const e = cascadeConfig.normal?.excess?.max ?? 10;
-    const r = cascadeConfig.normal?.residual?.max ?? null;
-
-    const labelSmall = `<${p.toFixed(2)}`;
-    const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
-    const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
-    const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
 
     // Track rows for coloring (store {vcs, bracket, rowIndex, hasPrevious})
     const rowColorInfo = [];
@@ -5965,12 +5967,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgSFLA: data.avgSFLA || 0        // Average SFLA for VCS
       };
 
-      const bracketList = [
-        { key: 'small', label: labelSmall, bracket: data.brackets.small },
-        { key: 'medium', label: labelMedium, bracket: data.brackets.medium },
-        { key: 'large', label: labelLarge, bracket: data.brackets.large },
-        { key: 'xlarge', label: labelXlarge, bracket: data.brackets.xlarge }
-      ];
+      // Mirror the on-screen bracket list so the export never drifts from the UI.
+      const bracketList = (data.bracketBuckets || []).map(function (bucket) {
+        return { key: bucket.key, label: bucket.label, bracket: bucket.stats };
+      });
 
       let hasPreviousInVCS = false;
       let previousAdjusted = null;
@@ -5992,9 +5992,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Calculate delta for coloring (null if first row)
         const calculatedDelta = hasPreviousInVCS && previousAdjusted != null ? currentAdjusted - previousAdjusted : null;
 
-        // Calculate lot delta: current lot size - previous lot size
-        const lotDelta = hasPreviousInVCS && previousLotSize != null && row.bracket.avgAcres != null ?
-          row.bracket.avgAcres - previousLotSize : null;
+        // Lot size and lot delta go out in the job's own unit, so the rate formulas
+        // divide by a real delta instead of a 2-decimal acre figure.
+        const lotSize = row.bracket.avgSize != null ? row.bracket.avgSize : row.bracket.avgAcres;
+        const lotDelta = hasPreviousInVCS && previousLotSize != null && lotSize != null ?
+          lotSize - previousLotSize : null;
 
         const currentRowIndex = method2Rows.length;
 
@@ -6002,13 +6004,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           vcs,
           row.label,
           row.bracket.count || 0,
-          row.bracket.avgAcres != null ? Number(row.bracket.avgAcres.toFixed(2)) : '',
+          lotSize != null ? roundBracketValue(lotSize) : '',
           row.bracket.avgSalePrice != null ? row.bracket.avgSalePrice : '',
           row.bracket.avgSalePrice != null ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '',
           row.bracket.avgSFLA != null ? Math.round(row.bracket.avgSFLA).toLocaleString() : '',
+          row.bracket.avgYearBuilt || '',
           '', // $ ADJUSTED - will use formula
           '', // $ DELTA - will use formula
-          lotDelta != null ? Number(lotDelta.toFixed(2)) : '',
+          lotDelta != null ? roundBracketValue(lotDelta) : '',
           '', // $ PER ACRE - will use formula
           '' // PER SQ FT - will use formula
         ]);
@@ -6024,7 +6027,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         hasPreviousInVCS = true;
         previousAdjusted = currentAdjusted;
-        previousLotSize = row.bracket.avgAcres || 0;
+        previousLotSize = lotSize || 0;
       });
     });
 
@@ -6218,7 +6221,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Add formulas for $ ADJUSTED, $ DELTA, and $ PER ACRE columns
     try {
       const vcsColIndex = method2Headers.indexOf('VCS');
-      const lotSizeColIndex = method2Headers.indexOf('Avg Lot Size (acres)');
+      const lotSizeColIndex = method2Headers.indexOf(lotSizeHeader);
       const avgSalePriceColIndex = method2Headers.indexOf('Avg Sale Price (t)');
       const avgSFLAColIndex = method2Headers.indexOf('Avg SFLA');
       const adjustedColIndex = method2Headers.indexOf('$ ADJUSTED');
@@ -6281,32 +6284,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }
         }
 
-        // Formula for $ PER ACRE: $ DELTA / LOT DELTA (only if has previous and valid)
-        if (hasPrevious && perAcreColIndex >= 0 && deltaColIndex >= 0 && lotDeltaColIndex >= 0) {
+        // LOT DELTA is in the job's unit, so on square-foot jobs the native rate is
+        // $/SF and $/acre is derived from it - not the other way round.
+        if (hasPrevious && perAcreColIndex >= 0 && perSqFtColIndex >= 0 && deltaColIndex >= 0 && lotDeltaColIndex >= 0) {
           const deltaCol = XLSX.utils.encode_col(deltaColIndex);
           const lotDeltaCol = XLSX.utils.encode_col(lotDeltaColIndex);
-          const perAcreCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perAcreColIndex });
-
-          // Formula: IF(AND(DELTA exists, LOT DELTA > 0), DELTA / LOT DELTA, "")
-          const perAcreFormula = `IF(AND(${deltaCol}${excelRow}<>"",${lotDeltaCol}${excelRow}>0),${deltaCol}${excelRow}/${lotDeltaCol}${excelRow},"")`;
-
-          if (ws2[perAcreCellRef]) {
-            ws2[perAcreCellRef].f = perAcreFormula;
-            ws2[perAcreCellRef].z = '"$"#,##0'; // Currency format without decimals
-          }
-        }
-
-        // Formula for PER SQ FT: $ PER ACRE / 43560 (only if PER ACRE has value)
-        if (hasPrevious && perSqFtColIndex >= 0 && perAcreColIndex >= 0) {
           const perAcreCol = XLSX.utils.encode_col(perAcreColIndex);
+          const perSqFtCol = XLSX.utils.encode_col(perSqFtColIndex);
+          const perAcreCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perAcreColIndex });
           const perSqFtCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perSqFtColIndex });
 
-          // Formula: IF(PER ACRE exists, PER ACRE / 43560, "")
-          const perSqFtFormula = `IF(${perAcreCol}${excelRow}<>"",${perAcreCol}${excelRow}/43560,"")`;
+          const rateFormula = `IF(AND(${deltaCol}${excelRow}<>"",${lotDeltaCol}${excelRow}>0),${deltaCol}${excelRow}/${lotDeltaCol}${excelRow},"")`;
 
-          if (ws2[perSqFtCellRef]) {
-            ws2[perSqFtCellRef].f = perSqFtFormula;
-            ws2[perSqFtCellRef].z = '"$"#,##0.00'; // Currency format with 2 decimals
+          if (bracketUnit === 'sf') {
+            if (ws2[perSqFtCellRef]) {
+              ws2[perSqFtCellRef].f = rateFormula;
+              ws2[perSqFtCellRef].z = '"$"#,##0.00';
+            }
+            if (ws2[perAcreCellRef]) {
+              ws2[perAcreCellRef].f = `IF(${perSqFtCol}${excelRow}<>"",${perSqFtCol}${excelRow}*43560,"")`;
+              ws2[perAcreCellRef].z = '"$"#,##0';
+            }
+          } else {
+            if (ws2[perAcreCellRef]) {
+              ws2[perAcreCellRef].f = rateFormula;
+              ws2[perAcreCellRef].z = '"$"#,##0';
+            }
+            if (ws2[perSqFtCellRef]) {
+              ws2[perSqFtCellRef].f = `IF(${perAcreCol}${excelRow}<>"",${perAcreCol}${excelRow}/43560,"")`;
+              ws2[perSqFtCellRef].z = '"$"#,##0.00';
+            }
           }
         }
       }
@@ -6324,6 +6331,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 14 }, // Avg Sale Price (t)
       { wch: 14 }, // $ Avg Sale Price
       { wch: 12 }, // Avg SFLA
+      { wch: 12 }, // Avg Yr Built
       { wch: 14 }, // $ ADJUSTED
       { wch: 12 }, // $ DELTA
       { wch: 10 }, // LOT DELTA
@@ -8765,6 +8773,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Lot Size ({bracketUnitLabel})</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Sale Price (t)</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg SFLA</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>Avg Yr Built</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>LOT DELTA</th>
@@ -8840,6 +8849,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                     {bracket.data.avgSFLA ? Math.round(bracket.data.avgSFLA).toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {bracket.data.avgYearBuilt || '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                     {bracket.data.avgAdjusted ? `$${Math.round(bracket.data.avgAdjusted).toLocaleString()}` : '-'}
