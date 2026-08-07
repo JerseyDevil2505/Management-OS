@@ -247,6 +247,8 @@ const LandValuationTab = ({
   // of the current one. Method 1 scope only — nothing is written to property_records.
   const [priorSalePicks, setPriorSalePicks] = useState({});
   const [salesHistoryTarget, setSalesHistoryTarget] = useState(null);
+  // Method 1 table sort. field null = the order filterVacantSales produced.
+  const [method1Sort, setMethod1Sort] = useState({ field: null, direction: 'asc' });
   const [hpi, setHpi] = useState({ fn: null, normalizeToYear: 2025 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
@@ -1232,6 +1234,90 @@ const getPricePerUnit = useCallback((price, size) => {
       hpi.normalizeToYear
     ).values_norm_time;
   }, [hpi]);
+
+  // ========== METHOD 1 TABLE SORT ==========
+  const method1SortValue = useCallback((sale, field) => {
+    switch (field) {
+      case 'included': return includedSales.has(sale.id) ? 1 : 0;
+      case 'block': return sale.property_block;
+      case 'lot': return sale.property_lot;
+      case 'qualifier': return sale.property_qualifier && sale.property_qualifier !== 'NONE' ? sale.property_qualifier : '';
+      case 'address': return sale.property_location;
+      case 'class': return sale.property_m4_class;
+      case 'building': return sale.asset_building_class;
+      case 'type': return sale.asset_type_use;
+      case 'yearBuilt': return sale.asset_year_built;
+      case 'design': return sale.asset_design_style;
+      case 'vcs': return sale.new_vcs;
+      case 'zoning': return sale.asset_zoning;
+      case 'location': return sale.location_analysis;
+      case 'region': return specialRegions[sale.id] || 'Normal';
+      case 'category': return saleCategories[sale.id] || sale.autoCategory || '';
+      case 'saleDate': return sale.sales_date;
+      case 'salePrice': return Number(sale.sales_price) || 0;
+      case 'size': return valuationMode === 'ff'
+        ? (parseFloat(sale.asset_lot_frontage) || 0)
+        : (Number(sale.totalAcres) || 0);
+      case 'depth': return parseFloat(sale.asset_lot_depth) || 0;
+      case 'unitRate': return Number(sale.pricePerAcre) || 0;
+      case 'package': return (sale.packageData && sale.packageData.package_count) || sale._priorPackageCount || 0;
+      case 'notes': return landNotes[sale.id] || '';
+      default: return '';
+    }
+  }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode]);
+
+  const sortedVacantSales = useMemo(() => {
+    if (!method1Sort.field) return vacantSales;
+    const dir = method1Sort.direction === 'desc' ? -1 : 1;
+    const isBlank = (v) => v === null || v === undefined || v === '';
+
+    return [...vacantSales].sort((a, b) => {
+      const av = method1SortValue(a, method1Sort.field);
+      const bv = method1SortValue(b, method1Sort.field);
+      // Blanks always sink, so flipping direction does not fill the top with empties.
+      if (isBlank(av) && isBlank(bv)) return 0;
+      if (isBlank(av)) return 1;
+      if (isBlank(bv)) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      // numeric:true keeps lots like 9 and 12.01 in human order.
+      return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+  }, [vacantSales, method1Sort, method1SortValue]);
+
+  const toggleMethod1Sort = useCallback((field) => {
+    setMethod1Sort(prev => prev.field === field
+      ? { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+      : { field, direction: 'asc' });
+  }, []);
+
+  const method1SortArrow = (field) => {
+    if (method1Sort.field !== field) return '\u21C5';
+    return method1Sort.direction === 'asc' ? '\u25B2' : '\u25BC';
+  };
+
+  const method1SortHeader = (label, field, align) => {
+    const active = method1Sort.field === field;
+    return (
+      <th
+        onClick={() => toggleMethod1Sort(field)}
+        title={'Sort by ' + label}
+        style={{
+          padding: '8px',
+          textAlign: align || 'left',
+          borderBottom: '1px solid #E5E7EB',
+          cursor: 'pointer',
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+          color: active ? '#1D4ED8' : undefined
+        }}
+      >
+        {label}
+        <span style={{ marginLeft: '4px', fontSize: '10px', opacity: active ? 1 : 0.35 }}>
+          {method1SortArrow(field)}
+        </span>
+      </th>
+    );
+  };
 
   useEffect(() => {
     debug('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
@@ -7624,44 +7710,60 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     />
                     Include
                   </label>
+                  <span
+                    onClick={() => toggleMethod1Sort('included')}
+                    title="Sort by included"
+                    style={{
+                      marginLeft: '4px',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      color: method1Sort.field === 'included' ? '#1D4ED8' : undefined,
+                      opacity: method1Sort.field === 'included' ? 1 : 0.35
+                    }}
+                  >
+                    {method1SortArrow('included')}
+                  </span>
                 </th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Block</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Lot</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Qual</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Address</th>
-                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Class</th>
-                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Bldg</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Type</th>
-                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Year Built</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Design</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>VCS</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Zoning</th>
+                {method1SortHeader('Block', 'block')}
+                {method1SortHeader('Lot', 'lot')}
+                {method1SortHeader('Qual', 'qualifier')}
+                {method1SortHeader('Address', 'address')}
+                {method1SortHeader('Class', 'class', 'center')}
+                {method1SortHeader('Bldg', 'building', 'center')}
+                {method1SortHeader('Type', 'type')}
+                {method1SortHeader('Year Built', 'yearBuilt', 'center')}
+                {method1SortHeader('Design', 'design')}
+                {method1SortHeader('VCS', 'vcs')}
+                {method1SortHeader('Zoning', 'zoning')}
                 {valuationMode === 'ff' && (
                   <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Depth Table</th>
                 )}
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Location</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Special Region</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Category</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
-                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Sale Price</th>
+                {method1SortHeader('Location', 'location')}
+                {method1SortHeader('Special Region', 'region')}
+                {method1SortHeader('Category', 'category')}
+                {method1SortHeader('Sale Date', 'saleDate')}
+                {method1SortHeader('Sale Price', 'salePrice', 'right')}
                 {valuationMode === 'ff' ? (
                   <>
-                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Frontage</th>
-                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Depth</th>
+                    {method1SortHeader('Frontage', 'size', 'right')}
+                    {method1SortHeader('Depth', 'depth', 'right')}
                   </>
                 ) : (
-                  <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>
-                    {valuationMode === 'acre' ? 'Acres' : valuationMode === 'sf' ? 'Sq Ft' : 'Frontage'}
-                  </th>
+                  method1SortHeader(
+                    valuationMode === 'acre' ? 'Acres' : valuationMode === 'sf' ? 'Sq Ft' : 'Frontage',
+                    'size',
+                    'right'
+                  )
                 )}
-                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>{getUnitLabel()}</th>
-                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Package</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Notes</th>
+                {method1SortHeader(getUnitLabel(), 'unitRate', 'right')}
+                {method1SortHeader('Package', 'package', 'center')}
+                {method1SortHeader('Notes', 'notes')}
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {vacantSales.map((sale, index) => {
+              {sortedVacantSales.map((sale, index) => {
                 // Get human-readable names - use only synchronous decoding to avoid async rendering issues
                 const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
                   ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_type_use') || sale.asset_type_use || '-'
