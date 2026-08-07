@@ -295,6 +295,11 @@ const LandValuationTab = ({
 
   // Bracket editor UI state (allows per-job overrides of bracket boundaries)
   const [showBracketEditor, setShowBracketEditor] = useState(false);
+
+  // Mirror of cascadeConfig readable synchronously. Saving brackets sets state and
+  // saves in the same click, and the state update would not be visible yet.
+  const cascadeConfigRef = useRef(cascadeConfig);
+  useEffect(() => { cascadeConfigRef.current = cascadeConfig; }, [cascadeConfig]);
   
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
@@ -1010,7 +1015,16 @@ const getPricePerUnit = useCallback((price, size) => {
     return (parseFloat(calculateAcreage(prop)) || 0) * 43560;
   }, [valuationMode, calculateAcreage]);
 
+  // Square feet are whole numbers; acres carry two decimals. Applied to every
+  // bracket boundary so a converted value never shows up as 3049.20000000001.
+  const roundBracketValue = useCallback((value) => {
+    const n = Number(value);
+    if (!isFinite(n)) return null;
+    return bracketUnit === 'sf' ? Math.round(n) : Math.round(n * 100) / 100;
+  }, [bracketUnit]);
+
   const formatBracketValue = useCallback((value) => {
+    if (value === '' || value == null) return '';
     const n = Number(value);
     if (!isFinite(n)) return '';
     return bracketUnit === 'sf'
@@ -1056,7 +1070,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Fall back to the legacy four-max cascade shape so jobs saved before brackets
   // became user-defined keep bucketing exactly as they did.
   const legacyBracketList = useCallback((normal) => {
-    const toUnit = (acres) => (bracketUnit === 'sf' ? acres * 43560 : acres);
+    const toUnit = (acres) => roundBracketValue(bracketUnit === 'sf' ? acres * 43560 : acres);
     const p = normal?.prime?.max;
     const s = normal?.secondary?.max;
     const e = normal?.excess?.max;
@@ -1074,7 +1088,23 @@ const getPricePerUnit = useCallback((price, size) => {
       }
     }
     return list;
-  }, [bracketUnit]);
+  }, [bracketUnit, roundBracketValue]);
+
+  // Starting point for a job that has never defined brackets: the four tiers the
+  // office has always used. Rows can be added or removed from here.
+  const defaultBracketList = useCallback(() => {
+    const toUnit = (acres) => roundBracketValue(bracketUnit === 'sf' ? acres * 43560 : acres);
+    const n = cascadeConfig.normal || {};
+    const p = n.prime?.max > 0 ? n.prime.max : 0.25;
+    const s = n.secondary?.max > p ? n.secondary.max : p * 2;
+    const e = n.excess?.max > s ? n.excess.max : s * 2;
+    return [
+      { id: 'b0', op: 'lt', value: toUnit(p) },
+      { id: 'b1', op: 'range', value: toUnit(p), value2: toUnit(s) },
+      { id: 'b2', op: 'range', value: toUnit(s), value2: toUnit(e) },
+      { id: 'b3', op: 'ge', value: toUnit(e) }
+    ];
+  }, [bracketUnit, cascadeConfig.normal, roundBracketValue]);
 
   const landBrackets = useMemo(() => {
     const saved = cascadeConfig.brackets;
@@ -1085,12 +1115,12 @@ const getPricePerUnit = useCallback((price, size) => {
       const factor = saved.unit === 'sf' ? 1 / 43560 : 43560;
       return saved.list.map(def => ({
         ...def,
-        value: def.value == null ? def.value : def.value * factor,
-        value2: def.value2 == null ? def.value2 : def.value2 * factor
+        value: def.value == null ? def.value : roundBracketValue(def.value * factor),
+        value2: def.value2 == null ? def.value2 : roundBracketValue(def.value2 * factor)
       }));
     }
     return legacyBracketList(cascadeConfig.normal);
-  }, [cascadeConfig.brackets, cascadeConfig.normal, bracketUnit, legacyBracketList]);
+  }, [cascadeConfig.brackets, cascadeConfig.normal, bracketUnit, legacyBracketList, roundBracketValue]);
 
   // A special region can carry its own legacy cascade maxima. Once the job has an
   // explicit bracket list that list wins everywhere; until then each region
@@ -1122,8 +1152,16 @@ const getPricePerUnit = useCallback((price, size) => {
   // keyed on landBrackets, so an in-progress edit is never clobbered.
   useEffect(() => {
     if (!showBracketEditor) return;
-    setBracketDraft(landBrackets.map(function (def, i) {
-      return { id: def.id || ('b' + i), op: def.op, value: def.value, value2: def.value2 };
+    const source = landBrackets.length > 0 ? landBrackets : defaultBracketList();
+    setBracketDraft(source.map(function (def, i) {
+      const v = roundBracketValue(def.value);
+      const v2 = roundBracketValue(def.value2);
+      return {
+        id: def.id || ('b' + i),
+        op: def.op,
+        value: v == null ? '' : v,
+        value2: v2 == null ? '' : v2
+      };
     }));
   }, [showBracketEditor]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1150,31 +1188,38 @@ const getPricePerUnit = useCallback((price, size) => {
     const list = [];
     for (let i = 0; i < bracketDraft.length; i++) {
       const row = bracketDraft[i];
-      const value = parseFloat(row.value);
-      if (!isFinite(value)) {
-        return alert('Bracket ' + (i + 1) + ' needs a numeric value in ' + bracketUnitLabel + '.');
+      const value = roundBracketValue(row.value);
+      if (value == null) {
+        alert('Bracket ' + (i + 1) + ' needs a numeric value in ' + bracketUnitLabel + '.');
+        return false;
       }
       const def = { id: row.id, op: row.op, value };
       if (row.op === 'range') {
-        const value2 = parseFloat(row.value2);
-        if (!isFinite(value2) || value2 <= value) {
-          return alert('Bracket ' + (i + 1) + ' is a range, so the upper value must be greater than the lower one.');
+        const value2 = roundBracketValue(row.value2);
+        if (value2 == null || value2 <= value) {
+          alert('Bracket ' + (i + 1) + ' is a range, so the upper value must be greater than the lower one.');
+          return false;
         }
         def.value2 = value2;
       }
       list.push(def);
     }
     if (list.length === 0) {
-      return alert('Define at least one bracket.');
+      alert('Define at least one bracket.');
+      return false;
     }
 
     // Stored with the unit they were authored in so a later mode change can
-    // convert rather than silently comparing the wrong numbers.
-    setCascadeConfig(prev => ({ ...prev, brackets: { unit: bracketUnit, list } }));
+    // convert rather than silently comparing the wrong numbers. The ref is set
+    // alongside state so a save in this same click writes the new list.
+    const next = { ...cascadeConfigRef.current, brackets: { unit: bracketUnit, list } };
+    cascadeConfigRef.current = next;
+    setCascadeConfig(next);
 
     if (!opts || opts.recalc !== false) {
       try { performBracketAnalysis(); } catch (err) { /* recalculation is best effort */ }
     }
+    return true;
   };
 
   // ========== GENERATE VCS COLORS ==========
@@ -4696,7 +4741,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           excluded_vcs: Array.from(excludedMethod2VCS),
           summary: method2Summary
         },
-        cascade_rates: cascadeConfig,
+        cascade_rates: cascadeConfigRef.current,
         target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
@@ -7495,6 +7540,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
+    cascadeConfigRef.current = { ...cascadeConfigRef.current, mode: valuationMode };
     setCascadeConfig(prev => ({ ...prev, mode: valuationMode }));
 
     // This triggers the main saveAnalysis function
@@ -8413,15 +8459,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
                 Define as many brackets as this town needs. Values are in <strong>{bracketUnitLabel}</strong>, matching the land method selected above.
               </div>
-              <div style={{ display: 'grid', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '24px 200px 120px 70px 120px 1fr 80px', gap: '8px', alignItems: 'center', fontSize: '11px', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.03em', paddingBottom: '6px', borderBottom: '1px solid #F3F4F6' }}>
+                <span>#</span>
+                <span>Condition</span>
+                <span>Value</span>
+                <span />
+                <span>Upper</span>
+                <span>Reads as</span>
+                <span />
+              </div>
+              <div style={{ display: 'grid', gap: '6px', marginTop: '8px' }}>
                 {bracketDraft.map(function (row, index) {
+                  const isRange = row.op === 'range';
+                  const inputStyle = { width: '100%', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '13px', boxSizing: 'border-box' };
                   return (
-                    <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', color: '#9CA3AF', width: '18px' }}>{index + 1}</span>
+                    <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '24px 200px 120px 70px 120px 1fr 80px', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: '#9CA3AF' }}>{index + 1}</span>
                       <select
                         value={row.op}
                         onChange={(e) => updateBracketRow(index, { op: e.target.value })}
-                        style={{ padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '13px' }}
+                        style={{ ...inputStyle, backgroundColor: 'white' }}
                       >
                         <option value="lt">Less than</option>
                         <option value="le">Less than or equal to</option>
@@ -8435,21 +8492,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         step={bracketUnit === 'sf' ? '1' : '0.01'}
                         value={row.value ?? ''}
                         onChange={(e) => updateBracketRow(index, { value: e.target.value })}
-                        style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                        style={inputStyle}
                       />
-                      {row.op === 'range' && (
-                        <span style={{ fontSize: '12px', color: '#6B7280' }}>and under</span>
-                      )}
-                      {row.op === 'range' && (
+                      <span style={{ fontSize: '12px', color: '#6B7280', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {isRange ? 'and under' : ''}
+                      </span>
+                      {isRange ? (
                         <input
                           type="number"
                           step={bracketUnit === 'sf' ? '1' : '0.01'}
                           value={row.value2 ?? ''}
                           onChange={(e) => updateBracketRow(index, { value2: e.target.value })}
-                          style={{ width: '120px', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                          style={inputStyle}
                         />
-                      )}
-                      <span style={{ fontSize: '12px', color: '#6B7280' }}>{bracketUnitLabel}</span>
+                      ) : <span />}
+                      <span style={{ fontSize: '12px', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {describeBracket({ op: row.op, value: row.value, value2: row.value2 })} {bracketUnitLabel}
+                      </span>
                       <button
                         onClick={() => removeBracketRow(index)}
                         title="Remove this bracket"
@@ -8461,42 +8520,41 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   );
                 })}
               </div>
-              <button
-                onClick={addBracketRow}
-                style={{ marginTop: '10px', padding: '6px 10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-              >
-                + Add bracket
-              </button>
-              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button
-                  onClick={() => setBracketDraft(legacyBracketList({
-                    prime: { max: 0.25 },
-                    secondary: { max: 0.5 },
-                    excess: { max: 0.75 },
-                    residual: { max: 1 }
-                  }))}
-                  style={{ padding: '8px 12px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Apply Quartile Defaults
-                </button>
-                <button
-                  onClick={() => { applyBracketDraft({ recalc: true }); setShowBracketEditor(false); }}
-                  style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Apply
-                </button>
-                <button
-                  onClick={() => setShowBracketEditor(false)}
-                  style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => { applyBracketDraft({ recalc: true }); saveRates(); }}
-                  style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  Save Brackets
-                </button>
+              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={addBracketRow}
+                    style={{ padding: '6px 10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    + Add bracket
+                  </button>
+                  <button
+                    onClick={() => setBracketDraft(defaultBracketList())}
+                    style={{ padding: '6px 10px', backgroundColor: '#F9FAFB', color: '#374151', border: '1px solid #E5E7EB', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    Reset to 4 defaults
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => setShowBracketEditor(false)}
+                    style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => { if (applyBracketDraft({ recalc: true })) setShowBracketEditor(false); }}
+                    style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => { if (applyBracketDraft({ recalc: true })) saveRates(); }}
+                    style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Save Brackets
+                  </button>
+                </div>
               </div>
             </div>
           )}
