@@ -4934,20 +4934,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Typical Lot Size');
     }
 
-    // Add stepdown header if any VCS uses FF or SF
+    // Stepdown headers must stay adjacent and in the same order the rows are
+    // built below, otherwise every column right of here reads the wrong value.
     if (hasFFMethod || hasSFMethod) {
       headers.push('Stepdown');
     }
-
-    // Raw Land column comes after stepdown
-    headers.push('Raw Land');
-
-    headers.push('Rec Site Value', 'Act Site Value', 'Allocation Target');
-
-    // Secondary stepdown header for SF/FF with 3-tier
     if (shouldShowSecondaryStepColumn) {
       headers.push('Stepdown 2');
     }
+
+    headers.push('Raw Land', 'Rec Site Value', 'Act Site Value', 'Allocation Target');
 
     // Dynamic cascade headers - include all column types present in the job
     if (hasFFMethod || hasSFMethod) {
@@ -5061,8 +5057,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cleanZoning = (vcsData.zoning || '').replace(/\n/g, ' ').substring(0, 50);
 
       // Start building row
-      const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
-      const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
+      // Currency cells stay numeric and get a display format applied later. The
+      // Rec Site formula multiplies these, and a "$1,510,783" string yields
+      // #VALUE! in Excel.
+      const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? Math.round(recSite) : '';
+      const actSiteFmt = actSite !== null && actSite !== undefined ? Math.round(actSite) : '';
 
       const row = [
         vcs,
@@ -5210,10 +5209,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Format Raw Land for display
-      const rawLandFmt = rawLandValue > 0 ? `$${Math.round(rawLandValue).toLocaleString()}` : '';
+      const rawLandFmt = rawLandValue > 0 ? Math.round(rawLandValue) : '';
 
-      // Add Raw Land column (comes after stepdown)
+      // Raw Land column - order must match the headers built above
       row.push(rawLandFmt);
 
       // Add Rec Site and Act Site
@@ -5287,9 +5285,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Price and lot size columns (formatted)
       row.push(
         avgNormTimeLotFmt,
-        vcsData.avgNormTime != null ? `$${Math.round(vcsData.avgNormTime).toLocaleString()}` : '',
+        vcsData.avgNormTime != null ? Math.round(vcsData.avgNormTime) : '',
         avgPriceLotFmt,
-        vcsData.avgPrice != null ? `$${Math.round(vcsData.avgPrice).toLocaleString()}` : ''
+        vcsData.avgPrice != null ? Math.round(vcsData.avgPrice) : ''
       );
 
       // CME bracket
@@ -5309,78 +5307,40 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
 
-    // Add Excel formulas for Raw Land and Rec Site
+    // Rec Site is left live so the user can retype the Allocation Target in
+    // Excel and see site values recalculate. Raw Land stays a computed value -
+    // the cascade is multi-tier and can carry a depth factor, which a cell
+    // formula can't reproduce from the columns present here.
     try {
       const rawLandColIndex = headers.indexOf('Raw Land');
       const recSiteColIndex = headers.indexOf('Rec Site Value');
       const methodColIndex = headers.indexOf('Method');
       const allocationTargetColIndex = headers.indexOf('Allocation Target');
       const avgPriceColIndex = headers.indexOf('Avg Price (Current)');
-      const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
-      const stepdownColIndex = headers.indexOf('Stepdown (FF)') !== -1 ?
-        headers.indexOf('Stepdown (FF)') : headers.indexOf('Stepdown (SF)');
 
-      // Get rate column indices
-      const standardRateFFColIndex = headers.indexOf('Standard Rate ($/FF)');
-      const excessRateFFColIndex = headers.indexOf('Excess Rate ($/FF)');
-      const standardRateSFColIndex = headers.indexOf('Standard Rate ($/SF)');
-      const excessRateSFColIndex = headers.indexOf('Excess Rate ($/SF)');
+      if (recSiteColIndex >= 0 && allocationTargetColIndex >= 0 && avgPriceColIndex >= 0) {
+        const avgPriceCol = XLSX.utils.encode_col(avgPriceColIndex);
+        const allocationTargetCol = XLSX.utils.encode_col(allocationTargetColIndex);
+        const rawLandCol = rawLandColIndex >= 0 ? XLSX.utils.encode_col(rawLandColIndex) : null;
 
-      // Process each data row (rows 1+ are data, row 0 is header)
-      for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
-        const excelRow = rowIndex + 1; // Excel is 1-indexed
-        const rowMethod = data[rowIndex][methodColIndex]; // Get the Method for this row
-
-        // ===== RAW LAND FORMULA =====
-        // Simple: avg price lot size - step X standard + remaining X excess
-        if (rawLandColIndex >= 0 && avgPriceLotSizeColIndex >= 0) {
-          const rawLandCellRef = XLSX.utils.encode_cell({ r: rowIndex, c: rawLandColIndex });
-          let rawLandFormula = '';
-
-          if (rowMethod === 'FF' && standardRateFFColIndex >= 0 && excessRateFFColIndex >= 0 && stepdownColIndex >= 0) {
-            const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
-            const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
-            const standardRateCol = XLSX.utils.encode_col(standardRateFFColIndex);
-            const excessRateCol = XLSX.utils.encode_col(excessRateFFColIndex);
-
-            // Raw Land = (lot size up to step × standard) + (remaining after step × excess)
-            rawLandFormula = `${stepdownCol}${excelRow}*${standardRateCol}${excelRow}+(${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
-          } else if (rowMethod === 'SF' && standardRateSFColIndex >= 0 && excessRateSFColIndex >= 0 && stepdownColIndex >= 0) {
-            const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
-            const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
-            const standardRateCol = XLSX.utils.encode_col(standardRateSFColIndex);
-            const excessRateCol = XLSX.utils.encode_col(excessRateSFColIndex);
-
-            // Raw Land = (lot size up to step × standard) + (remaining after step × excess)
-            rawLandFormula = `${stepdownCol}${excelRow}*${standardRateCol}${excelRow}+(${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
-          }
-
-          if (rawLandFormula && worksheet[rawLandCellRef]) {
-            worksheet[rawLandCellRef].f = rawLandFormula;
-            worksheet[rawLandCellRef].z = '"$"#,##0'; // Currency format with $ symbol
-          }
-        }
-
-        // ===== REC SITE FORMULA =====
-        if (recSiteColIndex >= 0 && allocationTargetColIndex >= 0 && avgPriceColIndex >= 0) {
+        for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+          const excelRow = rowIndex + 1; // Excel is 1-indexed
+          const rowMethod = data[rowIndex][methodColIndex];
           const recSiteCellRef = XLSX.utils.encode_cell({ r: rowIndex, c: recSiteColIndex });
-          const avgPriceCol = XLSX.utils.encode_col(avgPriceColIndex);
-          const allocationTargetCol = XLSX.utils.encode_col(allocationTargetColIndex);
-          const rawLandCol = XLSX.utils.encode_col(rawLandColIndex);
+          if (!worksheet[recSiteCellRef]) continue;
 
+          const base = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100`;
           let recSiteFormula = '';
 
           if (rowMethod === 'SITE') {
-            // SITE Method: Avg Price × Allocation Target (÷100 for percentage)
-            recSiteFormula = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100`;
+            recSiteFormula = base;
           } else if (rowMethod === 'FF' || rowMethod === 'SF' || rowMethod === 'AC') {
-            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land (÷100 for percentage)
-            recSiteFormula = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100-${rawLandCol}${excelRow}`;
+            recSiteFormula = rawLandCol ? `${base}-${rawLandCol}${excelRow}` : base;
           }
 
-          if (recSiteFormula && worksheet[recSiteCellRef]) {
+          if (recSiteFormula) {
             worksheet[recSiteCellRef].f = recSiteFormula;
-            worksheet[recSiteCellRef].z = '"$"#,##0'; // Currency format with $ symbol
+            worksheet[recSiteCellRef].z = '"$"#,##0';
           }
         }
       }
@@ -5405,12 +5365,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       colWidths.push({ wch: 15 }); // Typical Lot Size
     }
 
-    // Stepdown column for FF and SF modes
-    if (valuationMode === 'ff' || valuationMode === 'sf') {
+    // Stepdown columns for FF and SF modes
+    if (hasFFMethod || hasSFMethod) {
       colWidths.push({ wch: 15 }); // Stepdown
     }
+    if (shouldShowSecondaryStepColumn) {
+      colWidths.push({ wch: 15 }); // Stepdown 2
+    }
 
-    // Raw Land comes after stepdown
     colWidths.push({ wch: 15 }); // Raw Land
 
     colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 18 }); // Rec Site, Act Site, Allocation Target
@@ -5456,8 +5418,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const typicalLotColIndex = headers.indexOf('Typical Lot Size');
       const typicalFFColIndex = headers.indexOf('Typical FF');
       const typicalDepthColIndex = headers.indexOf('Typical Depth');
-      const stepdownFFColIndex = headers.indexOf('Stepdown (FF)');
-      const stepdownSFColIndex = headers.indexOf('Stepdown (SF)');
+      const stepdownColIndex = headers.indexOf('Stepdown');
+      const stepdown2ColIndex = headers.indexOf('Stepdown 2');
       const avgPriceTLotSizeColIndex = headers.indexOf('Avg Price (t) Lot Size');
       const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
 
@@ -5466,10 +5428,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         typicalLotColIndex,
         typicalFFColIndex,
         typicalDepthColIndex,
-        stepdownFFColIndex,
-        stepdownSFColIndex,
+        stepdownColIndex,
+        stepdown2ColIndex,
         avgPriceTLotSizeColIndex,
         avgPriceLotSizeColIndex
+      ].filter(i => i >= 0);
+
+      // Money columns now carry raw numbers, so Excel supplies the $ and commas
+      const currencyColumns = [
+        headers.indexOf('Raw Land'),
+        headers.indexOf('Rec Site Value'),
+        headers.indexOf('Act Site Value'),
+        headers.indexOf('Avg Price (Time Norm)'),
+        headers.indexOf('Avg Price (Current)')
       ].filter(i => i >= 0);
 
       // Style all cells with gridlines and formatting
@@ -5518,6 +5489,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               } else {
                 worksheet[cellRef].z = '#,##0.00'; // 2 decimals with comma separator
               }
+            }
+
+            if (currencyColumns.includes(c)) {
+              worksheet[cellRef].z = '"$"#,##0';
             }
           }
 
