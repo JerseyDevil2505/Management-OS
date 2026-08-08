@@ -1039,6 +1039,13 @@ const getPricePerUnit = useCallback((price, size) => {
     return bracketUnit === 'sf' ? Math.round(n) : Math.round(n * 100) / 100;
   }, [bracketUnit]);
 
+  // For figures only available in acres (typical lot size, VCS averages).
+  const acresToBracketUnit = useCallback((acres) => {
+    const n = Number(acres);
+    if (!isFinite(n)) return null;
+    return bracketUnit === 'sf' ? n * 43560 : n;
+  }, [bracketUnit]);
+
   const formatBracketValue = useCallback((value) => {
     if (value === '' || value == null) return '';
     const n = Number(value);
@@ -2909,8 +2916,8 @@ const getPricePerUnit = useCallback((price, size) => {
           bVal = b.normalizedTime || 0;
           break;
         case 'acres':
-          aVal = parseFloat(calculateAcreage(a) || 0);
-          bVal = parseFloat(calculateAcreage(b) || 0);
+          aVal = getBracketSize(a);
+          bVal = getBracketSize(b);
           break;
         case 'sfla':
           aVal = parseInt(a.asset_sfla || 0);
@@ -3490,11 +3497,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
       : sorted[Math.floor(sorted.length / 2)];
 
+    // Returned in acres; the banner converts to the selected unit for display.
     return {
-      median: median.toFixed(2),
+      median,
       count: lotSizes.length,
-      min: Math.min(...lotSizes).toFixed(2),
-      max: Math.max(...lotSizes).toFixed(2)
+      min: Math.min(...lotSizes),
+      max: Math.max(...lotSizes)
     };
   }, [properties]);
 
@@ -8589,9 +8597,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           {calculateTypicalLotSize && (
             <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
               <div style={{ fontSize: '12px', color: '#0C4A6E', fontWeight: '500' }}>
-                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{calculateTypicalLotSize.median} acres</span>
+                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.median))} {bracketUnitLabel}</span>
                 <span style={{ fontSize: '10px', color: '#0C4A6E', marginLeft: '6px' }}>
-                  ({calculateTypicalLotSize.count} properties, range: {calculateTypicalLotSize.min}-{calculateTypicalLotSize.max} acres)
+                  ({calculateTypicalLotSize.count} properties, range: {formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.min))}-{formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.max))} {bracketUnitLabel})
                 </span>
               </div>
             </div>
@@ -8753,7 +8761,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${data.avgAcres.toFixed(2)} ac • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
+                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${formatBracketValue(acresToBracketUnit(data.avgAcres))} ${bracketUnitLabel} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -10936,7 +10944,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Lot Size ({bracketUnitLabel}) {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
@@ -10984,7 +10992,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </thead>
                 <tbody>
                   {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
-                    const acres = parseFloat(calculateAcreage(prop) || 0);
+                    const lotSize = getBracketSize(prop);
                     const isExcluded = method2ExcludedSales.has(prop.id);
 
                     // Check for pre-construction (sale before year built)
@@ -11026,7 +11034,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{acres.toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{formatBracketValue(lotSize)}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.asset_year_built || '-'}
