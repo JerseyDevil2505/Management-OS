@@ -2571,19 +2571,10 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       });
 
-      // Calculate Method 2 Summary by bracket ranges with positive deltas only
-      const bracketRates = {
-        mediumRange: [], // 1.00-4.99 acre rates
-        largeRange: [],  // 5.00-9.99 acre rates
-        xlargeRange: [] // 10.00+ acre rates
-      };
-
-      // Also collect avgAcres for each bracket range
-      const bracketAcres = {
-        mediumRange: [],
-        largeRange: [],
-        xlargeRange: []
-      };
+      // Method 2 summary, one slot per user-defined bracket. Slot 0 never has a
+      // rate: there is no smaller bracket to compare it against.
+      const ratesByBracket = [];
+      const acresByBracket = [];
 
       Object.keys(vcsSales).forEach(vcs => {
         // Skip excluded VCSs from summary calculation
@@ -2592,8 +2583,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const vcsAnalysis = analysis[vcs];
         if (!vcsAnalysis) return;
 
-        const { brackets } = vcsAnalysis;
-        const allBrackets = [brackets.small, brackets.medium, brackets.large, brackets.xlarge];
+        const allBrackets = (vcsAnalysis.bracketBuckets || []).map(b => b.stats);
 
         // For each bracket, find the best comparison bracket (highest valid one below it)
         const findBestComparison = (targetBracket, targetIndex) => {
@@ -2614,41 +2604,22 @@ const getPricePerUnit = useCallback((price, size) => {
           return bestBracket;
         };
 
-        // Medium range (comparing medium bracket to best lower bracket)
-        if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
-          const comparison = findBestComparison(brackets.medium, 1);
-          if (comparison) {
-            const rate = impliedPerAcre(brackets.medium, comparison, bracketUnit === 'sf');
-            if (rate !== null) {
-              bracketRates.mediumRange.push(rate);
-              bracketAcres.mediumRange.push(brackets.medium.avgAcres);
-            }
+        allBrackets.forEach((bracket, index) => {
+          if (!ratesByBracket[index]) {
+            ratesByBracket[index] = [];
+            acresByBracket[index] = [];
           }
-        }
+          if (index === 0 || !bracket || bracket.count === 0 || !bracket.avgAdjusted) return;
 
-        // Large range (comparing large bracket to best lower bracket)
-        if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
-          const comparison = findBestComparison(brackets.large, 2);
-          if (comparison) {
-            const rate = impliedPerAcre(brackets.large, comparison, bracketUnit === 'sf');
-            if (rate !== null) {
-              bracketRates.largeRange.push(rate);
-              bracketAcres.largeRange.push(brackets.large.avgAcres);
-            }
-          }
-        }
+          const comparison = findBestComparison(bracket, index);
+          if (!comparison) return;
 
-        // XLarge range (comparing xlarge bracket to best lower bracket)
-        if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
-          const comparison = findBestComparison(brackets.xlarge, 3);
-          if (comparison) {
-            const rate = impliedPerAcre(brackets.xlarge, comparison, bracketUnit === 'sf');
-            if (rate !== null) {
-              bracketRates.xlargeRange.push(rate);
-              bracketAcres.xlargeRange.push(brackets.xlarge.avgAcres);
-            }
+          const rate = impliedPerAcre(bracket, comparison, bracketUnit === 'sf');
+          if (rate !== null) {
+            ratesByBracket[index].push(rate);
+            acresByBracket[index].push(bracket.avgAcres);
           }
-        }
+        });
       });
 
       // Calculate averages for each bracket range
@@ -2769,10 +2740,18 @@ const getPricePerUnit = useCallback((price, size) => {
       // Count only non-excluded VCSs
       const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
 
+      const rangesByBracket = ratesByBracket.map((rates, i) =>
+        calculateBracketSummary(rates || [], acresByBracket[i] || [])
+      );
+      const emptyRange = calculateBracketSummary([]);
+
       setMethod2Summary({
-        mediumRange: calculateBracketSummary(bracketRates.mediumRange, bracketAcres.mediumRange), // 1.00-4.99
-        largeRange: calculateBracketSummary(bracketRates.largeRange, bracketAcres.largeRange),   // 5.00-9.99
-        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange, bracketAcres.xlargeRange), // 10.00+
+        // One entry per bracket, positionally aligned with the bracket list.
+        ranges: rangesByBracket,
+        // Legacy aliases for the exports and readers that predate dynamic brackets.
+        mediumRange: rangesByBracket[1] || emptyRange,
+        largeRange: rangesByBracket[2] || emptyRange,
+        xlargeRange: rangesByBracket[3] || emptyRange,
         totalVCS: includedVCSCount,
         excludedVCSCount: excludedMethod2VCS.size
       });
@@ -3472,22 +3451,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties]);
 
-  // Helper function to calculate typical lot size for Method 2 guidance
-  // Uses same logic as VCS sheet: market_manual_lot_acre when available
+  // Typical lot size hint for Method 2, already in the selected unit.
   const calculateTypicalLotSize = useMemo(() => {
     if (!properties || properties.length === 0) return null;
 
-    // Filter for properties with market_manual_lot_acre (matches VCS sheet logic)
-    // Falls back to asset_lot_acre so the banner works for both vendors
-    const eligibleSales = properties.filter(p => {
-      const lot = p.market_manual_lot_acre || p.asset_lot_acre;
-      return lot && parseFloat(lot) > 0;
-    }) || [];
-
-    if (eligibleSales.length === 0) return null;
-
-    // Use market_manual_lot_acre with asset_lot_acre fallback
-    const lotSizes = eligibleSales.map(p => parseFloat(p.market_manual_lot_acre || p.asset_lot_acre));
+    // Read the lot size in the job's own unit. Square-foot jobs must not be
+    // measured in acres and multiplied back up - 0.14 ac returns 6,098 sf for a
+    // lot that is actually 6,250 sf.
+    const lotSizes = properties
+      .map(p => getBracketSize(p))
+      .filter(size => size > 0);
 
     if (lotSizes.length === 0) return null;
 
@@ -3497,14 +3470,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
       : sorted[Math.floor(sorted.length / 2)];
 
-    // Returned in acres; the banner converts to the selected unit for display.
     return {
       median,
       count: lotSizes.length,
       min: Math.min(...lotSizes),
       max: Math.max(...lotSizes)
     };
-  }, [properties]);
+  }, [properties, getBracketSize]);
 
   // Helper function to get unique regions from vacant test sales
   const getUniqueRegions = () => {
@@ -8597,9 +8569,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           {calculateTypicalLotSize && (
             <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: '6px' }}>
               <div style={{ fontSize: '12px', color: '#0C4A6E', fontWeight: '500' }}>
-                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.median))} {bracketUnitLabel}</span>
+                💡 Typical Residential Lot: <span style={{ fontWeight: '700' }}>{formatBracketValue(calculateTypicalLotSize.median)} {bracketUnitLabel}</span>
                 <span style={{ fontSize: '10px', color: '#0C4A6E', marginLeft: '6px' }}>
-                  ({calculateTypicalLotSize.count} properties, range: {formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.min))}-{formatBracketValue(acresToBracketUnit(calculateTypicalLotSize.max))} {bracketUnitLabel})
+                  ({calculateTypicalLotSize.count} properties, range: {formatBracketValue(calculateTypicalLotSize.min)}-{formatBracketValue(calculateTypicalLotSize.max)} {bracketUnitLabel})
                 </span>
               </div>
             </div>
@@ -8905,136 +8877,79 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {/* dynamic bracket labels based on cascadeConfig */}
-                {(() => {
-                  // The summary tiles report brackets 2-4, so label them from the
-                  // live bracket list rather than the legacy acre maxima.
-                  const unit = bracketUnitLabel;
-                  const labelFor = (i) => (landBrackets[i] ? `${describeBracket(landBrackets[i])} ${unit}` : '-');
-                  const labelMedium = labelFor(1);
-                  const labelLarge = labelFor(2);
-                  const labelXlarge = labelFor(3);
+                {/* One tile per bracket. The smallest has no bracket beneath it to
+                    compare against, so it always reads N/A. */}
+                {landBrackets.map((def, index) => {
+                  const range = method2Summary.ranges?.[index];
+                  const perAcre = range?.perAcre;
+                  const perSqFt = range?.perSqFt;
+                  const hasRate = perAcre != null && perAcre !== 'N/A';
+                  const colors = ['#6B7280', '#059669', '#0D9488', '#7C3AED', '#B45309'];
+                  const primary = valuationMode === 'sf'
+                    ? (hasRate ? `$${perSqFt}/SF` : 'N/A')
+                    : (hasRate ? `$${perAcre.toLocaleString()}` : 'N/A');
+                  const secondary = valuationMode === 'sf'
+                    ? (hasRate ? `$${perAcre.toLocaleString()}/AC` : 'N/A')
+                    : (hasRate ? `$${perSqFt}/SF` : 'N/A');
 
                   return (
-                    <>
-                      {/* medium */}
-                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelMedium}</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A') :
-                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
-                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                          ({method2Summary.mediumRange?.count || 0} VCS)
-                        </div>
+                    <div key={def.id || index} style={{ textAlign: 'center', minWidth: '150px' }}>
+                      <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>
+                        {describeBracket(def)} {bracketUnitLabel}
                       </div>
-
-                      {/* large */}
-                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelLarge}</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A') :
-                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
-                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                          ({method2Summary.largeRange?.count || 0} VCS)
-                        </div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: colors[index % colors.length] }}>
+                        {primary}
                       </div>
-
-                      {/* xlarge */}
-                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelXlarge}</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A') :
-                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                          {valuationMode === 'sf' ?
-                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
-                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A')
-                          }
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                          ({method2Summary.xlargeRange?.count || 0} VCS)
-                        </div>
+                      <div style={{ fontSize: '12px', color: '#6B7280' }}>{secondary}</div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                        ({range?.count || 0} VCS)
                       </div>
-                    </>
+                    </div>
                   );
-                })()}
+                })}
+
 
                 {/* Average Across All Positive Deltas */}
                 <div style={{ textAlign: 'center', minWidth: '150px' }}>
                   <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>All Positive Deltas</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                    {(() => {
-                      const allRates = [];
-                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
-                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
-                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+                  {(() => {
+                    const ranges = (method2Summary.ranges || []).filter(r => r && r.perAcre !== 'N/A');
+                    const rates = ranges.map(r => r.perAcre);
+                    const lotAcres = ranges.map(r => r.avgAcres).filter(a => a > 0);
+                    const totalCount = (method2Summary.ranges || []).reduce((sum, r) => sum + (r?.count || 0), 0);
 
-                      if (allRates.length === 0) return 'N/A';
+                    if (rates.length === 0) {
+                      return (
+                        <>
+                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>N/A</div>
+                          <div style={{ fontSize: '12px', color: '#6B7280' }}>N/A</div>
+                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>({totalCount} Total)</div>
+                        </>
+                      );
+                    }
 
-                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      if (valuationMode === 'sf') {
-                        const avgSf = (avgAcre / 43560).toFixed(2);
-                        return `$${avgSf}/SF`;
-                      }
+                    const avgAcre = Math.round(rates.reduce((sum, rate) => sum + rate, 0) / rates.length);
+                    const avgSf = (avgAcre / 43560).toFixed(2);
+                    const primary = valuationMode === 'sf' ? `$${avgSf}/SF` : `$${avgAcre.toLocaleString()}`;
+                    const secondary = valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${avgSf}/SF`;
 
-                      return `$${avgAcre.toLocaleString()}`;
-                    })()}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {(() => {
-                      const allRates = [];
-                      if (method2Summary.mediumRange?.perAcre !== 'N/A') allRates.push(method2Summary.mediumRange.perAcre);
-                      if (method2Summary.largeRange?.perAcre !== 'N/A') allRates.push(method2Summary.largeRange.perAcre);
-                      if (method2Summary.xlargeRange?.perAcre !== 'N/A') allRates.push(method2Summary.xlargeRange.perAcre);
+                    let lotLabel = `${totalCount} Total`;
+                    if (lotAcres.length > 0) {
+                      const avgLotAcres = lotAcres.reduce((sum, acres) => sum + acres, 0) / lotAcres.length;
+                      const avgLot = valuationMode === 'sf'
+                        ? `${Math.round(avgLotAcres * 43560).toLocaleString()} sq ft`
+                        : `${avgLotAcres.toFixed(2)} acres`;
+                      lotLabel = `${avgLot} avg lot | ${totalCount} Total`;
+                    }
 
-                      if (allRates.length === 0) return 'N/A';
-
-                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      const perSqFt = (avgAcre / 43560).toFixed(2);
-
-                      // show secondary value (opposite of primary)
-                      return valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${perSqFt}/SF`;
-                    })()}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
-                    {(() => {
-                      // Calculate average lot size across all positive deltas
-                      const allLotAcres = [];
-                      if (method2Summary.mediumRange?.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
-                      if (method2Summary.largeRange?.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
-                      if (method2Summary.xlargeRange?.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
-
-                      if (allLotAcres.length === 0) {
-                        return `(${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)`;
-                      }
-
-                      const avgLotAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
-                      const avgLotSF = Math.round(avgLotAcres * 43560);
-
-                      return `${avgLotAcres.toFixed(2)} AC / ${avgLotSF.toLocaleString()} SF avg lot | ${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total`;
-                    })()}
-                  </div>
+                    return (
+                      <>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>{primary}</div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>{secondary}</div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>{lotLabel}</div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ width: '1px', height: '80px', backgroundColor: '#D1D5DB' }}></div>
