@@ -8771,20 +8771,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                               // Find the bracket with the highest adjusted value that's still lower than current
                               let comparisonBracket = null;
+                              let comparisonIndex = -1;
                               let highestValidAdjusted = 0;
+                              // The bracket immediately below with sales in it. When the
+                              // comparison lands somewhere else, this row skipped a bracket
+                              // that sold for more than it did.
+                              let immediatePrevIndex = -1;
 
                               for (let i = 0; i < index; i++) {
                                 const candidate = brackets[i].data;
+                                if (!candidate || candidate.count === 0) continue;
+                                immediatePrevIndex = i;
 
-                                if (candidate &&
-                                    candidate.count > 0 &&
-                                    candidate.avgAdjusted &&
+                                if (candidate.avgAdjusted &&
                                     candidate.avgAdjusted < bracket.data.avgAdjusted &&
                                     candidate.avgAdjusted > highestValidAdjusted) {
                                   comparisonBracket = candidate;
+                                  comparisonIndex = i;
                                   highestValidAdjusted = candidate.avgAdjusted;
                                 }
                               }
+
+                              const skippedBracket = comparisonIndex >= 0 &&
+                                immediatePrevIndex >= 0 &&
+                                comparisonIndex !== immediatePrevIndex;
 
                               let adjustedDelta = null;
                               let lotDelta = null;
@@ -8838,6 +8848,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                     {adjustedDelta !== null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
+                                    {comparisonIndex >= 0 && (
+                                      <div
+                                        title={skippedBracket
+                                          ? `Skipped "${brackets[immediatePrevIndex].label}" - it sold higher than this bracket, which would give a negative delta.`
+                                          : undefined}
+                                        style={{
+                                          fontSize: '10px',
+                                          fontWeight: skippedBracket ? '600' : '400',
+                                          color: skippedBracket ? '#B45309' : '#9CA3AF'
+                                        }}
+                                      >
+                                        {skippedBracket ? '⚠ ' : ''}vs {brackets[comparisonIndex].label}
+                                      </div>
+                                    )}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
                                     {lotDelta !== null ? formatBracketValue(lotDelta) : '-'}
