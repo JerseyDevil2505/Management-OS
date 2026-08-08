@@ -7164,8 +7164,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            // Only include positive price differences and positive size differences
-            if (priceDiff > 0 && sizeDiff > 0) {
+            if (sizeDiff > 0) {
               const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -7395,7 +7394,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            if (priceDiff > 0 && sizeDiff > 0) {
+            if (sizeDiff > 0) {
               pairedRates.push(priceDiff / sizeDiff);
             }
           }
