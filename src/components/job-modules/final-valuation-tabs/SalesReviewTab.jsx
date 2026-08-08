@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
 import {
   Download,
   Save,
@@ -102,11 +102,10 @@ const SalesReviewTab = ({
 
     const sale = parseDateLocal(saleDate);
     if (!sale) return null;
-    const endLocal = parseDateLocal(endDate);
-    const assessmentYear = endLocal ? endLocal.getFullYear() : new Date().getFullYear();
+    const assessmentYear = getAssessmentYear(endDate);
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
-    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
     const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
     const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
@@ -802,7 +801,7 @@ const SalesReviewTab = ({
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
 
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const assessmentYear = getAssessmentYear(jobData.end_date);
 
     switch(period) {
       case 'CSP':

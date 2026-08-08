@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa from 'papaparse';
-import { supabase, parseDateLocal } from '../lib/supabaseClient';
+import { supabase, parseDateLocal, getAssessmentYear } from '../lib/supabaseClient';
 import { njCityForZip } from '../data/njZipToCity';
 import { isPpaJob } from '../lib/tenantConfig';
 
@@ -637,8 +637,7 @@ const GeocodingTool = () => {
   // we'll need a coordinate for", not which sub-bucket it lives in.
   const csvSalesWindow = useMemo(() => {
     if (!selectedJob?.end_date) return null;
-    const endLocal = parseDateLocal(selectedJob.end_date);
-    const rawYear = endLocal ? endLocal.getFullYear() : null;
+    const rawYear = getAssessmentYear(selectedJob.end_date, null);
     if (!rawYear) return null;
     const isLojik = selectedJob?.organizations?.org_type === 'assessor';
     const ay = isLojik ? rawYear - 1 : rawYear;
