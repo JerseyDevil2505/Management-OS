@@ -3265,8 +3265,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         });
 
       } else {
-        // Acre or SF mode calculation (existing method)
-        rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
+        // The cascade tiers are per square foot in SF mode, so they must be handed
+        // square feet. Package sales only carry a combined acreage, so those convert;
+        // everything else reads its own SF so 6,250 stays 6,250.
+        const sizeForRates = valuationMode === 'sf'
+          ? (sale.totalAcres ? sale.totalAcres * 43560 : getBracketSize(sale))
+          : acres;
+        rawLandValue = calculateRawLandValue(sizeForRates, cascadeRates, sale);
       }
 
       // Calculate site value (what's left after raw land)
@@ -3305,6 +3310,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         : 0;
       const avgImprovedAcres = improvedSalesForYear.length > 0
         ? improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length
+        : 0;
+      // The size the cascade actually priced, in the job's unit. Displayed so the
+      // table reconciles against the raw land figure beside it.
+      const avgImprovedSize = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + getBracketSize(p), 0) / improvedSalesForYear.length
         : 0;
 
       // Log improved sales calculation for debugging
@@ -3384,11 +3394,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgImprovedRawLand = validImprovedCount > 0 ?
           totalImprovedRawLand / validImprovedCount : 0;
       } else {
-        // Acre/SF mode - calculate average raw land for improved properties
+        // Acre/SF mode - same unit rule as the vacant side above.
         if (improvedSalesForYear.length > 0) {
-          const improvedAcreages = improvedSalesForYear.map(p => parseFloat(calculateAcreage(p)));
-          avgImprovedRawLand = improvedAcreages.reduce((sum, acres) =>
-            sum + calculateRawLandValue(acres, cascadeRates), 0) / improvedSalesForYear.length;
+          const improvedSizes = improvedSalesForYear.map(p => valuationMode === 'sf'
+            ? getBracketSize(p)
+            : parseFloat(calculateAcreage(p)));
+          avgImprovedRawLand = improvedSizes.reduce((sum, size) =>
+            sum + calculateRawLandValue(size, cascadeRates), 0) / improvedSalesForYear.length;
         }
       }
 
@@ -3416,6 +3428,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         lot: sale.property_lot,
         vacantPrice: sale.sales_amount || sale.sales_price || 0,
         acres: acres,
+        lotSize: valuationMode === 'sf'
+          ? (sale.totalAcres ? sale.totalAcres * 43560 : getBracketSize(sale))
+          : acres,
+        avgImprovedSize: avgImprovedSize,
         frontFeet: valuationMode === 'ff' ? Math.round(sale.asset_lot_frontage || 0) : 0,
         depth: valuationMode === 'ff' ? Math.round(sale.asset_lot_depth || 0) : 0,
         zone: sale.asset_zoning || 'DEFAULT',
@@ -11309,7 +11325,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     </>
                   ) : (
                     <>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.acres))}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(sale.lotSize)}</td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                       <td style={{
                         padding: '8px',
@@ -11333,7 +11349,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                     </>
                   ) : (
-                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.avgImprovedAcres))}</td>
+                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(sale.avgImprovedSize)}</td>
                   )}
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.improvedRawLandValue || 0).toLocaleString()}</td>
                   <td style={{
@@ -11542,7 +11558,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </>
                       ) : (
                         <>
-                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.acres))}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(sale.lotSize)}</td>
                           <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                           <td style={{
                             padding: '8px',
@@ -11566,7 +11582,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                         </>
                       ) : (
-                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.avgImprovedAcres))}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(sale.avgImprovedSize)}</td>
                       )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.improvedRawLandValue || 0).toLocaleString()}</td>
                       <td style={{
