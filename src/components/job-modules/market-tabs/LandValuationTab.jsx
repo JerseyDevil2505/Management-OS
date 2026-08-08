@@ -5609,59 +5609,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const rows = [];
 
-    // Headers match UI table structure - different for FF vs Acre mode
+    // Headers match UI table structure - different for FF vs Acre/SF mode
     const headers = valuationMode === 'ff'
-      ? ['VCS','Year','Block/Lot','Region','Price','Front Feet','Depth','Zone','Site Value','Count','Avg Price','Avg FF','Avg Depth','Total Land Value','Current %','Recommended %','Status']
-      : ['VCS','Year','Block/Lot','Region','Price','Acres','Site Value','Count','Avg Price','Avg Acres','Total Land Value','Current %','Recommended %','Status'];
+      ? ['VCS','Year','Block/Lot','Region','Price','Front Feet','Depth','Zone','Raw Land','Site Value','Count','Avg Price','Avg FF','Avg Depth','Avg Raw Land','Total Land Value','Current %','Recommended %','Status']
+      : ['VCS','Year','Block/Lot','Region','Price',`Lot Size (${bracketUnitLabel})`,'Raw Land','Site Value','Count','Avg Price',`Avg Lot Size (${bracketUnitLabel})`,'Avg Raw Land','Total Land Value','Current %','Recommended %','Status'];
     rows.push(headers);
 
-    (vacantTestSales || []).forEach(sale => {
-      const status = sale.isPositive ? 'Included' : 'Excluded';
-      const vacantPrice = sale.vacantPrice != null ? `$${Math.round(sale.vacantPrice).toLocaleString()}` : '';
-      const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
-      const avgPriceFmt = sale.avgImprovedPrice > 0 ? `$${Math.round(sale.avgImprovedPrice).toLocaleString()}` : '-';
-      const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
-      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
-      const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
+    // Lot sizes travel in the job's own unit, so square-foot jobs must not be
+    // rounded to two decimals the way acres are.
+    const sizeCell = (value) => {
+      const n = Number(value);
+      if (!isFinite(n) || value == null) return '';
+      return bracketUnit === 'sf' ? Math.round(n) : Number(n.toFixed(2));
+    };
+    const moneyCell = (value) => (value != null ? `$${Math.round(value).toLocaleString()}` : '');
 
-      if (valuationMode === 'ff') {
-        rows.push([
-          sale.vcs || '',
-          sale.year || '',
-          `${sale.block || ''}/${sale.lot || ''}`,
-          sale.region || '',
-          vacantPrice,
-          Math.round(sale.frontFeet) || '',
-          Math.round(sale.depth) || '',
-          sale.zone || '',
-          siteValueFmt,
-          sale.improvedSalesCount || 0,
-          avgPriceFmt,
-          Math.round(sale.avgImprovedFF) || '-',
-          Math.round(sale.avgImprovedDepth) || '-',
-          totalLandFmt,
-          currentPct,
-          recPct,
-          status
-        ]);
-      } else {
-        rows.push([
-          sale.vcs || '',
-          sale.year || '',
-          `${sale.block || ''}/${sale.lot || ''}`,
-          sale.region || '',
-          vacantPrice,
-          sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
-          siteValueFmt,
-          sale.improvedSalesCount || 0,
-          avgPriceFmt,
-          sale.avgImprovedAcres != null ? Number(sale.avgImprovedAcres.toFixed(2)) : '-',
-          totalLandFmt,
-          currentPct,
-          recPct,
-          status
-        ]);
-      }
+    const buildRow = (sale) => {
+      const status = sale.isPositive ? 'Included' : 'Excluded';
+      const avgPriceFmt = sale.avgImprovedPrice > 0 ? moneyCell(sale.avgImprovedPrice) : '-';
+      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
+      const recPct = sale.improvedSalesCount > 0
+        ? `${(sale.recommendedAllocation * 100).toFixed(1)}%`
+        : 'no match';
+
+      const common = [
+        sale.vcs || '',
+        sale.year || '',
+        `${sale.block || ''}/${sale.lot || ''}`,
+        sale.region || '',
+        moneyCell(sale.vacantPrice)
+      ];
+
+      const vacantSide = valuationMode === 'ff'
+        ? [Math.round(sale.frontFeet) || '', Math.round(sale.depth) || '', sale.zone || '']
+        : [sizeCell(sale.lotSize)];
+
+      const improvedSide = valuationMode === 'ff'
+        ? [Math.round(sale.avgImprovedFF) || '-', Math.round(sale.avgImprovedDepth) || '-']
+        : [sizeCell(sale.avgImprovedSize)];
+
+      return [
+        ...common,
+        ...vacantSide,
+        moneyCell(sale.rawLandValue || 0),
+        moneyCell(sale.siteValue),
+        sale.improvedSalesCount || 0,
+        avgPriceFmt,
+        ...improvedSide,
+        moneyCell(sale.improvedRawLandValue || 0),
+        moneyCell(sale.totalLandValue),
+        currentPct,
+        recPct,
+        status
+      ];
+    };
+
+    (vacantTestSales || []).forEach(sale => {
+      rows.push(buildRow(sale));
     });
 
     // Add summary section
@@ -5682,8 +5686,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Column widths for Allocation sheet (adjusted for new structure)
     ws['!cols'] = valuationMode === 'ff'
-      ? [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }]
-      : [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+      ? [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }]
+      : [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Individual Allocation');
 
@@ -5698,61 +5702,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       regionRows.push(headers);
 
       regionSales.forEach(sale => {
-        const status = sale.isPositive ? 'Included' : 'Excluded';
-        const vacantPrice = sale.vacantPrice != null ? `$${Math.round(sale.vacantPrice).toLocaleString()}` : '';
-        const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
-        const avgPriceFmt = sale.avgImprovedPrice > 0 ? `$${Math.round(sale.avgImprovedPrice).toLocaleString()}` : '-';
-        const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
-        const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
-        const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
-
-        if (valuationMode === 'ff') {
-          regionRows.push([
-            sale.vcs || '',
-            sale.year || '',
-            `${sale.block || ''}/${sale.lot || ''}`,
-            sale.region || '',
-            vacantPrice,
-            Math.round(sale.frontFeet) || '',
-            Math.round(sale.depth) || '',
-            sale.zone || '',
-            siteValueFmt,
-            sale.improvedSalesCount || 0,
-            avgPriceFmt,
-            Math.round(sale.avgImprovedFF) || '-',
-            Math.round(sale.avgImprovedDepth) || '-',
-            totalLandFmt,
-            currentPct,
-            recPct,
-            status
-          ]);
-        } else {
-          regionRows.push([
-            sale.vcs || '',
-            sale.year || '',
-            `${sale.block || ''}/${sale.lot || ''}`,
-            sale.region || '',
-            vacantPrice,
-            sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
-            siteValueFmt,
-            sale.improvedSalesCount || 0,
-            avgPriceFmt,
-            sale.avgImprovedAcres != null ? Number(sale.avgImprovedAcres.toFixed(2)) : '-',
-            totalLandFmt,
-            currentPct,
-            recPct,
-            status
-          ]);
-        }
+        regionRows.push(buildRow(sale));
       });
 
-      // Add region summary
+      // Add region summary. Both totals come off the same included-sales set —
+      // rows with no same-year improved sale carry a site value but no price,
+      // so mixing the two sets inflates the region percentage.
       const regionStats = calculateAllocationStats(regionName);
+      const includedRegionSales = regionSales.filter(s => s.isPositive);
       regionRows.push([]);
       regionRows.push([`${regionName} Summary`]);
-      regionRows.push(['Sales Included', regionSales.filter(s => s.isPositive).length]);
-      regionRows.push(['Total Land Value', `$${regionSales.filter(s => s.isPositive).reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
-      regionRows.push(['Total Sale Price', `$${regionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
+      regionRows.push(['Sales Included', `${includedRegionSales.length} of ${regionSales.length}`]);
+      regionRows.push(['Total Land Value', `$${includedRegionSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
+      regionRows.push(['Total Sale Price', `$${includedRegionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
       regionRows.push(['Recommended Allocation', `${regionStats?.averageAllocation || '0'}%`]);
 
       const wsRegion = XLSX.utils.aoa_to_sheet(regionRows);
@@ -6543,21 +6505,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Individual Allocation Analysis
     csv += 'INDIVIDUAL ALLOCATION ANALYSIS\n';
 
-    // Headers match UI - different for FF vs Acre mode
+    // Headers match UI - different for FF vs Acre/SF mode
     if (valuationMode === 'ff') {
-      csv += 'VCS,Year,Block/Lot,Region,Price,Front Feet,Depth,Zone,Site Value,Count,Avg Price,Avg FF,Avg Depth,Total Land Value,Current %,Recommended %,Status\n';
+      csv += 'VCS,Year,Block/Lot,Region,Price,Front Feet,Depth,Zone,Raw Land,Site Value,Count,Avg Price,Avg FF,Avg Depth,Avg Raw Land,Total Land Value,Current %,Recommended %,Status\n';
     } else {
-      csv += 'VCS,Year,Block/Lot,Region,Price,Acres,Site Value,Count,Avg Price,Avg Acres,Total Land Value,Current %,Recommended %,Status\n';
+      csv += `VCS,Year,Block/Lot,Region,Price,Lot Size (${bracketUnitLabel}),Raw Land,Site Value,Count,Avg Price,Avg Lot Size (${bracketUnitLabel}),Avg Raw Land,Total Land Value,Current %,Recommended %,Status\n`;
     }
+
+    const csvSize = (value) => {
+      const n = Number(value);
+      if (!isFinite(n) || value == null) return '';
+      return bracketUnit === 'sf' ? Math.round(n) : n.toFixed(2);
+    };
 
     vacantTestSales.forEach(sale => {
       const status = sale.isPositive ? 'Included' : 'Excluded';
       const avgPrice = sale.avgImprovedPrice > 0 ? sale.avgImprovedPrice : 0;
+      const recPct = sale.improvedSalesCount > 0
+        ? (sale.recommendedAllocation * 100).toFixed(1)
+        : 'no match';
+      const lead = `"${sale.vcs}",${sale.year},"${sale.block}/${sale.lot}","${sale.region}",${sale.vacantPrice}`;
+      const tail = `${Math.round(sale.improvedRawLandValue || 0)},${Math.round(sale.totalLandValue)},${(sale.currentAllocation * 100).toFixed(1)},${recPct},"${status}"`;
 
       if (valuationMode === 'ff') {
-        csv += `"${sale.vcs}",${sale.year},"${sale.block}/${sale.lot}","${sale.region}",${sale.vacantPrice},${Math.round(sale.frontFeet) || ''},${Math.round(sale.depth) || ''},${sale.zone || ''},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${Math.round(sale.avgImprovedFF) || ''},${Math.round(sale.avgImprovedDepth) || ''},${Math.round(sale.totalLandValue)},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
+        csv += `${lead},${Math.round(sale.frontFeet) || ''},${Math.round(sale.depth) || ''},${sale.zone || ''},${Math.round(sale.rawLandValue || 0)},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${Math.round(sale.avgImprovedFF) || ''},${Math.round(sale.avgImprovedDepth) || ''},${tail}\n`;
       } else {
-        csv += `"${sale.vcs}",${sale.year},"${sale.block}/${sale.lot}","${sale.region}",${sale.vacantPrice},${sale.acres.toFixed(2)},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${sale.avgImprovedAcres?.toFixed(2) || ''},${Math.round(sale.totalLandValue)},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
+        csv += `${lead},${csvSize(sale.lotSize)},${Math.round(sale.rawLandValue || 0)},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${csvSize(sale.avgImprovedSize)},${tail}\n`;
       }
     });
 
