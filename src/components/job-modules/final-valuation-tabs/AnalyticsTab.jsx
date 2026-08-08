@@ -31,11 +31,10 @@ const AnalyticsTab = ({ jobData, properties }) => {
   };
 
   // Calculate year prior to due year for sales period determination
-  const yearPriorToDueYear = useMemo(() => {
-    if (!jobData?.end_date) return new Date().getFullYear();
-    const endYear = parseInt(jobData.end_date.substring(0, 4));
-    return endYear - 1;
-  }, [jobData?.end_date]);
+  const yearPriorToDueYear = useMemo(
+    () => getAssessmentYear(jobData?.end_date),
+    [jobData?.end_date]
+  );
 
   // Determine sales period for a property - MATCH SalesReviewTab logic exactly
   const getSalesPeriod = useCallback((salesDate) => {

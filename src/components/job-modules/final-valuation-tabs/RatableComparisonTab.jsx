@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, Download, FileSpreadsheet, Save, Edit } from 'lucide-react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, getAssessmentYear } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJobDataDirect }) => {
@@ -97,11 +97,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache, updateJob
   }, [jobData?.id]);
 
   // Calculate years for ratable comparison
-  const yearPriorToDueYear = useMemo(() => {
-    if (!jobData?.end_date) return new Date().getFullYear();
-    const endYear = parseInt(jobData.end_date.substring(0, 4));
-    return endYear - 1;
-  }, [jobData?.end_date]);
+  const yearPriorToDueYear = useMemo(
+    () => getAssessmentYear(jobData?.end_date),
+    [jobData?.end_date]
+  );
 
   // Calculate current year totals based on LOCAL state values
   const currentYearCalculatedTotals = useMemo(() => {
