@@ -3446,7 +3446,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalLandValue: avgImprovedRawLand + siteValue,
         currentAllocation: avgCurrentAllocation,
         recommendedAllocation: avgImprovedPrice > 0 ? (avgImprovedRawLand + siteValue) / avgImprovedPrice : 0,
-        isPositive: siteValue > 0
+        // No improved sale in the same year means no denominator. Such a row still
+        // has a site value, so counting it would add to the aggregate numerator
+        // while contributing nothing to the price - inflating the region's %.
+        isPositive: siteValue > 0 && improvedSalesForYear.length > 0
       });
     });
 
@@ -11376,7 +11379,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                        sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
                       'transparent'
                   }}>
-                    {(sale.recommendedAllocation * 100).toFixed(1)}%
+                    {sale.improvedSalesCount > 0 ? (sale.recommendedAllocation * 100).toFixed(1) + '%' : 'no match'}
                   </td>
                   <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                     <span style={{
@@ -11609,7 +11612,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                            sale.recommendedAllocation >= 0.20 && sale.recommendedAllocation <= 0.45 ? '#FEF3C7' : '#FEE2E2') :
                           'transparent'
                       }}>
-                        {(sale.recommendedAllocation * 100).toFixed(1)}%
+                        {sale.improvedSalesCount > 0 ? (sale.recommendedAllocation * 100).toFixed(1) + '%' : 'no match'}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                         <span style={{
