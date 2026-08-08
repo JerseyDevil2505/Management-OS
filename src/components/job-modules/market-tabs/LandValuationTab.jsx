@@ -9661,8 +9661,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns:
-              valuationMode === 'ff' ? 'repeat(2, 1fr)' :
-              valuationMode === 'sf' ? 'repeat(2, 1fr)' :
+              valuationMode === 'ff' ? (cascadeConfig.special[region]?.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
+              valuationMode === 'sf' ? (cascadeConfig.special[region]?.secondary?.max ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)') :
               'repeat(4, 1fr)', gap: '15px' }}>
 
               {valuationMode === 'ff' ? (
@@ -9689,9 +9689,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       />
                     </div>
                   </div>
+                  {cascadeConfig.special[region]?.secondary?.max ? (
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                        Secondary ({cascadeConfig.special[region]?.standard?.max || 100}-{cascadeConfig.special[region]?.secondary?.max} ft)
+                        <button
+                          onClick={() => updateSpecialRegionCascade(region, 'secondary', 'max', '')}
+                          style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                        >Remove Step</button>
+                      </label>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <input
+                          type="number"
+                          value={cascadeConfig.special[region]?.secondary?.max || ''}
+                          onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'max', e.target.value)}
+                          placeholder="Max"
+                          style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="number"
+                          value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                          onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                          placeholder="Rate"
+                          style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Excess ({cascadeConfig.special[region]?.standard?.max || 100}+ ft)
+                      Excess ({(cascadeConfig.special[region]?.secondary?.max || cascadeConfig.special[region]?.standard?.max) || 100}+ ft)
                     </label>
                     <input
                       type="number"
@@ -9727,9 +9754,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       />
                     </div>
                   </div>
+                  {cascadeConfig.special[region]?.secondary?.max ? (
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
+                        Secondary ({cascadeConfig.special[region]?.standard?.max || 5000}-{cascadeConfig.special[region]?.secondary?.max} sq ft)
+                        <button
+                          onClick={() => updateSpecialRegionCascade(region, 'secondary', 'max', '')}
+                          style={{ marginLeft: '8px', fontSize: '10px', color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                        >Remove Step</button>
+                      </label>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <input
+                          type="number"
+                          value={cascadeConfig.special[region]?.secondary?.max || ''}
+                          onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'max', e.target.value)}
+                          placeholder="Max"
+                          style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={cascadeConfig.special[region]?.secondary?.rate || ''}
+                          onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                          placeholder="Rate"
+                          style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Excess ({cascadeConfig.special[region]?.standard?.max || 5000}+ sq ft)
+                      Excess ({(cascadeConfig.special[region]?.secondary?.max || cascadeConfig.special[region]?.standard?.max) || 5000}+ sq ft)
                     </label>
                     <input
                       type="number"
@@ -9825,6 +9880,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </>
               )}
             </div>
+            {(valuationMode === 'sf' || valuationMode === 'ff') && !cascadeConfig.special[region]?.secondary?.max && (
+              <button
+                onClick={() => {
+                  const base = cascadeConfig.special[region]?.standard?.max
+                    || cascadeConfig.normal.standard?.max
+                    || (valuationMode === 'sf' ? 5000 : 100);
+                  updateSpecialRegionCascade(region, 'secondary', 'max', base * 2);
+                }}
+                style={{
+                  marginTop: '10px',
+                  padding: '6px 14px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                + Add Step
+              </button>
+            )}
           </div>
         ))}
 
