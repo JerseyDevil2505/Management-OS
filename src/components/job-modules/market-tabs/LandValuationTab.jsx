@@ -3282,25 +3282,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
         const sameVCS = prop.new_vcs === vcs;
 
-        // Special regions: use ALL years for that VCS (don't filter by year)
-        // Normal region: filter by year to match vacant sale
-        const yearMatch = actualRegion === 'Normal'
-          ? new Date(prop.sales_date).getFullYear() === year
-          : true; // Special regions use all years
+        // Every region matches the vacant sale's year. Site value comes from that
+        // year's raw sale price, so the improved average has to be the same
+        // vintage or the allocation is comparing different dollars.
+        const yearMatch = new Date(prop.sales_date).getFullYear() === year;
 
         // Region filtering: ensure improved properties are in the same region
         const propRegion = specialRegions[prop.id] || 'Normal';
         const sameRegion = actualRegion === propRegion ||
                           (actualRegion !== 'Normal' && propRegion === 'Normal'); // Special regions can use unassigned (Normal) properties
 
-        // MUST have values_norm_time - this is the key filter
+        // values_norm_time is required as a vetting gate - a sale without one was
+        // never validated - but the price used below is the actual sale price.
         return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch && sameRegion;
       });
 
-      // Calculate averages only if we have improved sales
-      // CRITICAL FIX: User's Excel uses time-normalized prices, not actual sale prices
+      // Actual sale price, not the time-normalized one. Site value is derived from
+      // the vacant sale's real price in its own year, so normalizing only the
+      // improved side to 2025 would understate the allocation.
       const avgImprovedPrice = improvedSalesForYear.length > 0
-        ? improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length
+        ? improvedSalesForYear.reduce((sum, p) => sum + (p.sales_price || 0), 0) / improvedSalesForYear.length
         : 0;
       const avgImprovedAcres = improvedSalesForYear.length > 0
         ? improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length
@@ -11219,14 +11220,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "8" : "6"}>Vacant Sale</th>
+                }} colSpan={valuationMode === 'ff' ? "9" : "7"}>Vacant Sale</th>
                 {/* Improved Sales Info */}
                 <th style={{
                   padding: '8px',
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (Same Year)</th>
+                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>Improved Sales (Same Year)</th>
                 {/* Allocation Results */}
                 <th style={{
                   padding: '8px',
@@ -11245,11 +11246,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Front Feet</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Depth</th>
                     <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Zone</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Raw Land</th>
                     <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
                   </>
                 ) : (
                   <>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Lot Size ({bracketUnitLabel})</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Raw Land</th>
                     <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
                   </>
                 )}
@@ -11262,8 +11265,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Depth</th>
                   </>
                 ) : (
-                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Lot Size ({bracketUnitLabel})</th>
                 )}
+                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Raw Land</th>
                 <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
                 {/* Allocation Columns */}
                 <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
@@ -11291,6 +11295,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.frontFeet) || '-'}</td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.depth) || '-'}</td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
@@ -11304,7 +11309,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     </>
                   ) : (
                     <>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.acres))}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
@@ -11327,8 +11333,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                     </>
                   ) : (
-                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{parseFloat(sale.avgImprovedAcres).toFixed(2)}</td>
+                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.avgImprovedAcres))}</td>
                   )}
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.improvedRawLandValue || 0).toLocaleString()}</td>
                   <td style={{
                     padding: '8px',
                     textAlign: 'right',
@@ -11436,14 +11443,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       borderRight: '2px solid #E5E7EB',
                       border: '1px solid #D1D5DB',
                       fontWeight: 'bold'
-                    }} colSpan={valuationMode === 'ff' ? "9" : "7"}>Vacant Sale</th>
+                    }} colSpan={valuationMode === 'ff' ? "10" : "8"}>Vacant Sale</th>
                 {/* Improved Sales Info */}
                 <th style={{
                   padding: '8px',
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (All Years)</th>
+                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>Improved Sales (Same Year)</th>
                     {/* Allocation Results */}
                     <th style={{
                       padding: '8px',
@@ -11463,11 +11470,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Front Feet</th>
                       <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Depth</th>
                       <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Zone</th>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Raw Land</th>
                       <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
                     </>
                   ) : (
                     <>
-                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Lot Size ({bracketUnitLabel})</th>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Raw Land</th>
                       <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
                     </>
                   )}
@@ -11480,8 +11489,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Depth</th>
                     </>
                   ) : (
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Lot Size ({bracketUnitLabel})</th>
                   )}
+                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Raw Land</th>
                   <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
                     {/* Allocation Columns */}
                     <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
@@ -11518,6 +11528,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.frontFeet) || '-'}</td>
                           <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.depth) || '-'}</td>
                           <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                           <td style={{
                             padding: '8px',
                             textAlign: 'right',
@@ -11531,7 +11542,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </>
                       ) : (
                         <>
-                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.acres))}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.rawLandValue || 0).toLocaleString()}</td>
                           <td style={{
                             padding: '8px',
                             textAlign: 'right',
@@ -11554,8 +11566,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth ? parseFloat(sale.avgImprovedDepth).toFixed(2) : '-'}</td>
                         </>
                       ) : (
-                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{parseFloat(sale.avgImprovedAcres).toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{formatBracketValue(acresToBracketUnit(sale.avgImprovedAcres))}</td>
                       )}
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.improvedRawLandValue || 0).toLocaleString()}</td>
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
