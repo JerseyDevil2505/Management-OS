@@ -6680,7 +6680,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const adjustedWithFormula = `${withPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withLivingCol}${r})*(${withPriceCol}${r}/${withLivingCol}${r})*0.5)`;
       if (ws2[adjustedWithRef]) {
         ws2[adjustedWithRef].f = adjustedWithFormula;
-        ws2[adjustedWithRef].z = '\"$\"#,##0';
+        ws2[adjustedWithRef].z = '"$"#,##0';
         ws2[adjustedWithRef].s = ws2[adjustedWithRef].s || {};
         ws2[adjustedWithRef].s.font = { name: 'Leelawadee', sz: 10 };
         ws2[adjustedWithRef].s.alignment = { horizontal: 'center', vertical: 'center' };
@@ -6691,7 +6691,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const adjustedWithoutFormula = `${withoutPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withoutLivingCol}${r})*(${withoutPriceCol}${r}/${withoutLivingCol}${r})*0.5)`;
       if (ws2[adjustedWithoutRef]) {
         ws2[adjustedWithoutRef].f = adjustedWithoutFormula;
-        ws2[adjustedWithoutRef].z = '\"$\"#,##0';
+        ws2[adjustedWithoutRef].z = '"$"#,##0';
         ws2[adjustedWithoutRef].s = ws2[adjustedWithoutRef].s || {};
         ws2[adjustedWithoutRef].s.font = { name: 'Leelawadee', sz: 10 };
         ws2[adjustedWithoutRef].s.alignment = { horizontal: 'center', vertical: 'center' };
@@ -6702,7 +6702,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const dollarImpactFormula = `J${r}-K${r}`;
       if (ws2[dollarImpactRef]) {
         ws2[dollarImpactRef].f = dollarImpactFormula;
-        ws2[dollarImpactRef].z = '\"$\"#,##0';
+        ws2[dollarImpactRef].z = '"$"#,##0';
         ws2[dollarImpactRef].s = ws2[dollarImpactRef].s || {};
         ws2[dollarImpactRef].s.font = { name: 'Leelawadee', sz: 10 };
         ws2[dollarImpactRef].s.alignment = { horizontal: 'center', vertical: 'center' };
@@ -7149,26 +7149,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const smaller = sortedSales[i];
             const larger = sortedSales[j];
 
-            // Determine size measure depending on valuation mode
-            let smallerSize = 0;
-            let largerSize = 0;
-            if (valuationMode === 'sf') {
-              smallerSize = (smaller.totalAcres || 0) * 43560;
-              largerSize = (larger.totalAcres || 0) * 43560;
-            } else if (valuationMode === 'ff') {
-              smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
-              largerSize = parseFloat(larger.asset_lot_frontage) || 0;
-            } else {
-              // default to acres
-              smallerSize = smaller.totalAcres || 0;
-              largerSize = larger.totalAcres || 0;
-            }
+            const smallerSize = valuationMode === 'ff'
+              ? (parseFloat(smaller.asset_lot_frontage) || 0)
+              : valuationMode === 'sf'
+                ? (smaller.isPackage ? (smaller.totalAcres || 0) * 43560 : (getBracketSize(smaller) || (smaller.totalAcres || 0) * 43560))
+                : (smaller.totalAcres || 0);
+            const largerSize = valuationMode === 'ff'
+              ? (parseFloat(larger.asset_lot_frontage) || 0)
+              : valuationMode === 'sf'
+                ? (larger.isPackage ? (larger.totalAcres || 0) * 43560 : (getBracketSize(larger) || (larger.totalAcres || 0) * 43560))
+                : (larger.totalAcres || 0);
 
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            // Only include positive price differences and positive size differences
-            if (priceDiff > 0 && sizeDiff > 0) {
+            // Negative increments are kept: a bigger lot selling for less is evidence that
+            // lot size carries little value here. Keeping only upward-sloping pairs
+            // inflates the rate instead of measuring it.
+            if (sizeDiff > 0) {
               const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -7385,8 +7383,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             let smallerSize = 0;
             let largerSize = 0;
             if (valuationMode === 'sf') {
-              smallerSize = (smaller.totalAcres || 0) * 43560;
-              largerSize = (larger.totalAcres || 0) * 43560;
+              smallerSize = smaller.isPackage ? (smaller.totalAcres || 0) * 43560 : (getBracketSize(smaller) || (smaller.totalAcres || 0) * 43560);
+              largerSize = larger.isPackage ? (larger.totalAcres || 0) * 43560 : (getBracketSize(larger) || (larger.totalAcres || 0) * 43560);
             } else if (valuationMode === 'ff') {
               smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
               largerSize = parseFloat(larger.asset_lot_frontage) || 0;
@@ -7398,7 +7396,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            if (priceDiff > 0 && sizeDiff > 0) {
+            if (sizeDiff > 0) {
               pairedRates.push(priceDiff / sizeDiff);
             }
           }
@@ -7475,7 +7473,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     return { rawLand, buildingLot, wetlands, landlocked, conservation, commercialLand, specialRegions: specialRegionsAnalysis };
-  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
+  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions, getBracketSize]);
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
@@ -8368,8 +8366,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   * Paired analysis extracts incremental raw land value between similar sales with different {valuationMode === 'ff' ? 'frontages' : valuationMode === 'sf' ? 'square footages' : 'acreages'}.
                   This isolates the pure land component from site value and improvements.
                   <br />
-                  * All properties are included regardless of acreage similarity.
-                  Only sales with negative price differences are excluded.
+                  * All properties are included regardless of acreage similarity. Pairs where the
+                  larger lot sold for less are kept, since a negative increment is evidence that
+                  lot size carries little value here rather than bad data.
                 </div>
               </div>
             )}
