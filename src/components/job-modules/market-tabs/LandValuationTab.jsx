@@ -5739,7 +5739,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
     const salesHeaders = valuationMode === 'ff'
       ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
-      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),'Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -5751,9 +5751,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const notes = landNotes[sale.id] || '';
       const location = sale.location_analysis || '';
 
-      const acres = sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '';
+      // pricePerAcre already holds the rate in the job's unit (getPricePerUnit
+      // divides by SF when the job is square-foot), so only the size needs
+      // converting - and the header has to stop saying "acre".
+      const lotSize = sale.totalAcres != null
+        ? (bracketUnit === 'sf' ? Math.round(sale.totalAcres * 43560) : Number(sale.totalAcres.toFixed(2)))
+        : '';
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
-      const pricePerAcre = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
+      const pricePerUnit = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
 
       if (valuationMode === 'ff') {
         const frontage = sale.asset_lot_frontage || '';
@@ -5809,8 +5814,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category,
           sale.sales_date || '',
           salePrice ? `$${salePrice.toLocaleString()}` : '',
-          acres,
-          pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
+          lotSize,
+          pricePerUnit ? `$${pricePerUnit.toLocaleString()}` : '',
           isPackage,
           notes
         ]);
@@ -5841,8 +5846,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 12 }, // Category
       { wch: 12 }, // Sale Date
       { wch: 14 }, // $ Sale Price (formatted)
-      { wch: 8 }, // Acres
-      { wch: 12 }, // $ / Acre
+      { wch: 10 }, // Lot size
+      { wch: 12 }, // Unit rate
       { wch: 10 }, // Package
       { wch: 30 } // Notes
     ];
@@ -5996,54 +6001,42 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Method 2 Summary (similar to UI)
     method2Rows.push(['Method 2 Summary']);
     if (method2Summary) {
-      const mid = method2Summary.mediumRange || {};
-      const lg = method2Summary.largeRange || {};
-      const xl = method2Summary.xlargeRange || {};
-      const p = cascadeConfig.normal?.prime?.max ?? 1;
-      const s = cascadeConfig.normal?.secondary?.max ?? 5;
-      const e = cascadeConfig.normal?.excess?.max ?? 10;
+      // One row per user-defined bracket, labelled and sized in the job's unit.
+      // avgAcres is always stored in acres, so square-foot jobs convert here.
+      const lotSizeFromAcres = (acres) => {
+        if (!acres) return 'N/A';
+        return bracketUnit === 'sf'
+          ? Math.round(acres * 43560).toLocaleString()
+          : acres.toFixed(2);
+      };
 
-      // Enhanced summary with per acre, lot size, and per sq ft
-      method2Rows.push(['Bracket Range', 'Per Acre', 'Avg Lot Size (acres)', 'Per Sq Ft']);
-      method2Rows.push([
-        `${p.toFixed(2)}-${s.toFixed(2)}`,
-        mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A',
-        mid.avgAcres ? mid.avgAcres.toFixed(2) : 'N/A',
-        mid.perSqFt && mid.perSqFt !== 'N/A' ? `$${mid.perSqFt}` : 'N/A'
-      ]);
-      method2Rows.push([
-        `${s.toFixed(2)}-${e.toFixed(2)}`,
-        lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A',
-        lg.avgAcres ? lg.avgAcres.toFixed(2) : 'N/A',
-        lg.perSqFt && lg.perSqFt !== 'N/A' ? `$${lg.perSqFt}` : 'N/A'
-      ]);
-      method2Rows.push([
-        `${e.toFixed(2)}+`,
-        xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A',
-        xl.avgAcres ? xl.avgAcres.toFixed(2) : 'N/A',
-        xl.perSqFt && xl.perSqFt !== 'N/A' ? `$${xl.perSqFt}` : 'N/A'
-      ]);
-      // All Positive Deltas Avg - calculate across all brackets
-      const allRatesAcre = [];
-      const allAcres = [];
-      if (mid.perAcre && mid.perAcre !== 'N/A') {
-        allRatesAcre.push(mid.perAcre);
-        if (mid.avgAcres) allAcres.push(mid.avgAcres);
-      }
-      if (lg.perAcre && lg.perAcre !== 'N/A') {
-        allRatesAcre.push(lg.perAcre);
-        if (lg.avgAcres) allAcres.push(lg.avgAcres);
-      }
-      if (xl.perAcre && xl.perAcre !== 'N/A') {
-        allRatesAcre.push(xl.perAcre);
-        if (xl.avgAcres) allAcres.push(xl.avgAcres);
-      }
+      method2Rows.push(['Bracket Range', 'Per Acre', `Avg Lot Size (${bracketUnitLabel})`, 'Per Sq Ft']);
 
-      if (allRatesAcre.length > 0) {
-        const avgPerAcre = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
-        const avgLotSize = allAcres.length > 0 ? (allAcres.reduce((s, a) => s + a, 0) / allAcres.length).toFixed(2) : 'N/A';
-        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
-        method2Rows.push(['All Positive Deltas Avg', `$${avgPerAcre.toLocaleString()}`, avgLotSize, `$${avgPerSqFt}`]);
+      landBrackets.forEach((def, index) => {
+        const range = method2Summary.ranges?.[index] || {};
+        const hasRate = range.perAcre != null && range.perAcre !== 'N/A';
+        method2Rows.push([
+          `${describeBracket(def)} ${bracketUnitLabel}`,
+          hasRate ? `$${range.perAcre.toLocaleString()}` : 'N/A',
+          lotSizeFromAcres(range.avgAcres),
+          range.perSqFt && range.perSqFt !== 'N/A' ? `$${range.perSqFt}` : 'N/A'
+        ]);
+      });
+
+      const positiveRanges = (method2Summary.ranges || []).filter(r => r && r.perAcre !== 'N/A');
+      if (positiveRanges.length > 0) {
+        const rates = positiveRanges.map(r => r.perAcre);
+        const lotAcres = positiveRanges.map(r => r.avgAcres).filter(a => a > 0);
+        const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
+        const avgLotAcres = lotAcres.length > 0
+          ? lotAcres.reduce((sum, a) => sum + a, 0) / lotAcres.length
+          : 0;
+        method2Rows.push([
+          'All Positive Deltas Avg',
+          `$${avgPerAcre.toLocaleString()}`,
+          lotSizeFromAcres(avgLotAcres),
+          `$${(avgPerAcre / 43560).toFixed(2)}`
+        ]);
       } else {
         method2Rows.push(['All Positive Deltas Avg', 'N/A', 'N/A', 'N/A']);
       }
