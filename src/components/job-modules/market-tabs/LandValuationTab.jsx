@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
 import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
+import { exportMethod2SalesToExcel } from '../../../lib/method2SalesExport';
 import * as XLSX from 'xlsx-js-style';
 import './LandValuationTab.css';
 import './sharedTabNav.css';
@@ -7163,10 +7164,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            // Negative increments are kept: a bigger lot selling for less is evidence that
-            // lot size carries little value here. Keeping only upward-sloping pairs
-            // inflates the rate instead of measuring it.
-            if (sizeDiff > 0) {
+            // Only include positive price differences and positive size differences
+            if (priceDiff > 0 && sizeDiff > 0) {
               const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -7396,7 +7395,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            if (sizeDiff > 0) {
+            if (priceDiff > 0 && sizeDiff > 0) {
               pairedRates.push(priceDiff / sizeDiff);
             }
           }
@@ -10796,18 +10795,47 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
                 Method 2 Sales - VCS {method2ModalVCS}
               </h3>
-              <button
-                onClick={() => setShowMethod2Modal(false)}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  color: '#6B7280'
-                }}
-              >
-                +
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => exportMethod2SalesToExcel({
+                    vcs: method2ModalVCS,
+                    sales: sortModalData(getMethod2SalesForVCS(method2ModalVCS)),
+                    excludedIds: method2ExcludedSales,
+                    getLotSize: getBracketSize,
+                    bracketUnit,
+                    bracketUnitLabel,
+                    municipality: jobData?.municipality,
+                    timestamp: safeISODate(new Date())
+                  })}
+                  title="Export these sales to Excel"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#10B981',
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Download size={14} /> Export
+                </button>
+                <button
+                  onClick={() => setShowMethod2Modal(false)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    fontSize: '20px',
+                    cursor: 'pointer',
+                    color: '#6B7280'
+                  }}
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#FEF3C7', borderRadius: '4px' }}>
