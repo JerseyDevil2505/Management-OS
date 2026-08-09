@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Filter, TrendingUp, PieChart as PieIcon, BarChart3, Download, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
-import { interpretCodes, parseDateLocal, formatDateLocalYMD } from '../../lib/supabaseClient';
+import { interpretCodes, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../lib/supabaseClient';
 
 const DataVisualizations = ({ jobData, properties }) => {
   const [filters, setFilters] = useState({
@@ -149,17 +149,17 @@ const DataVisualizations = ({ jobData, properties }) => {
       
       if (filters.yearRange !== 'all' && prop.sales_date) {
         const saleYear = new Date(prop.sales_date).getFullYear();
-        const endYear = parseInt(jobEndDate?.substring(0, 4) || new Date().getFullYear());
+        const assessmentYear = getAssessmentYear(jobEndDate);
         
         switch (filters.yearRange) {
           case 'hsp':
-            if (saleYear < endYear - 3 || saleYear > endYear - 2) return false;
+            if (saleYear < assessmentYear - 3 || saleYear > assessmentYear - 2) return false;
             break;
           case 'psp':
-            if (saleYear < endYear - 2 || saleYear > endYear - 1) return false;
+            if (saleYear < assessmentYear - 2 || saleYear > assessmentYear - 1) return false;
             break;
           case 'csp':
-            if (saleYear < endYear - 1 || saleYear > endYear) return false;
+            if (saleYear < assessmentYear - 1 || saleYear > assessmentYear) return false;
             break;
           default:
             break;

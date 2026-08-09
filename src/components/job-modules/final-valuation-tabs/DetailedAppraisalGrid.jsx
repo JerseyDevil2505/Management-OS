@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { interpretCodes, supabase } from '../../../lib/supabaseClient';
+import { interpretCodes, supabase, getAssessmentYear } from '../../../lib/supabaseClient';
 import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon, History, Flag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -2936,7 +2936,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             // year is end_date.year - 1.
             const sampleRange = (() => {
               if (!jobData?.end_date) return { start: '', end: '' };
-              const rawYear = new Date(jobData.end_date).getFullYear();
+              const rawYear = getAssessmentYear(jobData.end_date);
               const isLojikTenant = tenantConfig?.orgType === 'assessor';
               const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
               return {

@@ -11,7 +11,7 @@
  * CRITICAL: Added automatic rollback for failed batches - all or nothing!
  */
 
-import { supabase, parseDateLocal } from '../supabaseClient.js';
+import { supabase, parseDateLocal, getAssessmentYear } from '../supabaseClient.js';
 
 export class MicrosystemsUpdater {
   constructor() {
@@ -804,8 +804,7 @@ export class MicrosystemsUpdater {
           .single();
 
         if (!jobError && jobData?.end_date) {
-          const endYear = new Date(jobData.end_date).getFullYear();
-          yearPriorToDueYear = endYear - 1;
+          yearPriorToDueYear = getAssessmentYear(jobData.end_date);
           console.log(`📅 Calculated yearPriorToDueYear: ${yearPriorToDueYear} (from end_date: ${jobData.end_date})`);
         } else {
           console.warn('⚠️ Could not fetch job end_date, effective age conversion will be skipped');

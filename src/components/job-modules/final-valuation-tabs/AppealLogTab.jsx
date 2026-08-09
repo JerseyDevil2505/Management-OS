@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera, Lock, Unlock } from 'lucide-react';
-import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
@@ -345,8 +345,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return bracket ? bracket.label : null;
     };
 
-    const endDateLocal = parseDateLocal(jobData.end_date);
-    const assessmentYear = endDateLocal ? endDateLocal.getFullYear() : new Date().getFullYear();
+    const assessmentYear = getAssessmentYear(jobData.end_date);
 
     // Define period boundaries (local time, month is 0-indexed)
     const cspStart = new Date(assessmentYear - 1, 9, 1);    // Oct 1 prior year

@@ -19,6 +19,7 @@ import {
 } from '../../../lib/adjustmentAnalysis';
 import { exportAdjustmentAnalysisPdf } from '../../../lib/adjustmentAnalysisPdf';
 import { STUDY_DEFAULT_SALES_CODES } from '../../../lib/salesCodes';
+import { getAssessmentYear } from '../../../lib/supabaseClient';
 
 // ---------------------------------------------------------------------------
 // Display helpers
@@ -75,9 +76,8 @@ function getReferenceYear(jobData, tenantConfig) {
   const isLojik = tenantConfig?.orgType === 'assessor'
     || jobData?.organizations?.org_type === 'assessor'
     || jobData?.org_type === 'assessor';
-  const end = jobData?.end_date ? new Date(jobData.end_date) : null;
-  if (!end || !Number.isFinite(end.getTime())) return new Date().getFullYear();
-  const raw = end.getFullYear();
+  if (!jobData?.end_date) return new Date().getFullYear();
+  const raw = getAssessmentYear(jobData.end_date);
   return isLojik ? raw - 1 : raw;
 }
 

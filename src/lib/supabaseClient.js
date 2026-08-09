@@ -173,6 +173,22 @@ export function formatDateLocalYMD(value = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Derive the assessment year from a job's end_date.
+ *
+ * end_date is whatever due date the admin typed, so one assessment year shows up
+ * in several shapes: '2026-12-31', '2027-01-01' and an extension like
+ * '2027-03-01' all mean assessment year 2026. A due date landing in the first
+ * half of a year belongs to the prior year's assessment; anything later is next
+ * January's job filed early.
+ */
+export function getAssessmentYear(endDate, fallback = new Date().getFullYear()) {
+  const d = parseDateLocal(endDate);
+  if (!d) return fallback;
+  const dueYear = d.getMonth() <= 5 ? d.getFullYear() : d.getFullYear() + 1;
+  return dueYear - 1;
+}
+
 // ===== SOURCE FILE DATA ACCESS HELPERS =====
 // These replace raw_data access with source file content parsing
 

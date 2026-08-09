@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, getAssessmentYear } from '../../../lib/supabaseClient';
 import { Download, AlertCircle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
@@ -141,20 +141,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     }
   };
 
-  // Calculate year prior to due year (for formulas)
-  // If end_date = '2026-01-01', yearPriorToDueYear = 2025
-  const yearPriorToDueYear = useMemo(() => {
-    if (!jobData?.end_date) return new Date().getFullYear();
-    // Extract year directly from date string to avoid timezone issues
-    const endYear = parseInt(jobData.end_date.substring(0, 4));
-    const yearPrior = endYear - 1;
-    console.log('🔍 MarketDataTab Year Calculation:', {
-      end_date: jobData.end_date,
-      endYear,
-      yearPriorToDueYear: yearPrior
-    });
-    return yearPrior;
-  }, [jobData?.end_date]);
+  const yearPriorToDueYear = useMemo(
+    () => getAssessmentYear(jobData?.end_date),
+    [jobData?.end_date]
+  );
 
   // Get vendor type
   const vendorType = jobData?.vendor_type || 'BRT';

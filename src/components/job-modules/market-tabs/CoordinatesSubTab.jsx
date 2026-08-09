@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from 'react';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
+import { getAssessmentYear } from '../../../lib/supabaseClient';
 
 // Quality strings the Census batch returns that we treat as "needs review".
 // Anything not in this list and not 'Manual' / 'Exact' / 'Match' is also
@@ -139,7 +140,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   // adjustment SalesComparisonTab makes.
   const salesWindow = useMemo(() => {
     if (!jobData?.end_date) return null;
-    const rawYear = new Date(jobData.end_date).getFullYear();
+    const rawYear = getAssessmentYear(jobData.end_date, null);
     if (!rawYear) return null;
     const isLojik =
       jobData?.organizations?.org_type === 'assessor' ||
