@@ -5220,6 +5220,24 @@ export const countyHpiService = {
         return properties;
       }
 
+      // Unmasking promotes the recovered sale into property_records, so a patch
+      // that only re-read market analysis would leave the stale junk sale in
+      // memory — and Sales Review's price filter would drop the parcel.
+      const salesMap = new Map();
+      let salesQuery = supabase
+        .from('property_records')
+        .select('property_composite_key, sales_price, sales_date, sales_nu, sales_book, sales_page, sales_override, sales_override_meta')
+        .eq('job_id', jobId);
+      if (Array.isArray(compositeKeys) && compositeKeys.length > 0) {
+        salesQuery = salesQuery.in('property_composite_key', compositeKeys);
+      }
+      const { data: salesRows, error: salesError } = await salesQuery;
+      if (salesError) {
+        console.error('❌ Surgical patch (sales) failed:', salesError);
+      } else {
+        (salesRows || []).forEach(row => salesMap.set(row.property_composite_key, row));
+      }
+
       // Build a map for O(1) lookup
       const analysisMap = new Map();
       marketAnalysisRows.forEach(row => {
@@ -5231,17 +5249,30 @@ export const countyHpiService = {
         const key = p.property_composite_key;
         const analysis = analysisMap.get(key);
 
+        const sales = salesMap.get(key);
+
         if (!analysis) return p; // No update for this property
 
         return {
           ...p,
+          ...(sales ? {
+            sales_price: sales.sales_price ?? null,
+            sales_date: sales.sales_date ?? null,
+            sales_nu: sales.sales_nu ?? null,
+            sales_book: sales.sales_book ?? null,
+            sales_page: sales.sales_page ?? null,
+            sales_override: sales.sales_override === true,
+            sales_override_meta: sales.sales_override_meta ?? null,
+          } : {}),
           location_analysis: analysis.location_analysis || p.location_analysis || null,
           new_vcs: analysis.new_vcs || p.new_vcs || null,
           asset_map_page: analysis.asset_map_page || p.asset_map_page || null,
           asset_key_page: analysis.asset_key_page || p.asset_key_page || null,
           asset_zoning: analysis.asset_zoning || p.asset_zoning || null,
           values_norm_size: analysis.values_norm_size || p.values_norm_size || null,
-          values_norm_time: analysis.values_norm_time || p.values_norm_time || null,
+          // Trust the fresh row — reverting an unmask nulls this, and an ||
+          // fallback would keep resurrecting the stale in-memory value.
+          values_norm_time: analysis.values_norm_time ?? null,
           sales_history: analysis.sales_history || p.sales_history || null,
           unmasked_sale: analysis.unmasked_sale || null, // Critical: refresh unmask data
           masked_review_skipped: analysis.masked_review_skipped === true,
