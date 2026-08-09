@@ -20,6 +20,8 @@ import {
  *   jobData      - { id, county, vendor_type }
  *   userId       - current user id (for audit)
  *   dateRange    - { fromYear, toDate } scopes detection
+ *   normalizeToYear - job's configured HPI target year, so unmasked values land
+ *                     on the same footing as every other normalized sale
  *   onSaved      - callback after a successful save (parent should refresh cache)
  *   surfaceLabel - 'Sales Review' | 'Sales Pool' (header copy only)
  */
@@ -30,6 +32,7 @@ const ScanMaskedSalesModal = ({
   jobData = {},
   userId = null,
   dateRange = {},
+  normalizeToYear = MASKED_DEFAULTS.normalizeToYear,
   onSaved = () => {},
   surfaceLabel = 'Sales Review',
 }) => {
@@ -61,7 +64,7 @@ const ScanMaskedSalesModal = ({
     if (!isOpen) return;
     let cancelled = false;
     setHpiLoaded(false);
-    loadHpiMultiplier(county, MASKED_DEFAULTS.normalizeToYear).then(fn => {
+    loadHpiMultiplier(county, normalizeToYear).then(fn => {
       if (cancelled) return;
       setHpiFn(() => fn);
       setHpiLoaded(true);
@@ -132,7 +135,7 @@ const ScanMaskedSalesModal = ({
         };
       }
       const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
-      const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
+      const norm = timeNormalizeUnmasked(chosen, hpiFn, normalizeToYear);
       return {
         property_composite_key: c.property_composite_key,
         userId,
@@ -141,6 +144,8 @@ const ScanMaskedSalesModal = ({
           sales_price: chosen.sales_price,
           sales_date: chosen.sales_date,
           sales_nu: null, // BRT prev_sales carry no NU code
+          sales_book: chosen.sales_book ?? null,
+          sales_page: chosen.sales_page ?? null,
           source: chosen.source,
           hpi_multiplier: norm.hpi_multiplier,
           values_norm_time: norm.values_norm_time,
@@ -240,7 +245,7 @@ const ScanMaskedSalesModal = ({
                   const r = rows[c.property_composite_key] || {};
                   const decision = r.decision || 'pending';
                   const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
-                  const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
+                  const norm = timeNormalizeUnmasked(chosen, hpiFn, normalizeToYear);
                   const rowBg = decision === 'unmask'
                     ? 'bg-green-50'
                     : decision === 'skip'

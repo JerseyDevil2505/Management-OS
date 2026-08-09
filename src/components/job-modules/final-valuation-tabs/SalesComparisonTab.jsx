@@ -1472,21 +1472,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           };
         }
 
-        // SECOND: Apply BRT masked sales unmask (only if no manual override)
-        // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
-        // which the filter below would drop anyway) and the user has unmasked a
-        // healthy prior, swap that prior in as the parcel's effective pool sale.
-        // Raw price/date are used here (the pool keys off sale price + window),
-        // not the HPI-normalized value (that's the Sales Review surface).
-        const currentJunk = !p.sales_price || Number(p.sales_price) <= 100;
-        if (currentJunk && p.unmasked_sale && p.unmasked_sale.sales_price) {
-          return {
-            ...p,
-            sales_price: p.unmasked_sale.sales_price,
-            sales_date: p.unmasked_sale.sales_date,
-            sales_nu: p.unmasked_sale.sales_nu ?? null,
-            _isUnmasked: true,
-          };
+        // BRT masked sales are promoted into property_records at unmask time,
+        // so the recovered prior is already this parcel's sale — the pool needs
+        // no substitution, just the marker for display.
+        if (p.sales_override === true && p.sales_override_meta?.promoted_from === 'masked_scan') {
+          return { ...p, _isUnmasked: true };
         }
         return p;
       })
@@ -8304,6 +8294,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             : undefined,
           toDate: compFilters.salesDateEnd || null,
         }}
+        normalizeToYear={marketLandData?.normalization_config?.normalizeToYear || 2025}
         surfaceLabel="Sales Pool"
         onSaved={(res) => {
           // Surgical patch: update only the changed properties in memory
