@@ -94,7 +94,8 @@ export function timeNormalizeUnmasked(sale, hpiMultiplierFn, normalizeToYear = M
  *   best: { sales_price, sales_date, source },               // top candidate
  *   currentIsJunk: boolean,
  *   autoSuggest: boolean,                                     // pre-check in UI
- *   alreadyUnmasked: { sales_price, sales_date } | null
+ *   alreadyUnmasked: { sales_price, sales_date } | null,
+ *   alreadySkipped: boolean
  * }>
  */
 export function detectMaskedCandidates(properties, opts = {}) {
@@ -148,6 +149,7 @@ export function detectMaskedCandidates(properties, opts = {}) {
     const alreadyUnmasked = p.unmasked_sale
       ? { sales_price: p.unmasked_sale.sales_price, sales_date: p.unmasked_sale.sales_date }
       : null;
+    const alreadySkipped = p.masked_review_skipped === true;
 
     // Only surface true masked candidates (junk current sale) — plus any parcel
     // already unmasked, so the user can review/clear that decision.
@@ -169,6 +171,7 @@ export function detectMaskedCandidates(properties, opts = {}) {
       currentIsJunk,
       autoSuggest: currentIsJunk, // pre-check rows where current sale is junk
       alreadyUnmasked,
+      alreadySkipped,
     });
   }
 
@@ -178,9 +181,11 @@ export function detectMaskedCandidates(properties, opts = {}) {
 /**
  * Persist a batch of unmask decisions.
  * @param {string} jobId
- * @param {Array<{ property_composite_key, sale, userId }>} decisions
+ * @param {Array<{ property_composite_key, sale, userId, skipped? }>} decisions
  *   sale = { sales_price, sales_date, sales_nu?, source, hpi_multiplier, values_norm_time }
  *   A null/absent sale clears the unmask (sets column to null).
+ *   skipped is only written when the caller passes an explicit boolean, so
+ *   callers that only manage unmasks (the post-upload re-check) leave it alone.
  */
 export async function saveUnmaskedSales(jobId, decisions) {
   if (!jobId || !Array.isArray(decisions) || decisions.length === 0) {
@@ -207,9 +212,12 @@ export async function saveUnmaskedSales(jobId, decisions) {
         }
       : null;
 
+    const updates = { unmasked_sale: payload, updated_at: new Date().toISOString() };
+    if (typeof d.skipped === 'boolean') updates.masked_review_skipped = d.skipped;
+
     const { error } = await supabase
       .from('property_market_analysis')
-      .update({ unmasked_sale: payload, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('job_id', jobId)
       .eq('property_composite_key', key);
 

@@ -5200,7 +5200,7 @@ export const countyHpiService = {
       // Build query for changed rows only (or all if not specified)
       let query = supabase
         .from('property_market_analysis')
-        .select('property_composite_key, location_analysis, new_vcs, asset_map_page, asset_key_page, asset_zoning, values_norm_size, values_norm_time, sales_history, unmasked_sale, market_manual_lot_acre, market_manual_lot_sf, market_manual_acre, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth, unit_rate_codes_applied')
+        .select('property_composite_key, location_analysis, new_vcs, asset_map_page, asset_key_page, asset_zoning, values_norm_size, values_norm_time, sales_history, unmasked_sale, masked_review_skipped, market_manual_lot_acre, market_manual_lot_sf, market_manual_acre, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth, unit_rate_codes_applied')
         .eq('job_id', jobId);
 
       // If specific keys provided, only fetch those (surgical)
@@ -5244,6 +5244,7 @@ export const countyHpiService = {
           values_norm_time: analysis.values_norm_time || p.values_norm_time || null,
           sales_history: analysis.sales_history || p.sales_history || null,
           unmasked_sale: analysis.unmasked_sale || null, // Critical: refresh unmask data
+          masked_review_skipped: analysis.masked_review_skipped === true,
           market_manual_lot_acre: analysis.market_manual_lot_acre ?? p.market_manual_lot_acre ?? null,
           market_manual_lot_sf: analysis.market_manual_lot_sf ?? p.market_manual_lot_sf ?? null,
           market_manual_acre: analysis.market_manual_acre ?? p.market_manual_acre ?? null,

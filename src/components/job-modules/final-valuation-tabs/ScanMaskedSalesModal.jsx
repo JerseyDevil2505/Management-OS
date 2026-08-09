@@ -47,14 +47,9 @@ const ScanMaskedSalesModal = ({
   const [saveResult, setSaveResult] = useState(null);
 
   // "Skip" decisions (reviewed in BRT, decided not to unmask) are parcel-level
-  // truth, so they persist per job in localStorage — survives reopen/surface
-  // switch without a DB column. Unmask decisions persist in the DB itself.
-  const skipStorageKey = jobData?.id ? `masked-skip-${jobData.id}` : null;
-  const loadSkipSet = useCallback(() => {
-    if (!skipStorageKey) return new Set();
-    try { return new Set(JSON.parse(localStorage.getItem(skipStorageKey) || '[]')); }
-    catch { return new Set(); }
-  }, [skipStorageKey]);
+  // truth shared by the whole team, so they live in
+  // property_market_analysis.masked_review_skipped next to unmasked_sale —
+  // a skip survives across users, browsers and machines.
 
   const candidates = useMemo(() => {
     if (!isOpen) return [];
@@ -79,18 +74,17 @@ const ScanMaskedSalesModal = ({
   // must deliberately review each one (verify the NU in BRT first).
   useEffect(() => {
     if (!isOpen) return;
-    const skipped = loadSkipSet();
     const seed = {};
     candidates.forEach(c => {
       const key = c.property_composite_key;
       let decision = 'pending';
       if (c.alreadyUnmasked) decision = 'unmask';
-      else if (skipped.has(key)) decision = 'skip';
+      else if (c.alreadySkipped) decision = 'skip';
       seed[key] = { decision, chosenSource: c.best?.source || null };
     });
     setRows(seed);
     setSaveResult(null);
-  }, [isOpen, candidates, loadSkipSet]);
+  }, [isOpen, candidates]);
 
   const setDecision = useCallback((key, decision) => {
     setRows(prev => ({ ...prev, [key]: { ...prev[key], decision } }));
@@ -127,16 +121,22 @@ const ScanMaskedSalesModal = ({
       const r = rows[c.property_composite_key];
       const decision = r?.decision || 'pending';
       if (decision !== 'unmask') {
-        // skip/pending → clear any existing unmask (only if previously set).
-        return c.alreadyUnmasked
-          ? { property_composite_key: c.property_composite_key, sale: null }
-          : null;
+        // skip/pending → clear any existing unmask (only if previously set) and
+        // record the skip state. Nothing to write when neither changed.
+        const skipped = decision === 'skip';
+        if (!c.alreadyUnmasked && skipped === c.alreadySkipped) return null;
+        return {
+          property_composite_key: c.property_composite_key,
+          sale: null,
+          skipped,
+        };
       }
       const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
       const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
       return {
         property_composite_key: c.property_composite_key,
         userId,
+        skipped: false,
         sale: {
           sales_price: chosen.sales_price,
           sales_date: chosen.sales_date,
@@ -148,18 +148,6 @@ const ScanMaskedSalesModal = ({
       };
     }).filter(Boolean);
 
-    // Persist the skip set: clear current-scope keys, re-add current skips.
-    if (skipStorageKey) {
-      const set = loadSkipSet();
-      candidates.forEach(c => set.delete(c.property_composite_key));
-      candidates.forEach(c => {
-        if ((rows[c.property_composite_key]?.decision || 'pending') === 'skip') {
-          set.add(c.property_composite_key);
-        }
-      });
-      try { localStorage.setItem(skipStorageKey, JSON.stringify([...set])); } catch { /* ignore quota */ }
-    }
-
     try {
       const res = await saveUnmaskedSales(jobData.id, decisions);
       setSaveResult(res);
@@ -170,7 +158,7 @@ const ScanMaskedSalesModal = ({
     } finally {
       setSaving(false);
     }
-  }, [candidates, rows, hpiFn, jobData?.id, userId, onSaved, skipStorageKey, loadSkipSet]);
+  }, [candidates, rows, hpiFn, jobData?.id, userId, onSaved]);
 
   if (!isOpen) return null;
 
