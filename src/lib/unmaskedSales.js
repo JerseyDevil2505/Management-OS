@@ -189,11 +189,12 @@ export function detectMaskedCandidates(properties, opts = {}) {
  */
 export async function saveUnmaskedSales(jobId, decisions) {
   if (!jobId || !Array.isArray(decisions) || decisions.length === 0) {
-    return { saved: 0, cleared: 0 };
+    return { saved: 0, cleared: 0, skipped: 0, changed: 0 };
   }
 
   let saved = 0;
   let cleared = 0;
+  let skipped = 0;
 
   for (const d of decisions) {
     const key = d.property_composite_key;
@@ -225,10 +226,12 @@ export async function saveUnmaskedSales(jobId, decisions) {
       console.error('saveUnmaskedSales failed for', key, error);
       continue;
     }
-    if (payload) saved++; else cleared++;
+    if (payload) saved++;
+    else if (d.skipped === true) skipped++;
+    else cleared++;
   }
 
-  return { saved, cleared };
+  return { saved, cleared, skipped, changed: saved + cleared + skipped };
 }
 
 /**

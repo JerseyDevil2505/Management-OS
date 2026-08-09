@@ -1690,8 +1690,8 @@ const SalesReviewTab = ({
         surfaceLabel="Sales Review"
         onSaved={(res) => {
           // Surgical patch: update only the changed properties in memory
-          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
-            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+          if (patchPropertiesWithMarketAnalysis && res?.changed > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved}, skipped ${res.skipped}`);
             setPatchToast({ type: 'loading', message: '🔧 Updating data...' });
             patchPropertiesWithMarketAnalysis().then(() => {
               setPatchToast({ type: 'success', message: '✅ Data refreshed instantly!' });
