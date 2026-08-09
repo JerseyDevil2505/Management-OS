@@ -187,6 +187,28 @@ Note: `SET search_path` blocks SQL-function inlining, so these run as a
 Worth it — keeping `search_path` pinned avoids a security advisory, and one
 650 ms call still beats 165 round trips by a wide margin.
 
+### Agent DB access under RLS — never use a `.env` file
+
+RLS blocks the anon/publishable key from most tables, so agent-side helper
+scripts (`scripts/lv-query.js`, `scripts/job-cols.js`) need the Supabase
+**secret** key. That key lives **only as a platform environment variable**
+(`SUPABASE_SECRET_KEY`), injected into the process at runtime. There is no
+`.env` file on disk and there must never be one.
+
+- To add or change it, use the environment-variable settings (Fusion:
+  `ProposeEnvVariable`). Do **not** write it into `.env`, a script, or a doc.
+- Scripts read `process.env.SUPABASE_SECRET_KEY` and
+  `process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL`. Only
+  `REACT_APP_SUPABASE_URL` is actually set, so keep that fallback.
+- The frontend gets `REACT_APP_SUPABASE_URL` + `REACT_APP_SUPABASE_ANON_KEY`
+  (the `sb_publishable_...` key — the legacy `anon` JWT is disabled). Those are
+  public by design and stay subject to RLS.
+- `.env` is gitignored **and untracked**. It was tracked until `05ded38a`
+  deleted it; while tracked, gitignore did nothing and the auto-commit bot kept
+  committing it, which is what tripped GitHub push protection. If a `.env` ever
+  reappears in `git ls-files`, that is the bug — remove it from the index, don't
+  work around the push block.
+
 ### Core Tables
 
 #### `organizations`
