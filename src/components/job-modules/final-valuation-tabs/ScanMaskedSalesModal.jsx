@@ -7,6 +7,7 @@ import {
   saveUnmaskedSales,
   MASKED_DEFAULTS,
 } from '../../../lib/unmaskedSales';
+import { parseDateLocal } from '../../../lib/supabaseClient';
 
 /**
  * Scan Masked Sales modal. Mounted in both Sales Review (wide window) and Sales
@@ -168,7 +169,12 @@ const ScanMaskedSalesModal = ({
   if (!isOpen) return null;
 
   const fmt = (n) => (n || n === 0) ? `$${Math.round(Number(n)).toLocaleString()}` : '—';
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US') : '—';
+  // new Date('2020-09-11') is UTC midnight, which renders as the 10th in any
+  // timezone behind UTC. parseDateLocal keeps date-only values on their day.
+  const fmtDate = (d) => {
+    const parsed = parseDateLocal(d);
+    return parsed ? parsed.toLocaleDateString('en-US') : '—';
+  };
 
   return createPortal((
     <div className="csv-export-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4">
