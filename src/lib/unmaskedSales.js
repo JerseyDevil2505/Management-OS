@@ -94,7 +94,8 @@ export function timeNormalizeUnmasked(sale, hpiMultiplierFn, normalizeToYear = M
  *   best: { sales_price, sales_date, source },               // top candidate
  *   currentIsJunk: boolean,
  *   autoSuggest: boolean,                                     // pre-check in UI
- *   alreadyUnmasked: { sales_price, sales_date } | null
+ *   alreadyUnmasked: { sales_price, sales_date } | null,
+ *   alreadySkipped: boolean
  * }>
  */
 export function detectMaskedCandidates(properties, opts = {}) {
@@ -122,6 +123,8 @@ export function detectMaskedCandidates(properties, opts = {}) {
       .map(s => ({
         sales_price: Number(s.price) || 0,
         sales_date: s.date || null,
+        sales_book: s.book || null,
+        sales_page: s.page || null,
         source: s.source || null,
       }))
       .filter(s => {
@@ -148,6 +151,7 @@ export function detectMaskedCandidates(properties, opts = {}) {
     const alreadyUnmasked = p.unmasked_sale
       ? { sales_price: p.unmasked_sale.sales_price, sales_date: p.unmasked_sale.sales_date }
       : null;
+    const alreadySkipped = p.masked_review_skipped === true;
 
     // Only surface true masked candidates (junk current sale) — plus any parcel
     // already unmasked, so the user can review/clear that decision.
@@ -169,30 +173,70 @@ export function detectMaskedCandidates(properties, opts = {}) {
       currentIsJunk,
       autoSuggest: currentIsJunk, // pre-check rows where current sale is junk
       alreadyUnmasked,
+      alreadySkipped,
     });
   }
 
   return out;
 }
 
+// Marks an override as ours, so clearing an unmask never reverts a sale that
+// was promoted by the Detailed grid's swap-hidden-sale UI.
+const UNMASK_PROMOTED_FROM = 'masked_scan';
+
 /**
  * Persist a batch of unmask decisions.
+ *
+ * An unmask *promotes* the recovered prior into property_records — the same
+ * operation as DetailedAppraisalGrid's swap-hidden-sale and the updater's
+ * "Keep Old". Once promoted it is simply the parcel's sale, so normalization,
+ * the sales-period gate and the land/CME analyses all read it without knowing
+ * unmasking exists. sales_override protects it from the next file upload (see
+ * the respect_sales_override trigger), and sales_override_meta.original_sale
+ * carries the displaced junk deed so the decision can be reversed.
+ *
  * @param {string} jobId
- * @param {Array<{ property_composite_key, sale, userId }>} decisions
- *   sale = { sales_price, sales_date, sales_nu?, source, hpi_multiplier, values_norm_time }
- *   A null/absent sale clears the unmask (sets column to null).
+ * @param {Array<{ property_composite_key, sale, userId, skipped? }>} decisions
+ *   sale = { sales_price, sales_date, sales_nu?, sales_book?, sales_page?,
+ *            source, hpi_multiplier, values_norm_time }
+ *   A null/absent sale clears the unmask and restores the displaced sale.
+ *   skipped is only written when the caller passes an explicit boolean, so
+ *   callers that only manage unmasks (the post-upload re-check) leave it alone.
  */
 export async function saveUnmaskedSales(jobId, decisions) {
   if (!jobId || !Array.isArray(decisions) || decisions.length === 0) {
-    return { saved: 0, cleared: 0 };
+    return { saved: 0, cleared: 0, skipped: 0, changed: 0 };
+  }
+
+  // Read the sale each parcel currently carries so a promotion can record
+  // exactly what it displaced, and a reversal knows what to put back.
+  const keys = decisions.map(d => d.property_composite_key).filter(Boolean);
+  const currentByKey = new Map();
+  for (let i = 0; i < keys.length; i += 500) {
+    const slice = keys.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from('property_records')
+      .select('property_composite_key, sales_price, sales_date, sales_nu, sales_book, sales_page, sales_override, sales_override_meta')
+      .eq('job_id', jobId)
+      .in('property_composite_key', slice);
+    if (error) {
+      console.error('saveUnmaskedSales: could not load current sales', error);
+      continue;
+    }
+    (data || []).forEach(r => currentByKey.set(r.property_composite_key, r));
   }
 
   let saved = 0;
   let cleared = 0;
+  let skipped = 0;
 
   for (const d of decisions) {
     const key = d.property_composite_key;
     if (!key) continue;
+
+    const current = currentByKey.get(key) || {};
+    const ourOverride = current.sales_override === true
+      && current.sales_override_meta?.promoted_from === UNMASK_PROMOTED_FROM;
 
     const payload = d.sale
       ? {
@@ -207,9 +251,71 @@ export async function saveUnmaskedSales(jobId, decisions) {
         }
       : null;
 
+    let salesPatch = null;
+
+    if (payload) {
+      // Re-unmasking an already-promoted parcel must keep pointing at the real
+      // file sale, not at the prior we promoted last time.
+      const displaced = ourOverride
+        ? current.sales_override_meta.original_sale
+        : {
+            date: current.sales_date ?? null,
+            price: current.sales_price ?? null,
+            nu: current.sales_nu ?? null,
+            book: current.sales_book ?? null,
+            page: current.sales_page ?? null,
+          };
+
+      salesPatch = {
+        sales_date: d.sale.sales_date ?? null,
+        sales_price: d.sale.sales_price ?? null,
+        sales_nu: d.sale.sales_nu ?? null,
+        sales_book: d.sale.sales_book ?? null,
+        sales_page: d.sale.sales_page ?? null,
+        sales_override: true,
+        sales_override_meta: {
+          promoted_from: UNMASK_PROMOTED_FROM,
+          source_entry: d.sale.source ?? null,
+          original_sale: displaced,
+          decided_at: new Date().toISOString(),
+          decided_by: d.userId ?? 'user',
+        },
+      };
+    } else if (ourOverride) {
+      const orig = current.sales_override_meta.original_sale || {};
+      salesPatch = {
+        sales_date: orig.date ?? null,
+        sales_price: orig.price ?? null,
+        sales_nu: orig.nu ?? null,
+        sales_book: orig.book ?? null,
+        sales_page: orig.page ?? null,
+        sales_override: false,
+        sales_override_meta: null,
+      };
+    }
+
+    if (salesPatch) {
+      const { error: srErr } = await supabase
+        .from('property_records')
+        .update(salesPatch)
+        .eq('job_id', jobId)
+        .eq('property_composite_key', key);
+      if (srErr) {
+        console.error('saveUnmaskedSales: promote/revert failed for', key, srErr);
+        continue;
+      }
+    }
+
+    const updates = { unmasked_sale: payload, updated_at: new Date().toISOString() };
+    if (typeof d.skipped === 'boolean') updates.masked_review_skipped = d.skipped;
+    // The promoted sale is a real sale now, so it carries a real normalized
+    // value. Reverting puts the junk deed back, which must not keep one.
+    if (payload) updates.values_norm_time = payload.values_norm_time ?? null;
+    else if (salesPatch) updates.values_norm_time = null;
+
     const { error } = await supabase
       .from('property_market_analysis')
-      .update({ unmasked_sale: payload, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('job_id', jobId)
       .eq('property_composite_key', key);
 
@@ -217,10 +323,12 @@ export async function saveUnmaskedSales(jobId, decisions) {
       console.error('saveUnmaskedSales failed for', key, error);
       continue;
     }
-    if (payload) saved++; else cleared++;
+    if (payload) saved++;
+    else if (d.skipped === true) skipped++;
+    else cleared++;
   }
 
-  return { saved, cleared };
+  return { saved, cleared, skipped, changed: saved + cleared + skipped };
 }
 
 /**
@@ -280,8 +388,13 @@ export async function recheckMaskedAfterUpload(jobId, opts = {}) {
   const changedKeys = salesChanges.map(c => c.property_composite_key).filter(Boolean);
   if (changedKeys.length === 0) return empty;
 
-  // Which of the changed parcels currently carry an unmasked_sale?
+  // Which of the changed parcels currently carry an unmasked_sale marker?
   const unmaskedKeys = new Set();
+  // Which still carry our promotion? The respect_sales_override trigger drops
+  // the override when the upload brings a newer, valid, arm's-length sale — so
+  // a marker without a matching override means the trigger already superseded
+  // this unmask and the marker has to follow.
+  const stillPromoted = new Set();
   // Supabase .in() caps out on huge lists; chunk to be safe.
   for (let i = 0; i < changedKeys.length; i += 500) {
     const slice = changedKeys.slice(i, i + 500);
@@ -295,6 +408,21 @@ export async function recheckMaskedAfterUpload(jobId, opts = {}) {
       continue;
     }
     (data || []).forEach(r => { if (r.unmasked_sale) unmaskedKeys.add(r.property_composite_key); });
+
+    const { data: srData, error: srError } = await supabase
+      .from('property_records')
+      .select('property_composite_key, sales_override, sales_override_meta')
+      .eq('job_id', jobId)
+      .in('property_composite_key', slice);
+    if (srError) {
+      console.error('recheckMaskedAfterUpload override load failed:', srError);
+      continue;
+    }
+    (srData || []).forEach(r => {
+      if (r.sales_override === true && r.sales_override_meta?.promoted_from === UNMASK_PROMOTED_FROM) {
+        stillPromoted.add(r.property_composite_key);
+      }
+    });
   }
 
   const stale = [];
@@ -308,8 +436,10 @@ export async function recheckMaskedAfterUpload(jobId, opts = {}) {
     const oldPrice = Number(c?.differences?.sales_price?.old) || 0;
 
     if (unmaskedKeys.has(key)) {
-      // Existing unmask + a now-valid current sale → stale, clear it.
-      if (effPrice > junkPriceCeiling) stale.push(key);
+      // The trigger already decided whether the promotion survives this upload.
+      // If it dropped the override, the marker is stale — clearing it only
+      // removes the marker, since property_records is already correct.
+      if (!stillPromoted.has(key)) stale.push(key);
     } else if (effPrice > 0 && effPrice <= junkPriceCeiling && oldPrice >= priceThreshold) {
       // Kept a junk dollar-sale over a healthy prior → newly masked.
       newMasks.push({

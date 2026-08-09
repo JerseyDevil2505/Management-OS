@@ -236,24 +236,10 @@ const SalesReviewTab = ({
       prop._isMainCard === undefined ? true : prop._isMainCard
     );
 
-    // Inject unmasked sales as their own synthetic rows. Each carries the
-    // unmasked prior sale's price/date/norm-time while keeping the parcel's
-    // physical attributes, so it sorts/filters alongside real sales. Flagged
-    // with _isUnmasked for badge rendering and a distinct id to avoid key
-    // collisions with the current-sale row.
-    const unmaskedRows = mainCardProps
-      .filter(prop => prop.unmasked_sale && prop.unmasked_sale.sales_price)
-      .map(prop => ({
-        ...prop,
-        id: `${prop.id}_unmasked`,
-        _isUnmasked: true,
-        sales_price: prop.unmasked_sale.sales_price,
-        sales_date: prop.unmasked_sale.sales_date,
-        sales_nu: prop.unmasked_sale.sales_nu || null,
-        values_norm_time: prop.unmasked_sale.values_norm_time || null,
-      }));
-
-    return [...mainCardProps, ...unmaskedRows].map(prop => {
+    // Unmasked sales are promoted into property_records, so the parcel's own
+    // row already carries the recovered sale — no synthetic row, and the junk
+    // deed it displaced stays hidden in sales_override_meta.
+    return mainCardProps.map(prop => {
       // Package detection using centralized _pkg (computed once in JobContainer)
       const pkgInfo = prop._pkg;
       const isPackage = !!pkgInfo;
@@ -317,6 +303,8 @@ const SalesReviewTab = ({
 
       return {
         ...prop,
+        _isUnmasked: prop.sales_override === true
+          && prop.sales_override_meta?.promoted_from === 'masked_scan',
         periodCode,
         isPackage,
         isFarmSale,
@@ -1687,11 +1675,12 @@ const SalesReviewTab = ({
         properties={properties}
         jobData={jobData}
         dateRange={{ fromYear: 2012 }}
+        normalizeToYear={marketLandData?.normalization_config?.normalizeToYear || 2025}
         surfaceLabel="Sales Review"
         onSaved={(res) => {
           // Surgical patch: update only the changed properties in memory
-          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
-            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+          if (patchPropertiesWithMarketAnalysis && res?.changed > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved}, skipped ${res.skipped}`);
             setPatchToast({ type: 'loading', message: '🔧 Updating data...' });
             patchPropertiesWithMarketAnalysis().then(() => {
               setPatchToast({ type: 'success', message: '✅ Data refreshed instantly!' });
