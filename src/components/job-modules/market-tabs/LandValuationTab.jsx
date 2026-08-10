@@ -1344,14 +1344,15 @@ const getPricePerUnit = useCallback((price, size) => {
     if (vcsSpecificConfig?.rates) {
       baseCascadeRates = vcsSpecificConfig.rates;
     } else {
-      const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([, config]) => {
+      const assignedRegion = Object.keys(cascadeConfig.special || {}).find(region => {
+        const config = cascadeConfig.special[region];
         if (!config?.vcsList) return false;
         return config.vcsList
           .split(',')
           .map(v => v.trim().toUpperCase())
           .includes(String(vcs).toUpperCase());
       });
-      if (assignedSpecialRegion) baseCascadeRates = assignedSpecialRegion[1];
+      if (assignedRegion) baseCascadeRates = cascadeConfig.special[assignedRegion];
     }
 
     return getVCSCascadeRates(vcs, baseCascadeRates);
@@ -3901,20 +3902,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgPrice = avgPrices[vcs] || avgNormTimes[vcs];
       if (!avgPrice) return;
 
-      // Check if this VCS Type contains "condo"
+      // SITE method takes the allocation straight off the price with no land
+      // dimensions. Condo types resolve to SITE, but so does an explicit method
+      // override, so ask for the effective method rather than sniffing the type.
       const vcsType = vcsTypes[vcs] || '';
-      const isCondo = vcsType.toLowerCase().includes('condo');
-
-      if (isCondo) {
-        // For condos: Rec Site = Target Allocation % × Avg Price (no land dimensions needed)
+      if (getVCSMethod(vcs, vcsType) === 'site') {
         const siteValue = avgPrice * (parseFloat(targetAllocation) / 100);
-        console.log(`🏢 CONDO VCS ${vcs}:`, {
-          vcsType,
-          avgPrice,
-          usedAvgPrice: !!avgPrices[vcs],
-          targetAllocation,
-          siteValue
-        });
         recommendedSites[vcs] = siteValue;
         return;
       }
@@ -3977,6 +3970,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
+  // getVCSMethod is intentionally omitted: it is declared further down and
+  // referencing it here would hit the TDZ during render. It is stable via
+  // useCallback and only called from inside this callback's body.
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS]);
 
   const formatPageRanges = (pages) => {
