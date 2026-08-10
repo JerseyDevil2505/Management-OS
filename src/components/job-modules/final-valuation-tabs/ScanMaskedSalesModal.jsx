@@ -7,6 +7,7 @@ import {
   saveUnmaskedSales,
   MASKED_DEFAULTS,
 } from '../../../lib/unmaskedSales';
+import { parseDateLocal } from '../../../lib/supabaseClient';
 
 /**
  * Scan Masked Sales modal. Mounted in both Sales Review (wide window) and Sales
@@ -20,6 +21,8 @@ import {
  *   jobData      - { id, county, vendor_type }
  *   userId       - current user id (for audit)
  *   dateRange    - { fromYear, toDate } scopes detection
+ *   normalizeToYear - job's configured HPI target year, so unmasked values land
+ *                     on the same footing as every other normalized sale
  *   onSaved      - callback after a successful save (parent should refresh cache)
  *   surfaceLabel - 'Sales Review' | 'Sales Pool' (header copy only)
  */
@@ -30,6 +33,7 @@ const ScanMaskedSalesModal = ({
   jobData = {},
   userId = null,
   dateRange = {},
+  normalizeToYear = MASKED_DEFAULTS.normalizeToYear,
   onSaved = () => {},
   surfaceLabel = 'Sales Review',
 }) => {
@@ -47,14 +51,9 @@ const ScanMaskedSalesModal = ({
   const [saveResult, setSaveResult] = useState(null);
 
   // "Skip" decisions (reviewed in BRT, decided not to unmask) are parcel-level
-  // truth, so they persist per job in localStorage — survives reopen/surface
-  // switch without a DB column. Unmask decisions persist in the DB itself.
-  const skipStorageKey = jobData?.id ? `masked-skip-${jobData.id}` : null;
-  const loadSkipSet = useCallback(() => {
-    if (!skipStorageKey) return new Set();
-    try { return new Set(JSON.parse(localStorage.getItem(skipStorageKey) || '[]')); }
-    catch { return new Set(); }
-  }, [skipStorageKey]);
+  // truth shared by the whole team, so they live in
+  // property_market_analysis.masked_review_skipped next to unmasked_sale —
+  // a skip survives across users, browsers and machines.
 
   const candidates = useMemo(() => {
     if (!isOpen) return [];
@@ -66,7 +65,7 @@ const ScanMaskedSalesModal = ({
     if (!isOpen) return;
     let cancelled = false;
     setHpiLoaded(false);
-    loadHpiMultiplier(county, MASKED_DEFAULTS.normalizeToYear).then(fn => {
+    loadHpiMultiplier(county, normalizeToYear).then(fn => {
       if (cancelled) return;
       setHpiFn(() => fn);
       setHpiLoaded(true);
@@ -79,18 +78,17 @@ const ScanMaskedSalesModal = ({
   // must deliberately review each one (verify the NU in BRT first).
   useEffect(() => {
     if (!isOpen) return;
-    const skipped = loadSkipSet();
     const seed = {};
     candidates.forEach(c => {
       const key = c.property_composite_key;
       let decision = 'pending';
       if (c.alreadyUnmasked) decision = 'unmask';
-      else if (skipped.has(key)) decision = 'skip';
+      else if (c.alreadySkipped) decision = 'skip';
       seed[key] = { decision, chosenSource: c.best?.source || null };
     });
     setRows(seed);
     setSaveResult(null);
-  }, [isOpen, candidates, loadSkipSet]);
+  }, [isOpen, candidates]);
 
   const setDecision = useCallback((key, decision) => {
     setRows(prev => ({ ...prev, [key]: { ...prev[key], decision } }));
@@ -127,38 +125,34 @@ const ScanMaskedSalesModal = ({
       const r = rows[c.property_composite_key];
       const decision = r?.decision || 'pending';
       if (decision !== 'unmask') {
-        // skip/pending → clear any existing unmask (only if previously set).
-        return c.alreadyUnmasked
-          ? { property_composite_key: c.property_composite_key, sale: null }
-          : null;
+        // skip/pending → clear any existing unmask (only if previously set) and
+        // record the skip state. Nothing to write when neither changed.
+        const skipped = decision === 'skip';
+        if (!c.alreadyUnmasked && skipped === c.alreadySkipped) return null;
+        return {
+          property_composite_key: c.property_composite_key,
+          sale: null,
+          skipped,
+        };
       }
       const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
-      const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
+      const norm = timeNormalizeUnmasked(chosen, hpiFn, normalizeToYear);
       return {
         property_composite_key: c.property_composite_key,
         userId,
+        skipped: false,
         sale: {
           sales_price: chosen.sales_price,
           sales_date: chosen.sales_date,
           sales_nu: null, // BRT prev_sales carry no NU code
+          sales_book: chosen.sales_book ?? null,
+          sales_page: chosen.sales_page ?? null,
           source: chosen.source,
           hpi_multiplier: norm.hpi_multiplier,
           values_norm_time: norm.values_norm_time,
         },
       };
     }).filter(Boolean);
-
-    // Persist the skip set: clear current-scope keys, re-add current skips.
-    if (skipStorageKey) {
-      const set = loadSkipSet();
-      candidates.forEach(c => set.delete(c.property_composite_key));
-      candidates.forEach(c => {
-        if ((rows[c.property_composite_key]?.decision || 'pending') === 'skip') {
-          set.add(c.property_composite_key);
-        }
-      });
-      try { localStorage.setItem(skipStorageKey, JSON.stringify([...set])); } catch { /* ignore quota */ }
-    }
 
     try {
       const res = await saveUnmaskedSales(jobData.id, decisions);
@@ -170,12 +164,17 @@ const ScanMaskedSalesModal = ({
     } finally {
       setSaving(false);
     }
-  }, [candidates, rows, hpiFn, jobData?.id, userId, onSaved, skipStorageKey, loadSkipSet]);
+  }, [candidates, rows, hpiFn, jobData?.id, userId, onSaved]);
 
   if (!isOpen) return null;
 
   const fmt = (n) => (n || n === 0) ? `$${Math.round(Number(n)).toLocaleString()}` : '—';
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US') : '—';
+  // new Date('2020-09-11') is UTC midnight, which renders as the 10th in any
+  // timezone behind UTC. parseDateLocal keeps date-only values on their day.
+  const fmtDate = (d) => {
+    const parsed = parseDateLocal(d);
+    return parsed ? parsed.toLocaleDateString('en-US') : '—';
+  };
 
   return createPortal((
     <div className="csv-export-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4">
@@ -252,7 +251,7 @@ const ScanMaskedSalesModal = ({
                   const r = rows[c.property_composite_key] || {};
                   const decision = r.decision || 'pending';
                   const chosen = c.candidates.find(s => s.source === r.chosenSource) || c.best;
-                  const norm = timeNormalizeUnmasked(chosen, hpiFn, MASKED_DEFAULTS.normalizeToYear);
+                  const norm = timeNormalizeUnmasked(chosen, hpiFn, normalizeToYear);
                   const rowBg = decision === 'unmask'
                     ? 'bg-green-50'
                     : decision === 'skip'
@@ -331,7 +330,7 @@ const ScanMaskedSalesModal = ({
             {counts.total} candidate{counts.total === 1 ? '' : 's'} · {counts.unmask} to unmask · {counts.pending} still pending
             {saveResult && !saveResult.error && (
               <span className="ml-2 text-green-600">
-                ✓ Saved {saveResult.saved} · cleared {saveResult.cleared} — 🔧 CME data ready
+                ✓ Saved {saveResult.saved} · skipped {saveResult.skipped} · cleared {saveResult.cleared} — 🔧 CME data ready
               </span>
             )}
             {saveResult?.error && <span className="ml-2 text-red-600">Error: {saveResult.error}</span>}

@@ -10,7 +10,7 @@
 // ============================================================
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { X, Search } from 'lucide-react';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getAssessmentYear } from '../../../lib/supabaseClient';
 import {
   evaluateAppellantComp,
   COLOR_CLASSES,
@@ -208,7 +208,7 @@ const AppellantEvidencePanel = ({
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
   const sampleRange = useMemo(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const rawYear = new Date(jobData.end_date).getFullYear();
+    const rawYear = getAssessmentYear(jobData.end_date);
     const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],

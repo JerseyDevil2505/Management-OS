@@ -345,6 +345,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22
     };
 
+    // Sale Price (I) always carries the raw sale, matching the on-screen grid.
+    // The basis drives the math only, so the ratio and improv formulas point at
+    // Price Time (K) when the user picked that basis.
+    const basisCol = priceBasis === 'price_time' ? 'K' : 'I';
+
     // Base cell style - Leelawadee, size 10, centered
     const baseStyle = {
       font: { name: 'Leelawadee', sz: 10 },
@@ -376,6 +381,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
       const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      const rawSalePrice = (p.sales_price !== undefined && p.sales_price !== null) ? Number(p.sales_price) : 0;
       const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : '';
       const detItems = getEffectiveDetItems(p);
       const baseCost = getEffectiveBaseCost(p);
@@ -398,7 +404,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       // Sales Date, Sale Price, Sale NU, Price Time
       row[COL.SALE_DATE] = saleDate;
-      row[COL.SALE_PRICE] = salePrice || '';
+      row[COL.SALE_PRICE] = rawSalePrice || '';
       row[COL.SALE_NU] = p.sales_nu || '';
       row[COL.PRICE_TIME] = timeNorm || '';
 
@@ -430,7 +436,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       // Improv - FORMULA: =I{rowNum} - P{rowNum} - Q{rowNum}
       if (salePrice) {
-        row[COL.IMPROV] = { f: `I${rowNum}-P${rowNum}-Q${rowNum}`, t: 'n' };
+        row[COL.IMPROV] = { f: `${basisCol}${rowNum}-P${rowNum}-Q${rowNum}`, t: 'n' };
       } else {
         row[COL.IMPROV] = '';
       }
@@ -451,7 +457,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       // Adjusted Ratio - FORMULA: =V{rowNum} / I{rowNum}
       if (yearBuilt && salePrice) {
-        row[COL.ADJ_RATIO] = { f: `IF(I${rowNum}=0,"",V${rowNum}/I${rowNum})`, t: 'n' };
+        row[COL.ADJ_RATIO] = { f: `IF(${basisCol}${rowNum}=0,"",V${rowNum}/${basisCol}${rowNum})`, t: 'n' };
       } else {
         row[COL.ADJ_RATIO] = '';
       }
@@ -477,7 +483,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     // Summary formulas
     summaryRow[COL.SALE_PRICE] = { f: `SUM(I2:I${lastDataRow})`, t: 'n' };
     summaryRow[COL.SALE_NU] = '';
-    summaryRow[COL.PRICE_TIME] = '';
+    summaryRow[COL.PRICE_TIME] = { f: `SUM(K2:K${lastDataRow})`, t: 'n' };
     summaryRow[COL.YEAR_BUILT] = '';
     summaryRow[COL.DEPR] = '';
     summaryRow[COL.BLDG_CLASS] = '';
@@ -489,7 +495,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     summaryRow[COL.IMPROV] = { f: `SUM(T2:T${lastDataRow})`, t: 'n' };
     summaryRow[COL.CCF] = { f: `IF(S${summaryRowNum}=0,"",T${summaryRowNum}/S${summaryRowNum})`, t: 'n' }; // Overall CCF
     summaryRow[COL.ADJ_VALUE] = { f: `SUM(V2:V${lastDataRow})`, t: 'n' };
-    summaryRow[COL.ADJ_RATIO] = { f: `IF(I${summaryRowNum}=0,"",V${summaryRowNum}/I${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
+    summaryRow[COL.ADJ_RATIO] = { f: `IF(${basisCol}${summaryRowNum}=0,"",V${summaryRowNum}/${basisCol}${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
 
     wsData.push(summaryRow);
 

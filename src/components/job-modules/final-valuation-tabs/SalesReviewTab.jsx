@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
 import {
   Download,
   Save,
@@ -102,11 +102,10 @@ const SalesReviewTab = ({
 
     const sale = parseDateLocal(saleDate);
     if (!sale) return null;
-    const endLocal = parseDateLocal(endDate);
-    const assessmentYear = endLocal ? endLocal.getFullYear() : new Date().getFullYear();
+    const assessmentYear = getAssessmentYear(endDate);
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
-    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
     const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
     const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
@@ -237,24 +236,10 @@ const SalesReviewTab = ({
       prop._isMainCard === undefined ? true : prop._isMainCard
     );
 
-    // Inject unmasked sales as their own synthetic rows. Each carries the
-    // unmasked prior sale's price/date/norm-time while keeping the parcel's
-    // physical attributes, so it sorts/filters alongside real sales. Flagged
-    // with _isUnmasked for badge rendering and a distinct id to avoid key
-    // collisions with the current-sale row.
-    const unmaskedRows = mainCardProps
-      .filter(prop => prop.unmasked_sale && prop.unmasked_sale.sales_price)
-      .map(prop => ({
-        ...prop,
-        id: `${prop.id}_unmasked`,
-        _isUnmasked: true,
-        sales_price: prop.unmasked_sale.sales_price,
-        sales_date: prop.unmasked_sale.sales_date,
-        sales_nu: prop.unmasked_sale.sales_nu || null,
-        values_norm_time: prop.unmasked_sale.values_norm_time || null,
-      }));
-
-    return [...mainCardProps, ...unmaskedRows].map(prop => {
+    // Unmasked sales are promoted into property_records, so the parcel's own
+    // row already carries the recovered sale — no synthetic row, and the junk
+    // deed it displaced stays hidden in sales_override_meta.
+    return mainCardProps.map(prop => {
       // Package detection using centralized _pkg (computed once in JobContainer)
       const pkgInfo = prop._pkg;
       const isPackage = !!pkgInfo;
@@ -318,6 +303,8 @@ const SalesReviewTab = ({
 
       return {
         ...prop,
+        _isUnmasked: prop.sales_override === true
+          && prop.sales_override_meta?.promoted_from === 'masked_scan',
         periodCode,
         isPackage,
         isFarmSale,
@@ -802,7 +789,7 @@ const SalesReviewTab = ({
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
 
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const assessmentYear = getAssessmentYear(jobData.end_date);
 
     switch(period) {
       case 'CSP':
@@ -1688,11 +1675,12 @@ const SalesReviewTab = ({
         properties={properties}
         jobData={jobData}
         dateRange={{ fromYear: 2012 }}
+        normalizeToYear={marketLandData?.normalization_config?.normalizeToYear || 2025}
         surfaceLabel="Sales Review"
         onSaved={(res) => {
           // Surgical patch: update only the changed properties in memory
-          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
-            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+          if (patchPropertiesWithMarketAnalysis && res?.changed > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved}, skipped ${res.skipped}`);
             setPatchToast({ type: 'loading', message: '🔧 Updating data...' });
             patchPropertiesWithMarketAnalysis().then(() => {
               setPatchToast({ type: 'success', message: '✅ Data refreshed instantly!' });

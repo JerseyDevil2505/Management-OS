@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Save, Plus, Trash2 } from 'lucide-react';
-import { supabase, parseDateLocal, formatDateLocalYMD } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const AnalyticsTab = ({ jobData, properties }) => {
@@ -31,11 +31,10 @@ const AnalyticsTab = ({ jobData, properties }) => {
   };
 
   // Calculate year prior to due year for sales period determination
-  const yearPriorToDueYear = useMemo(() => {
-    if (!jobData?.end_date) return new Date().getFullYear();
-    const endYear = parseInt(jobData.end_date.substring(0, 4));
-    return endYear - 1;
-  }, [jobData?.end_date]);
+  const yearPriorToDueYear = useMemo(
+    () => getAssessmentYear(jobData?.end_date),
+    [jobData?.end_date]
+  );
 
   // Determine sales period for a property - MATCH SalesReviewTab logic exactly
   const getSalesPeriod = useCallback((salesDate) => {
@@ -43,11 +42,10 @@ const AnalyticsTab = ({ jobData, properties }) => {
 
     const sale = parseDateLocal(salesDate);
     if (!sale) return null;
-    const endLocal = parseDateLocal(jobData.end_date);
-    const assessmentYear = endLocal ? endLocal.getFullYear() : new Date().getFullYear();
+    const assessmentYear = getAssessmentYear(jobData.end_date);
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
-    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
     const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
     const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 

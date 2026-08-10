@@ -8,7 +8,9 @@
 > scoping helpers (§ RLS), storage buckets made private, direct local-folder
 > photo workflow replacing the PowerComp print-time merge (§ 11), geocoder +
 > appeal map + distance filter, Coordinates cleanup sub-tab, sales-pool chip
-> filter w/ Lojik year adjustment, AppealLog→CME bracket label parity.
+> filter w/ Lojik year adjustment, AppealLog→CME bracket label parity,
+> masked sales reworked from display-time overlay to `sales_override` promotion
+> with DB-backed skip decisions (§ 13).
 
 ---
 
@@ -186,6 +188,28 @@ Note: `SET search_path` blocks SQL-function inlining, so these run as a
 `Function Scan` (~650 ms) rather than an inlined parallel aggregate (~360 ms).
 Worth it — keeping `search_path` pinned avoids a security advisory, and one
 650 ms call still beats 165 round trips by a wide margin.
+
+### Agent DB access under RLS — never use a `.env` file
+
+RLS blocks the anon/publishable key from most tables, so agent-side helper
+scripts (`scripts/lv-query.js`, `scripts/job-cols.js`) need the Supabase
+**secret** key. That key lives **only as a platform environment variable**
+(`SUPABASE_SECRET_KEY`), injected into the process at runtime. There is no
+`.env` file on disk and there must never be one.
+
+- To add or change it, use the environment-variable settings (Fusion:
+  `ProposeEnvVariable`). Do **not** write it into `.env`, a script, or a doc.
+- Scripts read `process.env.SUPABASE_SECRET_KEY` and
+  `process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL`. Only
+  `REACT_APP_SUPABASE_URL` is actually set, so keep that fallback.
+- The frontend gets `REACT_APP_SUPABASE_URL` + `REACT_APP_SUPABASE_ANON_KEY`
+  (the `sb_publishable_...` key — the legacy `anon` JWT is disabled). Those are
+  public by design and stay subject to RLS.
+- `.env` is gitignored **and untracked**. It was tracked until `05ded38a`
+  deleted it; while tracked, gitignore did nothing and the auto-commit bot kept
+  committing it, which is what tripped GitHub push protection. If a `.env` ever
+  reappears in `git ls-files`, that is the bug — remove it from the index, don't
+  work around the push block.
 
 ### Core Tables
 
@@ -895,14 +919,44 @@ This codebase has been built iteratively over the course of a year. Every patter
 
 15. **Sales-pool window math is shared and Lojik-aware** — `SalesComparisonTab.getCSPDateRange`, `AppellantEvidencePanel.sampleRange`, `DetailedAppraisalGrid` (inline in the comps prep), the admin Geocoder's `csvSalesWindow`, and `CoordinatesSubTab.salesWindow` all anchor on `jobs.end_date` and all subtract one from the year when `organizations.org_type === 'assessor'` (Lojik). Don't fork this convention. If the window definition needs to change, change all five usages together — and confirm with the user, because that math is the basis for sales review, sales pool inclusion, comp date ranges, and the coordinate cleanup queue.
 
-## 13. Masked Sales (BRT-only) — feature + pending test
+## 13. Masked Sales (BRT-only)
 
 BRT ships up to ~4 prior sales per parcel in `property_records.prev_sales`. A "masked" sale is a good older sale that got overwritten by a later **junk dollar-sale** (e.g. a $1 deed-of-correction), so it disappears from Sales Review (keys off the current sale's normalized value) and the Sales Pool (shows the most recent sampling).
 
-Pieces:
-- `src/lib/unmaskedSales.js` — detection (`detectMaskedCandidates`, gates on **current sale price ≤ $1,000**; NU codes are intentionally NOT used because BRT withholds them), HPI time-normalization, singular persistence to `property_market_analysis.unmasked_sale` (one JSONB per parcel — idempotent, overwrite-only), and `recheckMaskedAfterUpload` (post-upload classifier).
-- `ScanMaskedSalesModal.jsx` — fixed-size modal (uses `.csv-export-modal-box` CSS, NOT arbitrary Tailwind `max-h-[..]` which the v2 CDN ignores). Per-row **Unmask / Skip** decisions, progress bar, "Hide reviewed" filter. Skips persist per job in `localStorage` (`masked-skip-<jobId>`); unmasks persist in the DB.
-- Surfaced in **Sales Review** (wide window, `fromYear: 2012`) and **Sales Pool** (tight, user-selected `compFilters.salesDateStart/End`). Sales Pool injects the unmasked prior as the effective pool sale only when the current sale is junk (≤ $100), so a newer valid sale auto-supersedes it.
-- Post-upload re-check lives in `FileUploadButton.jsx` right after `computeTargetNormalization` (the pre-load spot, since normalization clearing was moved there to avoid the heavy job load). It auto-clears **stale** unmasks (a recent valid sale superseded them) and **flags** new masks (a junk dollar-sale kept over a healthy prior) — flags only, never auto-applies, since new masks still need BRT NU verification.
+### An unmask is a promotion, not an overlay
 
-**⏳ PENDING TEST (not yet validated end-to-end):** the post-upload re-check has only been verified to compile. The whole loop only matters **IF the user actually runs Scan Masked Sales + unmasks first, THEN does a file update** — only then is there an `unmasked_sale` for the re-check to clear/supersede. Cedar Grove (`be01c481-...`) was already fully unmasked, so it can't exercise the "new incoming sale clears a stale unmask" path without a fresh BRT update. Next time a BRT job has unmasked sales and receives a source-file update, watch the batch log for `🔓 Cleared N stale unmasked sale(s)` and `⚠️ N new masked sale(s)`. ✅
+**This is the thing to understand before touching any of it.** Unmasking writes
+the recovered prior into `property_records.sales_date/price/nu/book/page` and
+sets `sales_override = true` — the *same* operation as
+`DetailedAppraisalGrid`'s swap-hidden-sale and the updater's "Keep Old"
+(`FileUploadButton.jsx:1717`). Once promoted it is simply the parcel's sale, so
+normalization, the sales-period gate, Land Valuation and CME all consume it
+without knowing unmasking exists. **Do not re-add render-time substitution.**
+An earlier revision injected the sale at display time in Sales Review and the
+Sales Pool; that was replaced precisely because every downstream consumer had to
+learn about it individually, and most never did.
+
+`sales_override_meta` carries `promoted_from: 'masked_scan'`, which is what
+distinguishes our promotion from a Detailed-grid swap — reversal only touches
+our own. `original_sale` holds the displaced junk deed. Re-unmasking an
+already-promoted parcel deliberately keeps the *original* `original_sale` rather
+than overwriting it with the last promoted prior, or the real file sale would be
+lost on the second pass.
+
+Pieces:
+- `src/lib/unmaskedSales.js` — detection (`detectMaskedCandidates`, gates on **current sale price ≤ $1,000**; NU codes are intentionally NOT used because BRT withholds them), HPI time-normalization, promotion + reversal in `saveUnmaskedSales`, and `recheckMaskedAfterUpload` (post-upload classifier). `property_market_analysis.unmasked_sale` still exists but is now only a **marker + audit record** (source, multiplier, who/when) — it is not a data source for any surface.
+- `saveUnmaskedSales` also writes `values_norm_time` at save time, so **no normalization re-run is needed**. This is safe because the unmask HPI math (`loadHpiMultiplier`) is identical to `targetNormalization.getHPIMultiplier` — same table, same year clamping, same `Math.round(price × multiplier)`. It must be passed the **job's** `normalization_config.normalizeToYear` (threaded from both parents); the `MASKED_DEFAULTS.normalizeToYear` constant is a fallback only. `values_norm_size` is deliberately NOT written — size normalization is a separate PreValuation pass.
+- `ScanMaskedSalesModal.jsx` — fixed-size modal (uses `.csv-export-modal-box` CSS, NOT arbitrary Tailwind `max-h-[..]` which the v2 CDN ignores). Per-row **Unmask / Skip** decisions, progress bar, "Hide reviewed" filter. Both decisions persist in the DB: unmasks as promotions, skips in `property_market_analysis.masked_review_skipped`. Skips were briefly kept in `localStorage` — they are parcel-level team truth and belong in the DB, so a manager doesn't redo a colleague's BRT verification.
+- Dates render through `parseDateLocal`. `new Date('2020-09-11')` is UTC midnight and displays as the 10th anywhere behind UTC; the whole modal was a day early until this was fixed.
+- Surfaced in **Sales Review** (wide window, `fromYear: 2012`) and **Sales Pool** (tight, user-selected `compFilters.salesDateStart/End`). Both show one row per parcel carrying the promoted sale; the junk deed is never displayed. `_isUnmasked` (amber badge) derives from the override marker.
+- Post-upload re-check lives in `FileUploadButton.jsx` right after `computeTargetNormalization`. **The supersede rule now lives in the DB trigger `respect_sales_override`, not in JS** — it drops the override when the incoming sale is newer, over $100, and carries a usable NU code, otherwise it restores the promoted sale field by field. `recheckMaskedAfterUpload` no longer decides; it reads whether the override survived and syncs the marker to match. Don't reimplement that rule in application code.
+- `patchPropertiesWithMarketAnalysis` re-reads the sale fields from `property_records` as well as the market-analysis columns. Without that, a promotion lands in the DB but the stale $1 stays in memory and Sales Review's `sales_price <= 100` filter makes the parcel vanish.
+
+### Patterns here that look wrong but are correct
+
+| Pattern | Why |
+|---------|-----|
+| Unmasked sales get a `values_norm_time` but no CSP/PSP/HSP period code | Period windows only reach back ~3 years. An unmasked sale is by definition old — a recent sale wouldn't have years of junk deeds stacked on it. They feed Land Valuation and the `Avg Price (t)` columns; they were never meant to drive effective age. |
+| `unmasked_sale` is kept even though nothing reads it for data | It is the audit trail and the scan's `alreadyUnmasked` marker. Dropping it loses provenance and the ability to review a past decision. |
+| A promoted parcel still appears in the scan list | `detectMaskedCandidates` keeps it via `alreadyUnmasked` so the decision can be reversed. Its `current` now shows the promoted sale, which is correct post-promotion. |
+| `prev_sales` can contain a sale BRT's Mod IV panel doesn't show | `extractPrevSales` reads `PREV_SALE{1..5}DATE/AMT` verbatim from the export. Confirmed BRT-side bug (Barnegat Light 38/14 carries a 2016-07-29 $535,000 in slot 1 that the Mod IV Sales History omits). Don't "fix" the parser — verify against the file. |

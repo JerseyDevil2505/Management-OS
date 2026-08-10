@@ -10,7 +10,7 @@
  * CRITICAL: Added automatic cleanup for failed batches - prevents partial job creation!
  */
 
-import { supabase } from '../supabaseClient.js';
+import { supabase, getAssessmentYear } from '../supabaseClient.js';
 
 export class MicrosystemsProcessor {
   constructor() {
@@ -717,8 +717,7 @@ export class MicrosystemsProcessor {
           .single();
 
         if (!jobError && jobData?.end_date) {
-          const endYear = new Date(jobData.end_date).getFullYear();
-          yearPriorToDueYear = endYear - 1;
+          yearPriorToDueYear = getAssessmentYear(jobData.end_date);
           console.log(`📅 Calculated yearPriorToDueYear: ${yearPriorToDueYear} (from end_date: ${jobData.end_date})`);
         } else {
           console.warn('⚠️ Could not fetch job end_date, effective age conversion will be skipped');

@@ -173,6 +173,22 @@ export function formatDateLocalYMD(value = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Derive the assessment year from a job's end_date.
+ *
+ * end_date is whatever due date the admin typed, so one assessment year shows up
+ * in several shapes: '2026-12-31', '2027-01-01' and an extension like
+ * '2027-03-01' all mean assessment year 2026. A due date landing in the first
+ * half of a year belongs to the prior year's assessment; anything later is next
+ * January's job filed early.
+ */
+export function getAssessmentYear(endDate, fallback = new Date().getFullYear()) {
+  const d = parseDateLocal(endDate);
+  if (!d) return fallback;
+  const dueYear = d.getMonth() <= 5 ? d.getFullYear() : d.getFullYear() + 1;
+  return dueYear - 1;
+}
+
 // ===== SOURCE FILE DATA ACCESS HELPERS =====
 // These replace raw_data access with source file content parsing
 
@@ -5184,7 +5200,7 @@ export const countyHpiService = {
       // Build query for changed rows only (or all if not specified)
       let query = supabase
         .from('property_market_analysis')
-        .select('property_composite_key, location_analysis, new_vcs, asset_map_page, asset_key_page, asset_zoning, values_norm_size, values_norm_time, sales_history, unmasked_sale, market_manual_lot_acre, market_manual_lot_sf, market_manual_acre, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth, unit_rate_codes_applied')
+        .select('property_composite_key, location_analysis, new_vcs, asset_map_page, asset_key_page, asset_zoning, values_norm_size, values_norm_time, sales_history, unmasked_sale, masked_review_skipped, market_manual_lot_acre, market_manual_lot_sf, market_manual_acre, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth, unit_rate_codes_applied')
         .eq('job_id', jobId);
 
       // If specific keys provided, only fetch those (surgical)
@@ -5204,6 +5220,24 @@ export const countyHpiService = {
         return properties;
       }
 
+      // Unmasking promotes the recovered sale into property_records, so a patch
+      // that only re-read market analysis would leave the stale junk sale in
+      // memory — and Sales Review's price filter would drop the parcel.
+      const salesMap = new Map();
+      let salesQuery = supabase
+        .from('property_records')
+        .select('property_composite_key, sales_price, sales_date, sales_nu, sales_book, sales_page, sales_override, sales_override_meta')
+        .eq('job_id', jobId);
+      if (Array.isArray(compositeKeys) && compositeKeys.length > 0) {
+        salesQuery = salesQuery.in('property_composite_key', compositeKeys);
+      }
+      const { data: salesRows, error: salesError } = await salesQuery;
+      if (salesError) {
+        console.error('❌ Surgical patch (sales) failed:', salesError);
+      } else {
+        (salesRows || []).forEach(row => salesMap.set(row.property_composite_key, row));
+      }
+
       // Build a map for O(1) lookup
       const analysisMap = new Map();
       marketAnalysisRows.forEach(row => {
@@ -5215,19 +5249,33 @@ export const countyHpiService = {
         const key = p.property_composite_key;
         const analysis = analysisMap.get(key);
 
+        const sales = salesMap.get(key);
+
         if (!analysis) return p; // No update for this property
 
         return {
           ...p,
+          ...(sales ? {
+            sales_price: sales.sales_price ?? null,
+            sales_date: sales.sales_date ?? null,
+            sales_nu: sales.sales_nu ?? null,
+            sales_book: sales.sales_book ?? null,
+            sales_page: sales.sales_page ?? null,
+            sales_override: sales.sales_override === true,
+            sales_override_meta: sales.sales_override_meta ?? null,
+          } : {}),
           location_analysis: analysis.location_analysis || p.location_analysis || null,
           new_vcs: analysis.new_vcs || p.new_vcs || null,
           asset_map_page: analysis.asset_map_page || p.asset_map_page || null,
           asset_key_page: analysis.asset_key_page || p.asset_key_page || null,
           asset_zoning: analysis.asset_zoning || p.asset_zoning || null,
           values_norm_size: analysis.values_norm_size || p.values_norm_size || null,
-          values_norm_time: analysis.values_norm_time || p.values_norm_time || null,
+          // Trust the fresh row — reverting an unmask nulls this, and an ||
+          // fallback would keep resurrecting the stale in-memory value.
+          values_norm_time: analysis.values_norm_time ?? null,
           sales_history: analysis.sales_history || p.sales_history || null,
           unmasked_sale: analysis.unmasked_sale || null, // Critical: refresh unmask data
+          masked_review_skipped: analysis.masked_review_skipped === true,
           market_manual_lot_acre: analysis.market_manual_lot_acre ?? p.market_manual_lot_acre ?? null,
           market_manual_lot_sf: analysis.market_manual_lot_sf ?? p.market_manual_lot_sf ?? null,
           market_manual_acre: analysis.market_manual_acre ?? p.market_manual_acre ?? null,

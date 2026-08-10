@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -46,7 +46,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const rawYear = new Date(jobData.end_date).getFullYear();
+    const rawYear = getAssessmentYear(jobData.end_date);
     // LOJIK: assessment year is prior year (end_date is the job end, not assessment date)
     const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
@@ -1472,21 +1472,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           };
         }
 
-        // SECOND: Apply BRT masked sales unmask (only if no manual override)
-        // BRT masked sales: when the current sale is a junk dollar-sale (≤ $100,
-        // which the filter below would drop anyway) and the user has unmasked a
-        // healthy prior, swap that prior in as the parcel's effective pool sale.
-        // Raw price/date are used here (the pool keys off sale price + window),
-        // not the HPI-normalized value (that's the Sales Review surface).
-        const currentJunk = !p.sales_price || Number(p.sales_price) <= 100;
-        if (currentJunk && p.unmasked_sale && p.unmasked_sale.sales_price) {
-          return {
-            ...p,
-            sales_price: p.unmasked_sale.sales_price,
-            sales_date: p.unmasked_sale.sales_date,
-            sales_nu: p.unmasked_sale.sales_nu ?? null,
-            _isUnmasked: true,
-          };
+        // BRT masked sales are promoted into property_records at unmask time,
+        // so the recovered prior is already this parcel's sale — the pool needs
+        // no substitution, just the marker for display.
+        if (p.sales_override === true && p.sales_override_meta?.promoted_from === 'masked_scan') {
+          return { ...p, _isUnmasked: true };
         }
         return p;
       })
@@ -2979,7 +2969,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         // so we have to subtract 1 to land on the correct assessment year — same
         // logic as getCSPDateRange above. Without this, the CSP window shifts a
         // year forward and valid in-window subject sales get skipped.
-        const rawAssessmentYear = new Date(jobData.end_date).getFullYear();
+        const rawAssessmentYear = getAssessmentYear(jobData.end_date);
         const assessmentYear = isLojikTenant ? rawAssessmentYear - 1 : rawAssessmentYear;
         const cspStart = new Date(assessmentYear - 1, 9, 1);
         const cspEnd = new Date(assessmentYear, 9, 31);
@@ -8304,11 +8294,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             : undefined,
           toDate: compFilters.salesDateEnd || null,
         }}
+        normalizeToYear={marketLandData?.normalization_config?.normalizeToYear || 2025}
         surfaceLabel="Sales Pool"
         onSaved={(res) => {
           // Surgical patch: update only the changed properties in memory
-          if (patchPropertiesWithMarketAnalysis && res?.saved > 0) {
-            console.log(`🔧 Surgical patch: unmasked ${res.saved} sales`);
+          if (patchPropertiesWithMarketAnalysis && res?.changed > 0) {
+            console.log(`🔧 Surgical patch: unmasked ${res.saved}, skipped ${res.skipped}`);
             setPatchToast({ type: 'loading', message: '🔧 Updating CME data...' });
             patchPropertiesWithMarketAnalysis().then(() => {
               setPatchToast({ type: 'success', message: '✅ CME data refreshed instantly!' });
