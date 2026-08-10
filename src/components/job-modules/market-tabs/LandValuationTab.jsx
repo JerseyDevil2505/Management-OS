@@ -3778,7 +3778,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Avg Price Lot Size: Recent sales with valid NU codes + CSP-PSP-HSP time range
+      // Avg Price / Avg Price Lot Size: sales inside the CSP-PSP-HSP range.
+      // No NU filter — normalization is the vetting step, so a sale carrying a
+      // values_norm_time was already accepted by the user, NU code and all.
       if (prop.sales_date && prop.values_norm_time > 0) {
         const saleDate = new Date(prop.sales_date);
         const salesRange = getSalesPeriodRange();
@@ -3787,27 +3789,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (saleDate >= salesRange.start && saleDate <= salesRange.end) {
           if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
 
-          // Avg Price: Valid NU codes + time constraint
-          const nu = prop.sales_nu || '';
-          const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                         nu === '7' || nu.charCodeAt(0) === 32;
-          if (validNu) {
-            avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+          avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
 
-            // Collect lot size based on valuation mode
-            if (valuationMode === 'sf') {
-              if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-                avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-              } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-                // Fallback: convert acres to SF (1 acre = 43,560 SF)
-                const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
-                avgActualPriceLotSize[prop.new_vcs].push(lotSF);
-              }
-            } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
-            } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
-              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+          // Collect lot size based on valuation mode
+          if (valuationMode === 'sf') {
+            if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+            } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+              // Fallback: convert acres to SF (1 acre = 43,560 SF)
+              const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+              avgActualPriceLotSize[prop.new_vcs].push(lotSF);
             }
+          } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+            avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+          } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+            avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
           }
         }
       }
