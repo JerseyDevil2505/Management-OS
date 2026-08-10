@@ -1331,6 +1331,32 @@ const getPricePerUnit = useCallback((price, size) => {
     return rates;
   }, [vcsRateOverrides, vcsStepdownOverrides]);
 
+  // Resolve the cascade a VCS should price against: an explicit vcsSpecific
+  // config wins, then a special region claiming the VCS in its vcsList, then
+  // plain normal. Per-VCS rate/stepdown overrides layer on top of whichever won.
+  const resolveCascadeRatesForVCS = useCallback((vcs) => {
+    let baseCascadeRates = cascadeConfig.normal;
+
+    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+      config.vcsList?.includes(vcs)
+    );
+
+    if (vcsSpecificConfig?.rates) {
+      baseCascadeRates = vcsSpecificConfig.rates;
+    } else {
+      const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([, config]) => {
+        if (!config?.vcsList) return false;
+        return config.vcsList
+          .split(',')
+          .map(v => v.trim().toUpperCase())
+          .includes(String(vcs).toUpperCase());
+      });
+      if (assignedSpecialRegion) baseCascadeRates = assignedSpecialRegion[1];
+    }
+
+    return getVCSCascadeRates(vcs, baseCascadeRates);
+  }, [cascadeConfig, getVCSCascadeRates]);
+
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
     // First check manual descriptions
@@ -1528,8 +1554,8 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      debug('�� CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
-      calculateVCSRecommendedSitesWithTarget();
+      debug('CONDITIONS MET - recalculating VCS sheet + rec sites');
+      loadVCSPropertyCounts();
     } else {
       debug('�� CONDITIONS NOT MET FOR VCS CALCULATION:', {
         hasTargetAllocation: !!targetAllocation,
@@ -1538,7 +1564,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
     }
   }, [targetAllocation]);
-  // Note: intentionally exclude calculateVCSRecommendedSitesWithTarget from deps to avoid TDZ issues, it is stable via useCallback.
+  // Note: intentionally exclude loadVCSPropertyCounts from deps to avoid TDZ issues, it is stable via useCallback.
 
   useEffect(() => {
     if (activeSubTab === 'eco-obs' && properties) {
@@ -3509,141 +3535,99 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   };
 
+  // Depth table name for a zone, per the mapping the Land Rates tab writes into
+  // zoning_config. Depth tables are keyed by table name, not by zone.
+  const getDepthTableNameForZone = (zone) => {
+    const zcfg = marketLandData?.zoning_config || {};
+    const zoneEntry = zcfg[zone] ||
+                      zcfg[zone?.toUpperCase?.()] ||
+                      zcfg[zone?.toLowerCase?.()] || null;
+    return zoneEntry?.depth_table || zoneEntry?.depthTable || '100FT Table';
+  };
+
+  // SF and FF share a two-step cascade: everything up to the standard step at
+  // the standard rate, the remainder at the excess rate. With no step configured
+  // the whole size prices at the standard rate.
+  const applyStandardExcessCascade = (size, cascadeRates) => {
+    const standardTier = cascadeRates.standard?.rate != null
+      ? cascadeRates.standard
+      : (cascadeRates.prime || {});
+    const standardRate = standardTier.rate || 0;
+    const standardMax = standardTier.max ?? null;
+
+    if (!standardMax || size <= standardMax) return size * standardRate;
+
+    const excessRate = cascadeRates.excess?.rate || 0;
+    return (standardMax * standardRate) + ((size - standardMax) * excessRate);
+  };
+
   // Helper function to calculate raw land value using cascade rates
   const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null, methodOverride = null) => {
     const effectiveMethod = methodOverride || valuationMode;
-    // If method is Front Foot and we have a property with FF data, use FF calculation
-    console.log('\u27a1\ufe0f calculateRawLandValue called:', { effectiveMethod, valuationMode, hasPropertyForFF: !!propertyForFF });
+    if (!cascadeRates) return 0;
 
+    // FRONT FOOT: step the frontage, then apply the depth factor to the whole
+    // result. The factor comes from the zone's depth table against actual depth.
     if (effectiveMethod === 'ff' && propertyForFF) {
       const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
+      if (frontFeet <= 0) return 0;
+
       const depth = parseFloat(propertyForFF.land_depth) || 0;
+      const zone = propertyForFF.land_zoning || propertyForFF.zoning || 'DEFAULT';
+      const depthTableName = getDepthTableNameForZone(zone);
+      const depthFactor = depth > 0
+        ? (interpretCodes.getDepthFactor(depth, depthTableName, depthTables) || 1.0)
+        : 1.0;
 
-      console.log('\ud83d\udcca FF mode values:', { frontFeet, depth, land_front_feet: propertyForFF.land_front_feet, land_depth: propertyForFF.land_depth });
-
-      if (frontFeet > 0 && depth > 0) {
-        // Get depth table and zone for this property
-        const zone = propertyForFF.land_zoning || propertyForFF.zoning || 'DEFAULT';
-        const depthTable = depthTables[zone] || depthTables['DEFAULT'];
-
-        if (depthTable && (cascadeRates.prime?.rate || cascadeRates.standard?.rate)) {
-          // Find depth factor from depth table
-          let depthFactor = 1.0;
-          for (const row of depthTable) {
-            if (depth >= row.min && depth <= row.max) {
-              depthFactor = row.factor;
-              break;
-            }
-          }
-
-          // Use prime/excess structure if available, otherwise fall back to standard/excess
-          const primeRate = cascadeRates.prime?.rate || cascadeRates.standard?.rate || 0;
-          const primeMax = cascadeRates.prime?.max || cascadeRates.standard?.max || 100;
-          const excessRate = cascadeRates.excess?.rate || 0;
-
-          // Calculate tiered frontage value (BEFORE depth multiplier)
-          let remaining = frontFeet;
-          let rawValue = 0;
-
-          // Tier 1: Standard/Prime
-          const primeFF = Math.min(remaining, primeMax);
-          rawValue += primeFF * primeRate;
-          remaining -= primeFF;
-
-          // Tier 2: Secondary (if configured)
-          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
-            const secondaryMax = cascadeRates.secondary.max - primeMax;
-            const secondaryFF = Math.min(remaining, secondaryMax);
-            rawValue += secondaryFF * cascadeRates.secondary.rate;
-            remaining -= secondaryFF;
-          }
-
-          // Tier 3 (or 2): Excess
-          if (remaining > 0) {
-            rawValue += remaining * excessRate;
-          }
-
-          // Apply depth multiplier to total
-          const totalValue = rawValue * depthFactor;
-
-          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`);
-
-          return totalValue;
-        }
-      }
+      const rawValue = applyStandardExcessCascade(frontFeet, cascadeRates);
+      debug(`FF calc ${frontFeet}' x ${depth}' (${zone} / ${depthTableName}): ${rawValue.toFixed(0)} x ${depthFactor} = ${(rawValue * depthFactor).toFixed(0)}`);
+      return rawValue * depthFactor;
     }
 
-    // SQUARE FOOT MODE - supports 2 or 3 tier cascade
+    // SQUARE FOOT
     if (effectiveMethod === 'sf') {
       const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
                      (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
-
-      if (sqFeet > 0 && cascadeRates.standard) {
-        const standardRate = cascadeRates.standard.rate || 0;
-        const standardMax = cascadeRates.standard.max || 5000;
-        let rawLandValue = 0;
-        let remaining = sqFeet;
-
-        // Tier 1: Standard
-        const standardSF = Math.min(remaining, standardMax);
-        rawLandValue += standardSF * standardRate;
-        remaining -= standardSF;
-
-        // Tier 2: Secondary (if configured)
-        if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
-          const secondaryMax = cascadeRates.secondary.max - standardMax;
-          const secondarySF = Math.min(remaining, secondaryMax);
-          rawLandValue += secondarySF * cascadeRates.secondary.rate;
-          remaining -= secondarySF;
-        }
-
-        // Tier 3 (or 2 if no secondary): Excess
-        const excessRate = cascadeRates.excess?.rate || 0;
-        if (remaining > 0) {
-          rawLandValue += remaining * excessRate;
-        }
-
-        debug(`SF calc for ${sqFeet} sq ft = $${rawLandValue.toFixed(0)}`);
-        return rawLandValue;
-      }
+      if (sqFeet <= 0) return 0;
+      return applyStandardExcessCascade(sqFeet, cascadeRates);
     }
 
-    // Fall back to acreage-based calculation
+    // ACRE: cumulative steps through prime, secondary and excess, then residual
+    // takes whatever is left. A tier with no step configured is skipped, so a
+    // three-step config cascades in three rather than forcing a fourth.
     const acres = typeof acresOrProperty === 'number' ? acresOrProperty :
                   (acresOrProperty?.market_manual_lot_acre ? parseFloat(acresOrProperty.market_manual_lot_acre) :
                    parseFloat(calculateAcreage(acresOrProperty)));
-    let remainingAcres = acres;
+    if (!acres || acres <= 0) return 0;
+
+    let remaining = acres;
+    let consumed = 0;
     let rawLandValue = 0;
     const breakdown = [];
 
-    // TIER 1: First acre at prime rate ($15,000)
-    if (cascadeRates.prime && remainingAcres > 0) {
-      const tier1Acres = Math.min(remainingAcres, 1);
-      const tier1Value = tier1Acres * (cascadeRates.prime.rate || 0);
-      rawLandValue += tier1Value;
-      remainingAcres -= tier1Acres;
-      breakdown.push(`Tier 1 (0-1 acre): ${tier1Acres.toFixed(2)} × $${cascadeRates.prime.rate || 0} = $${tier1Value.toFixed(0)}`);
+    ['prime', 'secondary', 'excess'].forEach(tierName => {
+      const tier = cascadeRates[tierName];
+      if (!tier || remaining <= 0) return;
+      if (tier.max === null || tier.max === undefined) return;
+
+      const room = tier.max - consumed;
+      if (room <= 0) return;
+
+      const take = Math.min(remaining, room);
+      const rate = tier.rate || 0;
+      rawLandValue += take * rate;
+      remaining -= take;
+      consumed += take;
+      breakdown.push(`${tierName} ${take.toFixed(2)}ac x $${rate}`);
+    });
+
+    if (remaining > 0) {
+      const residualRate = cascadeRates.residual?.rate || 0;
+      rawLandValue += remaining * residualRate;
+      breakdown.push(`residual ${remaining.toFixed(2)}ac x $${residualRate}`);
     }
 
-    // TIER 2: Acres 1-5 at secondary rate ($10,000) - that's 4 acres total
-    if (cascadeRates.secondary && remainingAcres > 0) {
-      const tier2Acres = Math.min(remainingAcres, 4); // Only 4 acres in this tier (1-5)
-      const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
-      rawLandValue += tier2Value;
-      remainingAcres -= tier2Acres;
-      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} �� $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
-    }
-
-    // TIER 3: All remaining acres above 5 at excess rate ($5,000)
-    if (cascadeRates.excess && remainingAcres > 0) {
-      const tier3Value = remainingAcres * (cascadeRates.excess.rate || 0);
-      rawLandValue += tier3Value;
-      breakdown.push(`Tier 3 (>5 acres): ${remainingAcres.toFixed(2)} × $${cascadeRates.excess.rate || 0} = $${tier3Value.toFixed(0)}`);
-      remainingAcres = 0;
-    }
-
-    debug(`������ Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
-
+    debug(`Acre calc for ${acres}ac:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
     return rawLandValue;
   };
 
@@ -3935,8 +3919,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      // Get VCS-specific cascade rates (with any user overrides applied)
-      const vcsRates = getVCSCascadeRates(vcs, cascadeConfig.normal);
+      // Get the cascade this VCS prices against: vcsSpecific, else a special
+      // region claiming it, else normal - with any user overrides applied.
+      const vcsRates = resolveCascadeRatesForVCS(vcs);
 
       // Get average lot size for this VCS using appropriate pre-calculated field based on mode
       let vcsProps, avgSize, rawLandValue;
@@ -3992,176 +3977,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, getVCSCascadeRates]);
-
-
-  const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
-    debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('������� Input validation:', {
-      hasTargetAllocation: !!targetAllocation,
-      targetAllocationValue: targetAllocation,
-      hasCascadeRates: !!cascadeConfig.normal.prime,
-      cascadePrimeRate: cascadeConfig.normal.prime?.rate,
-      hasProperties: !!properties,
-      propertiesCount: properties?.length || 0
-    });
-
-    if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
-      debug('❌ Cannot calculate VCS recommended sites: missing data');
-      return;
-    }
-
-    debug('����� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
-
-    const recommendedSites = {};
-    const salesRange = getSalesPeriodRange();
-
-    // Get all VCS from properties
-    const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
-
-    allVCS.forEach(vcs => {
-      // Only calculate for VCS with residential OR condo properties
-      const residentialProps = properties.filter(p =>
-        p.new_vcs === vcs &&
-        (p.property_m4_class === '2' || p.property_m4_class === '3A')
-      );
-
-      const condoProps = properties.filter(p =>
-        p.new_vcs === vcs &&
-        p.property_m4_class === '4D'
-      );
-
-      if (residentialProps.length === 0 && condoProps.length === 0) return;
-
-      // Get 3 years of relevant sales for this VCS - MATCH SQL QUERY EXACTLY
-      const relevantSales = properties.filter(prop => {
-        // Must match this specific VCS
-        if (prop.new_vcs !== vcs) return false;
-
-        // Residential properties only (Class 2 = Single Family, 3A = Two Family, 4D = Condo)
-        if (!['2', '3A', '4D'].includes(prop.property_m4_class)) return false;
-
-        // Valid sales data
-        const hasValidSale = prop.sales_date && prop.sales_price > 0;
-        if (!hasValidSale) return false;
-
-        // Sales within CSP-PSP-HSP range (HSP start through CSP end or present)
-        const saleDate = new Date(prop.sales_date);
-        const isWithinRange = saleDate >= salesRange.start && saleDate <= salesRange.end;
-        if (!isWithinRange) return false;
-
-        // Valid asset type use starting with '1' (residential) - skip for condos
-        const isCondo = prop.property_m4_class === '4D';
-        if (!isCondo) {
-          if (!prop.asset_type_use) return false;
-          const typeUseStr = prop.asset_type_use.toString().trim();
-          const hasValidTypeUse = typeUseStr.startsWith('1') || typeUseStr.startsWith('01');
-          if (!hasValidTypeUse) return false;
-        }
-
-        // Valid NU codes (blank, '7', '07', '00', or space) - MATCH SQL EXACTLY
-        const nu = prop.sales_nu;
-        const validNu = !nu ||
-                       nu.trim() === '' ||
-                       nu.trim() === '7' ||
-                       nu.trim() === '07' ||
-                       nu.trim() === '00';
-        if (!validNu) return false;
-
-        return true;
-      });
-
-      if (relevantSales.length === 0) {
-        debug(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
-        return;
-      }
-
-      // Calculate average sale price from relevant sales
-      const avgSalePrice = relevantSales.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / relevantSales.length;
-
-      // Check if this VCS is a condo type
-      const vcsType = vcsTypes[vcs] || 'Residential-Typical';
-      const isCondo = vcsType.toLowerCase().includes('condo');
-
-      let siteValue;
-
-      if (isCondo) {
-        // For condos: recommended site = target allocation % × average sale price
-        siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        debug(`🏢 VCS ${vcs} (CONDO):`, {
-          relevantSalesCount: relevantSales.length,
-          avgSalePrice: Math.round(avgSalePrice),
-          targetAllocation: targetAllocation + '%',
-          recommendedSiteValue: Math.round(siteValue),
-          note: 'No lot size calculation for condos'
-        });
-      } else {
-        // For regular properties: calculate with lot size and cascade rates respecting valuation mode
-        const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        let avgSize, rawLandValue, salesWithLotData;
-
-        if (valuationMode === 'sf') {
-          // Square Foot mode: use market_manual_lot_sf
-          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
-          if (salesWithLotData.length === 0) {
-            console.warn(`���️ VCS ${vcs}: No sales with market_manual_lot_sf data (${relevantSales.length} total sales)`);
-            return;
-          }
-          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithLotData.length;
-          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
-
-        } else if (valuationMode === 'ff') {
-          // Front Foot mode: use frontage data
-          salesWithLotData = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
-          if (salesWithLotData.length === 0) {
-            console.warn(`⚠️ VCS ${vcs}: No sales with frontage data (${relevantSales.length} total sales)`);
-            return;
-          }
-          const avgFrontage = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / salesWithLotData.length;
-          const avgDepth = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / salesWithLotData.length;
-          avgSize = avgFrontage;
-          rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
-            land_front_feet: avgFrontage,
-            land_depth: avgDepth,
-            land_zoning: salesWithLotData[0]?.asset_zoning
-          });
-
-        } else {
-          // Acre mode: use market_manual_lot_acre
-          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
-          if (salesWithLotData.length === 0) {
-            console.warn(`⚠��� VCS ${vcs}: No sales with market_manual_lot_acre data (${relevantSales.length} total sales)`);
-            return;
-          }
-          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithLotData.length;
-          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
-
-        }
-
-        siteValue = totalLandValue - rawLandValue;
-
-        debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
-          relevantSalesCount: relevantSales.length,
-          salesWithLotData: salesWithLotData?.length || 0,
-          avgSalePrice: Math.round(avgSalePrice),
-          avgSize: typeof avgSize === 'number' ? avgSize.toFixed(2) : avgSize,
-          targetAllocation: targetAllocation + '%',
-          targetAllocationDecimal: parseFloat(targetAllocation) / 100,
-          totalLandValue: Math.round(totalLandValue),
-          rawLandValue: Math.round(rawLandValue),
-          recommendedSiteValue: Math.round(siteValue),
-          cascadeRates: cascadeConfig.normal,
-          formula: `${Math.round(avgSalePrice)} * ${(parseFloat(targetAllocation) / 100).toFixed(3)} - ${Math.round(rawLandValue)} = ${Math.round(siteValue)}`
-        });
-      }
-
-      recommendedSites[vcs] = siteValue; // No rounding - store exact value
-    });
-
-    setVcsRecommendedSites(recommendedSites);
-    debug('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
-
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS]);
 
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
@@ -4671,7 +4487,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Trigger VCS recommended sites calculation
       debug('�� Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
-        calculateVCSRecommendedSitesWithTarget();
+        loadVCSPropertyCounts();
       } else {
         debug('⚠�� Cannot calculate VCS recommended sites: missing cascade config or properties');
       }
@@ -11869,40 +11685,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFrontage = Math.min(avgFrontage, minFrontage);
     const excessFrontage = Math.max(0, avgFrontage - minFrontage);
 
-    // Get standard and excess FF rates from cascade config or calculated values
-    // Priority: VCS-Specific > Special Region (by VCS assignment) > Normal
-    let baseCascadeRates = cascadeConfig.normal;
-
-    // Check for VCS-specific configuration
-    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
-      config.vcsList?.includes(vcs)
-    );
-    if (vcsSpecificConfig) {
-      baseCascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
-    } else {
-      // Check for special region configuration by VCS assignment
-      const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
-        if (!config.vcsList) return false;
-        // Parse comma-separated VCS list and check if current VCS is in it
-        const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
-        return vcsList.includes(vcs.toString().toUpperCase());
-      });
-
-      if (assignedSpecialRegion) {
-        baseCascadeRates = assignedSpecialRegion[1]; // Use the config object from the [region, config] tuple
-      }
-    }
-
-    // Apply VCS-specific rate and stepdown overrides
-    const cascadeRates = getVCSCascadeRates(vcs, baseCascadeRates);
+    const cascadeRates = resolveCascadeRatesForVCS(vcs);
 
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    // Step the frontage first, then the depth factor applies to the whole result.
     const rawLandComponent = Math.round(
-      (standardFrontage * standardFF * depthFactor) +
-      (excessFrontage * excessFF)
+      ((standardFrontage * standardFF) + (excessFrontage * excessFF)) * depthFactor
     );
 
     // Calculate Target Allocation Value: avgPrice × (target% / 100)
@@ -11912,7 +11702,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const siteValue = targetValue - rawLandComponent;
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, vcsMethodOverrides, getVCSMethod]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, vcsMethodOverrides, getVCSMethod, resolveCascadeRatesForVCS]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
