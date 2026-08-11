@@ -170,12 +170,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       if (!year) return false;
       if (year < fromYear || year > toYear) return false;
 
-      // Require a valid price depending on selected basis
-      if (priceBasis === 'price_time') {
-        if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
-      } else {
-        if (!(p.sales_price && Number(p.sales_price) > 0)) return false;
-      }
+      // The study population is the normalized sales set on either basis. The Sale
+      // Price toggle swaps the numerator in the CCF math; it does not admit sales the
+      // normalization pass rejected. Those are $1 deeds and non-usable NU codes, and
+      // they drive improv (and so CCF) negative.
+      if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
@@ -204,7 +203,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       return true;
     });
-  }, [properties, fromYear, toYear, typeGroup]);
+  }, [properties, fromYear, toYear, typeGroup, currentYear]);
 
   // Unique building class codes from all properties in this town
   const uniqueBuildingClasses = useMemo(() => {
@@ -299,7 +298,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (rows.length === 0) return null;
     const sum = rows.reduce((a, b) => a + b, 0);
     return sum / rows.length;
-  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap]);
+  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, priceBasis, currentYear]);
 
   // Recommended median for robustness
   const recommendedMedian = useMemo(() => {
@@ -327,7 +326,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (rows.length === 0) return null;
     const mid = Math.floor(rows.length / 2);
     return rows.length % 2 !== 0 ? rows[mid] : (rows[mid - 1] + rows[mid]) / 2;
-  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap]);
+  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, priceBasis, currentYear]);
 
   // Export to Excel with formulas and formatting
   const exportToExcel = () => {
