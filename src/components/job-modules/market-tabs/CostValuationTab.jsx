@@ -273,32 +273,40 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
   // Recommended mean (average) based on included comparables
   // Use CCF = Improv / ReplWithDepr so a single comparable with CCF 2.88 yields recommendedFactor 2.88
-  const recommendedFactor = useMemo(() => {
-    const rows = filtered
-      .map(p => {
-        const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-        const included = includedMap[key] !== undefined ? includedMap[key] : true;
-        if (!included) return null;
-        const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
-        const detItems = getEffectiveDetItems(p);
-        const baseCost = getEffectiveBaseCost(p);
-        const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-        const yearBuilt = p.asset_year_built || '';
-        const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
-        if (!depr) return null;
-        const replWithDepr = (detItems + baseCost) * depr;
-        if (!replWithDepr || replWithDepr === 0) return null;
-        const improv = salePrice - cama - detItems;
-        if (!isFinite(improv)) return null;
-        const ccf = improv / replWithDepr;
-        return isFinite(ccf) ? ccf : null;
-      })
-      .filter(v => v !== null && v !== undefined && isFinite(v));
+  // Both bases are computed so the banner can show them side by side. Same
+  // population and same math either way, only the numerator differs.
+  const recommendedFactors = useMemo(() => {
+    const meanForBasis = (basis) => {
+      const rows = filtered
+        .map(p => {
+          const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+          const included = includedMap[key] !== undefined ? includedMap[key] : true;
+          if (!included) return null;
+          const salePrice = (basis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+          const detItems = getEffectiveDetItems(p);
+          const baseCost = getEffectiveBaseCost(p);
+          const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+          const yearBuilt = p.asset_year_built || '';
+          const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+          if (!depr) return null;
+          const replWithDepr = (detItems + baseCost) * depr;
+          if (!replWithDepr || replWithDepr === 0) return null;
+          const improv = salePrice - cama - detItems;
+          if (!isFinite(improv)) return null;
+          const ccf = improv / replWithDepr;
+          return isFinite(ccf) ? ccf : null;
+        })
+        .filter(v => v !== null && v !== undefined && isFinite(v));
 
-    if (rows.length === 0) return null;
-    const sum = rows.reduce((a, b) => a + b, 0);
-    return sum / rows.length;
-  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, priceBasis, currentYear]);
+      if (rows.length === 0) return null;
+      const sum = rows.reduce((a, b) => a + b, 0);
+      return sum / rows.length;
+    };
+
+    return { price_time: meanForBasis('price_time'), sale_price: meanForBasis('sale_price') };
+  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, currentYear]);
+
+  const recommendedFactor = recommendedFactors[priceBasis] ?? null;
 
   // Recommended median for robustness
   const recommendedMedian = useMemo(() => {
@@ -825,13 +833,25 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         <div className="mb-4 p-3 border border-gray-200 rounded bg-green-50 flex items-center justify-between">
           <div>
             <div className="text-sm text-gray-700 font-medium">Recommended Factor (mean)</div>
-            <div className="text-lg font-semibold">{Number(recommendedFactor).toFixed(2)}</div>
-            <div className="text-xs text-gray-500">Based on {filtered.filter(p => {
-              const has = (p.values_repl_cost || p.values_base_cost) && (priceBasis === 'price_time' ? p.values_norm_time : p.sales_price);
+            <div className="flex items-end gap-6 mt-1">
+              <div>
+                <div className={`text-xs ${priceBasis === 'price_time' ? 'text-indigo-700 font-medium' : 'text-gray-500'}`}>Price Time</div>
+                <div className={`text-lg ${priceBasis === 'price_time' ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                  {recommendedFactors.price_time !== null ? Number(recommendedFactors.price_time).toFixed(2) : '—'}
+                </div>
+              </div>
+              <div>
+                <div className={`text-xs ${priceBasis === 'sale_price' ? 'text-indigo-700 font-medium' : 'text-gray-500'}`}>Sale Price</div>
+                <div className={`text-lg ${priceBasis === 'sale_price' ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                  {recommendedFactors.sale_price !== null ? Number(recommendedFactors.sale_price).toFixed(2) : '—'}
+                </div>
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">Based on {filtered.filter(p => {
               const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
               const included = includedMap[key] !== undefined ? includedMap[key] : true;
-              return has && included;
-            }).length} comparable properties</div>
+              return (p.values_repl_cost || p.values_base_cost) && included;
+            }).length} comparable properties &middot; bold is the active basis</div>
           </div>
                 {/* Recommendation actions removed - keep Save Recommendation manual via Save Factor */}
         </div>
