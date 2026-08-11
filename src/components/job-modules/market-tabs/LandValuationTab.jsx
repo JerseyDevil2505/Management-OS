@@ -1626,7 +1626,9 @@ const getPricePerUnit = useCallback((price, size) => {
       setTimeout(() => {
         delete window._method1ExcludedSales;
         delete window._method1IncludedSales;
-        delete window._method1ManuallyAdded;
+        // _method1ManuallyAdded is NOT cleared - filterVacantSales rebuilds vacantSales
+        // from scratch on every date/mode/properties change, and this registry is the
+        // only record that a hand-added sale should survive that rebuild.
       }, 1000); // Small delay to ensure filterVacantSales completes
     }
   }, [isInitialLoadComplete, vacantSales.length]);
@@ -3016,6 +3018,10 @@ const getPricePerUnit = useCallback((price, size) => {
         land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
       };
     });
+
+    // Register in the same set filterVacantSales reads, or the next rebuild drops these.
+    if (!window._method1ManuallyAdded) window._method1ManuallyAdded = new Set();
+    toAdd.forEach(p => window._method1ManuallyAdded.add(p.id));
 
     setVacantSales([...vacantSales, ...enriched]);
     setIncludedSales(new Set([...includedSales, ...toAdd.map(p => p.id)]));
