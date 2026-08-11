@@ -25,6 +25,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [editedBaseCostMap, setEditedBaseCostMap] = useState({});
   const [editedBuildingClassMap, setEditedBuildingClassMap] = useState({});
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  // Persisted exclusions. Kept separate from includedMap because that map only
+  // covers rows in the current filter, and narrowing the years must not silently
+  // drop exclusions for rows that scrolled out of scope.
+  const [excludedKeys, setExcludedKeys] = useState(new Set());
+  const excludedList = useMemo(() => Array.from(excludedKeys), [excludedKeys]);
 
   // Helpers to get effective values (edited override or original)
   const getEffectiveDetItems = (p) => {
@@ -54,6 +59,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (marketLandData?.cost_valuation_to_year !== undefined && marketLandData?.cost_valuation_to_year !== null) {
       setToYear(Number(marketLandData.cost_valuation_to_year));
     }
+    if (Array.isArray(marketLandData?.cost_valuation_excluded)) {
+      setExcludedKeys(new Set(marketLandData.cost_valuation_excluded));
+    }
   }, [marketLandData]);
 
   // Auto-save cost valuation year range (debounced) to market_land_valuation
@@ -64,7 +72,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     try {
       const { data, error } = await supabase
         .from('market_land_valuation')
-        .upsert([{ job_id: jobData.id, cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .upsert([{ job_id: jobData.id, cost_valuation_from_year: from, cost_valuation_to_year: to, cost_valuation_excluded: excludedList, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
         .select()
         .single();
       if (error) throw error;
@@ -81,7 +89,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       }
       setSavedYears(true);
       setTimeout(() => setSavedYears(false), 1500);
-      console.log('Saved cost valuation year range', { from, to });
+      console.log('Saved cost valuation year range', { from, to, excluded: excludedList.length });
     } catch (e) {
       console.error('Error saving cost valuation date range:', e);
       alert('Failed to save sales year range. See console.');
@@ -221,12 +229,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const landMap = {};
     filtered.forEach(p => {
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-      map[key] = true;
+      map[key] = !excludedKeys.has(key);
       landMap[key] = p.values_cama_land !== undefined && p.values_cama_land !== null ? p.values_cama_land : '';
     });
     setIncludedMap(map);
     setEditedLandMap(landMap);
-  }, [filtered]);
+  }, [filtered, excludedKeys]);
 
   // formatting helpers
   const getLivingAreaValue = (p) => {
@@ -890,7 +898,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             onClick={() => saveYearRange(fromYear, toYear)}
             disabled={isSavingRange}
           >
-            {isSavingRange ? 'Saving...' : (savedYears ? 'Saved' : 'Save Years')}
+            {isSavingRange ? 'Saving...' : (savedYears ? 'Saved' : (excludedList.length > 0 ? `Save Years + ${excludedList.length} Excluded` : 'Save Years'))}
           </button>
           <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
@@ -990,7 +998,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     <input type="checkbox" checked={includedMap[p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`] !== false} onChange={(e) => {
                       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                      setIncludedMap(prev => ({ ...prev, [key]: e.target.checked }));
+                      const checked = e.target.checked;
+                      setIncludedMap(prev => ({ ...prev, [key]: checked }));
+                      setExcludedKeys(prev => {
+                        const next = new Set(prev);
+                        if (checked) next.delete(key); else next.add(key);
+                        return next;
+                      });
                     }} />
                   </td>
 
