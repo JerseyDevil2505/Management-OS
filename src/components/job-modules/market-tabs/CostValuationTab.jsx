@@ -24,6 +24,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [editedDetItemMap, setEditedDetItemMap] = useState({});
   const [editedBaseCostMap, setEditedBaseCostMap] = useState({});
   const [editedBuildingClassMap, setEditedBuildingClassMap] = useState({});
+  const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Helpers to get effective values (edited override or original)
   const getEffectiveDetItems = (p) => {
@@ -269,6 +270,92 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const formatPercentNoDecimals = (v) => {
     if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
     return `${Math.round(Number(v) * 100)}%`;
+  };
+
+  const rowKey = (p) => p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+
+  // Derived columns recompute the CCF math here rather than reading it off the
+  // rendered row, the same way recommendedFactors and summaryTotals do.
+  const sortValue = (p, field) => {
+    const key = rowKey(p);
+    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : null;
+    const detItems = getEffectiveDetItems(p);
+    const baseCost = getEffectiveBaseCost(p);
+    const cama = (editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land ?? 0);
+    const basisPrice = (priceBasis === 'price_time' && p.values_norm_time > 0) ? Number(p.values_norm_time) : Number(p.sales_price || 0);
+    const replWithDepr = depr ? (detItems + baseCost) * depr : null;
+    const improv = basisPrice - cama - detItems;
+    const ccf = (replWithDepr && replWithDepr !== 0) ? improv / replWithDepr : null;
+    const factor = (costConvFactor !== null && costConvFactor !== '') ? Number(costConvFactor) : (ccf ?? 0);
+    const adjusted = depr ? (cama + ((baseCost * depr) * factor) + detItems) : null;
+
+    switch (field) {
+      case 'incl': return includedMap[key] !== false ? 1 : 0;
+      case 'block': return p.property_block;
+      case 'lot': return p.property_lot;
+      case 'qualifier': return p.asset_qualifier || p.qualifier || '';
+      case 'card': return p.property_card;
+      case 'location': return p.property_location || '';
+      case 'vcs': return p.new_vcs || p.property_vcs || '';
+      case 'salesDate': return p.sales_date || '';
+      case 'salePrice': return Number(p.sales_price || 0);
+      case 'saleNu': return p.sales_nu || '';
+      case 'priceTime': return Number(p.values_norm_time || 0);
+      case 'yearBuilt': return Number(p.asset_year_built || 0);
+      case 'depr': return depr;
+      case 'buildingClass': return editedBuildingClassMap[key] ?? p.asset_building_class ?? '';
+      case 'livingArea': return getLivingAreaValue(p);
+      case 'currentLand': return cama;
+      case 'detItem': return detItems;
+      case 'baseCost': return baseCost;
+      case 'replDepr': return replWithDepr;
+      case 'improv': return improv;
+      case 'ccf': return ccf;
+      case 'adjustedValue': return adjusted;
+      case 'adjustedRatio': return (adjusted && basisPrice) ? adjusted / basisPrice : null;
+      default: return null;
+    }
+  };
+
+  const sortedFiltered = useMemo(() => {
+    if (!sortConfig.field) return filtered;
+    const dir = sortConfig.direction === 'desc' ? -1 : 1;
+    const isBlank = (v) => v === null || v === undefined || v === '' || (typeof v === 'number' && !isFinite(v));
+
+    return [...filtered].sort((a, b) => {
+      const av = sortValue(a, sortConfig.field);
+      const bv = sortValue(b, sortConfig.field);
+      // Blanks always sink, so flipping direction doesn't fill the top with empties.
+      if (isBlank(av) && isBlank(bv)) return 0;
+      if (isBlank(av)) return 1;
+      if (isBlank(bv)) return -1;
+
+      const an = typeof av === 'number' ? av : parseFloat(av);
+      const bn = typeof bv === 'number' ? bv : parseFloat(bv);
+      if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }, [filtered, sortConfig, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, editedBuildingClassMap, priceBasis, costConvFactor, currentYear]);
+
+  const toggleSort = (field) => {
+    setSortConfig(prev => prev.field === field
+      ? { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+      : { field, direction: 'asc' });
+  };
+
+  const sortableTh = (label, field, lastCol) => {
+    const active = sortConfig.field === field;
+    const arrow = !active ? '\u21C5' : (sortConfig.direction === 'asc' ? '\u25B2' : '\u25BC');
+    return (
+      <th
+        onClick={() => toggleSort(field)}
+        title={`Sort by ${label}`}
+        className={`px-3 py-2 text-xs border-b ${lastCol ? '' : 'border-r'} border-gray-200 cursor-pointer select-none hover:bg-gray-100 ${active ? 'text-gray-900 font-semibold' : 'text-gray-600'}`}
+      >
+        {label}
+        <span className="ml-1" style={{ fontSize: '10px', opacity: active ? 1 : 0.35 }}>{arrow}</span>
+      </th>
+    );
   };
 
   // Recommended mean (average) based on included comparables
@@ -862,35 +949,35 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         <table className="min-w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Incl</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Block</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Lot</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Qualifier</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Card</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Location</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">VCS</th>
+              {sortableTh('Incl', 'incl')}
+              {sortableTh('Block', 'block')}
+              {sortableTh('Lot', 'lot')}
+              {sortableTh('Qualifier', 'qualifier')}
+              {sortableTh('Card', 'card')}
+              {sortableTh('Location', 'location')}
+              {sortableTh('VCS', 'vcs')}
 
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sales Date</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Price</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale NU</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Price Time</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Year Built</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Depr</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Building Class</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Living Area</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Current Land</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Det Item</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Base Cost</th>
+              {sortableTh('Sales Date', 'salesDate')}
+              {sortableTh('Sale Price', 'salePrice')}
+              {sortableTh('Sale NU', 'saleNu')}
+              {sortableTh('Price Time', 'priceTime')}
+              {sortableTh('Year Built', 'yearBuilt')}
+              {sortableTh('Depr', 'depr')}
+              {sortableTh('Building Class', 'buildingClass')}
+              {sortableTh('Living Area', 'livingArea')}
+              {sortableTh('Current Land', 'currentLand')}
+              {sortableTh('Det Item', 'detItem')}
+              {sortableTh('Base Cost', 'baseCost')}
 
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Repl w/Depr</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Improv</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">CCF</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Adjusted Value</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Adjusted Ratio</th>
+              {sortableTh('Repl w/Depr', 'replDepr')}
+              {sortableTh('Improv', 'improv')}
+              {sortableTh('CCF', 'ccf')}
+              {sortableTh('Adjusted Value', 'adjustedValue', true)}
+              {sortableTh('Adjusted Ratio', 'adjustedRatio', true)}
             </tr>
           </thead>
           <tbody>
-            {filtered.slice(0, 500).map((p, i) => {
+            {sortedFiltered.slice(0, 500).map((p, i) => {
               const saleYear = safeSaleYear(p);
               const salePriceDisplay = (p.sales_price !== undefined && p.sales_price !== null) ? Number(p.sales_price) : 0;
               const priceTimeDisplay = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : 0;
