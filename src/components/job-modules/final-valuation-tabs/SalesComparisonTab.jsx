@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob, getSalesPeriodYear } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -12,7 +12,6 @@ import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
-  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
@@ -46,14 +45,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const rawYear = getAssessmentYear(jobData.end_date);
-    // LOJIK: assessment year is prior year (end_date is the job end, not assessment date)
-    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+    const assessmentYear = getSalesPeriodYear(jobData, tenantConfig);
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
       end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0] // 10/31 assessment year
     };
-  }, [jobData?.end_date, isLojikTenant]);
+  }, [jobData, tenantConfig]);
 
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
@@ -2965,12 +2962,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         }
 
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
-        // NOTE: LOJIK end_date is the job end (one year after the assessment year),
-        // so we have to subtract 1 to land on the correct assessment year — same
-        // logic as getCSPDateRange above. Without this, the CSP window shifts a
-        // year forward and valid in-window subject sales get skipped.
-        const rawAssessmentYear = getAssessmentYear(jobData.end_date);
-        const assessmentYear = isLojikTenant ? rawAssessmentYear - 1 : rawAssessmentYear;
+        const assessmentYear = getSalesPeriodYear(jobData, tenantConfig);
         const cspStart = new Date(assessmentYear - 1, 9, 1);
         const cspEnd = new Date(assessmentYear, 9, 31);
 
