@@ -189,24 +189,9 @@ export function getAssessmentYear(endDate, fallback = new Date().getFullYear()) 
   return dueYear - 1;
 }
 
-/**
- * Anchor year for the CSP/PSP/HSP sales periods.
- *
- * Assessor ("Lojik") clients are ongoing engagements, not revaluations with a
- * due date, so their periods track the current calendar year. Deriving theirs
- * from end_date parks them in a window that closed months ago.
- */
-export function getSalesPeriodYear(jobData, tenantConfig) {
-  const isLojik =
-    tenantConfig?.orgType === 'assessor' ||
-    jobData?.organizations?.org_type === 'assessor' ||
-    jobData?.org_type === 'assessor';
-  if (isLojik) return new Date().getFullYear();
-  return getAssessmentYear(jobData?.end_date);
-}
-
-export function getSalesPeriodRanges(jobData, tenantConfig) {
-  const ay = getSalesPeriodYear(jobData, tenantConfig);
+// CSP/PSP/HSP sales-period windows, anchored on the job assessment year.
+export function getSalesPeriodRanges(jobData) {
+  const ay = getAssessmentYear(jobData?.end_date);
   return {
     assessmentYear: ay,
     CSP: { start: new Date(ay - 1, 9, 1), end: new Date(ay, 11, 31, 23, 59, 59) },
@@ -215,10 +200,10 @@ export function getSalesPeriodRanges(jobData, tenantConfig) {
   };
 }
 
-export function classifySalesPeriod(saleDate, jobData, tenantConfig) {
+export function classifySalesPeriod(saleDate, jobData) {
   const sale = parseDateLocal(saleDate);
   if (!sale) return '';
-  const r = getSalesPeriodRanges(jobData, tenantConfig);
+  const r = getSalesPeriodRanges(jobData);
   if (sale >= r.CSP.start && sale <= r.CSP.end) return 'CSP';
   if (sale >= r.PSP.start && sale <= r.PSP.end) return 'PSP';
   if (sale >= r.HSP.start && sale <= r.HSP.end) return 'HSP';

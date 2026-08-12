@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob, classifySalesPeriod, getSalesPeriodYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob, classifySalesPeriod, getAssessmentYear } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import TypeUseNormalizationSubTab from './TypeUseNormalizationSubTab';
@@ -103,7 +103,7 @@ const PreValuationTab = ({
     }), { assessed: 0, normalized: 0, count: 0 });
 
     return {
-      assessmentYear: getSalesPeriodYear(jobData),
+      assessmentYear: getAssessmentYear(jobData?.end_date),
       periods: { CSP: pct(buckets.CSP), PSP: pct(buckets.PSP), HSP: pct(buckets.HSP) },
       counts: { CSP: buckets.CSP.count, PSP: buckets.PSP.count, HSP: buckets.HSP.count },
       combined: pct(combined),

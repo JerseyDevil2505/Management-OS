@@ -10,7 +10,7 @@
 // ============================================================
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { X, Search } from 'lucide-react';
-import { supabase, interpretCodes, getSalesPeriodYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getAssessmentYear } from '../../../lib/supabaseClient';
 import {
   evaluateAppellantComp,
   COLOR_CLASSES,
@@ -204,15 +204,17 @@ const AppellantEvidencePanel = ({
   onSaved,                // (updatedAppeal) => void — called after successful save
   onPromoteComp           // optional — (compProperty, slotData) => void — Detailed +Comp button
 }) => {
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ----- Derived job/market context -----
   const sampleRange = useMemo(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const assessmentYear = getSalesPeriodYear(jobData, tenantConfig);
+    const rawYear = getAssessmentYear(jobData.end_date);
+    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
       end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]
     };
-  }, [jobData, tenantConfig]);
+  }, [jobData?.end_date, isLojikTenant]);
 
   const landMethod = useMemo(() => (
     marketLandData?.land_method
