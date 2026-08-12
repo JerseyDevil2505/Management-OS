@@ -3205,9 +3205,9 @@ const analyzeImportFile = async (file) => {
       // Process each row from Excel
       for (const row of dataForAnalysis) {
         // Build composite key from Excel data - vendor aware
-        // Extract year from job's created_at field
-        const jobYear = jobData?.created_at
-          ? new Date(jobData.created_at).getFullYear()
+        // Year must come from start_date — that's what the processors used to build the keys.
+        const jobYear = jobData?.start_date
+          ? parseInt(String(jobData.start_date).substring(0, 4), 10)
           : new Date().getFullYear();
         const year = row.Year || row.YEAR || jobYear;
         const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd_code || jobData?.ccdd || '';
@@ -3376,8 +3376,9 @@ const analyzeImportFile = async (file) => {
       const getVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k]; } return ''; };
 
       for (const row of data) {
-        const year = getVal(row, ['Year','YEAR','year']) || new Date().getFullYear();
-        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd || '';
+        const year = getVal(row, ['Year','YEAR','year'])
+          || (jobData?.start_date ? parseInt(String(jobData.start_date).substring(0, 4), 10) : new Date().getFullYear());
+        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd_code || jobData?.ccdd || '';
         const block = String(getVal(row, ['Block','BLOCK','block'])).trim();
         const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
         let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
