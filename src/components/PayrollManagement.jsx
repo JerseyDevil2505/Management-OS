@@ -75,15 +75,14 @@ const PayrollManagement = ({
     });
   };
 
-  // Worksheet initials are hand-entered and often blank for new hires, so fall
-  // back to the employee record rather than silently paying a zero bonus.
+  // The employee roster is the system of record for initials, same as the
+  // production tracker. The hand-entered worksheet cell is only a fallback for
+  // anyone missing from the roster.
   const resolveInitials = (worksheetName, rawCell) => {
     const fromSheet = rawCell ? String(rawCell).toUpperCase().trim() : '';
-    if (fromSheet) return fromSheet;
     const employee = findEmployeeByWorksheetName(worksheetName);
-    if (!employee) return null;
-    if (!employee.initials) return null;
-    return String(employee.initials).toUpperCase().trim();
+    const fromRecord = employee?.initials ? String(employee.initials).toUpperCase().trim() : '';
+    return { initials: fromRecord || fromSheet || null, fromSheet, fromRecord };
   };
 
   const calculateExpectedHours = (startDate, endDate) => {
@@ -450,7 +449,8 @@ const loadInitialData = async () => {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
-            const initials = resolveInitials(employeeName, row[1]);
+            const resolved = resolveInitials(employeeName, row[1]);
+            const initials = resolved.initials;
             const hours = row[2];
             const timeOff = row[3] || '';
             const apptOT = row[4] || 0;
@@ -471,7 +471,9 @@ const loadInitialData = async () => {
             };
             
             if (!initials) {
-              empData.issues.push(`No initials on the worksheet and none on the employee record - any inspection bonus will be missed`);
+              empData.issues.push(`No initials on the worksheet and no matching employee record - any inspection bonus will be missed`);
+            } else if (resolved.fromSheet && resolved.fromRecord && resolved.fromSheet !== resolved.fromRecord) {
+              empData.issues.push(`Worksheet initials (${resolved.fromSheet}) do not match the employee record (${resolved.fromRecord}) - using ${resolved.fromRecord}`);
             }
 
             const calculatedTotal = (typeof apptOT === 'number' ? apptOT : 0) + (typeof fieldOT === 'number' ? fieldOT : 0);
