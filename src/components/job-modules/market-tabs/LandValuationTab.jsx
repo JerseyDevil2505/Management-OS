@@ -1626,7 +1626,9 @@ const getPricePerUnit = useCallback((price, size) => {
       setTimeout(() => {
         delete window._method1ExcludedSales;
         delete window._method1IncludedSales;
-        delete window._method1ManuallyAdded;
+        // _method1ManuallyAdded is NOT cleared - filterVacantSales rebuilds vacantSales
+        // from scratch on every date/mode/properties change, and this registry is the
+        // only record that a hand-added sale should survive that rebuild.
       }, 1000); // Small delay to ensure filterVacantSales completes
     }
   }, [isInitialLoadComplete, vacantSales.length]);
@@ -3016,6 +3018,10 @@ const getPricePerUnit = useCallback((price, size) => {
         land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
       };
     });
+
+    // Register in the same set filterVacantSales reads, or the next rebuild drops these.
+    if (!window._method1ManuallyAdded) window._method1ManuallyAdded = new Set();
+    toAdd.forEach(p => window._method1ManuallyAdded.add(p.id));
 
     setVacantSales([...vacantSales, ...enriched]);
     setIncludedSales(new Set([...includedSales, ...toAdd.map(p => p.id)]));
@@ -12434,21 +12440,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Skip empty/none and compounded descriptions
       if (!loc || /\bnone\b|\bno analysis\b/i.test(loc)) return;
       if (/[\/\|,]|\band\b|&/.test(loc)) return; // compound separators
-      if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [] };
+      if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [], sumWith: 0, sumWithout: 0, scored: new Set() };
       standaloneLocations[loc].vcsList.add(vcs);
       const impact = calculateEcoObsImpact(vcs, loc, globalEcoObsTypeFilter);
       if (impact && impact.percentImpact && impact.percentImpact !== 'N/A') {
         const num = parseFloat(String(impact.percentImpact));
         if (!isNaN(num)) standaloneLocations[loc].impacts.push(num);
+        // Only a VCS with sales on both sides can contribute to the rollup. One
+        // with no with-sales (or, rarely, no baseline) has nothing to compare and
+        // is left out of the totals entirely rather than counted as zero.
+        if (impact.withCount > 0 && impact.withoutCount > 0) {
+          standaloneLocations[loc].sumWith += impact.adjustedSaleWith;
+          standaloneLocations[loc].sumWithout += impact.adjustedSaleWithout;
+          standaloneLocations[loc].scored.add(vcs);
+        }
       }
     });
   });
 
-  // Compute standalone averages
+  // Compute standalone recommendations. Dollar-weighted across the contributing
+  // VCS, not a mean of their percentages -- a VCS carrying most of the dollars
+  // should move the recommendation more than a small one.
   const standaloneAvg = {};
   Object.entries(standaloneLocations).forEach(([loc, data]) => {
-    const avg = data.impacts.length ? (data.impacts.reduce((a, b) => a + b, 0) / data.impacts.length) : null;
-    standaloneAvg[loc] = { avg, count: data.vcsList.size, impacts: data.impacts };
+    const avg = data.sumWithout > 0 ? ((data.sumWith - data.sumWithout) / data.sumWithout) * 100 : null;
+    standaloneAvg[loc] = { avg, count: data.vcsList.size, scoredCount: data.scored.size, impacts: data.impacts };
   });
 
   // Find compound locations and compute summed averages from parts (cap at 25% absolute)
@@ -12484,7 +12500,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   });
 
   // Build combined summary list based on includeCompounded toggle
-  let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({ location: loc, avgPercent: d.avg, count: d.count, impacts: d.impacts, isCompound: false }));
+  let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({ location: loc, avgPercent: d.avg, count: d.count, scoredCount: d.scoredCount, impacts: d.impacts, isCompound: false }));
   if (includeCompounded) {
     combined = combined.concat(Object.keys(compoundLocations).map(loc => ({ location: loc, avgPercent: compoundLocations[loc].summedAvg || null, count: compoundLocations[loc].vcsList.size, impacts: [], isCompound: true })));
   }
@@ -12993,7 +13009,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {summaryList.map(item => (
                   <tr key={item.location} style={{ borderTop: '1px solid #E5E7EB' }}>
                     <td style={{ padding: '8px' }}>{item.location}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>{item.count}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {item.scoredCount !== undefined && item.scoredCount !== item.count
+                        ? `${item.scoredCount} of ${item.count}`
+                        : item.count}
+                    </td>
                     <td style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>{item.avgPercent !== null ? `${item.avgPercent.toFixed(1)}%` : 'N/A'}</td>
                     <td style={{ padding: '8px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                       <input

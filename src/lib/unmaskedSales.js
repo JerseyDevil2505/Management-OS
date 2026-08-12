@@ -182,7 +182,7 @@ export function detectMaskedCandidates(properties, opts = {}) {
 
 // Marks an override as ours, so clearing an unmask never reverts a sale that
 // was promoted by the Detailed grid's swap-hidden-sale UI.
-const UNMASK_PROMOTED_FROM = 'masked_scan';
+export const UNMASK_PROMOTED_FROM = 'masked_scan';
 
 /**
  * Persist a batch of unmask decisions.
