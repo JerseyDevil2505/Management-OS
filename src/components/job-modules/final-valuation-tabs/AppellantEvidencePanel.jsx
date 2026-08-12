@@ -204,8 +204,8 @@ const AppellantEvidencePanel = ({
   onSaved,                // (updatedAppeal) => void — called after successful save
   onPromoteComp           // optional — (compProperty, slotData) => void — Detailed +Comp button
 }) => {
-  // ----- Derived job/market context -----
   const isLojikTenant = tenantConfig?.orgType === 'assessor';
+  // ----- Derived job/market context -----
   const sampleRange = useMemo(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
     const rawYear = getAssessmentYear(jobData.end_date);

@@ -47,7 +47,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const getCSPDateRange = useCallback(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
     const rawYear = getAssessmentYear(jobData.end_date);
-    // LOJIK: assessment year is prior year (end_date is the job end, not assessment date)
     const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
@@ -2965,12 +2964,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
         }
 
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
-        // NOTE: LOJIK end_date is the job end (one year after the assessment year),
-        // so we have to subtract 1 to land on the correct assessment year — same
-        // logic as getCSPDateRange above. Without this, the CSP window shifts a
-        // year forward and valid in-window subject sales get skipped.
-        const rawAssessmentYear = getAssessmentYear(jobData.end_date);
-        const assessmentYear = isLojikTenant ? rawAssessmentYear - 1 : rawAssessmentYear;
+        const rawYear = getAssessmentYear(jobData.end_date);
+        const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
         const cspStart = new Date(assessmentYear - 1, 9, 1);
         const cspEnd = new Date(assessmentYear, 9, 31);
 

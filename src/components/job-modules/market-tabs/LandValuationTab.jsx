@@ -6,7 +6,7 @@ import {
   Save, FileDown, MapPin,
   Home, History
 } from 'lucide-react';
-import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors, parseDateLocal } from '../../../lib/supabaseClient';
 import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
 import { exportMethod2SalesToExcel } from '../../../lib/method2SalesExport';
 import * as XLSX from 'xlsx-js-style';
@@ -6899,6 +6899,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('�������� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
+
+    // Paired-sales gate: only pair sales from the same VCS and the same sale
+    // year. Pairing across years compares different markets, which produced
+    // wild incremental rates. Size difference is enforced separately.
+    const canPairSales = (a, b) => {
+      if ((a.property_vcs || null) !== (b.property_vcs || null)) return false;
+      const da = parseDateLocal(a.sales_date);
+      const db = parseDateLocal(b.sales_date);
+      if (!da || !db) return false;
+      return da.getFullYear() === db.getFullYear();
+    };
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
       const filtered = checkedSales.filter(filterFn);
@@ -6978,7 +6989,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            if (sizeDiff > 0) {
+            const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
+            if (pairAllowed) {
               const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
@@ -7208,7 +7220,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const sizeDiff = largerSize - smallerSize;
             const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
-            if (sizeDiff > 0) {
+            const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
+            if (pairAllowed) {
               pairedRates.push(priceDiff / sizeDiff);
             }
           }
