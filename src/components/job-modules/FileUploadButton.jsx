@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes, worksheetService } from '../../lib/supabaseClient';
 import { computeTargetNormalization, saveNormalizationDecisions } from '../../lib/targetNormalization';
-import { recheckMaskedAfterUpload, saveUnmaskedSales } from '../../lib/unmaskedSales';
+import { recheckMaskedAfterUpload, saveUnmaskedSales, UNMASK_PROMOTED_FROM } from '../../lib/unmaskedSales';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
@@ -939,7 +939,7 @@ const handleCodeFileUpdate = async () => {
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
-          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class')
+          .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class, sales_override, sales_override_meta')
           .eq('job_id', job.id)
           .eq('file_version', currentDbVersion)  // CRITICAL FIX: Only get current version!
           .range(rangeStart, rangeStart + batchSize - 1);
@@ -1124,7 +1124,23 @@ const handleCodeFileUpdate = async () => {
           });
         }
         */
-        if (pricesDifferent || datesDifferent) {
+        // A masked-sale promotion holds a recovered prior in property_records while
+        // the file keeps shipping the junk deed it displaced, so the two never agree
+        // and the parcel gets re-flagged on every upload forever. Suppress that one
+        // case. A sale above the junk floor still surfaces for review, where Keep Old
+        // preserves the promotion. The $100 floor matches the respect_sales_override
+        // trigger, which decides whether an incoming sale supersedes the promotion.
+        let isDisplacedJunkDeed = false;
+        if (dbRecord.sales_override === true
+            && dbRecord.sales_override_meta
+            && dbRecord.sales_override_meta.promoted_from === UNMASK_PROMOTED_FROM) {
+          const displaced = dbRecord.sales_override_meta.original_sale || {};
+          const sameTransaction = parseDate(displaced.date) === sourceSalesDate
+            && Math.abs((parseFloat(displaced.price) || 0) - sourceSalesPrice) <= 0.01;
+          isDisplacedJunkDeed = sameTransaction || sourceSalesPrice <= 100;
+        }
+
+        if ((pricesDifferent || datesDifferent) && !isDisplacedJunkDeed) {
           salesChanges.push({
             property_composite_key: key,
             property_block: dbRecord.property_block,
