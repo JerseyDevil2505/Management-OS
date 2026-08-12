@@ -3204,13 +3204,16 @@ const analyzeImportFile = async (file) => {
 
       // Process each row from Excel
       for (const row of dataForAnalysis) {
-        // Build composite key from Excel data - vendor aware
-        // Year must come from start_date — that's what the processors used to build the keys.
+        // Build composite key from Excel data - vendor aware.
+        // Year+ccdd are read off the keys being matched against. Re-deriving them from job
+        // fields or a spreadsheet column is a second rule that drifts from the one the
+        // processors used at import time, and then nothing matches.
         const jobYear = jobData?.start_date
           ? parseInt(String(jobData.start_date).substring(0, 4), 10)
           : new Date().getFullYear();
-        const year = row.Year || row.YEAR || jobYear;
-        const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd_code || jobData?.ccdd || '';
+        const keyPrefix = (worksheetProperties || []).find(p => p.property_composite_key)?.property_composite_key?.split('-')[0] || '';
+        const year = keyPrefix ? keyPrefix.slice(0, 4) : jobYear;
+        const ccdd = keyPrefix ? keyPrefix.slice(4) : (jobData?.ccdd_code || jobData?.ccdd || '');
         const block = (row.Block || row.BLOCK)?.toString() || '';
         const lot = (row.Lot || row.LOT || row.lot || '')?.toString().trim();
         console.log('Lot value from row:', row.Lot, 'Final lot:', lot);
@@ -3376,9 +3379,10 @@ const analyzeImportFile = async (file) => {
       const getVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k]; } return ''; };
 
       for (const row of data) {
-        const year = getVal(row, ['Year','YEAR','year'])
-          || (jobData?.start_date ? parseInt(String(jobData.start_date).substring(0, 4), 10) : new Date().getFullYear());
-        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd_code || jobData?.ccdd || '';
+        const keyPrefix = propKeys.find(k => k)?.split('-')[0] || '';
+        const year = keyPrefix ? keyPrefix.slice(0, 4)
+          : (jobData?.start_date ? parseInt(String(jobData.start_date).substring(0, 4), 10) : new Date().getFullYear());
+        const ccdd = keyPrefix ? keyPrefix.slice(4) : (jobData?.ccdd_code || jobData?.ccdd || '');
         const block = String(getVal(row, ['Block','BLOCK','block'])).trim();
         const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
         let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
