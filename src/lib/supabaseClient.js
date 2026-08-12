@@ -196,16 +196,17 @@ export function getAssessmentYear(endDate, fallback = new Date().getFullYear()) 
  * due date, so their periods track the current calendar year. Deriving theirs
  * from end_date parks them in a window that closed months ago.
  */
-export function getSalesPeriodYear(jobData) {
+export function getSalesPeriodYear(jobData, tenantConfig) {
   const isLojik =
+    tenantConfig?.orgType === 'assessor' ||
     jobData?.organizations?.org_type === 'assessor' ||
     jobData?.org_type === 'assessor';
   if (isLojik) return new Date().getFullYear();
   return getAssessmentYear(jobData?.end_date);
 }
 
-export function getSalesPeriodRanges(jobData) {
-  const ay = getSalesPeriodYear(jobData);
+export function getSalesPeriodRanges(jobData, tenantConfig) {
+  const ay = getSalesPeriodYear(jobData, tenantConfig);
   return {
     assessmentYear: ay,
     CSP: { start: new Date(ay - 1, 9, 1), end: new Date(ay, 11, 31, 23, 59, 59) },
@@ -214,10 +215,10 @@ export function getSalesPeriodRanges(jobData) {
   };
 }
 
-export function classifySalesPeriod(saleDate, jobData) {
+export function classifySalesPeriod(saleDate, jobData, tenantConfig) {
   const sale = parseDateLocal(saleDate);
   if (!sale) return '';
-  const r = getSalesPeriodRanges(jobData);
+  const r = getSalesPeriodRanges(jobData, tenantConfig);
   if (sale >= r.CSP.start && sale <= r.CSP.end) return 'CSP';
   if (sale >= r.PSP.start && sale <= r.PSP.end) return 'PSP';
   if (sale >= r.HSP.start && sale <= r.HSP.end) return 'HSP';
