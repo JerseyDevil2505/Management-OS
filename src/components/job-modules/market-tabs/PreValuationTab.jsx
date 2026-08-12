@@ -5977,7 +5977,7 @@ const analyzeImportFile = async (file) => {
                         if (editingZoning[zone]) {
                           zoningRequirements[zone] = {
                             description: editingZoning[zone].description || '',
-                            min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_size: parseFloat(editingZoning[zone].min_size) || null,
                             min_size_unit: editingZoning[zone].minSizeUnit || 'SF',
                             min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
                             min_depth: parseInt(editingZoning[zone].min_depth) || null,
