@@ -4086,8 +4086,9 @@ const analyzeImportFile = async (file) => {
                             .slice((normCurrentPage - 1) * normItemsPerPage, normCurrentPage * normItemsPerPage)
                             .map((sale) => {
                               const parsed = parseCompositeKey(sale.property_composite_key);
+                              const saleUnderAssessment = Number(sale.sales_price) > 0 && Number(sale.values_mod_total) > 0 && Number(sale.sales_price) < Number(sale.values_mod_total);
                               return (
-                                <tr key={sale.id} className="border-b hover:bg-gray-50">
+                                <tr key={sale.id} title={saleUnderAssessment ? "Raw sale price is below the current assessment" : undefined} className={"border-b hover:bg-gray-50 " + (saleUnderAssessment ? "bg-yellow-50" : "")}>
                                   <td className="px-4 py-3 text-sm">{parsed.block}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.lot}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
