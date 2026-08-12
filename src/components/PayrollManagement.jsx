@@ -64,6 +64,28 @@ const PayrollManagement = ({
   };
 
   // Helper functions
+  const findEmployeeByWorksheetName = (worksheetName) => {
+    const name = String(worksheetName).toLowerCase();
+    if (!name) return undefined;
+    return employees.find(emp => {
+      if (!emp.first_name) return false;
+      if (!emp.last_name) return false;
+      if (!name.includes(emp.last_name.toLowerCase())) return false;
+      return name.includes(emp.first_name.toLowerCase());
+    });
+  };
+
+  // Worksheet initials are hand-entered and often blank for new hires, so fall
+  // back to the employee record rather than silently paying a zero bonus.
+  const resolveInitials = (worksheetName, rawCell) => {
+    const fromSheet = rawCell ? String(rawCell).toUpperCase().trim() : '';
+    if (fromSheet) return fromSheet;
+    const employee = findEmployeeByWorksheetName(worksheetName);
+    if (!employee) return null;
+    if (!employee.initials) return null;
+    return String(employee.initials).toUpperCase().trim();
+  };
+
   const calculateExpectedHours = (startDate, endDate) => {
     if (!startDate || !endDate) return 0;
     
@@ -428,7 +450,7 @@ const loadInitialData = async () => {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
-            const initials = row[1] || null;
+            const initials = resolveInitials(employeeName, row[1]);
             const hours = row[2];
             const timeOff = row[3] || '';
             const apptOT = row[4] || 0;
@@ -448,6 +470,10 @@ const loadInitialData = async () => {
               issues: []
             };
             
+            if (!initials) {
+              empData.issues.push(`No initials on the worksheet and none on the employee record - any inspection bonus will be missed`);
+            }
+
             const calculatedTotal = (typeof apptOT === 'number' ? apptOT : 0) + (typeof fieldOT === 'number' ? fieldOT : 0);
             if (typeof total === 'number' && Math.abs(total - calculatedTotal) > 0.01) {
               empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);
