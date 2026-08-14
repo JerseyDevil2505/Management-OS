@@ -2932,8 +2932,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             // Mirror AppellantEvidencePanel's sample-range math EXACTLY so
             // the PDF doesn't paint sale dates red when the on-screen panel
-            // shows them green. For Lojik (assessor) tenants the assessment
-            // year is end_date.year - 1.
+            // shows them green.
             const sampleRange = (() => {
               if (!jobData?.end_date) return { start: '', end: '' };
               const rawYear = getAssessmentYear(jobData.end_date);

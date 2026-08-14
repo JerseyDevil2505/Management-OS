@@ -135,9 +135,7 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   }, [filteredForSkipped, classFilter]);
 
   // Sales-pool window: 10/1 (assessmentYear-2) → 10/31 (assessmentYear-1).
-  // Lojik tenants (org_type = 'assessor') subtract one from end_date.year
-  // because end_date is the job end, not the assessment date — same
-  // adjustment SalesComparisonTab makes.
+  // Lojik tenants subtract one from end_date.year because end_date is the job end.
   const salesWindow = useMemo(() => {
     if (!jobData?.end_date) return null;
     const rawYear = getAssessmentYear(jobData.end_date, null);

@@ -64,6 +64,27 @@ const PayrollManagement = ({
   };
 
   // Helper functions
+  const findEmployeeByWorksheetName = (worksheetName) => {
+    const name = String(worksheetName).toLowerCase();
+    if (!name) return undefined;
+    return employees.find(emp => {
+      if (!emp.first_name) return false;
+      if (!emp.last_name) return false;
+      if (!name.includes(emp.last_name.toLowerCase())) return false;
+      return name.includes(emp.first_name.toLowerCase());
+    });
+  };
+
+  // The employee roster is the system of record for initials, same as the
+  // production tracker. The hand-entered worksheet cell is only a fallback for
+  // anyone missing from the roster.
+  const resolveInitials = (worksheetName, rawCell) => {
+    const fromSheet = rawCell ? String(rawCell).toUpperCase().trim() : '';
+    const employee = findEmployeeByWorksheetName(worksheetName);
+    const fromRecord = employee?.initials ? String(employee.initials).toUpperCase().trim() : '';
+    return { initials: fromRecord || fromSheet || null, fromSheet, fromRecord };
+  };
+
   const calculateExpectedHours = (startDate, endDate) => {
     if (!startDate || !endDate) return 0;
     
@@ -428,7 +449,8 @@ const loadInitialData = async () => {
           const row = rawData[i];
           if (row[0] && typeof row[0] === 'string' && !row[0].includes('TOTAL HOURS')) {
             const employeeName = row[0].trim();
-            const initials = row[1] || null;
+            const resolved = resolveInitials(employeeName, row[1]);
+            const initials = resolved.initials;
             const hours = row[2];
             const timeOff = row[3] || '';
             const apptOT = row[4] || 0;
@@ -448,6 +470,12 @@ const loadInitialData = async () => {
               issues: []
             };
             
+            if (!initials) {
+              empData.issues.push(`No initials on the worksheet and no matching employee record - any inspection bonus will be missed`);
+            } else if (resolved.fromSheet && resolved.fromRecord && resolved.fromSheet !== resolved.fromRecord) {
+              empData.issues.push(`Worksheet initials (${resolved.fromSheet}) do not match the employee record (${resolved.fromRecord}) - using ${resolved.fromRecord}`);
+            }
+
             const calculatedTotal = (typeof apptOT === 'number' ? apptOT : 0) + (typeof fieldOT === 'number' ? fieldOT : 0);
             if (typeof total === 'number' && Math.abs(total - calculatedTotal) > 0.01) {
               empData.issues.push(`TOTAL formula error: Shows $${total} but should be $${calculatedTotal} (${apptOT} + ${fieldOT})`);

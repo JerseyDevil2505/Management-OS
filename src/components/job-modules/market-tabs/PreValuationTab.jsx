@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob, classifySalesPeriod, getAssessmentYear } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import TypeUseNormalizationSubTab from './TypeUseNormalizationSubTab';
@@ -75,6 +75,42 @@ const PreValuationTab = ({
     conversions: 0,
     avgSizeAdjustment: 0
   });
+  // True ratio over the CSP/PSP/HSP window, pooled as Σ assessed ÷ Σ time-normalized
+  // price. Reads the kept rows of the Sales Review table below so the headline
+  // figure and the per-sale ratios can never disagree.
+  const trueRatioByPeriod = useMemo(() => {
+    const buckets = {
+      CSP: { assessed: 0, normalized: 0, count: 0 },
+      PSP: { assessed: 0, normalized: 0, count: 0 },
+      HSP: { assessed: 0, normalized: 0, count: 0 }
+    };
+
+    timeNormalizedSales.forEach(sale => {
+      if (sale.keep_reject !== 'keep') return;
+      if (!sale.time_normalized_price || sale.time_normalized_price <= 0) return;
+      const bucket = buckets[classifySalesPeriod(sale.sales_date, jobData)];
+      if (!bucket) return;
+      bucket.assessed += sale.values_mod_total || 0;
+      bucket.normalized += sale.time_normalized_price;
+      bucket.count += 1;
+    });
+
+    const pct = b => (b.normalized > 0 ? (b.assessed / b.normalized) * 100 : null);
+    const combined = ['CSP', 'PSP', 'HSP'].reduce((acc, key) => ({
+      assessed: acc.assessed + buckets[key].assessed,
+      normalized: acc.normalized + buckets[key].normalized,
+      count: acc.count + buckets[key].count
+    }), { assessed: 0, normalized: 0, count: 0 });
+
+    return {
+      assessmentYear: getAssessmentYear(jobData?.end_date),
+      periods: { CSP: pct(buckets.CSP), PSP: pct(buckets.PSP), HSP: pct(buckets.HSP) },
+      counts: { CSP: buckets.CSP.count, PSP: buckets.PSP.count, HSP: buckets.HSP.count },
+      combined: pct(combined),
+      combinedCount: combined.count
+    };
+  }, [timeNormalizedSales, jobData]);
+
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
@@ -3168,13 +3204,16 @@ const analyzeImportFile = async (file) => {
 
       // Process each row from Excel
       for (const row of dataForAnalysis) {
-        // Build composite key from Excel data - vendor aware
-        // Extract year from job's created_at field
-        const jobYear = jobData?.created_at
-          ? new Date(jobData.created_at).getFullYear()
+        // Build composite key from Excel data - vendor aware.
+        // Year+ccdd are read off the keys being matched against. Re-deriving them from job
+        // fields or a spreadsheet column is a second rule that drifts from the one the
+        // processors used at import time, and then nothing matches.
+        const jobYear = jobData?.start_date
+          ? parseInt(String(jobData.start_date).substring(0, 4), 10)
           : new Date().getFullYear();
-        const year = row.Year || row.YEAR || jobYear;
-        const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd_code || jobData?.ccdd || '';
+        const keyPrefix = (worksheetProperties || []).find(p => p.property_composite_key)?.property_composite_key?.split('-')[0] || '';
+        const year = keyPrefix ? keyPrefix.slice(0, 4) : jobYear;
+        const ccdd = keyPrefix ? keyPrefix.slice(4) : (jobData?.ccdd_code || jobData?.ccdd || '');
         const block = (row.Block || row.BLOCK)?.toString() || '';
         const lot = (row.Lot || row.LOT || row.lot || '')?.toString().trim();
         console.log('Lot value from row:', row.Lot, 'Final lot:', lot);
@@ -3340,8 +3379,10 @@ const analyzeImportFile = async (file) => {
       const getVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k]; } return ''; };
 
       for (const row of data) {
-        const year = getVal(row, ['Year','YEAR','year']) || new Date().getFullYear();
-        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd || '';
+        const keyPrefix = propKeys.find(k => k)?.split('-')[0] || '';
+        const year = keyPrefix ? keyPrefix.slice(0, 4)
+          : (jobData?.start_date ? parseInt(String(jobData.start_date).substring(0, 4), 10) : new Date().getFullYear());
+        const ccdd = keyPrefix ? keyPrefix.slice(4) : (jobData?.ccdd_code || jobData?.ccdd || '');
         const block = String(getVal(row, ['Block','BLOCK','block'])).trim();
         const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
         let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
@@ -3779,50 +3820,27 @@ const analyzeImportFile = async (file) => {
                   </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-700">
-                    {(() => {
-                      const currentYear = new Date().getFullYear();
-                      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
-                      const currentYearSales = properties.filter(p => {
-                        if (!p.sales_price || p.sales_price <= minPrice) return false;
-                        if (!p.sales_date) return false;
-
-                        const saleYear = new Date(p.sales_date).getFullYear();
-                        if (saleYear !== currentYear) return false;
-
-                        // Check sales_nu conditions (empty, null, 00, 7, or 07 are valid)
-                        const nu = p.sales_nu?.toString().trim();
-                        const validNU = !nu || nu === '' || nu === '00' || nu === '7' || nu === '07';
-                        if (!validNU) return false;
-
-                        // Same filters as normalization
-                        const parsed = parseCompositeKey(p.property_composite_key);
-                        const card = parsed.card?.toUpperCase();
-
-                        // Card filter based on vendor
-                        if (vendorType === 'Microsystems') {
-                          if (card !== 'M') return false;
-                        } else {
-                          if (card !== '1') return false;
-                        }
-
-                        const buildingClass = p.asset_building_class?.toString().trim();
-                        const typeUse = p.asset_type_use?.toString().trim();
-                        const designStyle = p.asset_design_style?.toString().trim();
-
-                        if (!buildingClass || parseInt(buildingClass) <= 10) return false;
-                        if (!typeUse) return false;
-                        if (!designStyle) return false;
-
-                        return true;
-                      });
-
-                      const totalAssessedValue = currentYearSales.reduce((sum, p) => sum + (p.values_mod_total || 0), 0);
-                      const totalSalesPrice = currentYearSales.reduce((sum, p) => sum + (p.sales_price || 0), 0);
-                      const avgRatio = totalSalesPrice > 0 ? totalAssessedValue / totalSalesPrice : 0;
-                      return `${(avgRatio * 100).toFixed(2)}%`;
-                    })()}
+                    {trueRatioByPeriod.combined !== null
+                      ? `${trueRatioByPeriod.combined.toFixed(2)}%`
+                      : '—'}
                   </div>
-                  <div className="text-sm text-gray-500">True Ratio (Current Year)</div>
+                  <div className="text-sm text-gray-500">
+                    True Ratio (CSP+PSP+HSP)
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {trueRatioByPeriod.combinedCount} sales · AY {trueRatioByPeriod.assessmentYear}
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {['CSP', 'PSP', 'HSP'].map(period => (
+                      <div key={period} className="text-xs text-gray-500">
+                        <span className="font-medium">{period}</span>{' '}
+                        {trueRatioByPeriod.periods[period] !== null
+                          ? `${trueRatioByPeriod.periods[period].toFixed(2)}%`
+                          : '—'}{' '}
+                        <span className="text-gray-400">({trueRatioByPeriod.counts[period]})</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 </div>
               </div>
@@ -4073,8 +4091,9 @@ const analyzeImportFile = async (file) => {
                             .slice((normCurrentPage - 1) * normItemsPerPage, normCurrentPage * normItemsPerPage)
                             .map((sale) => {
                               const parsed = parseCompositeKey(sale.property_composite_key);
+                              const saleUnderAssessment = Number(sale.sales_price) > 0 && Number(sale.values_mod_total) > 0 && Number(sale.sales_price) < Number(sale.values_mod_total);
                               return (
-                                <tr key={sale.id} className="border-b hover:bg-gray-50">
+                                <tr key={sale.id} title={saleUnderAssessment ? "Raw sale price is below the current assessment" : undefined} className={"border-b hover:bg-gray-50 " + (saleUnderAssessment ? "bg-yellow-50" : "")}>
                                   <td className="px-4 py-3 text-sm">{parsed.block}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.lot}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
@@ -5963,7 +5982,7 @@ const analyzeImportFile = async (file) => {
                         if (editingZoning[zone]) {
                           zoningRequirements[zone] = {
                             description: editingZoning[zone].description || '',
-                            min_size: parseInt(editingZoning[zone].min_size) || null,
+                            min_size: parseFloat(editingZoning[zone].min_size) || null,
                             min_size_unit: editingZoning[zone].minSizeUnit || 'SF',
                             min_frontage: parseInt(editingZoning[zone].min_frontage) || null,
                             min_depth: parseInt(editingZoning[zone].min_depth) || null,
