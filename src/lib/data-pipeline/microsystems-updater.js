@@ -527,7 +527,9 @@ export class MicrosystemsUpdater {
       property_m4_class: rawRecord['Class'],
       property_facility: rawRecord['Facility Name'],
       property_vcs: rawRecord['VCS'],
-      
+      // Microsystems exports one additional-lot field; BRT's slot 2 has no counterpart.
+      property_additional_lot_1: rawRecord['Additional Lots'],
+
       // Owner fields
       owner_name: rawRecord['Owner Name'],
       owner_street: rawRecord['Owner Street'],

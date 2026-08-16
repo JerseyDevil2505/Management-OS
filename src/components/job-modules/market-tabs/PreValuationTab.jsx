@@ -1399,6 +1399,8 @@ useEffect(() => {
           ...parsed,
           property_location: prop.property_location,
           property_class: prop.property_m4_class,
+          property_additional_lot_1: prop.property_additional_lot_1 || '',
+          property_additional_lot_2: prop.property_additional_lot_2 || '',
           values_mod_improvement: prop.values_mod_improvement,
           property_facility: prop.property_facility,
           property_vcs: prop.property_vcs || prop.current_vcs || '',
@@ -3045,6 +3047,12 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
+    // BRT ships two additional-lot slots, Microsystems a single field — the
+    // export mirrors each vendor's shape rather than padding a blank column.
+    const additionalLotHeaders = vendorType === 'BRT'
+      ? ['Addl Lot 1', 'Addl Lot 2']
+      : ['Additional Lots'];
+
     // Export to Excel with formatting
     const headers = [
       'Block',
@@ -3053,6 +3061,7 @@ const processSelectedProperties = async () => {
       'Card',
       'Property Location',
       'Class',
+      ...additionalLotHeaders,
       'Improvement',
       'Facility',
       'Current VCS',
@@ -3077,6 +3086,9 @@ const processSelectedProperties = async () => {
       prop.card || '',
       prop.property_location || '',
       prop.property_class || '',
+      ...(vendorType === 'BRT'
+        ? [prop.property_additional_lot_1 || '', prop.property_additional_lot_2 || '']
+        : [prop.property_additional_lot_1 || '']),
       prop.values_mod_improvement || '',
       prop.property_facility || '',
       prop.property_vcs || '',
@@ -3112,6 +3124,10 @@ const processSelectedProperties = async () => {
     // Apply formatting to all cells
     const range = XLSX.utils.decode_range(ws['!ref']);
 
+    // Resolved by header name so inserting a column can't shift the rules.
+    const improvementCol = headers.indexOf('Improvement');
+    const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
+
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
@@ -3123,14 +3139,14 @@ const processSelectedProperties = async () => {
         } else {
           ws[cellAddress].s = { ...baseStyle };
 
-          // Column B (Lot) - format as text to preserve trailing zeros like .10
-          if (C === 1) {
+          // Lot columns - format as text to preserve trailing zeros like .10
+          if (lotTextCols.includes(C)) {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
 
-          // Column G (Improvement) - currency, no decimals ($1,234)
-          if (C === 6 && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+          // Improvement - currency, no decimals ($1,234)
+          if (C === improvementCol && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
             ws[cellAddress].t = 'n';
             ws[cellAddress].z = '$#,##0';
           }
@@ -3146,6 +3162,7 @@ const processSelectedProperties = async () => {
       { wch: 8 },   // Card
       { wch: 30 },  // Property Location
       { wch: 10 },  // Class
+      ...additionalLotHeaders.map(() => ({ wch: 12 })),  // Addl lot slot(s)
       { wch: 14 },  // Improvement
       { wch: 12 },  // Facility
       { wch: 12 },  // Current VCS
