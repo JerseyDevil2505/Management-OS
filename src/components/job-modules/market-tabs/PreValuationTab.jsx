@@ -781,6 +781,9 @@ useEffect(() => {
     setSelectedCounty(jobData?.county || config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
+    if (config.blockTypeFilter) setBlockTypeFilter(config.blockTypeFilter);
+    if (typeof config.blockColorScaleStart === 'number') setColorScaleStart(config.blockColorScaleStart);
+    if (typeof config.blockColorScaleIncrement === 'number') setColorScaleIncrement(config.blockColorScaleIncrement);
   } else {
     if (false) console.log('⚠️ No normalization_config found in marketLandData');
   }
@@ -3545,6 +3548,49 @@ const analyzeImportFile = async (file) => {
 
   const totalPages = Math.ceil(filteredWorksheetProps.length / itemsPerPage);
 
+  // ==================== BLOCK MARKET ANALYSIS SETTINGS ====================
+
+  // The in-session sizeNormalized count is not a reliable record of whether the
+  // step ever ran — it is recomputed and re-saved by several paths and lands 0
+  // on most jobs. lastSizeNormalizationRun is the durable marker, so the tab
+  // stays unlocked across reloads once the step has been run.
+  const sizeNormalizationHasRun = normalizationStats.sizeNormalized > 0 || !!lastSizeNormalizationRun;
+
+  // Persisted alongside the rest of the Pre-Valuation config so bracket and
+  // color-scale choices survive a reload instead of resetting to the defaults.
+  const persistBlockAnalysisSettings = useCallback((patch) => {
+    if (!jobData?.id) return;
+    worksheetService.saveNormalizationConfig(jobData.id, patch)
+      .catch(err => console.error('Failed to persist block analysis settings:', err));
+  }, [jobData?.id]);
+
+  // Min / median / max of the size-normalized values behind the current Type &
+  // Use filter — the same population the color scale buckets, so the scale
+  // start and increment can be set against the real spread.
+  const typeUseSaleSummary = useMemo(() => {
+    const values = properties
+      .filter(p => {
+        if (!(p.values_norm_size > 0)) return false;
+        const typeUse = p.asset_type_use?.toString().trim();
+        if (!typeUse) return false;
+        return blockTypeFilter === 'all_residential'
+          ? ['1', '2', '3', '4', '5', '6'].some(prefix => typeUse.startsWith(prefix))
+          : typeUse.startsWith(blockTypeFilter);
+      })
+      .map(p => Number(p.values_norm_size))
+      .sort((a, b) => a - b);
+
+    if (values.length === 0) return null;
+
+    const mid = Math.floor(values.length / 2);
+    return {
+      count: values.length,
+      min: values[0],
+      median: values.length % 2 ? values[mid] : Math.round((values[mid - 1] + values[mid]) / 2),
+      max: values[values.length - 1]
+    };
+  }, [properties, blockTypeFilter]);
+
   // ==================== RENDER ====================
   
   return (
@@ -3566,8 +3612,8 @@ const analyzeImportFile = async (file) => {
     </button>
     <button
       onClick={() => setActiveSubTab('marketAnalysis')}
-      disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
-      className={`mls-subtab-btn ${activeSubTab === 'marketAnalysis' ? 'mls-subtab-btn--active' : ''} ${!normalizationStats.sizeNormalized ? 'disabled' : ''}`}
+      disabled={!sizeNormalizationHasRun}
+      className={`mls-subtab-btn ${activeSubTab === 'marketAnalysis' ? 'mls-subtab-btn--active' : ''} ${!sizeNormalizationHasRun ? 'disabled' : ''}`}
     >
       Market Analysis
     </button>
@@ -4907,7 +4953,10 @@ const analyzeImportFile = async (file) => {
                 </label>
                 <select
                   value={blockTypeFilter}
-                  onChange={(e) => setBlockTypeFilter(e.target.value)}
+                  onChange={(e) => {
+                    setBlockTypeFilter(e.target.value);
+                    persistBlockAnalysisSettings({ blockTypeFilter: e.target.value });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 >
                   <option value="1">1 — Single Family</option>
@@ -4928,6 +4977,7 @@ const analyzeImportFile = async (file) => {
                   type="number"
                   value={colorScaleStart}
                   onChange={(e) => setColorScaleStart(parseInt(e.target.value) || 0)}
+                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleStart: colorScaleStart })}
                   step="100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
@@ -4941,12 +4991,34 @@ const analyzeImportFile = async (file) => {
                   type="number"
                   value={colorScaleIncrement}
                   onChange={(e) => setColorScaleIncrement(parseInt(e.target.value) || 100000)}
+                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleIncrement: colorScaleIncrement })}
                   step="100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
               </div>
             </div>
             
+            {typeUseSaleSummary && (
+              <div className="mt-4 grid grid-cols-4 gap-4">
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Min Sale</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.min.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Median Sale</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.median.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Max Sale</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.max.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Sales in Filter</div>
+                  <div className="text-lg font-semibold">{typeUseSaleSummary.count.toLocaleString()}</div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
               <strong>Color Scale:</strong> Red → Pink → Orange → Yellow → Green → Teal → Blue → Purple
               <br/>• Each color has 2 steps (pastel & bright) at ${colorScaleIncrement.toLocaleString()} intervals
