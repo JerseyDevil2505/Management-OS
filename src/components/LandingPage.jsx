@@ -121,7 +121,9 @@ const LandingPage = ({ onLogin }) => {
           <section className="hero-section">
             <h2>Property Assessment Copilot</h2>
             <p className="hero-description">
-              Comprehensive tools to help guide you through mass appraisal
+              The full assessment lifecycle in one system — from your BRT or Microsystems
+              export through market analysis, land valuation, and appeal defense.
+              Built for New Jersey.
             </p>
           </section>
 
