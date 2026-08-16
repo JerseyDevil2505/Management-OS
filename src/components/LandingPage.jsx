@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import './LandingPage.css';
 
@@ -8,6 +8,26 @@ const LandingPage = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const closeLogin = () => {
+    setShowLogin(false);
+    setError('');
+    setResetSent(false);
+  };
+
+  useEffect(() => {
+    if (!showLogin) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowLogin(false);
+        setError('');
+        setResetSent(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showLogin]);
 
   const handleForgotPassword = async () => {
     setError('');
@@ -86,6 +106,13 @@ const LandingPage = ({ onLogin }) => {
           <div className="logo-title-group">
             <LogoImage />
           </div>
+          <button
+            type="button"
+            className="header-signin-button"
+            onClick={() => setShowLogin(true)}
+          >
+            Sign In
+          </button>
         </div>
       </header>
 
@@ -94,64 +121,11 @@ const LandingPage = ({ onLogin }) => {
           <section className="hero-section">
             <h2>Property Assessment Copilot</h2>
             <p className="hero-description">
-              Comprehensive tools to help guide you through mass appraisal
+              The full assessment lifecycle in one system — from your BRT or Microsystems
+              export through market analysis, land valuation, and appeal defense.
+              Built for New Jersey.
             </p>
           </section>
-
-          <div className="login-card">
-            <h3>Sign In</h3>
-            <form onSubmit={handleLogin}>
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="password">Password</label>
-                <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              {error && <div className="error-message">{error}</div>}
-              {resetSent && (
-                <div className="reset-sent-message">
-                  Check your email for a link to set a new password.
-                </div>
-              )}
-
-              <button type="submit" className="login-button" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
-            </form>
-
-            <button
-              type="button"
-              className="forgot-password-link"
-              onClick={handleForgotPassword}
-              disabled={loading}
-            >
-              Forgot password?
-            </button>
-
-            <div className="login-footer">
-              <p>Need help? Contact your system administrator</p>
-            </div>
-          </div>
 
           {/* Platform Capabilities */}
           <section className="features-section">
@@ -208,35 +182,38 @@ const LandingPage = ({ onLogin }) => {
               <div className="about-text">
                 <h3>About <span className="about-accent">Me</span></h3>
                 <p>
-                  The LOJIK Evaluator has been used in multiple Revaluation and Reassessment
-                  projects in the State of New Jersey, producing accurate assessments that ensure
-                  equitable distribution of the tax levy.
-                </p>
-                <p>
                   Real estate valuation is as much an art as it is scientific or mathematical.
-                  This platform transforms decades of hands-on appraisal methodology into a
-                  documented, repeatable process — handling the entire lifecycle from job creation
-                  and data processing through market analysis, final valuation, and appeal defense.
+                  My vision is to give every tier of real estate professional a tried-and-true
+                  method of property valuation that is accurate, timely, and can be simply
+                  understood by all.
                 </p>
                 <p>
-                  Built to scale from a single municipality to enterprise-level operations
-                  processing 50,000+ property records, the Property Assessment Copilot replaces
-                  spreadsheet-based workflows with database-driven intelligence while preserving
-                  the professional judgment that defines quality mass appraisal.
+                  The Property Assessment Copilot has run multiple revaluation and reassessment
+                  projects across New Jersey, producing accurate assessments that ensure equitable
+                  distribution of the tax levy. It reads your standard BRT or Microsystems export
+                  natively — including the real structural differences between the two vendors in
+                  effective age and depreciation.
+                </p>
+                <p>
+                  You are not asked to change how you value. Work the cost approach and the tools
+                  are built for it — cost conversion, depreciation, land tables. Or use the
+                  comparable market evaluation. Most assessors use both. Every piece of this
+                  started as a problem on a real revaluation, and all of it exists to support your
+                  judgment, not to replace it.
                 </p>
               </div>
               <div className="about-stats">
                 <div className="stat-item">
-                  <div className="stat-value">50K+</div>
+                  <div className="stat-value">335K+</div>
                   <div className="stat-label">Properties Processed</div>
                 </div>
                 <div className="stat-item">
-                  <div className="stat-value">NJ</div>
-                  <div className="stat-label">Statewide Coverage</div>
+                  <div className="stat-value">42</div>
+                  <div className="stat-label">NJ Municipalities</div>
                 </div>
                 <div className="stat-item">
                   <div className="stat-value">2</div>
-                  <div className="stat-label">Approaches to Value</div>
+                  <div className="stat-label">CAMA Vendors Supported</div>
                 </div>
               </div>
             </div>
@@ -247,6 +224,82 @@ const LandingPage = ({ onLogin }) => {
       <footer className="landing-footer">
         <p>&copy; 2025 LOJIK. All rights reserved.</p>
       </footer>
+
+      {showLogin && (
+        <div
+          className="login-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="login-modal-title"
+          onClick={closeLogin}
+        >
+          <div className="login-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="login-card">
+              <button
+                type="button"
+                className="login-modal-close"
+                onClick={closeLogin}
+                aria-label="Close sign in"
+              >
+                &times;
+              </button>
+
+              <h3 id="login-modal-title">Sign In</h3>
+              <form onSubmit={handleLogin}>
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                {error && <div className="error-message">{error}</div>}
+                {resetSent && (
+                  <div className="reset-sent-message">
+                    Check your email for a link to set a new password.
+                  </div>
+                )}
+
+                <button type="submit" className="login-button" disabled={loading}>
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                className="forgot-password-link"
+                onClick={handleForgotPassword}
+                disabled={loading}
+              >
+                Forgot password?
+              </button>
+
+              <div className="login-footer">
+                <p>Need help? Contact your system administrator</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
