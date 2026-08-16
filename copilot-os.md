@@ -5,7 +5,7 @@
 > Updated August 2026.
 >
 > Recent revisions: RLS enabled on all 48 `public` tables with `private`-schema
-> scoping helpers (§ RLS), storage buckets made private, direct local-folder
+> scoping helpers (§ 3), storage buckets made private, direct local-folder
 > photo workflow replacing the PowerComp print-time merge (§ 11), geocoder +
 > appeal map + distance filter, Coordinates cleanup sub-tab, sales-pool chip
 > filter w/ Lojik year adjustment, AppealLog→CME bracket label parity,
@@ -396,14 +396,14 @@ CME adjustment definitions per job. Columns: `bracket_0` through `bracket_9` for
 #### `job_settings`
 Key-value settings per job (e.g., `year_prior_to_due_year`).
 
-#### `job_cme_evaluations` (RLS: no)
+#### `job_cme_evaluations`
 Individual CME evaluation results. Stores comparables array (jsonb), projected assessment, confidence score.
 Status workflow: `pending` → `saved` → `applied` / `set_aside`.
 
-#### `job_cme_result_sets` (RLS: yes)
+#### `job_cme_result_sets`
 Named saved CME result batches per bracket.
 
-#### `job_cme_bracket_mappings` (RLS: yes)
+#### `job_cme_bracket_mappings`
 Maps VCS/type-use codes to CME price brackets.
 
 #### `job_custom_brackets`
@@ -465,7 +465,7 @@ Business development proposals → can convert to organization.
 | `county_hpi_data` | FHFA House Price Index by NJ county |
 | `job_responsibilities` | Assigned property scope per job |
 | `job_access_grants` | Cross-job data access for assessor employees |
-| `job_sales_pool_overrides` (RLS) | Named sales pool filter overrides |
+| `job_sales_pool_overrides` | Named sales pool filter overrides |
 | `checklist_items` | Per-job checklist items |
 | `checklist_item_status` | Checklist completion tracking |
 | `checklist_documents` | File attachments on checklist items |
