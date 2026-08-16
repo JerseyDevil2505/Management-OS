@@ -925,6 +925,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'CAMA': property.property_cama_class || '',
         'Check': '', // Will be replaced with formula after column order is known
         'Info By': property.inspection_info_by ? { v: String(property.inspection_info_by), t: 's' } : '',
+        'Zoning': property.asset_zoning || '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes || '',
