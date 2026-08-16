@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import './LandingPage.css';
 
@@ -8,6 +8,26 @@ const LandingPage = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const closeLogin = () => {
+    setShowLogin(false);
+    setError('');
+    setResetSent(false);
+  };
+
+  useEffect(() => {
+    if (!showLogin) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowLogin(false);
+        setError('');
+        setResetSent(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showLogin]);
 
   const handleForgotPassword = async () => {
     setError('');
@@ -86,6 +106,13 @@ const LandingPage = ({ onLogin }) => {
           <div className="logo-title-group">
             <LogoImage />
           </div>
+          <button
+            type="button"
+            className="header-signin-button"
+            onClick={() => setShowLogin(true)}
+          >
+            Sign In
+          </button>
         </div>
       </header>
 
@@ -97,61 +124,6 @@ const LandingPage = ({ onLogin }) => {
               Comprehensive tools to help guide you through mass appraisal
             </p>
           </section>
-
-          <div className="login-card">
-            <h3>Sign In</h3>
-            <form onSubmit={handleLogin}>
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="password">Password</label>
-                <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                />
-              </div>
-
-              {error && <div className="error-message">{error}</div>}
-              {resetSent && (
-                <div className="reset-sent-message">
-                  Check your email for a link to set a new password.
-                </div>
-              )}
-
-              <button type="submit" className="login-button" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
-            </form>
-
-            <button
-              type="button"
-              className="forgot-password-link"
-              onClick={handleForgotPassword}
-              disabled={loading}
-            >
-              Forgot password?
-            </button>
-
-            <div className="login-footer">
-              <p>Need help? Contact your system administrator</p>
-            </div>
-          </div>
 
           {/* Platform Capabilities */}
           <section className="features-section">
@@ -247,6 +219,82 @@ const LandingPage = ({ onLogin }) => {
       <footer className="landing-footer">
         <p>&copy; 2025 LOJIK. All rights reserved.</p>
       </footer>
+
+      {showLogin && (
+        <div
+          className="login-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="login-modal-title"
+          onClick={closeLogin}
+        >
+          <div className="login-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="login-card">
+              <button
+                type="button"
+                className="login-modal-close"
+                onClick={closeLogin}
+                aria-label="Close sign in"
+              >
+                &times;
+              </button>
+
+              <h3 id="login-modal-title">Sign In</h3>
+              <form onSubmit={handleLogin}>
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                {error && <div className="error-message">{error}</div>}
+                {resetSent && (
+                  <div className="reset-sent-message">
+                    Check your email for a link to set a new password.
+                  </div>
+                )}
+
+                <button type="submit" className="login-button" disabled={loading}>
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                className="forgot-password-link"
+                onClick={handleForgotPassword}
+                disabled={loading}
+              >
+                Forgot password?
+              </button>
+
+              <div className="login-footer">
+                <p>Need help? Contact your system administrator</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
