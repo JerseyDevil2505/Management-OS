@@ -772,15 +772,11 @@ const OverallAnalysisTab = ({
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
     });
 
-    // Identify baseline (highest priced group)
-    let baselineGroup = null;
-    let maxPrice = 0;
-    Object.values(groups).forEach(group => {
-      if (group.salesCount > 0 && group.avgPrice > maxPrice) {
-        maxPrice = group.avgPrice;
-        baselineGroup = group;
-      }
-    });
+    // Baseline is the newest cohort that actually sold, stepping down a bracket
+    // at a time when the newer ones have no sales to measure against.
+    const baselineGroup = ['New', 'Newer', 'Moderate', 'Older', 'Historic']
+      .map(key => groups[key])
+      .find(group => group && group.salesCount > 0) || null;
 
     // Calculate adjusted prices using BASELINE size
     Object.values(groups).forEach(group => {
