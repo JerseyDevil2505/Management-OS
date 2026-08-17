@@ -410,6 +410,17 @@ const PreValuationTab = ({
   const [blockTypeFilter, setBlockTypeFilter] = useState('1');
   const [colorScaleStart, setColorScaleStart] = useState(100000);
   const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
+  // Above the breakpoint the scale switches to a coarser step, so a town with a
+  // long upper tail doesn't spend every color below the median and dump the top
+  // third of its blocks into one bucket. 0 disables it and keeps a single slope.
+  const [colorScaleBreakpoint, setColorScaleBreakpoint] = useState(0);
+  const [colorScaleUpperIncrement, setColorScaleUpperIncrement] = useState(250000);
+
+  // The in-session sizeNormalized count is not a reliable record of whether the
+  // step ever ran — several paths recompute and re-save it, and it lands 0 on
+  // most jobs. lastSizeNormalizationRun is the durable marker, so the tab stays
+  // unlocked and the block analysis keeps auto-processing across reloads.
+  const sizeNormalizationHasRun = normalizationStats.sizeNormalized > 0 || !!lastSizeNormalizationRun;
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
@@ -784,6 +795,8 @@ useEffect(() => {
     if (config.blockTypeFilter) setBlockTypeFilter(config.blockTypeFilter);
     if (typeof config.blockColorScaleStart === 'number') setColorScaleStart(config.blockColorScaleStart);
     if (typeof config.blockColorScaleIncrement === 'number') setColorScaleIncrement(config.blockColorScaleIncrement);
+    if (typeof config.blockColorScaleBreakpoint === 'number') setColorScaleBreakpoint(config.blockColorScaleBreakpoint);
+    if (typeof config.blockColorScaleUpperIncrement === 'number') setColorScaleUpperIncrement(config.blockColorScaleUpperIncrement);
   } else {
     if (false) console.log('⚠️ No normalization_config found in marketLandData');
   }
@@ -2461,10 +2474,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         
         // Assign color based on value
         // Index 0 is reserved for "No Data" gray, so actual colors start at index 1
-        const colorIndex = Math.min(
-          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1,
-          bluebeamPalette.length - 1
-        );
+        const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+        const rawIndex = usesBreakpoint && avgValue >= colorScaleBreakpoint
+          ? Math.ceil((colorScaleBreakpoint - colorScaleStart) / colorScaleIncrement)
+            + Math.floor((avgValue - colorScaleBreakpoint) / colorScaleUpperIncrement) + 1
+          : Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1;
+        const colorIndex = Math.min(rawIndex, bluebeamPalette.length - 1);
         const assignedColor = bluebeamPalette[Math.max(1, colorIndex)];
         
         return {
@@ -2510,14 +2525,14 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       setMarketAnalysisData(blockData);
 
       // Cache in parent so tab switches don't recompute
-      onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement }, dataVersion);
+      onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement }, dataVersion);
     } catch (error) {
       console.error('Error processing block analysis:', error);
       alert('Error processing block analysis. Please check the console.');
     } finally {
       setIsProcessingBlocks(false);
     }
-  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, codeDefinitions, vendorType]);
+  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, codeDefinitions, vendorType]);
 
 // Helper functions
   const calculateStandardDeviation = (values) => {
@@ -2586,12 +2601,14 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   // Auto-process when filter or scale changes — use cache when available and fresh
   const blockCacheRestoredRef = useRef(false);
   useEffect(() => {
-    if (isMounted && normalizationStats.sizeNormalized > 0) {
+    if (isMounted && sizeNormalizationHasRun) {
       // On first mount, try to restore from parent cache if data hasn't changed
       if (!blockCacheRestoredRef.current && blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion
           && blockAnalysisCache.data?.blockTypeFilter === blockTypeFilter
           && blockAnalysisCache.data?.colorScaleStart === colorScaleStart
-          && blockAnalysisCache.data?.colorScaleIncrement === colorScaleIncrement) {
+          && blockAnalysisCache.data?.colorScaleIncrement === colorScaleIncrement
+          && blockAnalysisCache.data?.colorScaleBreakpoint === colorScaleBreakpoint
+          && blockAnalysisCache.data?.colorScaleUpperIncrement === colorScaleUpperIncrement) {
         blockCacheRestoredRef.current = true;
         setMarketAnalysisData(blockAnalysisCache.data.blockData);
         return;
@@ -2599,7 +2616,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       blockCacheRestoredRef.current = true;
       processBlockAnalysis();
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, sizeNormalizationHasRun, isMounted]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Preserve scroll position before state update
@@ -3550,12 +3567,6 @@ const analyzeImportFile = async (file) => {
 
   // ==================== BLOCK MARKET ANALYSIS SETTINGS ====================
 
-  // The in-session sizeNormalized count is not a reliable record of whether the
-  // step ever ran — it is recomputed and re-saved by several paths and lands 0
-  // on most jobs. lastSizeNormalizationRun is the durable marker, so the tab
-  // stays unlocked across reloads once the step has been run.
-  const sizeNormalizationHasRun = normalizationStats.sizeNormalized > 0 || !!lastSizeNormalizationRun;
-
   // Persisted alongside the rest of the Pre-Valuation config so bracket and
   // color-scale choices survive a reload instead of resetting to the defaults.
   const persistBlockAnalysisSettings = useCallback((patch) => {
@@ -3590,6 +3601,25 @@ const analyzeImportFile = async (file) => {
       max: values[values.length - 1]
     };
   }, [properties, blockTypeFilter]);
+
+  // Bucket edges the palette actually uses, derived from the same rules as
+  // processBlockAnalysis so the legend can't drift from the colors on screen.
+  const colorScaleBands = useMemo(() => {
+    const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+    const lowerCount = usesBreakpoint
+      ? Math.ceil((colorScaleBreakpoint - colorScaleStart) / colorScaleIncrement)
+      : bluebeamPalette.length - 1;
+
+    return bluebeamPalette.slice(1).map((swatch, i) => {
+      const inLower = i < lowerCount;
+      const from = inLower
+        ? colorScaleStart + i * colorScaleIncrement
+        : colorScaleBreakpoint + (i - lowerCount) * colorScaleUpperIncrement;
+      const step = inLower ? colorScaleIncrement : colorScaleUpperIncrement;
+      const isLast = i === bluebeamPalette.length - 2;
+      return { ...swatch, from, to: isLast ? null : from + step - 1 };
+    });
+  }, [colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement]);
 
   // ==================== RENDER ====================
   
@@ -4996,6 +5026,35 @@ const analyzeImportFile = async (file) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Upper Breakpoint (0 = off)
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleBreakpoint}
+                  onChange={(e) => setColorScaleBreakpoint(parseInt(e.target.value) || 0)}
+                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleBreakpoint: colorScaleBreakpoint })}
+                  step="100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Increment Above Breakpoint
+                </label>
+                <input
+                  type="number"
+                  value={colorScaleUpperIncrement}
+                  onChange={(e) => setColorScaleUpperIncrement(parseInt(e.target.value) || 0)}
+                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleUpperIncrement: colorScaleUpperIncrement })}
+                  step="50000"
+                  disabled={!colorScaleBreakpoint}
+                  className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+                />
+              </div>
             </div>
             
             {typeUseSaleSummary && (
@@ -5020,11 +5079,23 @@ const analyzeImportFile = async (file) => {
             )}
 
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <strong>Color Scale:</strong> Red → Pink → Orange → Yellow → Green → Teal → Blue → Purple
-              <br/>• Each color has 2 steps (pastel & bright) at ${colorScaleIncrement.toLocaleString()} intervals
-              <br/>• Red: $0-${(colorScaleIncrement * 2 - 1).toLocaleString()} • Pink: ${(colorScaleIncrement * 2).toLocaleString()}-${(colorScaleIncrement * 4 - 1).toLocaleString()} • Orange: ${(colorScaleIncrement * 4).toLocaleString()}-${(colorScaleIncrement * 6 - 1).toLocaleString()} • Yellow: ${(colorScaleIncrement * 6).toLocaleString()}-${(colorScaleIncrement * 8 - 1).toLocaleString()}
-              <br/>• Green: ${(colorScaleIncrement * 8).toLocaleString()}-${(colorScaleIncrement * 10 - 1).toLocaleString()} • Teal: ${(colorScaleIncrement * 10).toLocaleString()}-${(colorScaleIncrement * 12 - 1).toLocaleString()} • Blue: ${(colorScaleIncrement * 12).toLocaleString()}-${(colorScaleIncrement * 14 - 1).toLocaleString()} • Purple: ${(colorScaleIncrement * 14).toLocaleString()}+
-              <br/>• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data
+              <strong>Color Scale:</strong>{' '}
+              {colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0
+                ? `$${colorScaleIncrement.toLocaleString()} steps to $${colorScaleBreakpoint.toLocaleString()}, then $${colorScaleUpperIncrement.toLocaleString()} steps above`
+                : `$${colorScaleIncrement.toLocaleString()} steps`}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {colorScaleBands.map(band => (
+                  <div
+                    key={band.name}
+                    className="px-2 py-1 rounded text-xs whitespace-nowrap border border-gray-300"
+                    style={{ backgroundColor: band.hex }}
+                    title={band.name}
+                  >
+                    ${band.from.toLocaleString()}{band.to === null ? '+' : `–$${band.to.toLocaleString()}`}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2">• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data</div>
             </div>
           </div>
           
