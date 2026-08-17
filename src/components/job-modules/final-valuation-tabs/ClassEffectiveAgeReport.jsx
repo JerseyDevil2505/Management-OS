@@ -48,6 +48,7 @@ const ClassEffectiveAgeReport = ({
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingEFA, setSavingEFA] = useState(false);
   const [hideEmptyCategories, setHideEmptyCategories] = useState(true);
+  const [includeClass10, setIncludeClass10] = useState(false);
 
   useEffect(() => {
     const stored = jobData?.class_efa_report_config;
@@ -128,7 +129,15 @@ const ClassEffectiveAgeReport = ({
 
     const matches = properties.filter(p => {
       const tu = String(p.asset_type_use || '').trim();
-      return tu && codes.includes(tu);
+      if (!tu || !codes.includes(tu)) return false;
+
+      // Building class 10 and below carries no structure, so it never produces an
+      // EFA and only widens the class min/max that flags real breaks.
+      if (!includeClass10) {
+        const bldgClass = parseInt(p.asset_building_class, 10);
+        if (Number.isFinite(bldgClass) && bldgClass <= 10) return false;
+      }
+      return true;
     });
 
     const columnFor = (p) => {
@@ -230,7 +239,7 @@ const ClassEffectiveAgeReport = ({
       columns: sortedCols.map(([key, label]) => ({ key, label })),
       cells
     };
-  }, [config, properties, categories, hideEmptyCategories, bandFor, inWindow, storedRecEFA, designLabel, rawDesignName, finalValuationData, vendorType, yearPriorToDueYear]);
+  }, [config, properties, categories, hideEmptyCategories, includeClass10, bandFor, inWindow, storedRecEFA, designLabel, rawDesignName, finalValuationData, vendorType, yearPriorToDueYear]);
 
   const formatCell = useCallback((cell) => {
     if (!cell || cell.count === 0) return EMPTY;
@@ -406,6 +415,14 @@ const ClassEffectiveAgeReport = ({
               Hide empty categories
             </label>
           )}
+          <label className="flex items-center gap-2 text-sm text-gray-700 mr-1">
+            <input
+              type="checkbox"
+              checked={includeClass10}
+              onChange={(e) => setIncludeClass10(e.target.checked)}
+            />
+            Include class 10
+          </label>
           <button
             onClick={saveRecommendedEFA}
             disabled={savingEFA}
