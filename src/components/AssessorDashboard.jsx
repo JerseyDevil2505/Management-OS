@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, jobService, propertyService } from '../lib/supabaseClient';
+import FileUploadButton from './job-modules/FileUploadButton';
+import { getJobTenantConfig } from '../lib/tenantConfig';
 
 const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} }) => {
   const [orgJobs, setOrgJobs] = useState([]);
@@ -8,6 +10,10 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} 
   const [selectedSetupOrg, setSelectedSetupOrg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSetup, setShowSetup] = useState(false);
+
+  // Standalone file update, so a town can refresh its data before opening the
+  // job instead of loading the old snapshot and re-refreshing from inside it.
+  const [selectedJobForUpload, setSelectedJobForUpload] = useState(null);
 
   // File upload state
   const [sourceFile, setSourceFile] = useState(null);
@@ -727,12 +733,27 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} 
                         </span>
                       )}
                     </div>
-                    <span style={{
-                      padding: '6px 16px', background: '#2563eb', color: 'white',
-                      borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600'
-                    }}>
-                      Go to Job
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedJobForUpload(job);
+                        }}
+                        title="Upload a new source or code file before opening the job"
+                        style={{
+                          padding: '6px 16px', background: '#059669', color: 'white', border: 'none',
+                          borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer'
+                        }}
+                      >
+                        Update File
+                      </button>
+                      <span style={{
+                        padding: '6px 16px', background: '#2563eb', color: 'white',
+                        borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600'
+                      }}>
+                        Go to Job
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -1074,6 +1095,58 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} 
               >
                 {processing ? 'Processing...' : 'Create Job & Process Data'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone file update — same flow Admin Jobs uses, so the town can
+          refresh its data and then open the job on fresh numbers. */}
+      {selectedJobForUpload && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px'
+          }}
+        >
+          <div style={{
+            background: 'white', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+            width: '100%', maxWidth: '1100px', maxHeight: '90vh', overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '20px 24px', borderBottom: '1px solid #e5e7eb'
+            }}>
+              <div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: '700', color: '#111827', margin: 0 }}>
+                  Update Files - {selectedJobForUpload.job_name || selectedJobForUpload.name}
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
+                  Upload source or code files without loading the full job
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedJobForUpload(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: '#9ca3af', cursor: 'pointer', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(90vh - 96px)' }}>
+              <FileUploadButton
+                job={{ ...selectedJobForUpload, name: selectedJobForUpload.job_name || selectedJobForUpload.name }}
+                isJobLoading={false}
+                standalone={true}
+                tenantConfig={getJobTenantConfig(selectedJobForUpload)}
+                onFileProcessed={async () => {
+                  await loadAssessorData();
+                  if (onDataUpdate) await onDataUpdate('job');
+                }}
+                onDataRefresh={async () => {
+                  await loadAssessorData();
+                  if (onDataUpdate) await onDataUpdate('job');
+                }}
+              />
             </div>
           </div>
         </div>
