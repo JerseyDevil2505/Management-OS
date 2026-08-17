@@ -21,7 +21,41 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const PreValuationTab = ({ 
+// Keystrokes stay inside this component so typing a bracket doesn't re-render
+// the whole tab (and its multi-hundred-row results table) on every character.
+// The value is lifted only on blur or Enter.
+const ScaleNumberInput = React.memo(({ label, value, step, disabled, onCommit }) => {
+  const [draft, setDraft] = useState(String(value ?? ''));
+
+  useEffect(() => {
+    setDraft(String(value ?? ''));
+  }, [value]);
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10);
+    const next = Number.isNaN(parsed) ? 0 : parsed;
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type="number"
+        value={draft}
+        step={step}
+        disabled={disabled}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+      />
+    </div>
+  );
+});
+
+const PreValuationTab = ({
   jobData, 
   properties,
   marketLandData,
@@ -410,48 +444,80 @@ const PreValuationTab = ({
   const [blockTypeFilter, setBlockTypeFilter] = useState('1');
   const [colorScaleStart, setColorScaleStart] = useState(100000);
   const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
+  // Above the breakpoint the scale switches to a coarser step, so a town with a
+  // long upper tail doesn't spend every color below the median and dump the top
+  // third of its blocks into one bucket. 0 disables it and keeps a single slope.
+  const [colorScaleBreakpoint, setColorScaleBreakpoint] = useState(0);
+  const [colorScaleUpperIncrement, setColorScaleUpperIncrement] = useState(250000);
+
+  // The in-session sizeNormalized count is not a reliable record of whether the
+  // step ever ran — several paths recompute and re-save it, and it lands 0 on
+  // most jobs. lastSizeNormalizationRun is the durable marker, so the tab stays
+  // unlocked and the block analysis keeps auto-processing across reloads.
+  const sizeNormalizationHasRun = normalizationStats.sizeNormalized > 0 || !!lastSizeNormalizationRun;
+
+  // Saved block analysis (results + the settings that produced them), read back
+  // from market_land_valuation.block_consistency_metrics. When the saved
+  // signature still matches, the tab renders the stored rows instead of
+  // recomputing — the whole point on a town the size of Berkeley.
+  const [savedBlockAnalysis, setSavedBlockAnalysis] = useState(null);
+  const [isSavingBlockAnalysis, setIsSavingBlockAnalysis] = useState(false);
+  const blockAnalysisSignature = JSON.stringify({
+    blockTypeFilter,
+    colorScaleStart,
+    colorScaleIncrement,
+    colorScaleBreakpoint,
+    colorScaleUpperIncrement
+  });
+  // Signature of the settings that produced the rows currently on screen, and a
+  // flag telling us the saved-results lookup has finished. Together they keep
+  // bracket edits from kicking off a recompute — the rows just go stale until
+  // the user presses Recalculate.
+  const [appliedBlockSignature, setAppliedBlockSignature] = useState(null);
+  const [blockRestoreChecked, setBlockRestoreChecked] = useState(false);
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
 
-  // Market Analysis Color Scale - Consistent Red → Purple progression
-  // Two variations per color range: pastel (lower half) and bright (upper half)
-  // Default: $100k increments with $50k steps = 2 steps per $100k
+  // Market Analysis Color Scale - Consistent Red → Purple progression.
+  // Three variations per hue (pastel / mid / bright) = 24 usable buckets. Two
+  // per hue ran out at 16, which silently clamped every block above the top
+  // bucket into one color once a town used tight increments.
   const bluebeamPalette = [
     // Gray for no data only
     { hex: "#CCCCCC", name: "No Data", row: 0, col: 0 },
 
-    // Red range ($0-99k)
-    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },      // $0-49k
-    { hex: "#FF6666", name: "Bright Red", row: 1, col: 2 },     // $50k-99k
+    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },
+    { hex: "#FF9999", name: "Mid Red", row: 1, col: 2 },
+    { hex: "#FF3333", name: "Bright Red", row: 1, col: 3 },
 
-    // Pink range ($100k-199k)
-    { hex: "#FFB3D9", name: "Light Pink", row: 2, col: 1 },     // $100k-149k
-    { hex: "#FF66B2", name: "Bright Pink", row: 2, col: 2 },    // $150k-199k
+    { hex: "#FFD6EB", name: "Light Pink", row: 2, col: 1 },
+    { hex: "#FFB3D9", name: "Mid Pink", row: 2, col: 2 },
+    { hex: "#FF3399", name: "Bright Pink", row: 2, col: 3 },
 
-    // Orange range ($200k-299k)
-    { hex: "#FFD9B3", name: "Light Orange", row: 3, col: 1 },   // $200k-249k
-    { hex: "#FF9966", name: "Bright Orange", row: 3, col: 2 },  // $250k-299k
+    { hex: "#FFE6CC", name: "Light Orange", row: 3, col: 1 },
+    { hex: "#FFB366", name: "Mid Orange", row: 3, col: 2 },
+    { hex: "#FF8000", name: "Bright Orange", row: 3, col: 3 },
 
-    // Yellow range ($300k-399k)
-    { hex: "#FFFF99", name: "Light Yellow", row: 4, col: 1 },   // $300k-349k
-    { hex: "#FFFF33", name: "Bright Yellow", row: 4, col: 2 },  // $350k-399k
+    { hex: "#FFFFCC", name: "Light Yellow", row: 4, col: 1 },
+    { hex: "#FFFF66", name: "Mid Yellow", row: 4, col: 2 },
+    { hex: "#FFD700", name: "Bright Yellow", row: 4, col: 3 },
 
-    // Green range ($400k-499k)
-    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },    // $400k-449k
-    { hex: "#66FF66", name: "Bright Green", row: 5, col: 2 },   // $450k-499k
+    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },
+    { hex: "#85F585", name: "Mid Green", row: 5, col: 2 },
+    { hex: "#33CC33", name: "Bright Green", row: 5, col: 3 },
 
-    // Teal range ($500k-599k)
-    { hex: "#B3F0F0", name: "Light Teal", row: 6, col: 1 },     // $500k-549k
-    { hex: "#33CCCC", name: "Bright Teal", row: 6, col: 2 },    // $550k-599k
+    { hex: "#CCF5F5", name: "Light Teal", row: 6, col: 1 },
+    { hex: "#7FE0E0", name: "Mid Teal", row: 6, col: 2 },
+    { hex: "#00A3A3", name: "Bright Teal", row: 6, col: 3 },
 
-    // Blue range ($600k-699k)
-    { hex: "#99CCFF", name: "Light Blue", row: 7, col: 1 },     // $600k-649k
-    { hex: "#3399FF", name: "Bright Blue", row: 7, col: 2 },    // $650k-699k
+    { hex: "#CCE5FF", name: "Light Blue", row: 7, col: 1 },
+    { hex: "#80BFFF", name: "Mid Blue", row: 7, col: 2 },
+    { hex: "#0066CC", name: "Bright Blue", row: 7, col: 3 },
 
-    // Purple range ($700k+)
-    { hex: "#CCAAFF", name: "Light Purple", row: 8, col: 1 },   // $700k-749k
-    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 }   // $750k+
+    { hex: "#E0CCFF", name: "Light Purple", row: 8, col: 1 },
+    { hex: "#B399FF", name: "Mid Purple", row: 8, col: 2 },
+    { hex: "#7733FF", name: "Bright Purple", row: 8, col: 3 }
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
   const [preValChecklist, setPreValChecklist] = useState({
@@ -781,9 +847,23 @@ useEffect(() => {
     setSelectedCounty(jobData?.county || config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
+    if (config.blockTypeFilter) setBlockTypeFilter(config.blockTypeFilter);
+    if (typeof config.blockColorScaleStart === 'number') setColorScaleStart(config.blockColorScaleStart);
+    if (typeof config.blockColorScaleIncrement === 'number') setColorScaleIncrement(config.blockColorScaleIncrement);
+    if (typeof config.blockColorScaleBreakpoint === 'number') setColorScaleBreakpoint(config.blockColorScaleBreakpoint);
+    if (typeof config.blockColorScaleUpperIncrement === 'number') setColorScaleUpperIncrement(config.blockColorScaleUpperIncrement);
   } else {
     if (false) console.log('⚠️ No normalization_config found in marketLandData');
   }
+
+  // Saved block results render straight from storage; nothing recomputes until
+  // the user asks for it with Recalculate.
+  if (marketLandData.block_consistency_metrics?.blockData) {
+    setSavedBlockAnalysis(marketLandData.block_consistency_metrics);
+    setMarketAnalysisData(marketLandData.block_consistency_metrics.blockData);
+    setAppliedBlockSignature(marketLandData.block_consistency_metrics.signature || null);
+  }
+  setBlockRestoreChecked(true);
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
     // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales that were incorrectly normalized)
@@ -817,6 +897,11 @@ useEffect(() => {
   if (marketLandData.normalization_stats) {
     if (false) console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
     setNormalizationStats(marketLandData.normalization_stats);
+  }
+
+  if (marketLandData.block_consistency_metrics?.blockData) {
+    setSavedBlockAnalysis(marketLandData.block_consistency_metrics);
+    setMarketAnalysisData(marketLandData.block_consistency_metrics.blockData);
   }
   
   if (marketLandData.zoning_config) {
@@ -1399,6 +1484,8 @@ useEffect(() => {
           ...parsed,
           property_location: prop.property_location,
           property_class: prop.property_m4_class,
+          property_additional_lot_1: prop.property_additional_lot_1 || '',
+          property_additional_lot_2: prop.property_additional_lot_2 || '',
           values_mod_improvement: prop.values_mod_improvement,
           property_facility: prop.property_facility,
           property_vcs: prop.property_vcs || prop.current_vcs || '',
@@ -2456,10 +2543,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         
         // Assign color based on value
         // Index 0 is reserved for "No Data" gray, so actual colors start at index 1
-        const colorIndex = Math.min(
-          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1,
-          bluebeamPalette.length - 1
-        );
+        const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+        const rawIndex = usesBreakpoint && avgValue >= colorScaleBreakpoint
+          ? Math.ceil((colorScaleBreakpoint - colorScaleStart) / colorScaleIncrement)
+            + Math.floor((avgValue - colorScaleBreakpoint) / colorScaleUpperIncrement) + 1
+          : Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1;
+        const colorIndex = Math.min(rawIndex, bluebeamPalette.length - 1);
         const assignedColor = bluebeamPalette[Math.max(1, colorIndex)];
         
         return {
@@ -2503,16 +2592,23 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
       
       setMarketAnalysisData(blockData);
+      setAppliedBlockSignature(JSON.stringify({
+        blockTypeFilter,
+        colorScaleStart,
+        colorScaleIncrement,
+        colorScaleBreakpoint,
+        colorScaleUpperIncrement
+      }));
 
       // Cache in parent so tab switches don't recompute
-      onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement }, dataVersion);
+      onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement }, dataVersion);
     } catch (error) {
       console.error('Error processing block analysis:', error);
       alert('Error processing block analysis. Please check the console.');
     } finally {
       setIsProcessingBlocks(false);
     }
-  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, codeDefinitions, vendorType]);
+  }, [properties, blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, codeDefinitions, vendorType]);
 
 // Helper functions
   const calculateStandardDeviation = (values) => {
@@ -2578,23 +2674,38 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     return mode;
   };
   
-  // Auto-process when filter or scale changes — use cache when available and fresh
+  // First pass only: show whatever results already exist (saved rows restored by
+  // the marketLandData effect, or the parent's in-session cache) and compute
+  // once when there are none. Bracket edits deliberately do NOT land here.
   const blockCacheRestoredRef = useRef(false);
+  const lastBlockDataVersionRef = useRef(dataVersion);
   useEffect(() => {
-    if (isMounted && normalizationStats.sizeNormalized > 0) {
-      // On first mount, try to restore from parent cache if data hasn't changed
-      if (!blockCacheRestoredRef.current && blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion
-          && blockAnalysisCache.data?.blockTypeFilter === blockTypeFilter
-          && blockAnalysisCache.data?.colorScaleStart === colorScaleStart
-          && blockAnalysisCache.data?.colorScaleIncrement === colorScaleIncrement) {
-        blockCacheRestoredRef.current = true;
-        setMarketAnalysisData(blockAnalysisCache.data.blockData);
-        return;
-      }
-      blockCacheRestoredRef.current = true;
-      processBlockAnalysis();
+    if (!isMounted || !sizeNormalizationHasRun || !blockRestoreChecked) return;
+    // New underlying data (a normalization run, a file update) is the only thing
+    // besides an explicit Recalculate that re-runs the analysis.
+    if (lastBlockDataVersionRef.current !== dataVersion) {
+      lastBlockDataVersionRef.current = dataVersion;
+      blockCacheRestoredRef.current = false;
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
+    if (blockCacheRestoredRef.current) return;
+    blockCacheRestoredRef.current = true;
+
+    if (savedBlockAnalysis?.blockData && savedBlockAnalysis.dataVersion === dataVersion) return;
+
+    if (blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion && blockAnalysisCache.data?.blockData) {
+      setMarketAnalysisData(blockAnalysisCache.data.blockData);
+      setAppliedBlockSignature(JSON.stringify({
+        blockTypeFilter: blockAnalysisCache.data.blockTypeFilter,
+        colorScaleStart: blockAnalysisCache.data.colorScaleStart,
+        colorScaleIncrement: blockAnalysisCache.data.colorScaleIncrement,
+        colorScaleBreakpoint: blockAnalysisCache.data.colorScaleBreakpoint,
+        colorScaleUpperIncrement: blockAnalysisCache.data.colorScaleUpperIncrement
+      }));
+      return;
+    }
+
+    processBlockAnalysis();
+  }, [isMounted, sizeNormalizationHasRun, blockRestoreChecked, savedBlockAnalysis, blockAnalysisCache, dataVersion, processBlockAnalysis]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Preserve scroll position before state update
@@ -3045,6 +3156,12 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
+    // BRT ships two additional-lot slots, Microsystems a single field — the
+    // export mirrors each vendor's shape rather than padding a blank column.
+    const additionalLotHeaders = vendorType === 'BRT'
+      ? ['Addl Lot 1', 'Addl Lot 2']
+      : ['Additional Lots'];
+
     // Export to Excel with formatting
     const headers = [
       'Block',
@@ -3053,6 +3170,7 @@ const processSelectedProperties = async () => {
       'Card',
       'Property Location',
       'Class',
+      ...additionalLotHeaders,
       'Improvement',
       'Facility',
       'Current VCS',
@@ -3077,6 +3195,9 @@ const processSelectedProperties = async () => {
       prop.card || '',
       prop.property_location || '',
       prop.property_class || '',
+      ...(vendorType === 'BRT'
+        ? [prop.property_additional_lot_1 || '', prop.property_additional_lot_2 || '']
+        : [prop.property_additional_lot_1 || '']),
       prop.values_mod_improvement || '',
       prop.property_facility || '',
       prop.property_vcs || '',
@@ -3112,6 +3233,10 @@ const processSelectedProperties = async () => {
     // Apply formatting to all cells
     const range = XLSX.utils.decode_range(ws['!ref']);
 
+    // Resolved by header name so inserting a column can't shift the rules.
+    const improvementCol = headers.indexOf('Improvement');
+    const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
+
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
@@ -3123,14 +3248,14 @@ const processSelectedProperties = async () => {
         } else {
           ws[cellAddress].s = { ...baseStyle };
 
-          // Column B (Lot) - format as text to preserve trailing zeros like .10
-          if (C === 1) {
+          // Lot columns - format as text to preserve trailing zeros like .10
+          if (lotTextCols.includes(C)) {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
 
-          // Column G (Improvement) - currency, no decimals ($1,234)
-          if (C === 6 && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+          // Improvement - currency, no decimals ($1,234)
+          if (C === improvementCol && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
             ws[cellAddress].t = 'n';
             ws[cellAddress].z = '$#,##0';
           }
@@ -3146,6 +3271,7 @@ const processSelectedProperties = async () => {
       { wch: 8 },   // Card
       { wch: 30 },  // Property Location
       { wch: 10 },  // Class
+      ...additionalLotHeaders.map(() => ({ wch: 12 })),  // Addl lot slot(s)
       { wch: 14 },  // Improvement
       { wch: 12 },  // Facility
       { wch: 12 },  // Current VCS
@@ -3528,6 +3654,141 @@ const analyzeImportFile = async (file) => {
 
   const totalPages = Math.ceil(filteredWorksheetProps.length / itemsPerPage);
 
+  // ==================== BLOCK MARKET ANALYSIS SETTINGS ====================
+
+  // Persisted alongside the rest of the Pre-Valuation config so bracket and
+  // color-scale choices survive a reload instead of resetting to the defaults.
+  const persistBlockAnalysisSettings = useCallback((patch) => {
+    if (!jobData?.id) return;
+    worksheetService.saveNormalizationConfig(jobData.id, patch)
+      .catch(err => console.error('Failed to persist block analysis settings:', err));
+  }, [jobData?.id]);
+
+  // Spread behind the current Type & Use filter, reported two ways. The color
+  // scale buckets *block averages*, so those are the headline numbers; the raw
+  // per-sale figures ride along because averaging hides the true high and low.
+  const typeUseSaleSummary = useMemo(() => {
+    const matches = properties.filter(p => {
+      if (!(p.values_norm_size > 0)) return false;
+      const typeUse = p.asset_type_use?.toString().trim();
+      if (!typeUse) return false;
+      return blockTypeFilter === 'all_residential'
+        ? ['1', '2', '3', '4', '5', '6'].some(prefix => typeUse.startsWith(prefix))
+        : typeUse.startsWith(blockTypeFilter);
+    });
+
+    if (matches.length === 0) return null;
+
+    const spread = (nums) => {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return {
+        min: sorted[0],
+        median: sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2),
+        max: sorted[sorted.length - 1]
+      };
+    };
+
+    // Grouped the same way processBlockAnalysis does, so these mirror the
+    // values the palette is actually assigned against.
+    const byBlock = {};
+    matches.forEach(p => {
+      const block = parseCompositeKey(p.property_composite_key).block;
+      if (!byBlock[block]) byBlock[block] = [];
+      byBlock[block].push(Number(p.values_norm_size));
+    });
+    const blockAverages = Object.values(byBlock)
+      .map(vals => Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length));
+
+    return {
+      saleCount: matches.length,
+      blockCount: blockAverages.length,
+      sales: spread(matches.map(p => Number(p.values_norm_size))),
+      blocks: spread(blockAverages)
+    };
+  }, [properties, blockTypeFilter, parseCompositeKey]);
+
+  // Results are stale whenever the on-screen rows were produced by settings
+  // other than the ones last saved, which is what lights up the Save button.
+  const blockAnalysisDirty = marketAnalysisData.length > 0
+    && (savedBlockAnalysis?.signature !== appliedBlockSignature
+        || savedBlockAnalysis?.dataVersion !== dataVersion);
+
+  // Brackets were edited after the rows on screen were produced, so the colors
+  // are out of date until Recalculate runs.
+  const blockSettingsStale = marketAnalysisData.length > 0
+    && !!appliedBlockSignature
+    && appliedBlockSignature !== blockAnalysisSignature;
+
+  const saveBlockAnalysis = async () => {
+    if (!jobData?.id || marketAnalysisData.length === 0) return;
+    setIsSavingBlockAnalysis(true);
+    try {
+      const payload = {
+        blockData: marketAnalysisData,
+        signature: blockAnalysisSignature,
+        dataVersion,
+        savedAt: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update({ block_consistency_metrics: payload, updated_at: new Date().toISOString() })
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+
+      // Lock the settings in alongside the results so a reload restores both.
+      await worksheetService.saveNormalizationConfig(jobData.id, {
+        blockTypeFilter,
+        blockColorScaleStart: colorScaleStart,
+        blockColorScaleIncrement: colorScaleIncrement,
+        blockColorScaleBreakpoint: colorScaleBreakpoint,
+        blockColorScaleUpperIncrement: colorScaleUpperIncrement
+      });
+
+      setSavedBlockAnalysis(payload);
+    } catch (err) {
+      console.error('Failed to save block analysis:', err);
+      alert('Could not save the block analysis. Check the console for details.');
+    } finally {
+      setIsSavingBlockAnalysis(false);
+    }
+  };
+
+  // Bucket edges the palette actually uses, derived from the same rules as
+  // processBlockAnalysis so the legend can't drift from the colors on screen.
+  const colorScaleBands = useMemo(() => {
+    const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+    const lowerCount = usesBreakpoint
+      ? Math.ceil((colorScaleBreakpoint - colorScaleStart) / colorScaleIncrement)
+      : bluebeamPalette.length - 1;
+
+    return bluebeamPalette.slice(1).map((swatch, i) => {
+      const inLower = i < lowerCount;
+      const from = inLower
+        ? colorScaleStart + i * colorScaleIncrement
+        : colorScaleBreakpoint + (i - lowerCount) * colorScaleUpperIncrement;
+      const step = inLower ? colorScaleIncrement : colorScaleUpperIncrement;
+      const isLast = i === bluebeamPalette.length - 2;
+      return { ...swatch, from, to: isLast ? null : from + step - 1 };
+    });
+  }, [colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement]);
+
+  // Blocks past the last band all share the top swatch. Tight increments run the
+  // palette out long before the top of the market, which reads as "why are these
+  // three very different blocks the same color".
+  const colorScaleClampedBlocks = useMemo(() => {
+    const topBand = colorScaleBands[colorScaleBands.length - 1];
+    if (!topBand) return { count: 0, from: 0 };
+    const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+    const step = usesBreakpoint ? colorScaleUpperIncrement : colorScaleIncrement;
+    const ceiling = topBand.from + step;
+    return {
+      count: marketAnalysisData.filter(b => (b.avgNormalizedValue || 0) >= ceiling).length,
+      from: topBand.from
+    };
+  }, [marketAnalysisData, colorScaleBands, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement]);
+
   // ==================== RENDER ====================
   
   return (
@@ -3549,8 +3810,8 @@ const analyzeImportFile = async (file) => {
     </button>
     <button
       onClick={() => setActiveSubTab('marketAnalysis')}
-      disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
-      className={`mls-subtab-btn ${activeSubTab === 'marketAnalysis' ? 'mls-subtab-btn--active' : ''} ${!normalizationStats.sizeNormalized ? 'disabled' : ''}`}
+      disabled={!sizeNormalizationHasRun}
+      className={`mls-subtab-btn ${activeSubTab === 'marketAnalysis' ? 'mls-subtab-btn--active' : ''} ${!sizeNormalizationHasRun ? 'disabled' : ''}`}
     >
       Market Analysis
     </button>
@@ -4725,7 +4986,46 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Block Market Analysis</h3>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {savedBlockAnalysis && !blockAnalysisDirty && (
+                  <span className="text-xs text-gray-500">
+                    Saved {new Date(savedBlockAnalysis.savedAt).toLocaleDateString()}
+                  </span>
+                )}
+                {blockSettingsStale && (
+                  <span className="text-xs font-medium" style={{ color: '#B45309' }}>Brackets changed</span>
+                )}
+                <button
+                  onClick={processBlockAnalysis}
+                  disabled={isProcessingBlocks}
+                  title="Re-run the block analysis with the current brackets"
+                  className="px-3 py-2 rounded text-sm font-medium inline-flex items-center"
+                  style={{
+                    backgroundColor: blockSettingsStale ? '#D97706' : '#E5E7EB',
+                    color: blockSettingsStale ? 'white' : '#374151',
+                    opacity: isProcessingBlocks ? 0.6 : 1,
+                    gap: '6px'
+                  }}
+                >
+                  <RefreshCw className={isProcessingBlocks ? 'animate-spin' : ''} size={14} />
+                  {isProcessingBlocks ? 'Recalculating...' : 'Recalculate'}
+                </button>
+                <button
+                  onClick={saveBlockAnalysis}
+                  disabled={isSavingBlockAnalysis || !blockAnalysisDirty || blockSettingsStale}
+                  title={blockSettingsStale
+                    ? 'Recalculate first so the saved results match the current brackets'
+                    : blockAnalysisDirty
+                      ? 'Save these brackets and the block results so this tab loads instantly'
+                      : 'No changes to save'}
+                  className={`px-3 py-1 rounded text-sm font-medium ${
+                    blockAnalysisDirty && !blockSettingsStale
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isSavingBlockAnalysis ? 'Saving...' : blockAnalysisDirty ? 'Save Results' : 'Saved'}
+                </button>
                 {preValChecklist.market_analysis ? (
                   <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold inline-flex items-center gap-2">
                     <Check className="w-4 h-4" />
@@ -4890,7 +5190,10 @@ const analyzeImportFile = async (file) => {
                 </label>
                 <select
                   value={blockTypeFilter}
-                  onChange={(e) => setBlockTypeFilter(e.target.value)}
+                  onChange={(e) => {
+                    setBlockTypeFilter(e.target.value);
+                    persistBlockAnalysisSettings({ blockTypeFilter: e.target.value });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 >
                   <option value="1">1 — Single Family</option>
@@ -4903,39 +5206,100 @@ const analyzeImportFile = async (file) => {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color Scale Start (0-99K = first color)
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleStart}
-                  onChange={(e) => setColorScaleStart(parseInt(e.target.value) || 0)}
-                  step="100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color Increment (100K intervals)
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleIncrement}
-                  onChange={(e) => setColorScaleIncrement(parseInt(e.target.value) || 100000)}
-                  step="100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
+              <ScaleNumberInput
+                label="Color Scale Start (0-99K = first color)"
+                value={colorScaleStart}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleStart(next);
+                  persistBlockAnalysisSettings({ blockColorScaleStart: next });
+                }}
+              />
+
+              <ScaleNumberInput
+                label="Color Increment (100K intervals)"
+                value={colorScaleIncrement}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleIncrement(next);
+                  persistBlockAnalysisSettings({ blockColorScaleIncrement: next });
+                }}
+              />
+
+              <ScaleNumberInput
+                label="Upper Breakpoint (0 = off)"
+                value={colorScaleBreakpoint}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleBreakpoint(next);
+                  persistBlockAnalysisSettings({ blockColorScaleBreakpoint: next });
+                }}
+              />
+
+              <ScaleNumberInput
+                label="Increment Above Breakpoint"
+                value={colorScaleUpperIncrement}
+                step="50000"
+                disabled={!colorScaleBreakpoint}
+                onCommit={(next) => {
+                  setColorScaleUpperIncrement(next);
+                  persistBlockAnalysisSettings({ blockColorScaleUpperIncrement: next });
+                }}
+              />
             </div>
             
+            {typeUseSaleSummary && (
+              <div className="mt-4 grid grid-cols-4 gap-4">
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Min Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.min.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.min.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Median Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.median.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.median.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Max Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.max.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.max.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <div className="text-xs text-gray-600">Blocks / Sales</div>
+                  <div className="text-lg font-semibold">
+                    {typeUseSaleSummary.blockCount.toLocaleString()} / {typeUseSaleSummary.saleCount.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-400">colored / normalized</div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <strong>Color Scale:</strong> Red → Pink → Orange → Yellow → Green → Teal → Blue → Purple
-              <br/>• Each color has 2 steps (pastel & bright) at ${colorScaleIncrement.toLocaleString()} intervals
-              <br/>• Red: $0-${(colorScaleIncrement * 2 - 1).toLocaleString()} • Pink: ${(colorScaleIncrement * 2).toLocaleString()}-${(colorScaleIncrement * 4 - 1).toLocaleString()} • Orange: ${(colorScaleIncrement * 4).toLocaleString()}-${(colorScaleIncrement * 6 - 1).toLocaleString()} • Yellow: ${(colorScaleIncrement * 6).toLocaleString()}-${(colorScaleIncrement * 8 - 1).toLocaleString()}
-              <br/>• Green: ${(colorScaleIncrement * 8).toLocaleString()}-${(colorScaleIncrement * 10 - 1).toLocaleString()} • Teal: ${(colorScaleIncrement * 10).toLocaleString()}-${(colorScaleIncrement * 12 - 1).toLocaleString()} • Blue: ${(colorScaleIncrement * 12).toLocaleString()}-${(colorScaleIncrement * 14 - 1).toLocaleString()} • Purple: ${(colorScaleIncrement * 14).toLocaleString()}+
-              <br/>• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data
+              <strong>Color Scale:</strong>{' '}
+              {colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0
+                ? `$${colorScaleIncrement.toLocaleString()} steps to $${colorScaleBreakpoint.toLocaleString()}, then $${colorScaleUpperIncrement.toLocaleString()} steps above`
+                : `$${colorScaleIncrement.toLocaleString()} steps`}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {colorScaleBands.map(band => (
+                  <div
+                    key={band.name}
+                    className="px-2 py-1 rounded text-xs whitespace-nowrap border border-gray-300"
+                    style={{ backgroundColor: band.hex }}
+                    title={band.name}
+                  >
+                    ${band.from.toLocaleString()}{band.to === null ? '+' : `–$${band.to.toLocaleString()}`}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2">• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data</div>
+              {colorScaleClampedBlocks.count > 0 && (
+                <div className="mt-2" style={{ color: '#B45309' }}>
+                  ⚠ {colorScaleClampedBlocks.count} block{colorScaleClampedBlocks.count === 1 ? '' : 's'} above
+                  ${colorScaleClampedBlocks.from.toLocaleString()} share the top color — the palette has{' '}
+                  {bluebeamPalette.length - 1} steps. Raise the start, the increment, or lower the breakpoint to spread them out.
+                </div>
+              )}
             </div>
           </div>
           

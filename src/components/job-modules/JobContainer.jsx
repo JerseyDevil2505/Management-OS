@@ -325,7 +325,8 @@ const JobContainer = ({
             previous_projected_total_count, previous_projected_total_total,
             attribute_condition_config, organization_id, turnover_date,
             year_of_value, director_ratio, needs_reprocessing, story_height_config,
-            parent_job_id, appeal_summary_snapshot, type_use_normalization_map
+            parent_job_id, appeal_summary_snapshot, type_use_normalization_map,
+            class_efa_report_config
           `)
           .eq('id', selectedJob.id)
           .single(),

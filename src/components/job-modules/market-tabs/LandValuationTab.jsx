@@ -43,10 +43,12 @@ const DEFAULT_CODE_PERCENTS = { LT: 5, MT: 10, HT: 15 };
 // keep reading the names they always have.
 const LEGACY_BRACKET_KEYS = ['small', 'medium', 'large', 'xlarge', 'residual'];
 
-// Implied $/acre between two brackets. Reads avgSize, which is in the job's own
-// unit at full precision - avgAcres is rounded to two decimals, which turns a
-// 762 sf delta into 0.01 acres and inflates the rate by ~75%.
-const impliedPerAcre = (target, comparison, unitIsSf) => {
+// Implied rate between two brackets, expressed in the job's own unit: $/acre
+// for acre and sf jobs, $/front foot for front foot jobs. Reads avgSize, which
+// is in the bracket unit at full precision - avgAcres is rounded to two
+// decimals, which turns a 762 sf delta into 0.01 acres and inflates the rate by
+// ~75%.
+const impliedUnitRate = (target, comparison, bracketUnit) => {
   if (!target || !comparison) return null;
   const priceDiff = target.avgAdjusted - comparison.avgAdjusted;
   if (!(priceDiff > 0)) return null;
@@ -55,8 +57,10 @@ const impliedPerAcre = (target, comparison, unitIsSf) => {
     ? target.avgSize - comparison.avgSize
     : target.avgAcres - comparison.avgAcres;
   if (!(sizeDiff > 0)) return null;
-  const acresDiff = haveSize && unitIsSf ? sizeDiff / 43560 : sizeDiff;
-  return Math.round(priceDiff / acresDiff);
+  // Square feet report per acre, the unit the cascade is written in. Front foot
+  // stays per foot - there is nothing to convert it to.
+  const denominator = haveSize && bracketUnit === 'sf' ? sizeDiff / 43560 : sizeDiff;
+  return Math.round(priceDiff / denominator);
 };
 
 const LandValuationTab = ({
@@ -1009,16 +1013,22 @@ const getPricePerUnit = useCallback((price, size) => {
   // ========== METHOD 2 LOT-SIZE BRACKETS ==========
   // Brackets are compared in the unit the user picked. Square-foot jobs compare
   // raw SF so an 'equal to' bracket can match a lot size exactly - going through
-  // acres would divide by 43560 and make equality meaningless. Front foot keeps
-  // acres, since frontage is not derivable from area.
-  const bracketUnit = valuationMode === 'sf' ? 'sf' : 'acre';
-  const bracketUnitLabel = bracketUnit === 'sf' ? 'sq ft' : 'acres';
-  // Tolerance for the 'equal to' operator: half a square foot, or the acre
-  // equivalent. Guards against float drift without matching a genuinely
+  // acres would divide by 43560 and make equality meaningless. Front foot jobs
+  // bracket on frontage itself: on a town like Riverton the only lot source is
+  // frontage x depth, and acreage from it lands rounded to 0.01 (436 sf), which
+  // is a large fraction of a 6,600 sf lot and blows up the implied rate.
+  const bracketUnit = valuationMode === 'sf' ? 'sf' : (valuationMode === 'ff' ? 'ff' : 'acre');
+  const bracketUnitLabel = bracketUnit === 'sf' ? 'sq ft' : (bracketUnit === 'ff' ? 'front feet' : 'acres');
+  // Tolerance for the 'equal to' operator: half a square foot, half a foot, or
+  // the acre equivalent. Guards against float drift without matching a genuinely
   // different lot.
-  const BRACKET_EPSILON = bracketUnit === 'sf' ? 0.5 : 0.5 / 43560;
+  const BRACKET_EPSILON = bracketUnit === 'sf' ? 0.5 : (bracketUnit === 'ff' ? 0.5 : 0.5 / 43560);
 
   const getBracketSize = useCallback((prop) => {
+    // Front foot: frontage only. A parcel without one has no place on the scale,
+    // so it returns 0 and the caller drops it.
+    if (valuationMode === 'ff') return parseFloat(prop?.asset_lot_frontage) || 0;
+
     if (valuationMode !== 'sf') return parseFloat(calculateAcreage(prop)) || 0;
 
     // Read SF straight from the source rather than round-tripping through acres.
@@ -1037,13 +1047,16 @@ const getPricePerUnit = useCallback((price, size) => {
   const roundBracketValue = useCallback((value) => {
     const n = Number(value);
     if (!isFinite(n)) return null;
-    return bracketUnit === 'sf' ? Math.round(n) : Math.round(n * 100) / 100;
+    return bracketUnit === 'acre' ? Math.round(n * 100) / 100 : Math.round(n);
   }, [bracketUnit]);
 
-  // For figures only available in acres (typical lot size, VCS averages).
+  // For figures only available in acres (typical lot size, VCS averages). There
+  // is no acre-to-frontage conversion, so front foot jobs get null and callers
+  // fall back to a frontage figure of their own.
   const acresToBracketUnit = useCallback((acres) => {
     const n = Number(acres);
     if (!isFinite(n)) return null;
+    if (bracketUnit === 'ff') return null;
     return bracketUnit === 'sf' ? n * 43560 : n;
   }, [bracketUnit]);
 
@@ -1051,9 +1064,9 @@ const getPricePerUnit = useCallback((price, size) => {
     if (value === '' || value == null) return '';
     const n = Number(value);
     if (!isFinite(n)) return '';
-    return bracketUnit === 'sf'
-      ? Math.round(n).toLocaleString()
-      : n.toFixed(2);
+    return bracketUnit === 'acre'
+      ? n.toFixed(2)
+      : Math.round(n).toLocaleString();
   }, [bracketUnit]);
 
   const describeBracket = useCallback((def) => {
@@ -1091,9 +1104,21 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [BRACKET_EPSILON]);
 
+  // Front foot brackets have no acre equivalent to derive from, so they start on
+  // the frontage tiers NJ zoning is usually written around. Editable like any
+  // other bracket row.
+  const defaultFrontageBrackets = useCallback(() => ([
+    { id: 'b0', op: 'lt', value: 50 },
+    { id: 'b1', op: 'range', value: 50, value2: 75 },
+    { id: 'b2', op: 'range', value: 75, value2: 100 },
+    { id: 'b3', op: 'ge', value: 100 }
+  ]), []);
+
   // Fall back to the legacy four-max cascade shape so jobs saved before brackets
   // became user-defined keep bucketing exactly as they did.
   const legacyBracketList = useCallback((normal) => {
+    // The legacy maxima are acre figures and say nothing about frontage.
+    if (bracketUnit === 'ff') return defaultFrontageBrackets();
     const toUnit = (acres) => roundBracketValue(bracketUnit === 'sf' ? acres * 43560 : acres);
     const p = normal?.prime?.max;
     const s = normal?.secondary?.max;
@@ -1112,11 +1137,12 @@ const getPricePerUnit = useCallback((price, size) => {
       }
     }
     return list;
-  }, [bracketUnit, roundBracketValue]);
+  }, [bracketUnit, roundBracketValue, defaultFrontageBrackets]);
 
   // Starting point for a job that has never defined brackets: the four tiers the
   // office has always used. Rows can be added or removed from here.
   const defaultBracketList = useCallback(() => {
+    if (bracketUnit === 'ff') return defaultFrontageBrackets();
     const toUnit = (acres) => roundBracketValue(bracketUnit === 'sf' ? acres * 43560 : acres);
     const n = cascadeConfig.normal || {};
     const p = n.prime?.max > 0 ? n.prime.max : 0.25;
@@ -1128,7 +1154,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { id: 'b2', op: 'range', value: toUnit(s), value2: toUnit(e) },
       { id: 'b3', op: 'ge', value: toUnit(e) }
     ];
-  }, [bracketUnit, cascadeConfig.normal, roundBracketValue]);
+  }, [bracketUnit, cascadeConfig.normal, roundBracketValue, defaultFrontageBrackets]);
 
   const landBrackets = useMemo(() => {
     const saved = cascadeConfig.brackets;
@@ -1136,6 +1162,9 @@ const getPricePerUnit = useCallback((price, size) => {
       // Values are stored in the unit they were authored in. If the job's mode
       // changed since, convert rather than silently comparing wrong numbers.
       if (saved.unit === bracketUnit) return saved.list;
+      // Acres and square feet convert cleanly. Frontage converts to neither, so
+      // a job moving in or out of front foot restarts from that unit's defaults.
+      if (saved.unit === 'ff' || bracketUnit === 'ff') return defaultBracketList();
       const factor = saved.unit === 'sf' ? 1 / 43560 : 43560;
       return saved.list.map(def => ({
         ...def,
@@ -1144,7 +1173,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }));
     }
     return legacyBracketList(cascadeConfig.normal);
-  }, [cascadeConfig.brackets, cascadeConfig.normal, bracketUnit, legacyBracketList, roundBracketValue]);
+  }, [cascadeConfig.brackets, cascadeConfig.normal, bracketUnit, legacyBracketList, roundBracketValue, defaultBracketList]);
 
   // A special region can carry its own legacy cascade maxima. Once the job has an
   // explicit bracket list that list wins everywhere; until then each region
@@ -2349,11 +2378,16 @@ const getPricePerUnit = useCallback((price, size) => {
 
         const acres = parseFloat(calculateAcreage(prop) || 0);
         const sfla = parseFloat(prop.asset_sfla || 0);
+        const bracketSize = getBracketSize(prop);
+
+        // No size in the job's own unit means the sale can't be bracketed. In
+        // front foot mode that is a parcel carrying no frontage.
+        if (!(bracketSize > 0)) return;
 
         const saleData = {
           id: prop.id,
           acres,
-          bracketSize: getBracketSize(prop),
+          bracketSize,
           salesPrice: timeNormData.values_norm_time,
           normalizedTime: timeNormData.values_norm_time,
           sfla,
@@ -2462,7 +2496,7 @@ const getPricePerUnit = useCallback((price, size) => {
         // Calculate implied rate from bracket differences
         let impliedRate = null;
         if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
-          impliedRate = impliedPerAcre(bracketStats.medium, bracketStats.small, bracketUnit === 'sf');
+          impliedRate = impliedUnitRate(bracketStats.medium, bracketStats.small, bracketUnit);
         }
 
         return {
@@ -2470,6 +2504,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          avgSize: sales.reduce((sum, s) => sum + (s.bracketSize || 0), 0) / sales.length,
           avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
           bracketBuckets,
@@ -2585,7 +2620,7 @@ const getPricePerUnit = useCallback((price, size) => {
         // Calculate implied rate from bracket differences
         let impliedRate = null;
         if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
-          impliedRate = impliedPerAcre(bracketStats.medium, bracketStats.small, bracketUnit === 'sf');
+          impliedRate = impliedUnitRate(bracketStats.medium, bracketStats.small, bracketUnit);
           if (impliedRate !== null) validRates.push(impliedRate);
         }
 
@@ -2594,6 +2629,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length), // Use time-normalized
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          avgSize: sales.reduce((sum, s) => sum + (s.bracketSize || 0), 0) / sales.length,
           avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
           bracketBuckets,
@@ -2605,6 +2641,9 @@ const getPricePerUnit = useCallback((price, size) => {
       // rate: there is no smaller bracket to compare it against.
       const ratesByBracket = [];
       const acresByBracket = [];
+      // Average size in the job's own unit - frontage for front foot jobs, where
+      // there is no acre figure worth reporting.
+      const sizesByBracket = [];
 
       Object.keys(vcsSales).forEach(vcs => {
         // Skip excluded VCSs from summary calculation
@@ -2638,37 +2677,47 @@ const getPricePerUnit = useCallback((price, size) => {
           if (!ratesByBracket[index]) {
             ratesByBracket[index] = [];
             acresByBracket[index] = [];
+            sizesByBracket[index] = [];
           }
           if (index === 0 || !bracket || bracket.count === 0 || !bracket.avgAdjusted) return;
 
           const comparison = findBestComparison(bracket, index);
           if (!comparison) return;
 
-          const rate = impliedPerAcre(bracket, comparison, bracketUnit === 'sf');
+          const rate = impliedUnitRate(bracket, comparison, bracketUnit);
           if (rate !== null) {
             ratesByBracket[index].push(rate);
             acresByBracket[index].push(bracket.avgAcres);
+            sizesByBracket[index].push(bracket.avgSize);
           }
         });
       });
 
       // Calculate averages for each bracket range
-      const calculateBracketSummary = (rates, acres = []) => {
-        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null };
+      const calculateBracketSummary = (rates, acres = [], sizes = []) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null, avgSize: null };
 
+        // perAcre carries $/acre for acre and sf jobs and $/front foot for front
+        // foot jobs. perSqFt is only meaningful for the former.
         const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
-        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+        const avgPerSqFt = bracketUnit === 'ff' ? null : (avgPerAcre / 43560).toFixed(2);
 
         // Calculate average lot size if acres array provided
         const avgAcres = acres.length > 0
           ? acres.reduce((sum, a) => sum + a, 0) / acres.length
           : null;
 
+        const validSizes = sizes.filter(s => s != null && isFinite(s));
+        const avgSize = validSizes.length > 0
+          ? validSizes.reduce((sum, s) => sum + s, 0) / validSizes.length
+          : null;
+
         return {
           perAcre: avgPerAcre,
           perSqFt: avgPerSqFt,
           count: rates.length,
-          avgAcres: avgAcres
+          avgAcres: avgAcres,
+          avgSize
         };
       };
 
@@ -2719,7 +2768,7 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
             const comparison = findBestComparison(brackets.medium, 1);
             if (comparison) {
-              const rate = impliedPerAcre(brackets.medium, comparison, bracketUnit === 'sf');
+              const rate = impliedUnitRate(brackets.medium, comparison, bracketUnit);
               if (rate !== null) regionBracketRates.mediumRange.push(rate);
             }
           }
@@ -2728,7 +2777,7 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
             const comparison = findBestComparison(brackets.large, 2);
             if (comparison) {
-              const rate = impliedPerAcre(brackets.large, comparison, bracketUnit === 'sf');
+              const rate = impliedUnitRate(brackets.large, comparison, bracketUnit);
               if (rate !== null) regionBracketRates.largeRange.push(rate);
             }
           }
@@ -2737,7 +2786,7 @@ const getPricePerUnit = useCallback((price, size) => {
           if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
             const comparison = findBestComparison(brackets.xlarge, 3);
             if (comparison) {
-              const rate = impliedPerAcre(brackets.xlarge, comparison, bracketUnit === 'sf');
+              const rate = impliedUnitRate(brackets.xlarge, comparison, bracketUnit);
               if (rate !== null) regionBracketRates.xlargeRange.push(rate);
             }
           }
@@ -2771,7 +2820,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
 
       const rangesByBracket = ratesByBracket.map((rates, i) =>
-        calculateBracketSummary(rates || [], acresByBracket[i] || [])
+        calculateBracketSummary(rates || [], acresByBracket[i] || [], sizesByBracket[i] || [])
       );
       const emptyRange = calculateBracketSummary([]);
 
@@ -3531,6 +3580,85 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       max: Math.max(...lotSizes)
     };
   }, [properties, getBracketSize]);
+
+  // Front foot jobs get their implied rate in dollars per front foot, so the
+  // zoning table works in frontage end to end instead of converting an acre rate
+  // through ordinance minimums. Zone figures come from the parcels themselves -
+  // the ordinance minimum lot and minimum frontage describe what is allowed, not
+  // what the zone actually contains.
+  const frontFootZoneRates = useMemo(() => {
+    if (valuationMode !== 'ff' || !method2Summary) return null;
+
+    const ranges = Array.isArray(method2Summary.ranges) ? method2Summary.ranges : [];
+    const rates = [];
+    const frontages = [];
+    ranges.forEach(r => {
+      if (!r || r.perAcre == null || r.perAcre === 'N/A') return;
+      rates.push(Number(r.perAcre));
+      if (r.avgSize > 0) frontages.push(Number(r.avgSize));
+    });
+    if (rates.length === 0 || frontages.length === 0) return null;
+
+    const perFF = Math.round(rates.reduce((s, v) => s + v, 0) / rates.length);
+    const globalFrontage = frontages.reduce((s, v) => s + v, 0) / frontages.length;
+    if (!(globalFrontage > 0)) return null;
+    const globalLandValue = Math.round(perFF * globalFrontage);
+
+    const zcfg = marketLandData?.zoning_config || {};
+    const zones = Object.keys(zcfg).sort().map(zoneKey => {
+      const entry = zcfg[zoneKey];
+      if (!entry) return null;
+      // Front foot pricing runs off a depth table, so a zone without one has
+      // nothing to apply the rate to.
+      const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
+      if (!depthTable) return null;
+
+      const key = zoneKey.toString().trim().toLowerCase();
+      const inZone = (properties || []).filter(p =>
+        p.asset_zoning &&
+        p.asset_zoning.toString().trim().toLowerCase() === key &&
+        parseFloat(p.asset_lot_frontage) > 0
+      );
+      if (inZone.length === 0) return null;
+
+      const avgFrontage = inZone.reduce((s, p) => s + parseFloat(p.asset_lot_frontage), 0) / inZone.length;
+      const withDepth = inZone.filter(p => parseFloat(p.asset_lot_depth) > 0);
+      const avgDepth = withDepth.length > 0
+        ? withDepth.reduce((s, p) => s + parseFloat(p.asset_lot_depth), 0) / withDepth.length
+        : null;
+
+      // Jim's magic formula, in frontage terms: half credit for the gap between
+      // this zone's typical frontage and the town's.
+      const landValue = Math.round(globalLandValue + (avgFrontage - globalFrontage) * perFF * 0.5);
+      const standardFF = Math.round(landValue / avgFrontage);
+
+      return {
+        zone: zoneKey,
+        count: inZone.length,
+        avgFrontage: Math.round(avgFrontage),
+        avgDepth: avgDepth != null ? Math.round(avgDepth) : null,
+        typicalSF: avgDepth != null ? Math.round(avgFrontage * avgDepth) : null,
+        minFrontage: entry.min_frontage || entry.minFrontage || null,
+        landValue,
+        standardFF,
+        excessFF: Math.round(standardFF / 2)
+      };
+    }).filter(Boolean);
+
+    const stds = zones.map(z => z.standardFF).filter(v => v != null);
+    const recStandard = stds.length > 0
+      ? Math.round(stds.reduce((s, v) => s + v, 0) / stds.length)
+      : null;
+
+    return {
+      perFF,
+      globalFrontage: Math.round(globalFrontage),
+      globalLandValue,
+      zones,
+      recStandard,
+      recExcess: recStandard != null ? Math.round(recStandard / 2) : null
+    };
+  }, [valuationMode, method2Summary, marketLandData, properties]);
 
   // Helper function to get unique regions from vacant test sales
   const getUniqueRegions = () => {
@@ -5799,8 +5927,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           ? Math.round(acres * 43560).toLocaleString()
           : acres.toFixed(2);
       };
+      // Front foot jobs have no acre figure worth reporting; their size column is
+      // the average frontage the rate was derived from.
+      const lotSizeForRange = (range) => bracketUnit === 'ff'
+        ? (range?.avgSize > 0 ? Math.round(range.avgSize).toLocaleString() : 'N/A')
+        : lotSizeFromAcres(range?.avgAcres);
 
-      method2Rows.push(['Bracket Range', 'Per Acre', `Avg Lot Size (${bracketUnitLabel})`, 'Per Sq Ft']);
+      const rateHeader = bracketUnit === 'ff' ? 'Per Front Foot' : 'Per Acre';
+      method2Rows.push(['Bracket Range', rateHeader, `Avg Lot Size (${bracketUnitLabel})`, 'Per Sq Ft']);
 
       landBrackets.forEach((def, index) => {
         const range = method2Summary.ranges?.[index] || {};
@@ -5808,7 +5942,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         method2Rows.push([
           `${describeBracket(def)} ${bracketUnitLabel}`,
           hasRate ? `$${range.perAcre.toLocaleString()}` : 'N/A',
-          lotSizeFromAcres(range.avgAcres),
+          lotSizeForRange(range),
           range.perSqFt && range.perSqFt !== 'N/A' ? `$${range.perSqFt}` : 'N/A'
         ]);
       });
@@ -5821,143 +5955,59 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const avgLotAcres = lotAcres.length > 0
           ? lotAcres.reduce((sum, a) => sum + a, 0) / lotAcres.length
           : 0;
+        const sizes = positiveRanges.map(r => r.avgSize).filter(s => s > 0);
+        const avgSize = sizes.length > 0 ? sizes.reduce((sum, s) => sum + s, 0) / sizes.length : 0;
         method2Rows.push([
           'All Positive Deltas Avg',
           `$${avgPerAcre.toLocaleString()}`,
-          lotSizeFromAcres(avgLotAcres),
-          `$${(avgPerAcre / 43560).toFixed(2)}`
+          bracketUnit === 'ff'
+            ? (avgSize > 0 ? Math.round(avgSize).toLocaleString() : 'N/A')
+            : lotSizeFromAcres(avgLotAcres),
+          bracketUnit === 'ff' ? 'N/A' : `$${(avgPerAcre / 43560).toFixed(2)}`
         ]);
       } else {
         method2Rows.push(['All Positive Deltas Avg', 'N/A', 'N/A', 'N/A']);
       }
     }
 
-    // Implied Front Foot Rates by Zoning (FF mode only)
-    if (valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange)) {
-      try {
-        method2Rows.push([]);
-        method2Rows.push(['Implied Front Foot Rates by Zoning']);
-        method2Rows.push(['Zoning', 'Zoning Lot', 'Land Value', 'Min Frontage', 'Standard FF', 'Excess FF']);
+    // Implied Front Foot Rates by Zoning (FF mode only). Mirrors the on-screen
+    // table, which works in frontage rather than converting an acre rate.
+    if (valuationMode === 'ff' && frontFootZoneRates) {
+      method2Rows.push([]);
+      method2Rows.push(['Implied Front Foot Rates by Zoning']);
+      method2Rows.push(['Zoning', 'Typical Lot (F x D)', 'Land Value', 'Avg Frontage', 'Min Frontage', 'Standard FF', 'Excess FF']);
 
-        const zcfg = marketLandData?.zoning_config || {};
-        const zoneKeys = Object.keys(zcfg || {}).sort();
+      method2Rows.push([
+        'Overall Average (all positive deltas)',
+        `${frontFootZoneRates.globalFrontage.toLocaleString()} ft`,
+        `$${frontFootZoneRates.globalLandValue.toLocaleString()}`,
+        frontFootZoneRates.globalFrontage,
+        '',
+        `$${frontFootZoneRates.perFF.toLocaleString()}`,
+        ''
+      ]);
 
-        // Choose lowest bracket with data
-        let chosenPerAcre = null;
-        let chosenBracketKey = null;
-        if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') {
-          chosenPerAcre = method2Summary.mediumRange.perAcre;
-          chosenBracketKey = 'medium';
-        } else if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') {
-          chosenPerAcre = method2Summary.largeRange.perAcre;
-          chosenBracketKey = 'large';
-        } else if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') {
-          chosenPerAcre = method2Summary.xlargeRange.perAcre;
-          chosenBracketKey = 'xlarge';
-        }
-
-        // Compute overall average lot size from bracketAnalysis
-        let overallAvgAcres = null;
-        if (chosenBracketKey && typeof bracketAnalysis === 'object') {
-          const vals = Object.values(bracketAnalysis).map(a => {
-            try {
-              const b = a.brackets && a.brackets[chosenBracketKey];
-              return b && b.avgAcres ? b.avgAcres : null;
-            } catch (e) { return null; }
-          }).filter(v => v != null);
-          if (vals.length > 0) overallAvgAcres = vals.reduce((s, v) => s + v, 0) / vals.length;
-        }
-
-        const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
-        const perSqFtSummary = (chosenPerAcre != null && chosenPerAcre !== 'N/A') ? (parseFloat(chosenPerAcre) / 43560) : null;
-        const summaryLandValue = (perSqFtSummary && summaryTypicalSF) ? Math.round(perSqFtSummary * summaryTypicalSF) : null;
-
-        // Overall summary row
+      frontFootZoneRates.zones.forEach(z => {
         method2Rows.push([
-          `Overall Average (${chosenBracketKey || 'N/A'})`,
-          overallAvgAcres != null ? `${overallAvgAcres.toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A',
-          summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A',
-          '', '', ''
+          z.zone,
+          z.typicalSF != null
+            ? `${z.avgFrontage} x ${z.avgDepth} / ${z.typicalSF.toLocaleString()} SF`
+            : `${z.avgFrontage} ft`,
+          `$${z.landValue.toLocaleString()}`,
+          z.avgFrontage,
+          z.minFrontage || '',
+          `$${z.standardFF.toLocaleString()}`,
+          `$${z.excessFF.toLocaleString()}`
         ]);
+      });
 
-        const standardFFs = [];
-        const excessFFs = [];
-
-        zoneKeys.forEach(zoneKey => {
-          const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
-          if (!entry) return;
-          const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
-          const minFrontage = entry.min_frontage || entry.minFrontage || null;
-          if (!depthTable || !minFrontage) return;
-
-          // Get typical lot size
-          let typicalLotAcres = '';
-          let typicalLotSF = '';
-          const cfgSize = entry.min_size || entry.minSize || entry.typical_lot || null;
-          const cfgUnit = (entry.min_size_unit || entry.minSizeUnit || '').toString().toUpperCase();
-          if (cfgSize) {
-            if (cfgUnit === 'SF') {
-              typicalLotSF = Math.round(Number(cfgSize));
-              typicalLotAcres = Number((typicalLotSF / 43560).toFixed(2));
-            } else {
-              typicalLotAcres = Number(Number(cfgSize).toFixed(2));
-              typicalLotSF = Math.round(typicalLotAcres * 43560);
-            }
-          } else {
-            const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
-            let avgAcres = null;
-            if (propsForZone.length > 0) {
-              avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
-            }
-            typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
-            typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
-          }
-
-          // Jim's magic formula
-          let landValue = '';
-          if (summaryTypicalSF && summaryLandValue && typicalLotSF) {
-            try {
-              const ZLS = Number(typicalLotSF);
-              const GLS = Number(summaryTypicalSF);
-              const GP = Number(summaryLandValue);
-              const adjustedLandValue = ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP;
-              landValue = Math.round(adjustedLandValue);
-            } catch (e) { landValue = ''; }
-          }
-
-          // Calculate FF rates
-          let standardFF = '';
-          let excessFF = '';
-          if (landValue && minFrontage) {
-            standardFF = Math.round(landValue / minFrontage);
-            excessFF = Math.round(standardFF / 2);
-            standardFFs.push(standardFF);
-            excessFFs.push(excessFF);
-          }
-
-          method2Rows.push([
-            zoneKey,
-            typicalLotAcres ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : '',
-            landValue ? `$${Number(landValue).toLocaleString()}` : '',
-            minFrontage || '',
-            standardFF ? `$${Number(standardFF).toLocaleString()}` : '',
-            excessFF ? `$${Number(excessFF).toLocaleString()}` : ''
-          ]);
-        });
-
-        // Recommended row
-        if (standardFFs.length > 0 && excessFFs.length > 0) {
-          const recStandard = Math.round(standardFFs.reduce((s, v) => s + v, 0) / standardFFs.length);
-          const recExcess = Math.round(excessFFs.reduce((s, v) => s + v, 0) / excessFFs.length);
-          method2Rows.push([
-            'Recommended Front Foot',
-            '', '', '',
-            `$${recStandard.toLocaleString()}`,
-            `$${recExcess.toLocaleString()}`
-          ]);
-        }
-      } catch (e) {
-        console.warn('Error building Implied FF Rates export:', e);
+      if (frontFootZoneRates.recStandard != null) {
+        method2Rows.push([
+          'Recommended Front Foot',
+          '', '', '', '',
+          `$${frontFootZoneRates.recStandard.toLocaleString()}`,
+          `$${frontFootZoneRates.recExcess.toLocaleString()}`
+        ]);
       }
     }
 
@@ -8518,7 +8568,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${formatBracketValue(acresToBracketUnit(data.avgAcres))} ${bracketUnitLabel} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
+                        {` | Avg $${Math.round(data.avgPrice).toLocaleString()} | ${formatBracketValue(bracketUnit === 'ff' ? data.avgSize : acresToBracketUnit(data.avgAcres))} ${bracketUnitLabel} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} | $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -8542,8 +8592,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>ADJUSTED</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>DELTA</th>
                             <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>LOT DELTA</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER ACRE</th>
-                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER SQ FT</th>
+                            <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>{bracketUnit === 'ff' ? 'PER FRONT FOOT' : 'PER ACRE'}</th>
+                            {bracketUnit !== 'ff' && (
+                              <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600', borderBottom: '1px solid #E5E7EB' }}>PER SQ FT</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -8603,6 +8655,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   if (haveSize && bracketUnit === 'sf') {
                                     perSqFt = adjustedDelta / lotDelta;
                                     perAcre = perSqFt * 43560;
+                                  } else if (bracketUnit === 'ff') {
+                                    // Frontage delta gives dollars per front foot; there is no
+                                    // area figure to spread it over.
+                                    perAcre = adjustedDelta / lotDelta;
                                   } else {
                                     perAcre = adjustedDelta / lotDelta;
                                     perSqFt = perAcre / 43560;
@@ -8654,9 +8710,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
                                     {perAcre !== null ? `$${Math.round(perAcre).toLocaleString()}` : 'N/A'}
                                   </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                    {perSqFt !== null ? `$${perSqFt.toFixed(2)}` : '-'}
-                                  </td>
+                                  {bracketUnit !== 'ff' && (
+                                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                      {perSqFt !== null ? `$${perSqFt.toFixed(2)}` : '-'}
+                                    </td>
+                                  )}
                                 </tr>
                               );
                             });
@@ -8676,7 +8734,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                  Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
+                  Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : (valuationMode === 'ff' ? '$/Front Foot Rates' : '$/Acre Rates')}
                 </h4>
                 {method2Summary.excludedVCSCount > 0 && (
                   <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: '600', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '4px' }}>
@@ -8696,10 +8754,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const colors = ['#6B7280', '#059669', '#0D9488', '#7C3AED', '#B45309'];
                   const primary = valuationMode === 'sf'
                     ? (hasRate ? `$${perSqFt}/SF` : 'N/A')
-                    : (hasRate ? `$${perAcre.toLocaleString()}` : 'N/A');
-                  const secondary = valuationMode === 'sf'
-                    ? (hasRate ? `$${perAcre.toLocaleString()}/AC` : 'N/A')
-                    : (hasRate ? `$${perSqFt}/SF` : 'N/A');
+                    : (hasRate ? `$${perAcre.toLocaleString()}${valuationMode === 'ff' ? '/FF' : ''}` : 'N/A');
+                  const secondary = valuationMode === 'ff'
+                    ? (range?.avgSize > 0 ? `${Math.round(range.avgSize).toLocaleString()} ft avg frontage` : '')
+                    : valuationMode === 'sf'
+                      ? (hasRate ? `$${perAcre.toLocaleString()}/AC` : 'N/A')
+                      : (hasRate ? `$${perSqFt}/SF` : 'N/A');
 
                   return (
                     <div key={def.id || index} style={{ textAlign: 'center', minWidth: '150px' }}>
@@ -8739,11 +8799,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                     const avgAcre = Math.round(rates.reduce((sum, rate) => sum + rate, 0) / rates.length);
                     const avgSf = (avgAcre / 43560).toFixed(2);
-                    const primary = valuationMode === 'sf' ? `$${avgSf}/SF` : `$${avgAcre.toLocaleString()}`;
-                    const secondary = valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${avgSf}/SF`;
+                    const primary = valuationMode === 'sf'
+                      ? `$${avgSf}/SF`
+                      : `$${avgAcre.toLocaleString()}${valuationMode === 'ff' ? '/FF' : ''}`;
+                    const secondary = valuationMode === 'ff'
+                      ? ''
+                      : valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${avgSf}/SF`;
 
                     let lotLabel = `${totalCount} Total`;
-                    if (lotAcres.length > 0) {
+                    if (valuationMode === 'ff') {
+                      const frontages = ranges.map(r => r.avgSize).filter(s => s > 0);
+                      if (frontages.length > 0) {
+                        const avgFrontage = frontages.reduce((sum, f) => sum + f, 0) / frontages.length;
+                        lotLabel = `${Math.round(avgFrontage).toLocaleString()} ft avg frontage | ${totalCount} Total`;
+                      }
+                    } else if (lotAcres.length > 0) {
                       const avgLotAcres = lotAcres.reduce((sum, acres) => sum + acres, 0) / lotAcres.length;
                       const avgLot = valuationMode === 'sf'
                         ? `${Math.round(avgLotAcres * 43560).toLocaleString()} sq ft`
@@ -8788,203 +8858,71 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         )}
         
         {/* Implied Front Foot Rates - ONLY IN FF MODE */}
-        {valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
+        {valuationMode === 'ff' && frontFootZoneRates && (
           <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB' }}>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' }}>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold' }}>
               Implied Front Foot Rates by Zoning
             </h4>
+            <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '10px' }}>
+              Implied ${frontFootZoneRates.perFF.toLocaleString()}/front foot across a typical{' '}
+              {frontFootZoneRates.globalFrontage.toLocaleString()} ft frontage. Zone frontage and depth are
+              the averages of the parcels actually in each zone, not the ordinance minimums.
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', border: '1px solid #E5E7EB' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
                     <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Zoning</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Zoning Lot</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Typical Lot (F x D)</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Land Value</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Avg Frontage</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Min Frontage</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Standard FF</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Excess FF</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    try {
-                      const zcfg = marketLandData?.zoning_config || {};
-                      const zoneKeys = Object.keys(zcfg || {}).sort();
-                      if (zoneKeys.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan="6" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
-                              No zoning with depth tables available.
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      // Use average across ALL positive deltas instead of just lowest bracket
-                      const allRates = [];
-                      const allLotAcres = [];
-                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') {
-                        allRates.push(method2Summary.mediumRange.perAcre);
-                        if (method2Summary.mediumRange.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
-                      }
-                      if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') {
-                        allRates.push(method2Summary.largeRange.perAcre);
-                        if (method2Summary.largeRange.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
-                      }
-                      if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') {
-                        allRates.push(method2Summary.xlargeRange.perAcre);
-                        if (method2Summary.xlargeRange.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
-                      }
-
-                      let chosenPerAcre = null;
-                      let overallAvgAcres = null;
-
-                      if (allRates.length > 0) {
-                        // Use average of all positive deltas
-                        chosenPerAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      }
-
-                      if (allLotAcres.length > 0) {
-                        // Use average lot size across all positive deltas
-                        overallAvgAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
-                      }
-
-                      const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
-                      const perSqFtSummary = (chosenPerAcre != null && chosenPerAcre !== 'N/A') ? (parseFloat(chosenPerAcre) / 43560) : null;
-                      const summaryLandValue = (perSqFtSummary && summaryTypicalSF) ? Math.round(perSqFtSummary * summaryTypicalSF) : null;
-
-                      // Build rows array so we can append summary and recommended rows
-                      const rows = [];
-
-                      // Top summary row showing overall average metrics (from all positive deltas)
-                      rows.push(
-                        <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
-                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average (all positive deltas)</td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                        </tr>
-                      );
-
-                      // Collect FF arrays for recommended summary
-                      const standardFFs = [];
-                      const excessFFs = [];
-
-                      zoneKeys.forEach(zoneKey => {
-                        const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
-                        if (!entry) return;
-                        const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
-                        const minFrontage = entry.min_frontage || entry.minFrontage || null;
-
-                        // Only include zones with an assigned depth table AND a min frontage
-                        if (!depthTable || !minFrontage) return;
-
-                        // Determine zoning lot from config if present, otherwise fallback to property average
-                        let typicalLotAcres = '';
-                        let typicalLotSF = '';
-                        const cfgSize = entry.min_size || entry.minSize || entry.typical_lot || null;
-                        const cfgUnit = (entry.min_size_unit || entry.minSizeUnit || '').toString().toUpperCase();
-                        if (cfgSize) {
-                          if (cfgUnit === 'SF') {
-                            typicalLotSF = Math.round(Number(cfgSize));
-                            typicalLotAcres = Number((typicalLotSF / 43560).toFixed(2));
-                          } else {
-                            // assume acres
-                            typicalLotAcres = Number(Number(cfgSize).toFixed(2));
-                            typicalLotSF = Math.round(typicalLotAcres * 43560);
-                          }
-                        } else {
-                          // fallback: average from properties
-                          const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
-                          let avgAcres = null;
-                          if (propsForZone.length > 0) {
-                            avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
-                          }
-                          typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
-                          typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
-                        }
-
-                        const perAcre = chosenPerAcre != null ? chosenPerAcre : 'N/A';
-
-                        // Apply Jim's magic formula per-zone using LOT SF values when possible:
-                        // AdjustedLotValue = ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP
-                        // Where: ZLS = typicalLotSF (zone), GLS = summaryTypicalSF (global typical lot SF), GP = summaryLandValue (global lot land value)
-                        let landValue = '';
-                        if (summaryTypicalSF && summaryLandValue && typicalLotSF) {
-                          try {
-                            const ZLS = Number(typicalLotSF);
-                            const GLS = Number(summaryTypicalSF);
-                            const GP = Number(summaryLandValue);
-                            // Guard against division by zero
-                            if (GLS > 0) {
-                              const adjusted = ((ZLS - GLS) * ((GP / GLS) * 0.5)) + GP;
-                              landValue = Math.round(adjusted);
-                            } else {
-                              landValue = '';
-                            }
-                          } catch (e) {
-                            landValue = '';
-                          }
-                        } else {
-                          // Fallback: use top-level per-acre rate
-                          const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
-                          landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
-                        }
-
-                        // Standard FF: integer (no decimals), Excess FF = half (integer)
-                        const standardFF = (landValue && minFrontage) ? Math.round(landValue / minFrontage) : '';
-                        const excessFF = standardFF !== '' ? Math.round(standardFF / 2) : '';
-
-                        if (standardFF !== '') standardFFs.push(standardFF);
-                        if (excessFF !== '') excessFFs.push(excessFF);
-
-                        rows.push(
-                          <tr key={zoneKey}>
-                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{zoneKey}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{minFrontage}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString()}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{excessFF !== '' ? `$${excessFF.toLocaleString()}` : 'N/A'}</td>
-                          </tr>
-                        );
-                      });
-
-                      // Recommended rounded summary from averages of standardFF and excessFF
-                      let recStandard = null;
-                      let recExcess = null;
-                      if (standardFFs.length > 0 && excessFFs.length > 0) {
-                        const avgStandard = standardFFs.reduce((s, v) => s + v, 0) / standardFFs.length;
-                        const avgExcess = excessFFs.reduce((s, v) => s + v, 0) / excessFFs.length;
-                        // Round recommended to nearest hundredth (2 decimals)
-                        recStandard = Number(avgStandard.toFixed(2));
-                        recExcess = Number(avgExcess.toFixed(2));
-
-                        rows.push(
-                          <tr key="__recommended__" style={{ fontWeight: '700', backgroundColor: '#ECFDF5' }}>
-                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Recommended Front Foot</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recStandard.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recExcess.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                          </tr>
-                        );
-                      }
-
-                      return rows;
-
-                    } catch (e) {
-                      debug('Failed to render implied front foot rates:', e);
-                      return (
-                        <tr>
-                          <td colSpan="6" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
-                        </tr>
-                      );
-                    }
-                  })()}
+                  <tr style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
+                    <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Overall Average (all positive deltas)</td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{frontFootZoneRates.globalFrontage.toLocaleString()} ft</td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${frontFootZoneRates.globalLandValue.toLocaleString()}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{frontFootZoneRates.globalFrontage.toLocaleString()}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${frontFootZoneRates.perFF.toLocaleString()}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                  </tr>
+                  {frontFootZoneRates.zones.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                        No zoning with a depth table and parcels carrying frontage.
+                      </td>
+                    </tr>
+                  ) : frontFootZoneRates.zones.map(z => (
+                    <tr key={z.zone}>
+                      <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>{z.zone}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        {z.typicalSF != null
+                          ? `${z.avgFrontage} x ${z.avgDepth} / ${z.typicalSF.toLocaleString()} SF`
+                          : `${z.avgFrontage} ft`}
+                      </td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${z.landValue.toLocaleString()}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{z.avgFrontage.toLocaleString()}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{z.minFrontage || '—'}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${z.standardFF.toLocaleString()}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${z.excessFF.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {frontFootZoneRates.recStandard != null && (
+                    <tr style={{ fontWeight: '700', backgroundColor: '#ECFDF5' }}>
+                      <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Recommended Front Foot</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${frontFootZoneRates.recStandard.toLocaleString()}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${frontFootZoneRates.recExcess.toLocaleString()}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
