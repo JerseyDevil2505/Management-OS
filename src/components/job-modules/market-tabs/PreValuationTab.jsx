@@ -435,6 +435,12 @@ const PreValuationTab = ({
     colorScaleBreakpoint,
     colorScaleUpperIncrement
   });
+  // Signature of the settings that produced the rows currently on screen, and a
+  // flag telling us the saved-results lookup has finished. Together they keep
+  // bracket edits from kicking off a recompute — the rows just go stale until
+  // the user presses Recalculate.
+  const [appliedBlockSignature, setAppliedBlockSignature] = useState(null);
+  const [blockRestoreChecked, setBlockRestoreChecked] = useState(false);
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
@@ -814,6 +820,15 @@ useEffect(() => {
   } else {
     if (false) console.log('⚠️ No normalization_config found in marketLandData');
   }
+
+  // Saved block results render straight from storage; nothing recomputes until
+  // the user asks for it with Recalculate.
+  if (marketLandData.block_consistency_metrics?.blockData) {
+    setSavedBlockAnalysis(marketLandData.block_consistency_metrics);
+    setMarketAnalysisData(marketLandData.block_consistency_metrics.blockData);
+    setAppliedBlockSignature(marketLandData.block_consistency_metrics.signature || null);
+  }
+  setBlockRestoreChecked(true);
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
     // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales that were incorrectly normalized)
@@ -2542,6 +2557,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
       
       setMarketAnalysisData(blockData);
+      setAppliedBlockSignature(JSON.stringify({
+        blockTypeFilter,
+        colorScaleStart,
+        colorScaleIncrement,
+        colorScaleBreakpoint,
+        colorScaleUpperIncrement
+      }));
 
       // Cache in parent so tab switches don't recompute
       onCacheBlockAnalysis({ blockData, blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement }, dataVersion);
@@ -2617,36 +2639,38 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     return mode;
   };
   
-  // Auto-process when filter or scale changes — use cache when available and fresh
+  // First pass only: show whatever results already exist (saved rows restored by
+  // the marketLandData effect, or the parent's in-session cache) and compute
+  // once when there are none. Bracket edits deliberately do NOT land here.
   const blockCacheRestoredRef = useRef(false);
+  const lastBlockDataVersionRef = useRef(dataVersion);
   useEffect(() => {
-    if (isMounted && sizeNormalizationHasRun) {
-      // Saved results for these exact settings are authoritative — render them
-      // and skip the recompute entirely. Without this every visit re-derives a
-      // result the user already reviewed and saved.
-      if (savedBlockAnalysis?.blockData
-          && savedBlockAnalysis.signature === blockAnalysisSignature
-          && savedBlockAnalysis.dataVersion === dataVersion) {
-        blockCacheRestoredRef.current = true;
-        setMarketAnalysisData(savedBlockAnalysis.blockData);
-        return;
-      }
-
-      // On first mount, try to restore from parent cache if data hasn't changed
-      if (!blockCacheRestoredRef.current && blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion
-          && blockAnalysisCache.data?.blockTypeFilter === blockTypeFilter
-          && blockAnalysisCache.data?.colorScaleStart === colorScaleStart
-          && blockAnalysisCache.data?.colorScaleIncrement === colorScaleIncrement
-          && blockAnalysisCache.data?.colorScaleBreakpoint === colorScaleBreakpoint
-          && blockAnalysisCache.data?.colorScaleUpperIncrement === colorScaleUpperIncrement) {
-        blockCacheRestoredRef.current = true;
-        setMarketAnalysisData(blockAnalysisCache.data.blockData);
-        return;
-      }
-      blockCacheRestoredRef.current = true;
-      processBlockAnalysis();
+    if (!isMounted || !sizeNormalizationHasRun || !blockRestoreChecked) return;
+    // New underlying data (a normalization run, a file update) is the only thing
+    // besides an explicit Recalculate that re-runs the analysis.
+    if (lastBlockDataVersionRef.current !== dataVersion) {
+      lastBlockDataVersionRef.current = dataVersion;
+      blockCacheRestoredRef.current = false;
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, sizeNormalizationHasRun, isMounted, savedBlockAnalysis, blockAnalysisSignature]);
+    if (blockCacheRestoredRef.current) return;
+    blockCacheRestoredRef.current = true;
+
+    if (savedBlockAnalysis?.blockData && savedBlockAnalysis.dataVersion === dataVersion) return;
+
+    if (blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion && blockAnalysisCache.data?.blockData) {
+      setMarketAnalysisData(blockAnalysisCache.data.blockData);
+      setAppliedBlockSignature(JSON.stringify({
+        blockTypeFilter: blockAnalysisCache.data.blockTypeFilter,
+        colorScaleStart: blockAnalysisCache.data.colorScaleStart,
+        colorScaleIncrement: blockAnalysisCache.data.colorScaleIncrement,
+        colorScaleBreakpoint: blockAnalysisCache.data.colorScaleBreakpoint,
+        colorScaleUpperIncrement: blockAnalysisCache.data.colorScaleUpperIncrement
+      }));
+      return;
+    }
+
+    processBlockAnalysis();
+  }, [isMounted, sizeNormalizationHasRun, blockRestoreChecked, savedBlockAnalysis, blockAnalysisCache, dataVersion, processBlockAnalysis]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Preserve scroll position before state update
@@ -3652,8 +3676,14 @@ const analyzeImportFile = async (file) => {
   // Results are stale whenever the on-screen rows were produced by settings
   // other than the ones last saved, which is what lights up the Save button.
   const blockAnalysisDirty = marketAnalysisData.length > 0
-    && (savedBlockAnalysis?.signature !== blockAnalysisSignature
+    && (savedBlockAnalysis?.signature !== appliedBlockSignature
         || savedBlockAnalysis?.dataVersion !== dataVersion);
+
+  // Brackets were edited after the rows on screen were produced, so the colors
+  // are out of date until Recalculate runs.
+  const blockSettingsStale = marketAnalysisData.length > 0
+    && !!appliedBlockSignature
+    && appliedBlockSignature !== blockAnalysisSignature;
 
   const saveBlockAnalysis = async () => {
     if (!jobData?.id || marketAnalysisData.length === 0) return;
@@ -4912,14 +4942,32 @@ const analyzeImportFile = async (file) => {
                     Saved {new Date(savedBlockAnalysis.savedAt).toLocaleDateString()}
                   </span>
                 )}
+                {blockSettingsStale && (
+                  <span className="text-xs text-amber-600 font-medium">Brackets changed</span>
+                )}
+                <button
+                  onClick={processBlockAnalysis}
+                  disabled={isProcessingBlocks}
+                  title="Re-run the block analysis with the current brackets"
+                  className={`px-3 py-1 rounded text-sm font-medium inline-flex items-center gap-1 ${
+                    blockSettingsStale
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  } disabled:opacity-60`}
+                >
+                  <RefreshCw className={isProcessingBlocks ? 'animate-spin' : ''} size={14} />
+                  {isProcessingBlocks ? 'Recalculating...' : 'Recalculate'}
+                </button>
                 <button
                   onClick={saveBlockAnalysis}
-                  disabled={isSavingBlockAnalysis || !blockAnalysisDirty}
-                  title={blockAnalysisDirty
-                    ? 'Save these brackets and the block results so this tab loads instantly'
-                    : 'No changes to save'}
+                  disabled={isSavingBlockAnalysis || !blockAnalysisDirty || blockSettingsStale}
+                  title={blockSettingsStale
+                    ? 'Recalculate first so the saved results match the current brackets'
+                    : blockAnalysisDirty
+                      ? 'Save these brackets and the block results so this tab loads instantly'
+                      : 'No changes to save'}
                   className={`px-3 py-1 rounded text-sm font-medium ${
-                    blockAnalysisDirty
+                    blockAnalysisDirty && !blockSettingsStale
                       ? 'bg-blue-600 text-white hover:bg-blue-700'
                       : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                   }`}
