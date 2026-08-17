@@ -590,6 +590,9 @@ export class BRTProcessor {
       property_m4_class: rawRecord.PROPERTY_CLASS,
       property_facility: rawRecord.EXEMPT_FACILITYNAME,
       property_vcs: rawRecord.VCS,
+      // Slot 2 can carry a lot while slot 1 is blank, so read them independently.
+      property_additional_lot_1: this.preserveStringValue(rawRecord.PROPERTY_ADDITIONALLOT1),
+      property_additional_lot_2: this.preserveStringValue(rawRecord.PROPERTY_ADDITIONALLOT2),
       
       // Owner fields
       owner_name: rawRecord.OWNER_OWNER,

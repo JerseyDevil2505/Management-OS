@@ -3,6 +3,7 @@ import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react'
 import './sharedTabNav.css';
 import { supabase, propertyService, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
+import { isPpaJob } from '../../../lib/tenantConfig';
 
 // Wraps a wide child element with synced top + bottom horizontal scrollbars.
 // The top scrollbar is a thin proxy whose scrollLeft mirrors the bottom container.
@@ -67,6 +68,18 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+// InfoBy codes arrive as '1' in some files and '01' in others; compare on a
+// single padded form so the Production Tracker config matches either way.
+function normalizeInfoByCode(value) {
+  const raw = String(value ?? '').trim().toUpperCase();
+  if (!raw) return '';
+  return /^\d+$/.test(raw) ? String(parseInt(raw, 10)).padStart(2, '0') : raw;
+}
+
+function normalizeInfoByCodes(values) {
+  return (values || []).map(normalizeInfoByCode).filter(Boolean);
+}
+
 // Helper to format percentage
 function formatPercent(value) {
   if (value === null || value === undefined || isNaN(value)) return '-';
@@ -90,7 +103,15 @@ function downloadCsv(filename, headers, rows) {
 const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {}, onUpdateJobCache = () => {} }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
-  const infoByCodes = useMemo(() => jobData?.info_by_config || {}, [jobData?.info_by_config]);
+  const infoByCodes = useMemo(
+    () => jobData?.infoby_category_config || jobData?.info_by_config || {},
+    [jobData?.infoby_category_config, jobData?.info_by_config]
+  );
+
+  // PPA jobs run live inspections, so interior entries come from inspection_data.
+  // LOJIK jobs work off a delivered file, where the entry marker is the InfoBy
+  // code already on the property record.
+  const isLojikJob = useMemo(() => !isPpaJob(jobData || {}), [jobData]);
 
   // Track which job ID we've loaded baseline settings for (to prevent redundant loads)
   const loadedJobIdRef = useRef(null);
@@ -127,6 +148,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     exterior: {},
     interior: {}
   });
+  const [interiorSource, setInteriorSource] = useState(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
   const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table', 'effective_age', or 'ncovr_override'
@@ -468,8 +490,27 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       );
 
       // Load inspection data if filtering by interior inspections
+      const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
       let inspectionMap = new Map();
-      if (useInteriorInspections) {
+      let sourceInfo = null;
+
+      if (useInteriorInspections && isLojikJob) {
+        // LOJIK: the delivered file already carries the InfoBy code, and the
+        // Production Tracker config says which codes count as an entry.
+        const entryCodeSet = new Set(normalizeInfoByCodes(entryInfoByCodes));
+
+        if (entryCodeSet.size === 0) {
+          sourceInfo = { mode: 'infoby', count: null, unconfigured: true };
+        } else {
+          properties.forEach(prop => {
+            const code = normalizeInfoByCode(prop.inspection_info_by);
+            if (code && entryCodeSet.has(code)) {
+              inspectionMap.set(prop.property_composite_key, true);
+            }
+          });
+          sourceInfo = { mode: 'infoby', count: inspectionMap.size, unconfigured: false };
+        }
+      } else if (useInteriorInspections) {
         try {
           const { data: inspections, error: inspError } = await supabase
             .from('inspection_data')
@@ -481,29 +522,23 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             throw new Error(`Failed to load inspection data: ${inspError.message || inspError}`);
           }
 
-          // Use the InfoBy configuration that the user already defined in the jobs table
-          // Since the user defines what constitutes an "entry" in info_by_config,
-          // we include all inspections as the user has already configured this properly
-          const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
-
-          if (entryInfoByCodes.length === 0) {
-            console.warn('No entry InfoBy codes found in job.info_by_config. Including all inspections for interior analysis.');
-            console.log('Available info_by_config:', infoByCodes);
-          } else {
-            console.log('Entry InfoBy codes from job config:', entryInfoByCodes);
-          }
-
-          // Include all inspections since the user has already defined entry criteria in job config
+          // The user has already defined entry criteria in the job config, so
+          // every live inspection row counts here.
           inspectionMap = new Map(
             (inspections || []).map(i => [i.property_composite_key, true])
           );
-
-          console.log(`Interior inspections filter: ${inspectionMap.size} properties have inspection data`);
+          sourceInfo = { mode: 'live', count: inspectionMap.size, unconfigured: false };
         } catch (inspectionError) {
           console.error('Error processing inspection data:', inspectionError);
           throw new Error(`Inspection data processing failed: ${inspectionError.message || inspectionError}`);
         }
       }
+
+      setInteriorSource(sourceInfo);
+
+      // With no usable entry list there is nothing to filter on, so fall back to
+      // every property rather than emptying the interior analysis.
+      const interiorFilterActive = useInteriorInspections && inspectionMap.size > 0;
 
       // Filter properties by type/use
       const filteredProps = filterPropertiesByType(properties, typeUseFilter);
@@ -541,7 +576,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
 
         // Process interior condition
-        const shouldIncludeInterior = !useInteriorInspections || inspectionMap.has(prop.property_composite_key);
+        const shouldIncludeInterior = !interiorFilterActive || inspectionMap.has(prop.property_composite_key);
 
         if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '' && shouldIncludeInterior) {
           if (!interiorByVCS[vcs]) interiorByVCS[vcs] = {};
@@ -1664,6 +1699,23 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <Info size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
                 Analyzing {filterPropertiesByType(properties, typeUseFilter).length.toLocaleString()} properties
               </div>
+
+              {interiorSource && (
+                <div style={{
+                  padding: '8px 12px',
+                  backgroundColor: interiorSource.unconfigured ? '#FEF3C7' : '#ECFDF5',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  color: interiorSource.unconfigured ? '#92400E' : '#047857'
+                }}>
+                  <Info size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                  {interiorSource.unconfigured
+                    ? 'No entry InfoBy codes configured in Production Tracker \u2014 interior analysis is using all properties'
+                    : interiorSource.mode === 'infoby'
+                      ? `Interior from ${interiorSource.count.toLocaleString()} InfoBy entry records`
+                      : `Interior from ${interiorSource.count.toLocaleString()} live inspections`}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>

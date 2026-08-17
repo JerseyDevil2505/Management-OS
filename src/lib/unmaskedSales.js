@@ -30,6 +30,10 @@ export const MASKED_DEFAULTS = {
   normalizeToYear: 2025,
 };
 
+// Commercial/industrial parcels are out of scope for unmasking — a dollar deed
+// on a 4A/4B/4C is usually an entity transfer, not a masked arm's-length sale.
+export const MASKED_EXCLUDED_CLASSES = new Set(['4A', '4B', '4C']);
+
 const getYear = (dateStr) => {
   if (!dateStr) return null;
   const d = parseDateLocal(dateStr);
@@ -156,6 +160,11 @@ export function detectMaskedCandidates(properties, opts = {}) {
     // Only surface true masked candidates (junk current sale) — plus any parcel
     // already unmasked, so the user can review/clear that decision.
     if (!currentIsJunk && !alreadyUnmasked) continue;
+
+    // Same escape hatch for the class gate: a 4A/4B/4C promoted before this
+    // gate existed must stay visible or it could never be reversed.
+    const m4 = String(p.property_m4_class || '').trim().toUpperCase();
+    if (MASKED_EXCLUDED_CLASSES.has(m4) && !alreadyUnmasked) continue;
 
     out.push({
       property_composite_key: p.property_composite_key,

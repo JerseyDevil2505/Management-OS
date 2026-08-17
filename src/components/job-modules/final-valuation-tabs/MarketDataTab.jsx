@@ -2,6 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { supabase, getAssessmentYear } from '../../../lib/supabaseClient';
 import { Download, AlertCircle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import ClassEffectiveAgeReport from './ClassEffectiveAgeReport';
+import {
+  calculateRecommendedEFA as computeRecommendedEFA,
+  resolveActualEFA as computeActualEFA
+} from '../../../lib/effectiveAge';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
@@ -149,6 +154,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Get vendor type
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // Sales-period math in this tab keys off the calendar year of the job end date
+  const reportAssessmentYear = useMemo(
+    () => (jobData?.end_date ? new Date(jobData.end_date).getFullYear() : new Date().getFullYear()),
+    [jobData?.end_date]
+  );
+
   // Helper: Get bedroom count from property
   const getBedroomTotal = (property) => {
     return property.asset_bedrooms || null;
@@ -282,25 +293,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Formula: Recommended EFA
   // BRT: outputs a calendar year (e.g., 2015)
   // Microsystems: outputs an age in years (e.g., 10)
-  const calculateRecommendedEFA = (property) => {
-    if (!property.values_norm_time) return null;
-
-    const normTime = property.values_norm_time;
-    const camaLand = property.values_cama_land || 0;
-    const detItems = property.values_det_items || 0;
-    const replCost = property.values_repl_cost || 0;
-
-    if (replCost === 0) return null;
-
-    const deprAge = (1 - ((normTime - camaLand - detItems) / replCost)) * 100;
-
-    if (vendorType === 'Microsystems') {
-      // Microsystems stores EFA as actual age, so just return the age
-      return Math.round(deprAge);
-    }
-    // BRT: convert age to effective year
-    return Math.round(yearPriorToDueYear - deprAge);
-  };
+  const calculateRecommendedEFA = (property) =>
+    computeRecommendedEFA(property, vendorType, yearPriorToDueYear);
 
   // Formula: DEPR factor
   // BRT: actualEFA is a year, so depr = 1 - ((yearPrior - year) / 100)
@@ -383,25 +377,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const storedData = finalValuationData[property.property_composite_key] || {};
     const qualifiesForEFA = propertyQualifiesForEFA(property);
 
-    let actualEFA = null;
-    if (qualifiesForEFA) {
-      if (storedData.actual_efa !== null && storedData.actual_efa !== undefined) {
-        actualEFA = storedData.actual_efa;
-      } else {
-        actualEFA = getCurrentEFA(property);
-        if (typeof actualEFA === 'string' && actualEFA !== '') {
-          actualEFA = parseFloat(actualEFA);
-        }
-        if (actualEFA === '' || isNaN(actualEFA)) {
-          actualEFA = null;
-        }
-        // Microsystems: asset_effective_age is stored as a year (yearPrior - age),
-        // convert back to age for Actual EFA since DEPR formula expects age
-        if (actualEFA !== null && vendorType === 'Microsystems' && yearPriorToDueYear) {
-          actualEFA = yearPriorToDueYear - actualEFA;
-        }
-      }
-    }
+    const actualEFA = computeActualEFA(property, storedData, vendorType, yearPriorToDueYear);
 
     const recommendedEFA = calculateRecommendedEFA(property);
     const depr = qualifiesForEFA && actualEFA !== null && actualEFA !== undefined ? calculateDEPR(actualEFA) : null;
@@ -925,6 +901,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'CAMA': property.property_cama_class || '',
         'Check': '', // Will be replaced with formula after column order is known
         'Info By': property.inspection_info_by ? { v: String(property.inspection_info_by), t: 's' } : '',
+        'Zoning': property.asset_zoning || '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes || '',
@@ -1503,7 +1480,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
       </div>
 
-      {/* Preview Notice */}
+      {/* Class / Effective Age Analysis */}
+      <ClassEffectiveAgeReport
+        jobData={jobData}
+        properties={properties}
+        finalValuationData={finalValuationData}
+        vendorType={vendorType}
+        assessmentYear={reportAssessmentYear}
+        yearPriorToDueYear={yearPriorToDueYear}
+        onReloadFinalValuationData={loadFinalValuationData}
+      />
+
+      {/* Preview Notice - full dataset lives in the export */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
@@ -1552,6 +1540,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">CAMA Class</th>
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Check</th>
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">InfoBy</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Zoning</th>
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">VCS</th>
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Facility</th>
                 <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Special</th>
@@ -1593,6 +1582,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                     <td className="px-2 py-2 border border-gray-300">{property.property_cama_class}</td>
                     <td className="px-2 py-2 border border-gray-300">{classesMatch(property)}</td>
                     <td className="px-2 py-2 border border-gray-300">{property.inspection_info_by}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_zoning}</td>
                     <td className="px-2 py-2 border border-gray-300">{property.property_vcs}</td>
                     <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_facility}</td>
                     <td className="px-2 py-2 border border-gray-300">
