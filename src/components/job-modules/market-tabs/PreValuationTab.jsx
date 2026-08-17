@@ -3575,32 +3575,49 @@ const analyzeImportFile = async (file) => {
       .catch(err => console.error('Failed to persist block analysis settings:', err));
   }, [jobData?.id]);
 
-  // Min / median / max of the size-normalized values behind the current Type &
-  // Use filter — the same population the color scale buckets, so the scale
-  // start and increment can be set against the real spread.
+  // Spread behind the current Type & Use filter, reported two ways. The color
+  // scale buckets *block averages*, so those are the headline numbers; the raw
+  // per-sale figures ride along because averaging hides the true high and low.
   const typeUseSaleSummary = useMemo(() => {
-    const values = properties
-      .filter(p => {
-        if (!(p.values_norm_size > 0)) return false;
-        const typeUse = p.asset_type_use?.toString().trim();
-        if (!typeUse) return false;
-        return blockTypeFilter === 'all_residential'
-          ? ['1', '2', '3', '4', '5', '6'].some(prefix => typeUse.startsWith(prefix))
-          : typeUse.startsWith(blockTypeFilter);
-      })
-      .map(p => Number(p.values_norm_size))
-      .sort((a, b) => a - b);
+    const matches = properties.filter(p => {
+      if (!(p.values_norm_size > 0)) return false;
+      const typeUse = p.asset_type_use?.toString().trim();
+      if (!typeUse) return false;
+      return blockTypeFilter === 'all_residential'
+        ? ['1', '2', '3', '4', '5', '6'].some(prefix => typeUse.startsWith(prefix))
+        : typeUse.startsWith(blockTypeFilter);
+    });
 
-    if (values.length === 0) return null;
+    if (matches.length === 0) return null;
 
-    const mid = Math.floor(values.length / 2);
-    return {
-      count: values.length,
-      min: values[0],
-      median: values.length % 2 ? values[mid] : Math.round((values[mid - 1] + values[mid]) / 2),
-      max: values[values.length - 1]
+    const spread = (nums) => {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return {
+        min: sorted[0],
+        median: sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2),
+        max: sorted[sorted.length - 1]
+      };
     };
-  }, [properties, blockTypeFilter]);
+
+    // Grouped the same way processBlockAnalysis does, so these mirror the
+    // values the palette is actually assigned against.
+    const byBlock = {};
+    matches.forEach(p => {
+      const block = parseCompositeKey(p.property_composite_key).block;
+      if (!byBlock[block]) byBlock[block] = [];
+      byBlock[block].push(Number(p.values_norm_size));
+    });
+    const blockAverages = Object.values(byBlock)
+      .map(vals => Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length));
+
+    return {
+      saleCount: matches.length,
+      blockCount: blockAverages.length,
+      sales: spread(matches.map(p => Number(p.values_norm_size))),
+      blocks: spread(blockAverages)
+    };
+  }, [properties, blockTypeFilter, parseCompositeKey]);
 
   // Bucket edges the palette actually uses, derived from the same rules as
   // processBlockAnalysis so the legend can't drift from the colors on screen.
@@ -5060,20 +5077,26 @@ const analyzeImportFile = async (file) => {
             {typeUseSaleSummary && (
               <div className="mt-4 grid grid-cols-4 gap-4">
                 <div className="p-3 bg-gray-50 rounded text-center">
-                  <div className="text-xs text-gray-600">Min Sale</div>
-                  <div className="text-lg font-semibold">${typeUseSaleSummary.min.toLocaleString()}</div>
+                  <div className="text-xs text-gray-600">Min Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.min.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.min.toLocaleString()}</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded text-center">
-                  <div className="text-xs text-gray-600">Median Sale</div>
-                  <div className="text-lg font-semibold">${typeUseSaleSummary.median.toLocaleString()}</div>
+                  <div className="text-xs text-gray-600">Median Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.median.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.median.toLocaleString()}</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded text-center">
-                  <div className="text-xs text-gray-600">Max Sale</div>
-                  <div className="text-lg font-semibold">${typeUseSaleSummary.max.toLocaleString()}</div>
+                  <div className="text-xs text-gray-600">Max Block Avg</div>
+                  <div className="text-lg font-semibold">${typeUseSaleSummary.blocks.max.toLocaleString()}</div>
+                  <div className="text-xs text-gray-400">sale ${typeUseSaleSummary.sales.max.toLocaleString()}</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded text-center">
-                  <div className="text-xs text-gray-600">Sales in Filter</div>
-                  <div className="text-lg font-semibold">{typeUseSaleSummary.count.toLocaleString()}</div>
+                  <div className="text-xs text-gray-600">Blocks / Sales</div>
+                  <div className="text-lg font-semibold">
+                    {typeUseSaleSummary.blockCount.toLocaleString()} / {typeUseSaleSummary.saleCount.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-400">colored / normalized</div>
                 </div>
               </div>
             )}
