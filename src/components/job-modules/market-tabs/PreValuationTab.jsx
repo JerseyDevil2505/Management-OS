@@ -421,6 +421,20 @@ const PreValuationTab = ({
   // most jobs. lastSizeNormalizationRun is the durable marker, so the tab stays
   // unlocked and the block analysis keeps auto-processing across reloads.
   const sizeNormalizationHasRun = normalizationStats.sizeNormalized > 0 || !!lastSizeNormalizationRun;
+
+  // Saved block analysis (results + the settings that produced them), read back
+  // from market_land_valuation.block_consistency_metrics. When the saved
+  // signature still matches, the tab renders the stored rows instead of
+  // recomputing — the whole point on a town the size of Berkeley.
+  const [savedBlockAnalysis, setSavedBlockAnalysis] = useState(null);
+  const [isSavingBlockAnalysis, setIsSavingBlockAnalysis] = useState(false);
+  const blockAnalysisSignature = JSON.stringify({
+    blockTypeFilter,
+    colorScaleStart,
+    colorScaleIncrement,
+    colorScaleBreakpoint,
+    colorScaleUpperIncrement
+  });
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
@@ -833,6 +847,11 @@ useEffect(() => {
   if (marketLandData.normalization_stats) {
     if (false) console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
     setNormalizationStats(marketLandData.normalization_stats);
+  }
+
+  if (marketLandData.block_consistency_metrics?.blockData) {
+    setSavedBlockAnalysis(marketLandData.block_consistency_metrics);
+    setMarketAnalysisData(marketLandData.block_consistency_metrics.blockData);
   }
   
   if (marketLandData.zoning_config) {
@@ -2602,6 +2621,17 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   const blockCacheRestoredRef = useRef(false);
   useEffect(() => {
     if (isMounted && sizeNormalizationHasRun) {
+      // Saved results for these exact settings are authoritative — render them
+      // and skip the recompute entirely. Without this every visit re-derives a
+      // result the user already reviewed and saved.
+      if (savedBlockAnalysis?.blockData
+          && savedBlockAnalysis.signature === blockAnalysisSignature
+          && savedBlockAnalysis.dataVersion === dataVersion) {
+        blockCacheRestoredRef.current = true;
+        setMarketAnalysisData(savedBlockAnalysis.blockData);
+        return;
+      }
+
       // On first mount, try to restore from parent cache if data hasn't changed
       if (!blockCacheRestoredRef.current && blockAnalysisCache && blockAnalysisCache.dataVersion === dataVersion
           && blockAnalysisCache.data?.blockTypeFilter === blockTypeFilter
@@ -2616,7 +2646,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       blockCacheRestoredRef.current = true;
       processBlockAnalysis();
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, sizeNormalizationHasRun, isMounted]);
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement, sizeNormalizationHasRun, isMounted, savedBlockAnalysis, blockAnalysisSignature]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Preserve scroll position before state update
@@ -3618,6 +3648,47 @@ const analyzeImportFile = async (file) => {
       blocks: spread(blockAverages)
     };
   }, [properties, blockTypeFilter, parseCompositeKey]);
+
+  // Results are stale whenever the on-screen rows were produced by settings
+  // other than the ones last saved, which is what lights up the Save button.
+  const blockAnalysisDirty = marketAnalysisData.length > 0
+    && (savedBlockAnalysis?.signature !== blockAnalysisSignature
+        || savedBlockAnalysis?.dataVersion !== dataVersion);
+
+  const saveBlockAnalysis = async () => {
+    if (!jobData?.id || marketAnalysisData.length === 0) return;
+    setIsSavingBlockAnalysis(true);
+    try {
+      const payload = {
+        blockData: marketAnalysisData,
+        signature: blockAnalysisSignature,
+        dataVersion,
+        savedAt: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update({ block_consistency_metrics: payload, updated_at: new Date().toISOString() })
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+
+      // Lock the settings in alongside the results so a reload restores both.
+      await worksheetService.saveNormalizationConfig(jobData.id, {
+        blockTypeFilter,
+        blockColorScaleStart: colorScaleStart,
+        blockColorScaleIncrement: colorScaleIncrement,
+        blockColorScaleBreakpoint: colorScaleBreakpoint,
+        blockColorScaleUpperIncrement: colorScaleUpperIncrement
+      });
+
+      setSavedBlockAnalysis(payload);
+    } catch (err) {
+      console.error('Failed to save block analysis:', err);
+      alert('Could not save the block analysis. Check the console for details.');
+    } finally {
+      setIsSavingBlockAnalysis(false);
+    }
+  };
 
   // Bucket edges the palette actually uses, derived from the same rules as
   // processBlockAnalysis so the legend can't drift from the colors on screen.
@@ -4835,7 +4906,26 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Block Market Analysis</h3>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {savedBlockAnalysis && !blockAnalysisDirty && (
+                  <span className="text-xs text-gray-500">
+                    Saved {new Date(savedBlockAnalysis.savedAt).toLocaleDateString()}
+                  </span>
+                )}
+                <button
+                  onClick={saveBlockAnalysis}
+                  disabled={isSavingBlockAnalysis || !blockAnalysisDirty}
+                  title={blockAnalysisDirty
+                    ? 'Save these brackets and the block results so this tab loads instantly'
+                    : 'No changes to save'}
+                  className={`px-3 py-1 rounded text-sm font-medium ${
+                    blockAnalysisDirty
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isSavingBlockAnalysis ? 'Saving...' : blockAnalysisDirty ? 'Save Results' : 'Saved'}
+                </button>
                 {preValChecklist.market_analysis ? (
                   <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold inline-flex items-center gap-2">
                     <Check className="w-4 h-4" />
