@@ -122,12 +122,10 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate, jobFreshness = {} 
 
       setOrgJobs(transformedJobs);
 
-      // If single org, single_job_mode, and has a job, go straight to it
-      if (orgsList.length === 1 && primaryOrg?.single_job_mode && transformedJobs?.length > 0) {
-        const job = transformedJobs[0];
-        onJobSelect(job);
-        return;
-      }
+      // single_job_mode orgs used to skip straight into the job. That put them
+      // back in the old flow — open the stale snapshot, update the file from
+      // inside, then refresh the town. They land on the dashboard now so they
+      // can update the file first.
 
       // Show setup if no jobs exist
       if (!jobs || jobs.length === 0) {
