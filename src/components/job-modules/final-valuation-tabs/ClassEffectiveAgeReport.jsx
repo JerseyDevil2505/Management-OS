@@ -3,6 +3,7 @@ import { Download, Settings, ChevronDown, ChevronUp, AlertCircle, Save } from 'l
 import * as XLSX from 'xlsx-js-style';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import { calculateRecommendedEFA, resolveActualEFA } from '../../../lib/effectiveAge';
+import { buildYearBuiltCategories, categorizeYearBuilt } from '../../../lib/yearBuiltCategories';
 
 const EMPTY = '\u2014';
 
@@ -16,7 +17,6 @@ const DEFAULT_CONDO_COLUMNS = [
 ];
 
 const defaultConfig = (assessmentYear) => ({
-  yearBuiltBreakpoints: [1990, 2015],
   samplingWindowStart: `${assessmentYear - 3}-10-01`,
   tabs: {
     class2: { typeUseCodes: ['10'], label: 'Class 2' },
@@ -30,34 +30,6 @@ const defaultConfig = (assessmentYear) => ({
   condoColumns: DEFAULT_CONDO_COLUMNS,
   designLabels: {}
 });
-
-// Bands are derived from breakpoints so a parcel built exactly on a breakpoint
-// lands in the middle band (1990 -> "1990-2015", not "<1990").
-export const buildYearBands = (breakpoints) => {
-  const pts = (breakpoints || [])
-    .map(n => parseInt(n, 10))
-    .filter(n => Number.isFinite(n))
-    .sort((a, b) => a - b);
-
-  if (!pts.length) return [{ min: -Infinity, max: Infinity, label: 'All Years' }];
-
-  const bands = [{ min: -Infinity, max: pts[0] - 1 }];
-  for (let i = 1; i < pts.length; i++) bands.push({ min: pts[i - 1], max: pts[i] });
-  bands.push({ min: pts[pts.length - 1] + 1, max: Infinity });
-
-  for (let i = 1; i < bands.length; i++) {
-    if (bands[i].min > bands[i - 1].max + 1) bands[i].min = bands[i - 1].max + 1;
-  }
-
-  return bands.map(b => ({
-    ...b,
-    label: b.min === -Infinity
-      ? `<${b.max + 1}`
-      : b.max === Infinity
-        ? `>${b.min - 1}`
-        : `${b.min}-${b.max}`
-  }));
-};
 
 const avg = (arr) => (arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null);
 
@@ -75,6 +47,7 @@ const ClassEffectiveAgeReport = ({
   const [config, setConfig] = useState(() => defaultConfig(assessmentYear));
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingEFA, setSavingEFA] = useState(false);
+  const [hideEmptyCategories, setHideEmptyCategories] = useState(true);
 
   useEffect(() => {
     const stored = jobData?.class_efa_report_config;
@@ -99,7 +72,9 @@ const ClassEffectiveAgeReport = ({
     return interpretCodes.getDesignName({ asset_design_style: code }, codeDefinitions, vendorType) || '';
   }, [codeDefinitions, vendorType]);
 
-  const bands = useMemo(() => buildYearBands(config.yearBuiltBreakpoints), [config.yearBuiltBreakpoints]);
+  // Base the rolling bands on the job's assessment year, not the wall clock, so
+  // they only move when a new reval cycle is set up.
+  const categories = useMemo(() => buildYearBuiltCategories(assessmentYear), [assessmentYear]);
 
   const windowStart = useMemo(() => {
     const raw = config.samplingWindowStart;
@@ -133,11 +108,10 @@ const ClassEffectiveAgeReport = ({
     return latest;
   }, [finalValuationData]);
 
-  const bandFor = useCallback((yearBuilt) => {
-    const yb = parseInt(yearBuilt, 10);
-    if (!Number.isFinite(yb) || yb <= 0) return null;
-    return bands.find(b => yb >= b.min && yb <= b.max) || null;
-  }, [bands]);
+  const bandFor = useCallback(
+    (yearBuilt) => categorizeYearBuilt(yearBuilt, categories),
+    [categories]
+  );
 
   const inWindow = useCallback((property) => {
     if (!windowStart || !property.sales_date) return false;
@@ -181,7 +155,8 @@ const ClassEffectiveAgeReport = ({
     };
 
     const cells = new Map();
-    const rowKeys = new Map();
+    const rowCounts = new Map();
+    const vcsSet = new Set();
     const colKeys = new Map();
 
     matches.forEach(p => {
@@ -189,8 +164,9 @@ const ClassEffectiveAgeReport = ({
       const band = useBands ? bandFor(p.asset_year_built) : null;
       if (useBands && !band) return;
 
-      const rowKey = useBands ? `${vcs}||${band.label}` : vcs;
-      if (!rowKeys.has(rowKey)) rowKeys.set(rowKey, { vcs, band: band?.label || null });
+      vcsSet.add(vcs);
+      const rowKey = useBands ? `${vcs}||${band.key}` : vcs;
+      rowCounts.set(rowKey, (rowCounts.get(rowKey) || 0) + 1);
 
       const col = columnFor(p);
       if (!colKeys.has(col.key)) colKeys.set(col.key, col.label);
@@ -222,11 +198,20 @@ const ClassEffectiveAgeReport = ({
       }
     });
 
-    const sortedRows = [...rowKeys.entries()].sort((a, b) => {
-      if (a[1].vcs !== b[1].vcs) return a[1].vcs.localeCompare(b[1].vcs);
-      const ai = bands.findIndex(x => x.label === a[1].band);
-      const bi = bands.findIndex(x => x.label === b[1].band);
-      return ai - bi;
+    // Every VCS carries the full category ladder so a missing band reads as a
+    // gap in the stock rather than a missing row.
+    const rows = [];
+    [...vcsSet].sort((a, b) => a.localeCompare(b)).forEach(vcs => {
+      if (!useBands) {
+        rows.push({ key: vcs, vcs, band: null, count: rowCounts.get(vcs) || 0 });
+        return;
+      }
+      categories.forEach(cat => {
+        const key = `${vcs}||${cat.key}`;
+        const count = rowCounts.get(key) || 0;
+        if (hideEmptyCategories && count === 0) return;
+        rows.push({ key, vcs, band: cat.label, count });
+      });
     });
 
     const sortedCols = [...colKeys.entries()].sort((a, b) => {
@@ -241,11 +226,11 @@ const ClassEffectiveAgeReport = ({
 
     return {
       useBands,
-      rows: sortedRows.map(([key, meta]) => ({ key, ...meta })),
+      rows,
       columns: sortedCols.map(([key, label]) => ({ key, label })),
       cells
     };
-  }, [config, properties, bands, bandFor, inWindow, storedRecEFA, designLabel, rawDesignName, finalValuationData, vendorType, yearPriorToDueYear]);
+  }, [config, properties, categories, hideEmptyCategories, bandFor, inWindow, storedRecEFA, designLabel, rawDesignName, finalValuationData, vendorType, yearPriorToDueYear]);
 
   const formatCell = useCallback((cell) => {
     if (!cell || cell.count === 0) return EMPTY;
@@ -411,6 +396,16 @@ const ClassEffectiveAgeReport = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {activeTab !== 'condo' && (
+            <label className="flex items-center gap-2 text-sm text-gray-700 mr-1">
+              <input
+                type="checkbox"
+                checked={hideEmptyCategories}
+                onChange={(e) => setHideEmptyCategories(e.target.checked)}
+              />
+              Hide empty categories
+            </label>
+          )}
           <button
             onClick={saveRecommendedEFA}
             disabled={savingEFA}
@@ -454,22 +449,14 @@ const ClassEffectiveAgeReport = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
-                Year-built breakpoints (comma separated)
+                Year Built categories
               </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                value={(config.yearBuiltBreakpoints || []).join(', ')}
-                onChange={(e) => setConfig(c => ({
-                  ...c,
-                  yearBuiltBreakpoints: e.target.value
-                    .split(',')
-                    .map(v => parseInt(v.trim(), 10))
-                    .filter(v => Number.isFinite(v))
-                }))}
-              />
+              <div className="px-3 py-2 border border-gray-200 bg-white rounded text-sm text-gray-700">
+                {categories.map(c => c.label).join(' \u00b7 ')}
+              </div>
               <div className="text-xs text-gray-500 mt-1">
-                Bands: {bands.map(b => b.label).join(' / ')} &middot; a parcel built on a breakpoint falls in the upper band
+                Global categories based on assessment year {assessmentYear}. New and Newer roll with
+                the reval cycle; Moderate always ends the year before Newer opens.
               </div>
             </div>
             <div>
