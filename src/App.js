@@ -1202,11 +1202,19 @@ const App = () => {
       window.history.pushState({}, '', '/assessor-dashboard');
       return;
     }
+    // The assessor dashboard only renders for assessor users, so an admin who
+    // lands on that URL - by reloading it, or by exiting View As - would other-
+    // wise get an empty page with no way back.
+    if (activeView === 'assessor-dashboard' && !isAssessorUser) {
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
+      return;
+    }
     if (!isAdmin && (activeView === 'billing' || activeView === 'payroll')) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
     }
-  }, [user, isAdmin, isRealAssessorUser, activeView]);
+  }, [user, isAdmin, isRealAssessorUser, isAssessorUser, activeView]);
 
   const handleLogout = async () => {
     try {
