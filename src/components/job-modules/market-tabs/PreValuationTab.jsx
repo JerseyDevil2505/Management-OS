@@ -21,7 +21,41 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const PreValuationTab = ({ 
+// Keystrokes stay inside this component so typing a bracket doesn't re-render
+// the whole tab (and its multi-hundred-row results table) on every character.
+// The value is lifted only on blur or Enter.
+const ScaleNumberInput = React.memo(({ label, value, step, disabled, onCommit }) => {
+  const [draft, setDraft] = useState(String(value ?? ''));
+
+  useEffect(() => {
+    setDraft(String(value ?? ''));
+  }, [value]);
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10);
+    const next = Number.isNaN(parsed) ? 0 : parsed;
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type="number"
+        value={draft}
+        step={step}
+        disabled={disabled}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+      />
+    </div>
+  );
+});
+
+const PreValuationTab = ({
   jobData, 
   properties,
   marketLandData,
@@ -445,44 +479,45 @@ const PreValuationTab = ({
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
 
-  // Market Analysis Color Scale - Consistent Red → Purple progression
-  // Two variations per color range: pastel (lower half) and bright (upper half)
-  // Default: $100k increments with $50k steps = 2 steps per $100k
+  // Market Analysis Color Scale - Consistent Red → Purple progression.
+  // Three variations per hue (pastel / mid / bright) = 24 usable buckets. Two
+  // per hue ran out at 16, which silently clamped every block above the top
+  // bucket into one color once a town used tight increments.
   const bluebeamPalette = [
     // Gray for no data only
     { hex: "#CCCCCC", name: "No Data", row: 0, col: 0 },
 
-    // Red range ($0-99k)
-    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },      // $0-49k
-    { hex: "#FF6666", name: "Bright Red", row: 1, col: 2 },     // $50k-99k
+    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },
+    { hex: "#FF9999", name: "Mid Red", row: 1, col: 2 },
+    { hex: "#FF3333", name: "Bright Red", row: 1, col: 3 },
 
-    // Pink range ($100k-199k)
-    { hex: "#FFB3D9", name: "Light Pink", row: 2, col: 1 },     // $100k-149k
-    { hex: "#FF66B2", name: "Bright Pink", row: 2, col: 2 },    // $150k-199k
+    { hex: "#FFD6EB", name: "Light Pink", row: 2, col: 1 },
+    { hex: "#FFB3D9", name: "Mid Pink", row: 2, col: 2 },
+    { hex: "#FF3399", name: "Bright Pink", row: 2, col: 3 },
 
-    // Orange range ($200k-299k)
-    { hex: "#FFD9B3", name: "Light Orange", row: 3, col: 1 },   // $200k-249k
-    { hex: "#FF9966", name: "Bright Orange", row: 3, col: 2 },  // $250k-299k
+    { hex: "#FFE6CC", name: "Light Orange", row: 3, col: 1 },
+    { hex: "#FFB366", name: "Mid Orange", row: 3, col: 2 },
+    { hex: "#FF8000", name: "Bright Orange", row: 3, col: 3 },
 
-    // Yellow range ($300k-399k)
-    { hex: "#FFFF99", name: "Light Yellow", row: 4, col: 1 },   // $300k-349k
-    { hex: "#FFFF33", name: "Bright Yellow", row: 4, col: 2 },  // $350k-399k
+    { hex: "#FFFFCC", name: "Light Yellow", row: 4, col: 1 },
+    { hex: "#FFFF66", name: "Mid Yellow", row: 4, col: 2 },
+    { hex: "#FFD700", name: "Bright Yellow", row: 4, col: 3 },
 
-    // Green range ($400k-499k)
-    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },    // $400k-449k
-    { hex: "#66FF66", name: "Bright Green", row: 5, col: 2 },   // $450k-499k
+    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },
+    { hex: "#85F585", name: "Mid Green", row: 5, col: 2 },
+    { hex: "#33CC33", name: "Bright Green", row: 5, col: 3 },
 
-    // Teal range ($500k-599k)
-    { hex: "#B3F0F0", name: "Light Teal", row: 6, col: 1 },     // $500k-549k
-    { hex: "#33CCCC", name: "Bright Teal", row: 6, col: 2 },    // $550k-599k
+    { hex: "#CCF5F5", name: "Light Teal", row: 6, col: 1 },
+    { hex: "#7FE0E0", name: "Mid Teal", row: 6, col: 2 },
+    { hex: "#00A3A3", name: "Bright Teal", row: 6, col: 3 },
 
-    // Blue range ($600k-699k)
-    { hex: "#99CCFF", name: "Light Blue", row: 7, col: 1 },     // $600k-649k
-    { hex: "#3399FF", name: "Bright Blue", row: 7, col: 2 },    // $650k-699k
+    { hex: "#CCE5FF", name: "Light Blue", row: 7, col: 1 },
+    { hex: "#80BFFF", name: "Mid Blue", row: 7, col: 2 },
+    { hex: "#0066CC", name: "Bright Blue", row: 7, col: 3 },
 
-    // Purple range ($700k+)
-    { hex: "#CCAAFF", name: "Light Purple", row: 8, col: 1 },   // $700k-749k
-    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 }   // $750k+
+    { hex: "#E0CCFF", name: "Light Purple", row: 8, col: 1 },
+    { hex: "#B399FF", name: "Mid Purple", row: 8, col: 2 },
+    { hex: "#7733FF", name: "Bright Purple", row: 8, col: 3 }
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
   const [preValChecklist, setPreValChecklist] = useState({
@@ -3739,6 +3774,21 @@ const analyzeImportFile = async (file) => {
     });
   }, [colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement]);
 
+  // Blocks past the last band all share the top swatch. Tight increments run the
+  // palette out long before the top of the market, which reads as "why are these
+  // three very different blocks the same color".
+  const colorScaleClampedBlocks = useMemo(() => {
+    const topBand = colorScaleBands[colorScaleBands.length - 1];
+    if (!topBand) return { count: 0, from: 0 };
+    const usesBreakpoint = colorScaleBreakpoint > colorScaleStart && colorScaleUpperIncrement > 0;
+    const step = usesBreakpoint ? colorScaleUpperIncrement : colorScaleIncrement;
+    const ceiling = topBand.from + step;
+    return {
+      count: marketAnalysisData.filter(b => (b.avgNormalizedValue || 0) >= ceiling).length,
+      from: topBand.from
+    };
+  }, [marketAnalysisData, colorScaleBands, colorScaleStart, colorScaleIncrement, colorScaleBreakpoint, colorScaleUpperIncrement]);
+
   // ==================== RENDER ====================
   
   return (
@@ -4943,17 +4993,19 @@ const analyzeImportFile = async (file) => {
                   </span>
                 )}
                 {blockSettingsStale && (
-                  <span className="text-xs text-amber-600 font-medium">Brackets changed</span>
+                  <span className="text-xs font-medium" style={{ color: '#B45309' }}>Brackets changed</span>
                 )}
                 <button
                   onClick={processBlockAnalysis}
                   disabled={isProcessingBlocks}
                   title="Re-run the block analysis with the current brackets"
-                  className={`px-3 py-1 rounded text-sm font-medium inline-flex items-center gap-1 ${
-                    blockSettingsStale
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  } disabled:opacity-60`}
+                  className="px-3 py-2 rounded text-sm font-medium inline-flex items-center"
+                  style={{
+                    backgroundColor: blockSettingsStale ? '#D97706' : '#E5E7EB',
+                    color: blockSettingsStale ? 'white' : '#374151',
+                    opacity: isProcessingBlocks ? 0.6 : 1,
+                    gap: '6px'
+                  }}
                 >
                   <RefreshCw className={isProcessingBlocks ? 'animate-spin' : ''} size={14} />
                   {isProcessingBlocks ? 'Recalculating...' : 'Recalculate'}
@@ -5154,62 +5206,46 @@ const analyzeImportFile = async (file) => {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color Scale Start (0-99K = first color)
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleStart}
-                  onChange={(e) => setColorScaleStart(parseInt(e.target.value) || 0)}
-                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleStart: colorScaleStart })}
-                  step="100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color Increment (100K intervals)
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleIncrement}
-                  onChange={(e) => setColorScaleIncrement(parseInt(e.target.value) || 100000)}
-                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleIncrement: colorScaleIncrement })}
-                  step="100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
+              <ScaleNumberInput
+                label="Color Scale Start (0-99K = first color)"
+                value={colorScaleStart}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleStart(next);
+                  persistBlockAnalysisSettings({ blockColorScaleStart: next });
+                }}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Upper Breakpoint (0 = off)
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleBreakpoint}
-                  onChange={(e) => setColorScaleBreakpoint(parseInt(e.target.value) || 0)}
-                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleBreakpoint: colorScaleBreakpoint })}
-                  step="100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                />
-              </div>
+              <ScaleNumberInput
+                label="Color Increment (100K intervals)"
+                value={colorScaleIncrement}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleIncrement(next);
+                  persistBlockAnalysisSettings({ blockColorScaleIncrement: next });
+                }}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Increment Above Breakpoint
-                </label>
-                <input
-                  type="number"
-                  value={colorScaleUpperIncrement}
-                  onChange={(e) => setColorScaleUpperIncrement(parseInt(e.target.value) || 0)}
-                  onBlur={() => persistBlockAnalysisSettings({ blockColorScaleUpperIncrement: colorScaleUpperIncrement })}
-                  step="50000"
-                  disabled={!colorScaleBreakpoint}
-                  className="w-full px-3 py-2 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
-                />
-              </div>
+              <ScaleNumberInput
+                label="Upper Breakpoint (0 = off)"
+                value={colorScaleBreakpoint}
+                step="100000"
+                onCommit={(next) => {
+                  setColorScaleBreakpoint(next);
+                  persistBlockAnalysisSettings({ blockColorScaleBreakpoint: next });
+                }}
+              />
+
+              <ScaleNumberInput
+                label="Increment Above Breakpoint"
+                value={colorScaleUpperIncrement}
+                step="50000"
+                disabled={!colorScaleBreakpoint}
+                onCommit={(next) => {
+                  setColorScaleUpperIncrement(next);
+                  persistBlockAnalysisSettings({ blockColorScaleUpperIncrement: next });
+                }}
+              />
             </div>
             
             {typeUseSaleSummary && (
@@ -5257,6 +5293,13 @@ const analyzeImportFile = async (file) => {
                 ))}
               </div>
               <div className="mt-2">• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data</div>
+              {colorScaleClampedBlocks.count > 0 && (
+                <div className="mt-2" style={{ color: '#B45309' }}>
+                  ⚠ {colorScaleClampedBlocks.count} block{colorScaleClampedBlocks.count === 1 ? '' : 's'} above
+                  ${colorScaleClampedBlocks.from.toLocaleString()} share the top color — the palette has{' '}
+                  {bluebeamPalette.length - 1} steps. Raise the start, the increment, or lower the breakpoint to spread them out.
+                </div>
+              )}
             </div>
           </div>
           
