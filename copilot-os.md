@@ -1202,6 +1202,26 @@ v2 CDN ignoring arbitrary values like `max-h-[80vh]` (§ 13).
 **Before shipping a new colored element, confirm the class exists in
 `tailwind@2.2.19/dist/tailwind.min.css`.** Don't trust muscle memory from v3.
 
+### 15.5c `job.vendor` vs `job.vendor_type`
+
+The `jobs` table column is **`vendor_type`**. There is no `vendor` column.
+
+`App.js:600` nonetheless maps `vendor: job.vendor || ''`, which reads a field
+that doesn't exist and therefore sets **every** job's `vendor` to `''`. Any
+consumer reading `job.vendor` silently gets an empty string:
+
+- `AdminJobManagement.jsx:2666-2675` (active card badge) reads `job.vendor_type`
+  with a `|| 'BRT'` fallback. **Correct.**
+- `AdminJobManagement.jsx:2657` (active card border tint) reads `job.vendor`, so
+  the `Microsystems` branch never fires and every card takes the else branch.
+  Currently invisible anyway because that branch uses `orange-300` (§ 15.5b).
+- The archived card badge read `job.vendor` and rendered an empty pill. Now
+  fixed to match the active card's `vendor_type` pattern.
+
+Fixing `App.js:600` to fall back to `vendor_type` would correct all consumers at
+the source, but it changes active-card border tinting too, so it hasn't been
+done unilaterally. **Read `vendor_type` in new code.**
+
 ### 15.6 Defense-Year File Update on an Archived Job
 
 Archived cards carry their own **Update File** button (`bg-purple-600`, matching

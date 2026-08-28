@@ -3086,11 +3086,11 @@ const AdminJobManagement = ({
                           <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
                           <div className="flex items-center space-x-2">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                              job.vendor === 'Microsystems'
+                              job.vendor_type === 'Microsystems'
                                 ? 'bg-blue-100 text-blue-800'
                                 : 'bg-yellow-200 text-yellow-800'
                             }`}>
-                              {job.vendor}
+                              {job.vendor_type || 'BRT'}
                             </span>
                             <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium shadow-sm">
                               Archived
