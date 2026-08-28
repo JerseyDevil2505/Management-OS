@@ -47,7 +47,8 @@ function loadCsv() {
     qual: r[3].trim(),
     address: r[4].trim(),
     specialRegion: r[12].trim() || 'Normal',
-    category: r[13].trim(),
+    category: r[13].trim() === 'building-lot' ? 'building_lot' : r[13].trim(),
+    rawCategory: r[13].trim(),
     saleDate: r[14].trim(),
     isPackage: /^Y/i.test(r[18].trim()),
     notes: r[19].trim()

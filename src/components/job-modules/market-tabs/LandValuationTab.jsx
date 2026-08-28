@@ -2039,7 +2039,7 @@ const getPricePerUnit = useCallback((price, size) => {
           category = 'pre-construction';
         } else if (prop.property_m4_class === '1' || prop.property_m4_class === '3B') {
           // Default vacant land sales to Building Lots
-          category = 'building-lot';
+          category = 'building_lot';
         }
       }
       
