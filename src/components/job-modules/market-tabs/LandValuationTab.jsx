@@ -675,7 +675,38 @@ useEffect(() => {
       manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
     });
 
-    marketLandData.vacant_sales_analysis.sales.forEach(s => {
+    // A file update regenerates property_records.id, so saved sale ids can point at
+    // rows that no longer exist. Fall back to the parcel identity written alongside
+    // the id, but only when block/lot/address resolves to exactly one live parcel -
+    // an ambiguous match would silently move a category onto the wrong property.
+    const liveIds = new Set((properties || []).map(p => p.id));
+    const identityIndex = new Map();
+    (properties || []).forEach(p => {
+      const key = `${p.property_block}|${p.property_lot}|${p.property_location}`;
+      const hit = identityIndex.get(key);
+      if (hit === undefined) identityIndex.set(key, p.id);
+      else if (hit !== null) identityIndex.set(key, null); // ambiguous - refuse to guess
+    });
+
+    let remappedCount = 0;
+    let unresolvedCount = 0;
+    const resolveSaleId = (s) => {
+      if (liveIds.has(s.id)) return s.id;
+      if (!s.block && !s.lot && !s.address) {
+        unresolvedCount++;
+        return s.id;
+      }
+      const match = identityIndex.get(`${s.block}|${s.lot}|${s.address}`);
+      if (match) {
+        remappedCount++;
+        return match;
+      }
+      unresolvedCount++;
+      return s.id;
+    };
+
+    marketLandData.vacant_sales_analysis.sales.forEach(sale => {
+      const s = { ...sale, id: resolveSaleId(sale) };
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
@@ -683,6 +714,14 @@ useEffect(() => {
       if (s.included) savedIncluded.add(s.id);
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
+
+    if (remappedCount || unresolvedCount) {
+      console.log('🔗 Method 1 sale id remap after file update:', {
+        remapped: remappedCount,
+        unresolved: unresolvedCount,
+        total: marketLandData.vacant_sales_analysis.sales.length
+      });
+    }
 
     debug('🔄 Restored Method 1 metadata (sales data will be recalculated):', {
       excludedCount: savedExcluded.size,
@@ -4664,6 +4703,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vacant_sales_analysis: {
           sales: vacantSales.map(s => ({
             id: s.id,
+            // property_records.id is regenerated whenever a file update changes the
+            // composite key (it embeds year + address), orphaning anything keyed to
+            // it. These let the loader re-find the parcel after that churn.
+            block: s.property_block || null,
+            lot: s.property_lot || null,
+            qualifier: s.property_qualifier || null,
+            address: s.property_location || null,
             included: includedSales.has(s.id),
             category: saleCategories[s.id] || null,
             special_region: specialRegions[s.id] || 'Normal',
