@@ -1645,7 +1645,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const autoSaveFailureCount = useRef(0);
   const isAutoSaveDisabled = useRef(false);
 
-  // Auto-save every 30 seconds - but only after initial load is complete
+  // Auto-save every 5 minutes - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
       debug('������������� Auto-save waiting for initial load to complete');
@@ -1665,7 +1665,7 @@ const getPricePerUnit = useCallback((price, size) => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
       }
-    }, 30000);
+    }, 300000);
     return () => {
       debug('🛑 Clearing auto-save interval');
       clearInterval(interval);
@@ -1673,7 +1673,7 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [isInitialLoadComplete]);
 
   // DISABLED: Immediate auto-save was causing checkbox state to revert
-  // Auto-save only happens every 30 seconds via the interval above
+  // Auto-save only happens every 5 minutes via the interval above
   // useEffect(() => {
   //   if (!isInitialLoadComplete) return;
   //   debug('🔄 State change detected, triggering immediate save');
