@@ -4,13 +4,15 @@
 > Covers repo layout, component map, database schema, data pipeline, and vendor-specific business rules.
 > Updated August 2026.
 >
-> Recent revisions: RLS enabled on all 48 `public` tables with `private`-schema
+> Recent revisions: RLS enabled on all 49 `public` tables with `private`-schema
 > scoping helpers (§ 3), storage buckets made private, direct local-folder
 > photo workflow replacing the PowerComp print-time merge (§ 11), geocoder +
 > appeal map + distance filter, Coordinates cleanup sub-tab, sales-pool chip
 > filter w/ Lojik year adjustment, AppealLog→CME bracket label parity,
 > masked sales reworked from display-time overlay to `sales_override` promotion
-> with DB-backed skip decisions (§ 13).
+> with DB-backed skip decisions (§ 13), and a completeness pass adding the app
+> shell / permission model (§ 14), Admin Job Management (§ 15), and the modules
+> built after the original component map (§ 16).
 
 ---
 
@@ -18,7 +20,7 @@
 
 | Layer | Tech |
 |-------|------|
-| Frontend | React 18 (CRA), Tailwind CSS, Lucide icons |
+| Frontend | React 18 (CRA), **Tailwind 2.2.19 via CDN**, Lucide icons |
 | Mapping | Leaflet + react-leaflet (subject/comp maps), pdf-lib (PDF merge), pdfjs-dist (PDF parsing) |
 | Geocoding | U.S. Census Bureau Batch Geocoder (free, manual round-trip CSV) + manual lat/lng entry |
 | Backend / DB | Supabase (Postgres), Row-Level Security — **Project ID: `zxvavttfvpsagzluqqwn`** |
@@ -48,83 +50,108 @@ supabase/
         └── index.ts                Edge Function — recalculates property amenity areas
 
 src/
-├── App.js                          (1,772)  Router + auth guard + tenant context
+├── App.js                          (2,134)  Router + auth guard + tenant context + inline Help modal (§ 14)
 ├── index.js                        (11)     Entry point
 │
 ├── components/                     Top-level pages (rendered by App.js router)
-│   ├── AdminJobManagement.jsx      (3,280)  Job CRUD, archiving, status lifecycle
-│   ├── AppealMap.jsx                (290)   Leaflet subject+comps map (numbered pins, html2canvas capture)
-│   ├── AppealsSummary.jsx          (376)    Cross-job appeal dashboard
-│   ├── AssessorDashboard.jsx       (1,079)  External assessor client view
-│   ├── BillingManagement.jsx       (4,721)  Contracts, billing events, invoices
-│   ├── EmployeeManagement.jsx      (2,478)  HR, inspector management, analytics
+│   ├── AdminJobManagement.jsx      (3,333)  Job CRUD, archiving, status lifecycle (§ 15)
+│   ├── AppealMap.jsx                (293)   Leaflet subject+comps map (numbered pins, html2canvas capture)
+│   ├── AppealsSummary.jsx           (715)   Cross-job appeal dashboard
+│   ├── AssessorDashboard.jsx       (1,156)  External assessor client view
+│   ├── BillingManagement.jsx       (4,835)  Contracts, billing events, invoices
+│   ├── EmployeeManagement.jsx      (2,482)  HR, inspector management, analytics
 │   ├── GeocodeStatusChip.jsx        (390)   Inline lat/lng status pin + edit modal for comp grids
-│   ├── GeocodingTool.jsx           (2,674)  Admin-only Census batch geocoder (CSV round-trip + manual)
-│   ├── LandingPage.jsx             (217)    Public landing / login
-│   ├── OrganizationManagement.jsx  (748)    Org CRUD, subscriptions
-│   ├── PayrollManagement.jsx       (1,540)  Payroll periods, processing
-│   ├── RevenueManagement.jsx       (1,538)  Revenue tracking, proposals
-│   ├── UserManagement.jsx          (1,126)  Profile/user admin
+│   ├── GeocodingTool.jsx           (2,941)  Admin-only Census batch geocoder (CSV round-trip + manual)
+│   ├── LandingPage.jsx              (307)   Public landing / login
+│   ├── OrganizationManagement.jsx   (748)   Org CRUD, subscriptions
+│   ├── PayrollManagement.jsx       (1,591)  Payroll periods, processing
+│   ├── ResetPassword.jsx             (97)   Supabase recovery-link password reset screen
+│   ├── RevenueManagement.jsx       (1,535)  Revenue tracking, proposals
+│   ├── UserManagement.jsx          (1,119)  Profile/user admin
 │   │
 │   └── job-modules/                Job-scoped modules (loaded inside JobContainer)
-│       ├── JobContainer.jsx        (1,466)  Module dispatcher + data orchestrator
-│       ├── FileUploadButton.jsx    (3,766)  Source-file upload + comparison engine
-│       ├── ProductionTracker.jsx   (4,632)  Inspection analytics, charts
-│       ├── DataVisualizations.jsx  (1,182)  Data viz / chart components
-│       ├── InspectionInfo.jsx      (582)    Inspection data viewer
-│       ├── ManagementChecklist.jsx (1,736)  Checklist management per job
-│       ├── AppealCoverage.jsx      (19)     Placeholder / redirect
+│       ├── JobContainer.jsx        (1,664)  Module dispatcher + data orchestrator
+│       ├── FileUploadButton.jsx    (3,876)  Source-file upload + comparison engine
+│       ├── ProductionTracker.jsx   (4,781)  Inspection analytics, charts
+│       ├── ManagementChecklist.jsx (2,297)  Checklist management per job
+│       ├── DataVisualizations.jsx  (1,184)  Data viz / chart components
+│       ├── EdmundsSyncTab.jsx      (1,080)  "Edmunds Audit" — collector-file reconciliation (§ 16.1)
+│       ├── InspectionInfo.jsx       (914)   Inspection data viewer
+│       ├── ParcelPhotoStrip.jsx     (481)   Per-parcel photo picker strip (§ 11)
+│       ├── JobPhotoSourcePanel.jsx  (122)   Local Pictures-folder connect/index UI (§ 11)
+│       ├── AppealCoverage.jsx        (19)   Placeholder / redirect
 │       │
-│       ├── MarketAnalysis.jsx      (372)    Orchestrator → market-tabs/
+│       ├── MarketAnalysis.jsx       (372)   Orchestrator → market-tabs/
 │       ├── market-tabs/
-│       │   ├── LandValuationTab.jsx    (12,678) ★ LARGEST — land rates, brackets, eco-obs
-│       │   ├── PreValuationTab.jsx     (6,408)  Normalization workflows
-│       │   ├── AttributeCardsTab.jsx   (4,624)  Condition items + attribute cards
-│       │   ├── OverallAnalysisTab.jsx  (4,275)  Block mapping, condos, overall analysis
-│       │   ├── DataQualityTab.jsx      (3,279)  Data validation checks
-│       │   ├── CoordinatesSubTab.jsx   ( --- )  User-facing geocode cleanup queue (Pending/Review/Fixed buckets, class + sales-pool chips, inline GeocodeStatusChip edits)
-│       │   └── CostValuationTab.jsx    (1,072)  New construction, CCF
+│       │   ├── LandValuationTab.jsx        (13,191) ★ LARGEST — land rates, brackets, eco-obs
+│       │   ├── PreValuationTab.jsx          (6,841) Normalization workflows + VCS Analyzer / Type-Use sub-tabs
+│       │   ├── AttributeCardsTab.jsx        (6,063) Condition items + attribute cards
+│       │   ├── OverallAnalysisTab.jsx       (4,271) Block mapping, condos, overall analysis
+│       │   ├── DataQualityTab.jsx           (3,290) Validation checks + 6 sub-tabs (§ 16.6)
+│       │   ├── CostValuationTab.jsx         (1,198) New construction, CCF
+│       │   ├── VcsAnalyzerSubTab.jsx          (764) VCS consolidation guide (§ 16.7)
+│       │   ├── CoordinatesSubTab.jsx          (501) Geocode cleanup queue (§ 9.7)
+│       │   └── TypeUseNormalizationSubTab.jsx  (228) Raw → standard type/use code mapper (§ 16.8)
 │       │
-│       ├── FinalValuation.jsx      (182)    Orchestrator → final-valuation-tabs/
+│       ├── FinalValuation.jsx       (190)   Orchestrator → final-valuation-tabs/
 │       └── final-valuation-tabs/
-│           ├── SalesComparisonTab.jsx      (5,684)  CME comparable search + evaluation (incl. distance-from-subject filter)
-│           ├── AppealLogTab.jsx            (3,116)  Appeal log CRUD + legacy PowerComp import + PDF export (direct photos) + CSV export to BRT
-│           ├── DetailedAppraisalGrid.jsx   (2,532)  Manual appraisal + PDF export (uploads to `appeal-reports` bucket)
-│           ├── AdjustmentsTab.jsx          (2,277)  CME grid + bracket mapping
-│           ├── SalesReviewTab.jsx          (1,870)  Sales history review
-│           ├── MarketDataTab.jsx           (1,692)  Effective age / depreciation
-│           ├── VacantLandAppraisalTab.jsx  (1,549)  Vacant land evaluation
-│           ├── RatableComparisonTab.jsx    (1,109)  Tax rate impact analysis
-│           ├── AppellantEvidencePanel.jsx  ( -- )   Appellant-supplied comps panel + BS Meter
-│           └── AnalyticsTab.jsx            (468)    Final recommendations
+│           ├── SalesComparisonTab.jsx      (8,516) ★ CME comparable search + evaluation (incl. distance filter)
+│           ├── AppealLogTab.jsx            (5,831) Appeal log CRUD + PowerComp import + PDF export + CSV to BRT
+│           ├── DetailedAppraisalGrid.jsx   (5,064) Manual appraisal + PDF export (→ `appeal-reports` bucket)
+│           ├── AdjustmentsTab.jsx          (2,582) CME grid + bracket mapping + Adjustment Analysis sub-tab
+│           ├── VacantLandAppraisalTab.jsx  (1,973) Vacant land evaluation
+│           ├── SalesReviewTab.jsx          (1,965) Sales history review
+│           ├── MarketDataTab.jsx           (1,672) Effective age / depreciation
+│           ├── RatableComparisonTab.jsx    (1,108) Tax rate impact analysis
+│           ├── AppellantEvidencePanel.jsx  (1,104) Appellant-supplied comps panel + BS Meter
+│           ├── ClassEffectiveAgeReport.jsx   (636) Class 2 / MF / condo EFA grids (§ 16.4)
+│           ├── ManageResultSetsTab.jsx       (578) CME result-set rename/archive/delete (§ 16.3)
+│           ├── AdjustmentAnalysisTab.jsx     (516) Grid back-test UI + tax-board PDF (§ 16.2)
+│           ├── AnalyticsTab.jsx              (468) Final recommendations
+│           ├── ManualSalesModal.jsx          (363) Microsystems manual sale entry (§ 16.5)
+│           └── ScanMaskedSalesModal.jsx      (356) Masked-sale scan / unmask decisions (§ 13)
+│
+├── contexts/
+│   └── JobPhotoSourceContext.jsx    (174)   Per-job local photo index provider (§ 11)
 │
 ├── data/
-│   └── njZipToCity.js              (654)    NJ ZIP → city lookup (Census geocoder ZIP-sweep helper)
+│   └── njZipToCity.js               (801)   NJ ZIP → city lookup (Census geocoder ZIP-sweep helper)
 │
 ├── lib/
-│   ├── supabaseClient.js           (5,058)  Supabase client, service layer, interpretCodes
-│   ├── targetNormalization.js      (402)    Time/size normalization math
-│   ├── tenantConfig.js             (142)    Multi-tenant helpers
-│   ├── powercompPdfParser.js       (948)    Parses BRT PowerComp Batch Taxpayer PDFs → per-subject photo packets
-│   ├── appellantCompEvaluator.js   (397)    BS Meter — scores appellant comps (NU codes, date range, similarity)
-│   ├── appealReportBuilder.js       (60)    PDF download / zip-of-PDFs / safe filename helpers
+│   ├── supabaseClient.js           (5,319)  Supabase client, service layer, interpretCodes
+│   ├── powercompPdfParser.js        (948)   BRT PowerComp Batch Taxpayer PDFs → per-subject photo packets
+│   ├── adjustmentAnalysis.js        (925)   Adjustment-grid back-test engine (§ 16.2)
+│   ├── localPhotoSource.js          (619)   Photo filename parser + IndexedDB store + folder indexer (§ 11)
+│   ├── unmaskedSales.js             (466)   Masked-sale detection / promotion / reversal (§ 13)
+│   ├── targetNormalization.js       (402)   Time/size normalization math
+│   ├── appellantCompEvaluator.js    (398)   BS Meter — scores appellant comps
+│   ├── adjustmentAnalysisPdf.js     (281)   Branded tax-board PDF for the adjustment back-test
+│   ├── tenantConfig.js              (146)   Multi-tenant helpers
+│   ├── effectiveAttributes.js       (125)   Card/SFLA derived markers (`_isMainCard`, `_effectiveSfla`) (§ 16.9)
+│   ├── conditionRanking.js          (110)   Shared condition-code ranking / NCOVR normalization (§ 16.9)
+│   ├── method2SalesExport.js         (84)   Method 2 VCS sales modal → xlsx (§ 16.9)
+│   ├── yearBuiltCategories.js        (65)   Assessment-year-relative year-built bands (§ 16.9)
+│   ├── appealReportBuilder.js        (60)   PDF download / zip-of-PDFs / safe filename helpers
+│   ├── effectiveAge.js               (50)   Centralized EFA eligibility + vendor age↔year conversion (§ 16.9)
+│   ├── salesCodes.js                 (30)   Sales-code normalization + allowlist (§ 16.9)
+│   ├── utils/
 │   └── data-pipeline/
-│       ├── brt-processor.js        (1,551)  BRT source-file parser → property_records
-│       ├── brt-updater.js          (1,998)  BRT re-upload delta processor
-│       ├── microsystems-processor.js (1,420) Microsystems parser → property_records
-│       └── microsystems-updater.js (1,873)  Microsystems re-upload delta processor
+│       ├── brt-updater.js          (2,092)  BRT re-upload delta processor
+│       ├── microsystems-updater.js (1,954)  Microsystems re-upload delta processor
+│       ├── brt-processor.js        (1,686)  BRT source-file parser → property_records
+│       └── microsystems-processor.js (1,545) Microsystems parser → property_records
 │
 ├── App.css / index.css             Global styles
 └── (component-level .css files)    LandValuationTab.css, sharedTabNav.css, etc.
 ```
 
-**Total source lines: ~98,000+**
+**Total source lines: ~128,000** (counted August 2026).
 
 ### Component Organization Pattern
 
 Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 
-- **Parent Orchestrator** — lightweight coordinator (`MarketAnalysis` 372 lines, `FinalValuation` 182 lines)
+- **Parent Orchestrator** — lightweight coordinator (`MarketAnalysis` 372 lines, `FinalValuation` 190 lines)
 - **Child Tab Components** — heavy implementations live in sub-folders
 - **Benefits** — clean file organization, logical grouping, no double data loading
 
@@ -142,7 +169,26 @@ Both `market-tabs/` and `final-valuation-tabs/` follow the same pattern:
 
 All tables in `public` schema.
 
-**RLS is enabled on all 48 public tables as of 2026-08-03.** See
+**RLS is enabled on all 49 public tables.** The original sweep covered 48 tables
+on 2026-08-03; `riverton_property_vcs_backup` was created afterwards with RLS
+off and was locked down separately (see the supporting-tables entry below). A
+full audit on that occasion also confirmed the one `public` view,
+`job_assignments_with_employee`, has `security_invoker = true`.
+
+To re-audit at any time:
+
+```sql
+select c.relname, c.relrowsecurity
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+```
+
+Note the grant convention: `anon` and `authenticated` hold broad table grants on
+essentially every table, and **RLS is the only gate**. That is why a table
+created without RLS is immediately world-writable through the publishable key,
+and why enabling RLS — not revoking grants — is the fix that matches the
+existing schema. See
+`SECURITY-REMEDIATION.md` for the full policy map. Summary:
 `SECURITY-REMEDIATION.md` for the full policy map. Summary: money tables
 (billing/payroll/contracts/expenses/receivables/distributions/proposals) are
 admin-only; job-scoped tables use `staff or own job`; identity tables use
@@ -272,7 +318,7 @@ Central entity — one job = one municipality revaluation project.
 | vendor_type | varchar | `BRT` or `Microsystems` |
 | vendor_detection | jsonb | auto-detected vendor info |
 | organization_id | uuid | FK → organizations |
-| parent_job_id | uuid | self-FK for archived snapshots |
+| parent_job_id | uuid | self-FK. **Unused** — nothing in the app writes it; only read in `JobContainer`'s select list. Archiving does not snapshot (§ 15.5) |
 | year_of_value | int | |
 | director_ratio | numeric | |
 | total_properties | int | |
@@ -473,6 +519,7 @@ Business development proposals → can convert to organization.
 | `appeal_powercomp_photos` | Per-property photo-packet metadata imported from BRT PowerComp PDFs. **Legacy / fallback** — superseded by `appeal_photos` for new appeals. Columns: `id`, `job_id`, `property_composite_key`, `storage_path`, `page_count`, `source_filename`, `imported_at`, `imported_by`. |
 | `appeal_photos` | Per-parcel front-photo picks for appeal reports, populated from the local Pictures folder via `ParcelPhotoStrip` (Detailed tab). One row per `(job_id, property_composite_key)` — re-picking replaces. Columns: `id`, `job_id`, `property_composite_key`, `appeal_id` (nullable), `storage_path`, `source` (`powercama` / `powerpad` / `user_upload` / `clipboard`), `original_filename`, `capture_ts` (T<14 digits> if from a PowerCama-stamped file), `picked_by`, `picked_at`, `caption`. |
 | `appeal_reports` | Per-subject Appeal Report PDFs uploaded from the Detailed tab. Source of truth for what gets printed from the Appeal Log; uploads replace prior versions for the same subject. Columns: `id`, `job_id`, `property_composite_key`, `appeal_id`, `storage_path`, `source_filename`, `page_count`, `uploaded_at`, `uploaded_by`. |
+| `riverton_property_vcs_backup` | **Rollback data for a conference demo — do not drop without reading this.** One atomic snapshot (2026-08-17) of Riverton's *real* `property_records.property_vcs`, 2,026 rows, one per parcel: `id`, `job_id`, `property_composite_key`, `old_property_vcs`, `backed_up_at`. Riverton's live VCS was deliberately overwritten with a consolidated demo structure (37 granular codes such as `R4HW` / `R8EB` collapsed into `RIVE` / `RIVW` / `DNTN` / `COMM`); 1,005 of 2,026 parcels currently differ. Riverton is an **active** job that is not actually being reassessed, so this table is the only record of its true VCS. Referenced by no application code. Created without RLS; locked down later with the standard `admin_only` policy. |
 | `nu_code_dictionary` | NJ NU (non-usable) deed transaction code dictionary (N.J.A.C. 18:12-1.1). Columns: `code`, `short_form` (human-readable label used in autogenerated commentary), `category`, `description`, `usable` (bool), `notes`, `source`, `updated_at`. |
 
 ### Storage Buckets (Supabase Storage)
@@ -853,7 +900,7 @@ This codebase has been built iteratively over the course of a year. Every patter
 - Ask "is this intentional?" before changing any pattern that seems odd
 - Check this document for context on vendor differences before touching anything in the data pipeline or EFA logic
 - Make surgical, minimal changes scoped to exactly what was requested
-- Trust that large components (LandValuationTab at 12,678 lines) are large for a reason — they contain complex, interrelated workflows that break when split apart
+- Trust that large components (LandValuationTab at 13,191 lines) are large for a reason — they contain complex, interrelated workflows that break when split apart
 
 ### Patterns That Look Wrong But Are Correct
 
@@ -862,8 +909,8 @@ This codebase has been built iteratively over the course of a year. Every patter
 | `asset_effective_age` stores a year, not an age (Microsystems) | Processor converts age→year for uniform storage; UI converts back for display |
 | Separate processor + updater files per vendor | First upload vs re-upload have fundamentally different logic (diff tracking, comparison reports) |
 | `MarketAnalysis.jsx` is only 372 lines | It's an orchestrator — all real work is in `market-tabs/` children |
-| `FinalValuation.jsx` is only 182 lines | Same pattern — orchestrator for `final-valuation-tabs/` |
-| `supabaseClient.js` at 5,058 lines | Centralized service layer — it's large because it's the single source of truth for data operations |
+| `FinalValuation.jsx` is only 190 lines | Same pattern — orchestrator for `final-valuation-tabs/` |
+| `supabaseClient.js` at 5,319 lines | Centralized service layer — it's large because it's the single source of truth for data operations |
 | Components with 2,000-12,000 lines | These are full workflow modules with inline state, calculations, and UI — splitting them creates worse problems than keeping them together |
 | Inline calculations in JSX components | The depreciation/normalization/CME math needs to live close to the UI that displays it — extracting to separate files creates synchronization bugs |
 | `property_composite_key` used as FK (not uuid) | Block+lot+qualifier+card is the natural key in NJ tax assessment — it's the identifier that survives across file uploads |
@@ -893,7 +940,7 @@ This codebase has been built iteratively over the course of a year. Every patter
 
 2. **Don't "fix" the data pipeline processors** — `brt-processor.js` and `microsystems-processor.js` map vendor-specific field names to our normalized schema. The field mappings look arbitrary but match exact vendor export formats that municipalities provide. Renaming or reordering breaks real uploads.
 
-3. **Large components are load-bearing** — `LandValuationTab.jsx` (12,678 lines) handles bracket analysis, vacant sales, allocation studies, cascade rates, eco-obs adjustments, and per-block worksheets. These features share internal state. Previous attempts to split it created race conditions and stale-state bugs.
+3. **Large components are load-bearing** — `LandValuationTab.jsx` (13,191 lines) handles bracket analysis, vacant sales, allocation studies, cascade rates, eco-obs adjustments, and per-block worksheets. These features share internal state. Previous attempts to split it created race conditions and stale-state bugs.
 
 4. **CME adjustment grid is bracket-aware** — The `job_adjustment_grid` has `bracket_0` through `bracket_9` columns. These map to price brackets defined in `job_cme_bracket_mappings`. The mapping between VCS codes, type-use codes, and brackets is municipality-specific. Don't assume uniform bracket definitions.
 
@@ -960,3 +1007,463 @@ Pieces:
 | `unmasked_sale` is kept even though nothing reads it for data | It is the audit trail and the scan's `alreadyUnmasked` marker. Dropping it loses provenance and the ability to review a past decision. |
 | A promoted parcel still appears in the scan list | `detectMaskedCandidates` keeps it via `alreadyUnmasked` so the decision can be reversed. Its `current` now shows the promoted sale, which is correct post-promotion. |
 | `prev_sales` can contain a sale BRT's Mod IV panel doesn't show | `extractPrevSales` reads `PREV_SALE{1..5}DATE/AMT` verbatim from the export. Confirmed BRT-side bug (Barnegat Light 38/14 carries a 2016-07-29 $535,000 in slot 1 that the Mod IV Sales History omits). Don't "fix" the parser — verify against the file. |
+
+---
+
+## 14. App Shell, Navigation & Permissions (`App.js`)
+
+`App.js` is the router, auth guard, and tenant resolver. Everything in § 2's
+`components/` list is mounted from here; `/job/:id` mounts `JobContainer`, which
+**replaces** the main nav rather than nesting inside it.
+
+### 14.1 Nav Tabs
+
+**Internal / PPA shell** (`!isAssessorUser`), in render order:
+
+| Tab | Route | Component | Gate |
+|-----|-------|-----------|------|
+| Employees | `/employees` | `EmployeeManagement` | — |
+| Jobs | `/admin-jobs` | `AdminJobManagement` | — |
+| Appeals | `/appeals` | `AppealsSummary` | — |
+| Billing | `/billing` | `BillingManagement` | `isAdmin && tenantConfig.modules.billing` |
+| Payroll | `/payroll` | `PayrollManagement` | `isAdmin && tenantConfig.modules.payroll` |
+| Users | `/users` | `UserManagement` | `canManageUsers` |
+| Organizations | `/organizations` | `OrganizationManagement` | `canManageUsers` |
+| Revenue | `/revenue` | `RevenueManagement` | `canManageUsers` |
+| Geocoder | `/geocoding-tool` | `GeocodingTool` | `canManageUsers` |
+
+**Assessor shell:**
+
+| Tab | Route | Component | Gate |
+|-----|-------|-----------|------|
+| Dashboard | `/assessor-dashboard` | `AssessorDashboard` | `isAssessorUser` |
+| Job Management | `/admin-jobs` | `AdminJobManagement` | `viewingAs && canManageUsers` |
+
+### 14.2 How Permissions Are Actually Derived
+
+This does not match what you'd guess from the schema — read carefully before
+adding a gate.
+
+- **`user.role` comes from `employees.role`, not `profiles.role`.** The session
+  user is looked up in `employees` by `auth_user_id` *or* `email`, and defaults
+  to `inspector` when absent. `profiles.role` exists in the schema (§ 3) but is
+  not what the shell reads.
+- **`isAdmin`** = role is `admin` or `owner`. Gates Billing and Payroll only.
+- **`canManageUsers` is a hard-coded primary-owner UUID compare**
+  (`user?.id === PRIMARY_OWNER_ID`), *not* a role check. Users, Organizations,
+  Revenue, and the Geocoder are therefore single-person tabs. Don't "fix" this
+  into a role check without asking — it is the current access model for the
+  destructive admin surfaces.
+- **Assessor detection is organization-ID based**, not `org_type` based:
+  `isRealAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID`, where PPA is the
+  hard-coded org `00000000-0000-0000-0000-000000000001`.
+- **`tenantConfig`** (`src/lib/tenantConfig.js`) maps "no org, or the PPA org" to
+  `internal`, anything else to `assessor`, and exposes `tenantConfig.modules`.
+  `organizations.tab_config` and `organizations.org_type` are **not read by
+  `App.js`** — `org_type` is used elsewhere (the Lojik sales-window adjustment,
+  § 9.5), and `tab_config` is currently unused by the shell.
+
+### 14.3 Tenant Behavior
+
+- PPA users see PPA jobs only; the primary owner sees all jobs.
+- Real assessor users are redirected to `/assessor-dashboard` and their job list
+  is filtered by `employeeData.organization_id`.
+- `viewingAs` (impersonation) narrows to the impersonated employee's org.
+- **`single_job_mode` / `default_job_id` are not used by `App.js`.** They are
+  live columns on `organizations` (§ 3), but `AssessorDashboard` deliberately
+  lands single-job orgs on the dashboard rather than opening straight into the
+  job. Treat the § 3 description of those columns as schema-only.
+
+### 14.4 Help Modal
+
+The header Help button (`title="How-to guides"`) sets `showHelp` and opens an
+**inline modal defined in `App.js`**. Content is the inline `HELP_TABS` array —
+four tabs of prose plus step lists and screenshot paths served from `public/`.
+It is not a separate component and not a markdown or JSON file, so editing help
+copy means editing `App.js`.
+
+---
+
+## 15. Admin Job Management (`AdminJobManagement.jsx`)
+
+The main operational screen: 3,333 lines covering the job list, the job
+lifecycle, and the pre-contract pipeline.
+
+### 15.1 PPA Jobs / LOJIK Clients Toggle
+
+**Client-side filter only — it does not change the Supabase query.**
+
+```js
+const scopedJobs = jobScope === 'ppa'
+  ? jobs.filter(isPpaJob)
+  : jobs.filter(j => !isPpaJob(j));
+```
+
+`isPpaJob` keys off `organization_id`, and a **null `organization_id` counts as
+PPA**. Flipping the toggle re-scopes the active/planning/archived arrays and
+resets the view to Active Jobs.
+
+### 15.2 Tabs
+
+| Tab | What it does | Backing table |
+|-----|--------------|---------------|
+| Active Jobs | Job cards + live metrics | `jobs` (passed down from `App`) |
+| Planning Jobs | Pre-contract pipeline: create / edit / convert / delete | `planning_jobs` |
+| Archived Jobs | Jobs in appeal-defense phase (§ 15.5). Actions: Update File, Go to Job, Restore to Active | `jobs` filtered by `status` / `archived_at` |
+| County HPI | Import / upsert / export FHFA index by county+year | `county_hpi_data` |
+| Manager Assignments | Management-role workload view | `employees` + `job_assignments` (via `job.assignedManagers`) |
+
+### 15.3 Job-Card Actions
+
+| Action | Data-layer effect |
+|--------|-------------------|
+| Assign Properties | Writes `job_responsibilities` and flips `property_records.is_assigned_property`; then updates `jobs.has_property_assignments` and `jobs.assigned_has_commercial` |
+| Update File | Opens `FileUploadButton` → the § 4 processor/updater pipeline |
+| Go to Job | `onJobSelect(job)`; `App` handles navigation and workspace load |
+| Edit | Updates the `jobs` row, then **deletes and re-inserts** all `job_assignments` for the job |
+| Archive | Checklist validation, then a status transition on the same row: `status: 'archived'`, `archived_at`, `archived_by`. Reversible via Restore to Active, which clears both fields |
+| Delete | **Hard delete.** Explicit child cleanup in order: `comparison_reports`, `job_assignments`, `job_responsibilities`, `property_records`, `source_file_versions`, then `jobs` |
+
+**Archive is a lifecycle stage, not cold storage** — see § 15.5. It is
+deliberately a status flip rather than a snapshot, and `parent_job_id` is never
+written. Reassessment archive validation deliberately excludes the checklist
+`analysis` and `completion` items.
+
+Delete's child cleanup logs and swallows most child-delete errors rather than
+throwing, and there is no verified DB-level cascade beyond the listed tables. A
+delete that partially fails will leave orphans quietly — worth knowing before
+you trust it on a large job.
+
+### 15.4 Where the Card Metrics Come From
+
+Every metric prefers a `jobMetrics[job.id]` entry when the parent supplied one,
+and falls back to `jobs.workflow_stats` (jsonb):
+
+| Metric | Primary | Fallback |
+|--------|---------|----------|
+| Completion % / inspected | `jobMetrics` | `workflow_stats.validInspections / .totalRecords` |
+| Entry rate / refusal rate | `jobMetrics` | `workflow_stats.jobEntryRate` / `.jobRefusalRate` |
+| Commercial / pricing complete | `jobMetrics` | `workflow_stats.commercialCompletePercent` / `.pricingCompletePercent` |
+| Billing | `jobs.percent_billed` | — (no billing RPC) |
+| Total properties | `workflow_stats.totalRecords` | `jobs.total_properties` |
+| Residential / commercial | `jobs.totalresidential` / `jobs.totalcommercial` | — |
+| Assigned-scope total | per-job `property_records` exact count, on assignment refresh | — |
+
+> **Known outstanding perf issue.** § 3's "never count in a loop" rule was fixed
+> for Revenue and the Geocoder via grouped RPCs. It was **not** fixed here:
+> `App.loadJobFreshness()` still issues per-job `property_records` count queries
+> across the job list, including the client summaries. This screen uses no
+> grouped metric RPC. If job-list load time becomes a complaint, this is the
+> cause, and the fix is the same shape as `geocode_coverage_by_job()`.
+
+### 15.5 Job Lifecycle: Revaluation Year, then Appeal-Defense Years
+
+**Read this before changing anything about archiving.** A reval contract is not
+one year of work. PPA delivers the revaluation in year one and is then
+contractually obligated to *defend* those values for the following two to three
+years. "Archived" is the name of that defense phase.
+
+Using Califon as the worked example:
+
+| When | What happens | State |
+|------|--------------|-------|
+| Now → Feb 2027 | Revaluation production: inspections, market analysis, valuation. Due Feb 2027. | Active |
+| ~Mar 2027 | Work is delivered. Job is archived — off the active list, into the archived list. | Archived |
+| May 1 2027 | NJ appeal deadline; appeals come in against the new values. | Archived |
+| 2027 | Go into the archived job, **update the source file** to pull in recent sales, then use the Appeal Log and CME to defend the assessments. Archive that year's CME result sets. | Archived |
+| 2028 | Same cycle again on the same job — new appeal year, new sales, new result sets. | Archived |
+
+Consequences that constrain the code:
+
+- **An archived job is fully live and mutable.** It receives source-file updates
+  and code-file updates, its `property_records` change, and new CME evaluations
+  and appeal-log entries are written against it for years after delivery.
+- **This is exactly why archive is a status flip and not a snapshot.** A frozen
+  copy would be useless here — the defense work *requires* fresh sales data on
+  the same job. Don't "fix" archive by adding snapshotting, and don't treat
+  archived jobs as read-only anywhere in the app.
+- **Per-year separation lives below the job, not on it.** The appeal year is
+  carried by `appeal_log.appeal_year`, and each year's CME batches are separated
+  by `job_cme_result_sets.archive_year` / `archive_category` via
+  ManageResultSetsTab (§ 16.3). That's the mechanism for "archive those logs and
+  do it again next year" — one job, many appeal years stacked inside it.
+- **Restore to Active is a genuine un-archive**, clearing `archived_at` /
+  `archived_by`. Used when a town goes back into production (e.g. the next
+  reassessment), not as part of the defense cycle.
+- `goToArchivedJob` checks `job_access_grants` by `ccdd` before opening the
+  workspace, which is how an assessor-tenant employee reaches a defense-phase
+  job they don't otherwise own.
+
+### 15.5b Tailwind Palette Constraint (bites here, applies everywhere)
+
+Tailwind is loaded as a **prebuilt CDN stylesheet** — `App.css:6` imports
+`tailwindcss@2.2.19/dist/tailwind.min.css`. There is no `tailwind.config.js` and
+no build step, so **only Tailwind 2's default palette exists**:
+`gray, red, yellow, green, blue, indigo, purple, pink`.
+
+`amber`, `orange`, `slate`, `emerald`, `teal`, `sky`, `violet`, `rose`, `lime`
+and the rest of the v3 palette **do not exist**. Neither does v3's directional
+border-color syntax (`border-l-amber-600`) — in v2 you set width and color
+separately: `border-l-4 border-purple-400`.
+
+A class that doesn't exist doesn't error. It emits nothing, so the element
+renders with no background — a button that is present, clickable, and
+effectively invisible. That is exactly how the archived-card **Update File**
+button first shipped (`bg-amber-600`), and it's the same failure mode as the
+v2 CDN ignoring arbitrary values like `max-h-[80vh]` (§ 13).
+
+> **Pre-existing debt:** roughly **225 lines across 26 components** still
+> reference `amber-*` or `orange-*` and are silently rendering unstyled today —
+> `SalesComparisonTab` (46), `EmployeeManagement` (26), `DetailedAppraisalGrid`
+> (18), `PreValuationTab` (16), `AppealLogTab` (13) and more. This has not been
+> swept. When you touch a component, verify any amber/orange class against the
+> CDN stylesheet rather than assuming it works.
+
+**Before shipping a new colored element, confirm the class exists in
+`tailwind@2.2.19/dist/tailwind.min.css`.** Don't trust muscle memory from v3.
+
+### 15.5c `job.vendor` vs `job.vendor_type`
+
+The `jobs` table column is **`vendor_type`**. There is no `vendor` column.
+
+`App.js:600` nonetheless maps `vendor: job.vendor || ''`, which reads a field
+that doesn't exist and therefore sets **every** job's `vendor` to `''`. Any
+consumer reading `job.vendor` silently gets an empty string:
+
+- `AdminJobManagement.jsx:2666-2675` (active card badge) reads `job.vendor_type`
+  with a `|| 'BRT'` fallback. **Correct.**
+- `AdminJobManagement.jsx:2657` (active card border tint) reads `job.vendor`, so
+  the `Microsystems` branch never fires and every card takes the else branch.
+  Currently invisible anyway because that branch uses `orange-300` (§ 15.5b).
+- The archived card badge read `job.vendor` and rendered an empty pill. Now
+  fixed to match the active card's `vendor_type` pattern.
+
+Fixing `App.js:600` to fall back to `vendor_type` would correct all consumers at
+the source, but it changes active-card border tinting too, so it hasn't been
+done unilaterally. **Read `vendor_type` in new code.**
+
+### 15.6 Defense-Year File Update on an Archived Job
+
+Archived cards carry their own **Update File** button (`bg-purple-600`, matching
+the card's `border-purple-400` accent — blue and green are already taken by Go to
+Job and Restore to Active; see § 15.5b for why it isn't amber), left of Go to Job
+so the defense-year sales refresh doesn't require a restore / upload /
+re-archive round trip. It opens the same job-agnostic upload modal as the active
+cards (`selectedJobForUpload` → `FileUploadButton`).
+
+Two things make this safe, and both matter:
+
+1. **`goToArchivedJob` re-reads the `jobs` row before calling `onJobSelect`.**
+   It used to pass the card's copy straight from the list, which is a snapshot
+   taken when the list loaded. After a file update that copy is stale, and the
+   workspace would open on old data unless the user manually reloaded. The fresh
+   read (falling back to the list copy if it fails) removes that trap. The
+   pre-existing `job_access_grants` redirect still runs first and is unchanged.
+2. **The upload modal shows an archived-job warning** with the job's property
+   count and a "keep this tab open, 20–30 minutes on large jobs" note. Berkeley
+   is the reference case. Processing time scales with parcel count, and the tab
+   must stay open for the whole run.
+
+The existing `onFileProcessed` / `onDataRefresh` handlers already call
+`onRefresh()`, and `propsArchivedJobs` syncs into `archivedJobs` state, so the
+archived list picks up the new version and upload timestamp automatically.
+
+---
+
+## 16. Modules Added After the Initial Guide
+
+Everything below post-dates the original guide's component map.
+
+### 16.1 Edmunds Audit (`EdmundsSyncTab.jsx`)
+
+Job module `edmunds-sync`, mounted by `JobContainer` under the tab label
+**Edmunds Audit**. Edmunds is the municipality's tax-collector system; this
+reconciles their parcel list against ours.
+
+**It is not a sync and touches no database.** No Supabase import, no API, no
+credentials. Purely local: upload an Edmunds `.xlsx` / `.xls` / `.csv`, `XLSX`
+parses sheet 1, flexible column matching pulls block, lot, qualifier, owner,
+address, city/state/ZIP, class, and optional sale fields, the rows are compared
+against the primary-card properties already in the `properties` prop, and
+`XLSX.writeFile` downloads a workbook with **Discrepancies**, **Phantom
+Properties**, and **Summary** sheets. Don't rename it into a "sync" or wire it
+to a table without being asked; the deliverable is the workbook.
+
+Vendor and matching quirks that are intentional:
+
+- Primary card is `M` for Microsystems, `1` for BRT.
+- Subdivided lots and additional-card records are bucketed separately from
+  genuinely orphaned ("phantom") records.
+- Owner names match at a **50%** fuzzy threshold; other text fields at 90%.
+  Owner strings differ wildly between systems, so the loose threshold is
+  deliberate.
+- Numeric-street variants (`4th` / `fourth` / `04`) are treated as fuzzy matches.
+- Edmunds sale fields are informational only — the export appends *our* Last
+  Sale columns because Edmunds can't supply them.
+
+### 16.2 Adjustment Analysis (`AdjustmentAnalysisTab.jsx` + `lib/adjustmentAnalysis.js` + `lib/adjustmentAnalysisPdf.js`)
+
+Reached at **Final Valuation → Adjustments → Adjustment Analysis** (rendered by
+`AdjustmentsTab` when `activeSubTab === 'study'`).
+
+**It back-tests the existing adjustment grid; it does not propose adjustments.**
+It reads `job_adjustment_grid` rows (via the parent) and **writes nothing**. It
+does not touch `job_cme_bracket_mappings` — bracket mapping stays in
+`AdjustmentsTab`. It runs *alongside* the CME grid, as a defensibility check you
+can hand to a tax board.
+
+Method (`adjustmentAnalysis.js`, pure — no network, no persistence):
+
+1. Filter sales by class, date window, sale code, price, condo-child status, and
+   vetted vs all-allowable mode.
+2. Dependent value is `values_norm_time` in **vetted** mode and raw `sales_price`
+   in **all-allowable** mode. Bracket assignment always uses raw `sales_price`
+   regardless of mode.
+3. Per bracket, compute median attribute baselines and a median baseline price.
+4. Predict: `baselinePrice + Σ(gridValue × (saleQty − baselineQty))`.
+5. A **hit** is absolute error ≤ 10% of the actual dependent value.
+6. Verdicts: fewer than 10 sales = "Can't verify", 10–24 = limited, 25+ =
+   verified; hit-rate then bands green / yellow / red.
+7. Attribute diagnostics split sales above/below median deviation and compare
+   mean signed errors. **Diagnostic only** — not a recommended adjustment.
+
+`adjustmentAnalysisPdf.js` renders the branded LOJIK US-Letter report
+(`LOJIK_Adjustment_Analysis_<job>_<YYYYMMDD>.pdf`) via a dynamic `jspdf` +
+`jspdf-autotable` import, pulling `/lojik-logo.PNG` from `public/`, not storage.
+
+### 16.3 Manage Result Sets (`ManageResultSetsTab.jsx`)
+
+**Sales Comparison → Manage Result Sets.** Sole table: `job_cme_result_sets`.
+Rename, relabel, archive (`archived_at`, `archived_by`, `archive_category`,
+`archive_year`), unarchive (clears those), delete.
+
+Archived sets stay visible here but drop out of the Evaluate picker. **Delete is
+permanent and performs no cleanup of linked `job_cme_evaluations`** — worth
+knowing before you offer it in bulk.
+
+`archive_year` + `archive_category` are what separate one appeal year's CME work
+from the next on the same job (§ 15.5). A job in its second or third defense year
+accumulates result sets across years; archiving last year's batch under its year
+is how the Evaluate picker stays clean without losing the prior year's defense
+record. Relabel exists to re-file a batch under a different year/category.
+
+### 16.4 Class Effective Age Report (`ClassEffectiveAgeReport.jsx`)
+
+Rendered inline by `MarketDataTab` beneath its metrics — no separate nav click.
+Builds Class 2, Multi-Family, and Condo grids grouped by VCS / year-built band /
+design, showing building class alongside average recommended and actual EFA.
+
+Writes:
+
+- `final_valuation_data` — upserts `job_id`, `property_composite_key`,
+  `recommended_efa`, `recommended_efa_calculated_at`, `updated_at`.
+- `jobs.class_efa_report_config` — the report's saved configuration.
+
+It intentionally **reads stored `recommended_efa` and does not recalculate on
+open**; recalculation happens only on "Save Effective Age Results". Class 10 is
+excluded by default and empty year-built bands are hidden by default.
+
+### 16.5 Manual Sales Modal (`ManualSalesModal.jsx`) — Microsystems only
+
+**Sales Comparison → Sales Pool → Add Manual Sale.** Lets a user type a
+historical sale onto an existing parcel when the Microsystems file doesn't carry
+it.
+
+Writes `property_records` directly, matched on `job_id` + block + lot +
+qualifier: `sales_date`, `sales_price`, `sales_nu`, `sales_book`, `sales_page`,
+`sales_override = true`. There is **no manual-sales table**.
+
+**This shares the `sales_override` flag with masked-sale promotion (§ 13) but is
+a different workflow.** It does *not* write `sales_override_meta` and does not
+set `promoted_from: 'masked_scan'` — which is exactly how § 13's reversal logic
+tells the two apart, since reversal only touches its own promotions. Don't
+"unify" them, and don't start writing `sales_override_meta` here without
+re-reading § 13's reversal path first. Only unique main-card properties that
+already have a `sales_date` can be selected.
+
+### 16.6 Data Quality Sub-Tabs (`DataQualityTab.jsx`)
+
+Rendered by `MarketAnalysis` (`MarketLandAnalysis`) on the **Data Quality** tab.
+Runs client-side MOD IV, CAMA, characteristics, room/special, VCS, lot-size, and
+user-defined custom checks.
+
+Sub-tabs in order: **Overview**, **Standard & Custom Check Results**, **Custom
+Checks/Definitions**, **Ignored**, **Run History**, **Coordinates** (§ 9.7).
+
+Reads/writes:
+
+- Reads `checklist_item_status.status` for `item_id = 'data-quality-analysis'`,
+  and `jobs.raw_file_parsed_at` / `source_file_uploaded_at` / `updated_at`.
+- Reads `market_land_valuation.quality_check_results`.
+- Writes `market_land_valuation`: `quality_check_last_run`,
+  `quality_issues_count`, `quality_score`, `critical_count`, `warning_count`,
+  `info_count`, `custom_checks`, `quality_check_results`, `ignored_issues`.
+- Checklist completion goes through `checklistService.updateItemStatus`.
+
+Confirmed: it passes its already-loaded `properties` array straight to
+`<CoordinatesSubTab properties={properties} jobData={jobData} />` with **no
+refetch** — as § 9.7 requires. "Ignored" issues stay in `rawResults`; ignoring is
+a display/count filter, not a deletion. Lot-size checks skip non-primary cards
+and read different sources per vendor.
+
+### 16.7 VCS Analyzer (`VcsAnalyzerSubTab.jsx`)
+
+**Pre-Valuation → VCS Analyzer.** A live consolidation guide for Class 2
+residential and commercial 4A–4C VCS groups. Scores each group on parcel count,
+street dominance, type mixing, and normalized-size outliers, then suggests
+**Merge / No / Review**.
+
+Reads and upserts `job_settings` with `setting_key = 'vcs_analysis'`. It writes
+no property data. It reads `property_vcs` (i.e. `property_records.property_vcs`)
+and **does not read or write `property_market_analysis.new_vcs`** — so it
+analyzes the *source* VCS, not the reassigned one. `NOVC` and `FF01` are
+deliberately excluded from the Class 2 pass. The saved values are commentary and
+overrides only; nothing downstream is driven by them.
+
+### 16.8 Type/Use Mapper (`TypeUseNormalizationSubTab.jsx`)
+
+**Pre-Valuation → Type/Use Mapper.** Maps a job's raw `asset_type_use` codes to
+vendor-standard codes, with a frequency preview. Writes
+`jobs.type_use_normalization_map` (or `null` when cleared).
+
+`JobContainer` applies the map **at property-fetch time**, preserving the source
+value in `asset_type_use_raw` and exposing the mapped value as `asset_type_use`
+downstream. This is configuration for the existing pipeline — it is unrelated to
+the sale-normalization math in `targetNormalization.js`. Unmapped codes pass
+through unchanged and may still be excluded by standard-code consumers, which is
+intended. The save confirmation says a reload is required because the mapping is
+applied at fetch.
+
+### 16.9 Shared Libraries
+
+| File | Role |
+|------|------|
+| `effectiveAge.js` | **Centralizes the EFA vendor conversion** (§ 5). `resolveActualEFA` converts the Microsystems stored `yearPrior − age` back to an age; recommended EFA returns an age for Microsystems and a calendar year for BRT. A stored `actual_efa` overrides the source-file value before conversion. Used by `ClassEffectiveAgeReport` and `MarketDataTab`. Note `MarketDataTab` still has an inline `getCurrentEFA()` that displays the raw stored value — that is a display path, not a duplicate conversion, and the DEPR formulas remain inline and vendor-specific. |
+| `conditionRanking.js` | `buildConditionRanker` — shared condition-code normalization and Franklin NCOVR percentage ranking, driven by per-job config. Consumed by `adjustmentAnalysis.js`. Unknown conditions rank `0`; the ranker returns `null` only when a condition can't be resolved at all. Don't fork this into consumers. |
+| `effectiveAttributes.js` | Derives non-persistent card markers on a property array: `_baseKey`, `_isMainCard`, `_cardCount`, `_additionalCardsCount`, `_effectiveSfla`, `_cardMode`. Returns a new array; never mutates. Dedupes sibling cards by `property_addl_card`, keeping the first. Default mode `combine`; consumers are expected to filter on `_isMainCard`. |
+| `yearBuiltCategories.js` | New / Newer / Moderate / Older / Historic bands computed **relative to the job's assessment year**, not today. Moderate's upper bound is derived as the Newer lower bound minus 1 so there's no one-year gap. |
+| `salesCodes.js` | Sales-code normalization + the default allowlist shared by CME and the Adjustment Study. `normalizeSalesCode('00')` returns `''`, and padded/unpadded equivalents are both present in the allowlist on purpose. |
+| `method2SalesExport.js` | Exports the Land Valuation **Method 2 Sales – VCS** modal rows to `.xlsx` (one sheet per VCS). Display-layer export only; performs no valuation math. |
+
+### 16.10 Additional Patterns That Look Wrong But Are Correct
+
+| Pattern | Why It's Intentional |
+|---------|---------------------|
+| `canManageUsers` is a hard-coded UUID compare, not a role check | It is the current access model for the destructive admin surfaces (Users, Orgs, Revenue, Geocoder). Converting it to a role check silently widens access — ask first. |
+| The shell reads `employees.role`, not `profiles.role` | `employees` is the operational staff record and is what the app is keyed to. `profiles` exists for auth identity. Don't "correct" the lookup to `profiles`. |
+| PPA / LOJIK toggle filters client-side instead of re-querying | The job list is already fully loaded by `App`. A second scoped query would double the load and race with the freshness pass. |
+| Job **Archive** is a status flip, not a snapshot | Archived jobs are still live and still get file updates — freezing a copy would defeat the whole appeal-defense phase (§ 15.5). `jobs.parent_job_id` exists but is unused; don't build snapshot logic on the assumption that it's half-implemented. |
+| `EdmundsSyncTab` has no Supabase calls at all | The deliverable is a downloadable audit workbook, not persisted state. Adding a table would create a second source of truth for parcel identity. |
+| Edmunds owner matching uses a 50% fuzzy threshold while everything else uses 90% | Owner-name strings diverge heavily between Edmunds and CAMA (trusts, estates, married-name changes). A 90% threshold produced mostly false discrepancies. |
+| `AdjustmentAnalysisTab` back-tests the grid but never writes to it | It's a defensibility report for a tax board. Making it write recommended values back would turn a measurement into a feedback loop. |
+| Adjustment analysis brackets on raw `sales_price` even in vetted mode, where the dependent value is `values_norm_time` | Brackets are a price tier the board recognizes, defined on actual sale price. Normalizing the bracket key too would move sales between tiers and make the report unreconcilable against the deed record. |
+| `adjustmentAnalysis.js` keeps a vendor branch for `asset_effective_age` even though both branches currently compute `referenceYear − stored` | The branch documents the § 5 vendor difference and is the correct place to diverge again. Also: don't substitute `asset_year_built` for it. |
+| Only one lot-size method is active; the largest-total method wins with a warning | Jobs sometimes carry partial data in several lot-size fields. Picking the fullest one and warning beats silently summing or nulling out. |
+| Adjustment analysis surfaces "Pending", inactive lot-size methods, and zero-priced attributes instead of skipping them | A grid cell that was never filled in is a finding, not noise. Silently treating it as usable would inflate the hit rate. |
+| `ManualSalesModal` sets `sales_override` but deliberately omits `sales_override_meta` | That absence is the signal § 13's reversal uses to leave manual entries alone. Writing meta here would make masked-sale reversal clobber hand-entered sales. |
+| `ClassEffectiveAgeReport` shows stored EFA and only recalculates on explicit save | Recalculating on open would make the displayed numbers drift from what's in `final_valuation_data` without anyone choosing to change them. |
+| `ManageResultSetsTab` delete doesn't clean up `job_cme_evaluations` | Current behavior, not a designed cascade. If you touch delete here, decide the cascade deliberately with the user rather than assuming it exists. |
+| `VcsAnalyzerSubTab` reads `property_vcs` and ignores `new_vcs` | It advises on consolidating the *source* VCS groups. Reading `new_vcs` would feed its own prior recommendations back into the analysis. |
+| Type/Use mapping is applied at fetch in `JobContainer`, not stored on the row | Keeps `asset_type_use_raw` authoritative and makes the mapping editable without a data migration. That's also why saving prompts for a reload. |
+| `adjustmentAnalysisPdf` converts the PNG logo to JPEG on a canvas first | jsPDF leaks PNG transparency state into subsequent text rendering. The canvas round-trip is the workaround — don't simplify it back to a direct PNG `addImage`. |
+| Data Quality "Ignored" issues stay in `rawResults` | Ignoring is a display and count filter, not a deletion, so the run history stays a faithful record of what the check actually found. |

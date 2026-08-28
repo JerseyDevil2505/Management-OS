@@ -675,7 +675,49 @@ useEffect(() => {
       manuallyAdded: marketLandData.vacant_sales_analysis.sales.filter(s => s.manually_added).length
     });
 
-    marketLandData.vacant_sales_analysis.sales.forEach(s => {
+    // A file update regenerates property_records.id, so saved sale ids can point at
+    // rows that no longer exist. Fall back to the parcel identity written alongside
+    // the id, but only when block/lot/address resolves to exactly one live parcel -
+    // an ambiguous match would silently move a category onto the wrong property.
+    const liveIds = new Set((properties || []).map(p => p.id));
+    const identityIndex = new Map();
+    (properties || []).forEach(p => {
+      const key = `${p.property_block}|${p.property_lot}|${p.property_location}`;
+      const hit = identityIndex.get(key);
+      if (hit === undefined) identityIndex.set(key, p.id);
+      else if (hit !== null) identityIndex.set(key, null); // ambiguous - refuse to guess
+    });
+
+    let remappedCount = 0;
+    let unresolvedCount = 0;
+    const resolveSaleId = (s) => {
+      const raw = s.id || '';
+
+      // Package rows are keyed by deed book/page, which a file update never
+      // changes. Prior-sale rows are "<parcelId>::prevN" - only the prefix can
+      // go stale, and dropping the suffix would collapse a prior sale onto its
+      // parent's current sale and clobber both.
+      if (raw.startsWith('package_')) return raw;
+      const sep = raw.indexOf('::');
+      const base = sep === -1 ? raw : raw.slice(0, sep);
+      const suffix = sep === -1 ? '' : raw.slice(sep);
+
+      if (liveIds.has(base)) return raw;
+      if (!s.block && !s.lot && !s.address) {
+        unresolvedCount++;
+        return raw;
+      }
+      const match = identityIndex.get(`${s.block}|${s.lot}|${s.address}`);
+      if (match) {
+        remappedCount++;
+        return match + suffix;
+      }
+      unresolvedCount++;
+      return raw;
+    };
+
+    marketLandData.vacant_sales_analysis.sales.forEach(sale => {
+      const s = { ...sale, id: resolveSaleId(sale) };
       if (s.category) savedCategories[s.id] = s.category;
       if (s.notes) savedNotes[s.id] = s.notes;
       if (s.special_region && s.special_region !== 'Normal') savedRegions[s.id] = s.special_region;
@@ -683,6 +725,14 @@ useEffect(() => {
       if (s.included) savedIncluded.add(s.id);
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
+
+    if (remappedCount || unresolvedCount) {
+      console.log('🔗 Method 1 sale id remap after file update:', {
+        remapped: remappedCount,
+        unresolved: unresolvedCount,
+        total: marketLandData.vacant_sales_analysis.sales.length
+      });
+    }
 
     debug('🔄 Restored Method 1 metadata (sales data will be recalculated):', {
       excludedCount: savedExcluded.size,
@@ -1606,7 +1656,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const autoSaveFailureCount = useRef(0);
   const isAutoSaveDisabled = useRef(false);
 
-  // Auto-save every 30 seconds - but only after initial load is complete
+  // Auto-save every 5 minutes - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
       debug('������������� Auto-save waiting for initial load to complete');
@@ -1626,7 +1676,7 @@ const getPricePerUnit = useCallback((price, size) => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
       }
-    }, 30000);
+    }, 300000);
     return () => {
       debug('🛑 Clearing auto-save interval');
       clearInterval(interval);
@@ -1634,7 +1684,7 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [isInitialLoadComplete]);
 
   // DISABLED: Immediate auto-save was causing checkbox state to revert
-  // Auto-save only happens every 30 seconds via the interval above
+  // Auto-save only happens every 5 minutes via the interval above
   // useEffect(() => {
   //   if (!isInitialLoadComplete) return;
   //   debug('🔄 State change detected, triggering immediate save');
@@ -1951,6 +2001,18 @@ const getPricePerUnit = useCallback((price, size) => {
       });
     }
 
+    // Package members are looked up by composite key many times below; a linear
+    // scan per lookup is O(parcels) each and Berkeley ships ~29k parcels.
+    const propsByCompositeKey = new Map();
+    properties.forEach(p => {
+      if (p.property_composite_key) propsByCompositeKey.set(p.property_composite_key, p);
+    });
+
+    // Categories and auto-includes are collected here and written once at the end.
+    // Setting them per sale re-clones the whole object/Set on every row.
+    const pendingCategories = {};
+    const pendingIncluded = [];
+
     // Group by book/page for package handling
     const packageGroups = {};
     const standalone = [];
@@ -2000,7 +2062,7 @@ const getPricePerUnit = useCallback((price, size) => {
           category = 'pre-construction';
         } else if (prop.property_m4_class === '1' || prop.property_m4_class === '3B') {
           // Default vacant land sales to Building Lots
-          category = 'building-lot';
+          category = 'building_lot';
         }
       }
       
@@ -2036,7 +2098,7 @@ const getPricePerUnit = useCallback((price, size) => {
             properties: packageData.package_properties || group.map(p => p.property_composite_key)
           };
           finalSales.push(enriched);
-          if (enriched.autoCategory && !saleCategories[enriched.id]) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
+          if (enriched.autoCategory && !saleCategories[enriched.id]) pendingCategories[enriched.id] = enriched.autoCategory;
           return;
         }
 
@@ -2054,7 +2116,7 @@ const getPricePerUnit = useCallback((price, size) => {
           } else {
             totalAcres = packageData.package_properties.reduce((sum, pObj) => {
               const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
-              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              const p = group.find(g => g.property_composite_key === compKey) || propsByCompositeKey.get(compKey);
               return sum + parseFloat(calculateAcreage(p) || 0);
             }, 0);
           }
@@ -2066,12 +2128,12 @@ const getPricePerUnit = useCallback((price, size) => {
             // Sum frontage and compute average depth for display
             const totalFrontage = packageData.package_properties.reduce((sum, pObj) => {
               const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
-              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              const p = group.find(g => g.property_composite_key === compKey) || propsByCompositeKey.get(compKey);
               return sum + (parseFloat(p?.asset_lot_frontage) || 0);
             }, 0);
             const depthValues = packageData.package_properties.map(pObj => {
               const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
-              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              const p = group.find(g => g.property_composite_key === compKey) || propsByCompositeKey.get(compKey);
               return parseFloat(p?.asset_lot_depth) || null;
             }).filter(Boolean);
             const avgDepth = depthValues.length > 0 ? (depthValues.reduce((s, v) => s + v, 0) / depthValues.length) : null;
@@ -2128,8 +2190,8 @@ const getPricePerUnit = useCallback((price, size) => {
           }
 
           finalSales.push(packageSale);
-          setIncludedSales(prev => new Set([...prev, packageSale.id]));
-          if (packageSale.autoCategory && !saleCategories[packageSale.id]) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          pendingIncluded.push(packageSale.id);
+          if (packageSale.autoCategory && !saleCategories[packageSale.id]) pendingCategories[packageSale.id] = packageSale.autoCategory;
           return;
         }
       }
@@ -2166,18 +2228,18 @@ const getPricePerUnit = useCallback((price, size) => {
         finalSales.push(packageSale);
 
         // Auto-include package in analysis
-        setIncludedSales(prev => new Set([...prev, packageSale.id]));
+        pendingIncluded.push(packageSale.id);
 
         // Set package category
         if (packageSale.autoCategory && !saleCategories[packageSale.id]) {
-          setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          pendingCategories[packageSale.id] = packageSale.autoCategory;
         }
       } else {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
         finalSales.push(enriched);
         if (enriched.autoCategory && !saleCategories[enriched.id]) {
-          setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
+          pendingCategories[enriched.id] = enriched.autoCategory;
         }
       }
     });
@@ -2188,7 +2250,7 @@ const getPricePerUnit = useCallback((price, size) => {
       finalSales.push(enriched);
       if (enriched.autoCategory) {
         debug(`����️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
-        if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
+        if (!saleCategories[prop.id]) pendingCategories[prop.id] = enriched.autoCategory;
       }
     });
 
@@ -2197,7 +2259,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(row);
       finalSales.push(enriched);
       if (enriched.autoCategory && !saleCategories[row.id]) {
-        setSaleCategories(prev => ({ ...prev, [row.id]: enriched.autoCategory }));
+        pendingCategories[row.id] = enriched.autoCategory;
       }
     });
 
@@ -2215,7 +2277,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Check if any property in the package has a restricted class
       const hasRestrictedClass = sale.packageData.properties.some(propertyKey => {
-        const prop = properties.find(p => p.property_composite_key === propertyKey);
+        const prop = propsByCompositeKey.get(propertyKey);
         return prop && restrictedClasses.includes(String(prop.property_m4_class));
       });
 
@@ -2233,6 +2295,15 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     setVacantSales(filteredSales);
+
+    // Must land before the preservation pass below, which reads the auto-included
+    // package ids out of prev.
+    if (Object.keys(pendingCategories).length > 0) {
+      setSaleCategories(prev => ({ ...prev, ...pendingCategories }));
+    }
+    if (pendingIncluded.length > 0) {
+      setIncludedSales(prev => new Set([...prev, ...pendingIncluded]));
+    }
 
     // Preserve checkbox states more intelligently
     setIncludedSales(prev => {
@@ -2306,6 +2377,14 @@ const getPricePerUnit = useCallback((price, size) => {
         timeNormLookup.set(item.property_composite_key, item);
       });
 
+      // The region fallback below wants the first vacant sale on a parcel's block/lot.
+      // Scanning vacantSales once per parcel is O(sales x parcels), so index it here.
+      const vacantSaleByBlockLot = new Map();
+      (vacantSales || []).forEach(vs => {
+        const blockLotKey = vs.property_block + '|' + vs.property_lot;
+        if (!vacantSaleByBlockLot.has(blockLotKey)) vacantSaleByBlockLot.set(blockLotKey, vs);
+      });
+
       const vcsSales = {};
       const vcsSalesByRegion = {}; // New: Group by VCS + Special Region
 
@@ -2351,9 +2430,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
         if (propRegion === 'Normal') {
           // If not directly assigned, find if there's a vacant sale at the same location with a special region
-          const matchingVacantSale = vacantSales.find(vs =>
-            vs.property_block === prop.property_block &&
-            vs.property_lot === prop.property_lot
+          const matchingVacantSale = vacantSaleByBlockLot.get(
+            prop.property_block + '|' + prop.property_lot
           );
 
           if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
@@ -4664,6 +4742,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vacant_sales_analysis: {
           sales: vacantSales.map(s => ({
             id: s.id,
+            // property_records.id is regenerated whenever a file update changes the
+            // composite key (it embeds year + address), orphaning anything keyed to
+            // it. These let the loader re-find the parcel after that churn.
+            block: s.property_block || null,
+            lot: s.property_lot || null,
+            qualifier: s.property_qualifier || null,
+            address: s.property_location || null,
             included: includedSales.has(s.id),
             category: saleCategories[s.id] || null,
             special_region: specialRegions[s.id] || 'Normal',
@@ -5663,7 +5748,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     (vacantSales || []).forEach(sale => {
       const category = saleCategories[sale.id] || 'Uncategorized';
       const region = specialRegions[sale.id] || 'Normal';
-      const qual = sale.sales_nu || '';
+      const qual = sale.property_qualifier || '';
       const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
       const included = includedSales.has(sale.id) ? 'Y' : 'N';
       const notes = landNotes[sale.id] || '';
