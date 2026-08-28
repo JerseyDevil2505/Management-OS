@@ -691,18 +691,29 @@ useEffect(() => {
     let remappedCount = 0;
     let unresolvedCount = 0;
     const resolveSaleId = (s) => {
-      if (liveIds.has(s.id)) return s.id;
+      const raw = s.id || '';
+
+      // Package rows are keyed by deed book/page, which a file update never
+      // changes. Prior-sale rows are "<parcelId>::prevN" - only the prefix can
+      // go stale, and dropping the suffix would collapse a prior sale onto its
+      // parent's current sale and clobber both.
+      if (raw.startsWith('package_')) return raw;
+      const sep = raw.indexOf('::');
+      const base = sep === -1 ? raw : raw.slice(0, sep);
+      const suffix = sep === -1 ? '' : raw.slice(sep);
+
+      if (liveIds.has(base)) return raw;
       if (!s.block && !s.lot && !s.address) {
         unresolvedCount++;
-        return s.id;
+        return raw;
       }
       const match = identityIndex.get(`${s.block}|${s.lot}|${s.address}`);
       if (match) {
         remappedCount++;
-        return match;
+        return match + suffix;
       }
       unresolvedCount++;
-      return s.id;
+      return raw;
     };
 
     marketLandData.vacant_sales_analysis.sales.forEach(sale => {
