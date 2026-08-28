@@ -1089,7 +1089,7 @@ resets the view to Active Jobs.
 |-----|--------------|---------------|
 | Active Jobs | Job cards + live metrics | `jobs` (passed down from `App`) |
 | Planning Jobs | Pre-contract pipeline: create / edit / convert / delete | `planning_jobs` |
-| Archived Jobs | Jobs in appeal-defense phase (§ 15.5). Actions: Go to Job, Restore to Active | `jobs` filtered by `status` / `archived_at` |
+| Archived Jobs | Jobs in appeal-defense phase (§ 15.5). Actions: Update File, Go to Job, Restore to Active | `jobs` filtered by `status` / `archived_at` |
 | County HPI | Import / upsert / export FHFA index by county+year | `county_hpi_data` |
 | Manager Assignments | Management-role workload view | `employees` + `job_assignments` (via `job.assignedManagers`) |
 
@@ -1174,13 +1174,29 @@ Consequences that constrain the code:
   workspace, which is how an assessor-tenant employee reaches a defense-phase
   job they don't otherwise own.
 
-> **Gap worth knowing:** the **Update File** button is rendered only on *active*
-> job cards. Archived cards expose just Go to Job and Restore to Active. The
-> upload modal itself (`selectedJobForUpload` → `FileUploadButton`,
-> `AdminJobManagement.jsx:3305`) is job-agnostic and would work fine on an
-> archived job — the button simply isn't wired onto that card. Today the
-> defense-year file update means restoring to active, uploading, and
-> re-archiving.
+### 15.6 Defense-Year File Update on an Archived Job
+
+Archived cards carry their own **Update File** button (amber, left of Go to Job)
+so the defense-year sales refresh doesn't require a restore / upload /
+re-archive round trip. It opens the same job-agnostic upload modal as the active
+cards (`selectedJobForUpload` → `FileUploadButton`).
+
+Two things make this safe, and both matter:
+
+1. **`goToArchivedJob` re-reads the `jobs` row before calling `onJobSelect`.**
+   It used to pass the card's copy straight from the list, which is a snapshot
+   taken when the list loaded. After a file update that copy is stale, and the
+   workspace would open on old data unless the user manually reloaded. The fresh
+   read (falling back to the list copy if it fails) removes that trap. The
+   pre-existing `job_access_grants` redirect still runs first and is unchanged.
+2. **The upload modal shows an archived-job warning** with the job's property
+   count and a "keep this tab open, 20–30 minutes on large jobs" note. Berkeley
+   is the reference case. Processing time scales with parcel count, and the tab
+   must stay open for the whole run.
+
+The existing `onFileProcessed` / `onDataRefresh` handlers already call
+`onRefresh()`, and `propsArchivedJobs` syncs into `archivedJobs` state, so the
+archived list picks up the new version and upload timestamp automatically.
 
 ---
 

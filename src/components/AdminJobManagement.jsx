@@ -1621,7 +1621,23 @@ const AdminJobManagement = ({
         console.warn('Grant check failed, routing to original archived job:', err);
       }
     }
-    // No grant found or lookup failed — proceed normally
+    // Re-read the row instead of passing the list copy: an archived job's source
+    // file gets updated during appeal-defense years, so the list copy can be stale.
+    try {
+      const { data: freshJob } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', job.id)
+        .single();
+
+      if (freshJob) {
+        onJobSelect(freshJob);
+        return;
+      }
+    } catch (err) {
+      console.warn('Fresh archived job fetch failed, using list copy:', err);
+    }
+
     onJobSelect(job);
   };
 
@@ -3106,6 +3122,18 @@ const AdminJobManagement = ({
                     {/* Job Actions */}
                     <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                       <button
+                        onClick={() => {
+                          setSelectedJobForUpload(job);
+                          setShowFileUploadModal(true);
+                        }}
+                        disabled={processing}
+                        className="px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
+                        title="Update source or code files to capture new sales for appeal defense"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Update File</span>
+                      </button>
+                      <button
                         onClick={() => goToArchivedJob(job)}
                         disabled={processing}
                         className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
@@ -3302,6 +3330,26 @@ const AdminJobManagement = ({
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {selectedJobForUpload.archived_at && (
+                <div className="mb-4 rounded-lg border-l-4 border-l-amber-600 bg-amber-50 border border-amber-200 p-4">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-900">
+                      <p className="font-semibold">Archived job — appeal-defense update</p>
+                      <p className="mt-1">
+                        Keep this tab open until processing finishes. Large jobs
+                        ({(selectedJobForUpload.totalProperties || selectedJobForUpload.total_properties || 0).toLocaleString()} properties)
+                        can take 20–30 minutes.
+                      </p>
+                      <p className="mt-1">
+                        The job list refreshes automatically when it completes, and
+                        "Go to Job" re-reads the job before opening the workspace, so
+                        you'll get the updated data without a manual reload.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <FileUploadButton
                 job={selectedJobForUpload}
                 onFileProcessed={(result) => {
