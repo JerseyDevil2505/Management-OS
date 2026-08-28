@@ -299,7 +299,7 @@ Central entity — one job = one municipality revaluation project.
 | vendor_type | varchar | `BRT` or `Microsystems` |
 | vendor_detection | jsonb | auto-detected vendor info |
 | organization_id | uuid | FK → organizations |
-| parent_job_id | uuid | self-FK for archived snapshots |
+| parent_job_id | uuid | self-FK. **Unused** — nothing in the app writes it; only read in `JobContainer`'s select list. Archiving does not snapshot (§ 15.5) |
 | year_of_value | int | |
 | director_ratio | numeric | |
 | total_properties | int | |
@@ -1089,7 +1089,7 @@ resets the view to Active Jobs.
 |-----|--------------|---------------|
 | Active Jobs | Job cards + live metrics | `jobs` (passed down from `App`) |
 | Planning Jobs | Pre-contract pipeline: create / edit / convert / delete | `planning_jobs` |
-| Archived Jobs | Archived + draft jobs, restore, history | `jobs` filtered by `status` |
+| Archived Jobs | Jobs in appeal-defense phase (§ 15.5). Actions: Go to Job, Restore to Active | `jobs` filtered by `status` / `archived_at` |
 | County HPI | Import / upsert / export FHFA index by county+year | `county_hpi_data` |
 | Manager Assignments | Management-role workload view | `employees` + `job_assignments` (via `job.assignedManagers`) |
 
@@ -1101,14 +1101,13 @@ resets the view to Active Jobs.
 | Update File | Opens `FileUploadButton` → the § 4 processor/updater pipeline |
 | Go to Job | `onJobSelect(job)`; `App` handles navigation and workspace load |
 | Edit | Updates the `jobs` row, then **deletes and re-inserts** all `job_assignments` for the job |
-| Archive | Checklist validation, then a status transition on the same row: `status: 'archived'`, `archived_at`, `archived_by` |
+| Archive | Checklist validation, then a status transition on the same row: `status: 'archived'`, `archived_at`, `archived_by`. Reversible via Restore to Active, which clears both fields |
 | Delete | **Hard delete.** Explicit child cleanup in order: `comparison_reports`, `job_assignments`, `job_responsibilities`, `property_records`, `source_file_versions`, then `jobs` |
 
-**Archive does not use `parent_job_id` and does not create a snapshot.** § 3
-describes `jobs.parent_job_id` as a "self-FK for archived snapshots"; the
-archive path in this component never writes it. Treat the column as schema-only
-until someone finds the writer. Reassessment archive validation deliberately
-excludes the checklist `analysis` and `completion` items.
+**Archive is a lifecycle stage, not cold storage** — see § 15.5. It is
+deliberately a status flip rather than a snapshot, and `parent_job_id` is never
+written. Reassessment archive validation deliberately excludes the checklist
+`analysis` and `completion` items.
 
 Delete's child cleanup logs and swallows most child-delete errors rather than
 throwing, and there is no verified DB-level cascade beyond the listed tables. A
@@ -1136,6 +1135,52 @@ and falls back to `jobs.workflow_stats` (jsonb):
 > across the job list, including the client summaries. This screen uses no
 > grouped metric RPC. If job-list load time becomes a complaint, this is the
 > cause, and the fix is the same shape as `geocode_coverage_by_job()`.
+
+### 15.5 Job Lifecycle: Revaluation Year, then Appeal-Defense Years
+
+**Read this before changing anything about archiving.** A reval contract is not
+one year of work. PPA delivers the revaluation in year one and is then
+contractually obligated to *defend* those values for the following two to three
+years. "Archived" is the name of that defense phase.
+
+Using Califon as the worked example:
+
+| When | What happens | State |
+|------|--------------|-------|
+| Now → Feb 2027 | Revaluation production: inspections, market analysis, valuation. Due Feb 2027. | Active |
+| ~Mar 2027 | Work is delivered. Job is archived — off the active list, into the archived list. | Archived |
+| May 1 2027 | NJ appeal deadline; appeals come in against the new values. | Archived |
+| 2027 | Go into the archived job, **update the source file** to pull in recent sales, then use the Appeal Log and CME to defend the assessments. Archive that year's CME result sets. | Archived |
+| 2028 | Same cycle again on the same job — new appeal year, new sales, new result sets. | Archived |
+
+Consequences that constrain the code:
+
+- **An archived job is fully live and mutable.** It receives source-file updates
+  and code-file updates, its `property_records` change, and new CME evaluations
+  and appeal-log entries are written against it for years after delivery.
+- **This is exactly why archive is a status flip and not a snapshot.** A frozen
+  copy would be useless here — the defense work *requires* fresh sales data on
+  the same job. Don't "fix" archive by adding snapshotting, and don't treat
+  archived jobs as read-only anywhere in the app.
+- **Per-year separation lives below the job, not on it.** The appeal year is
+  carried by `appeal_log.appeal_year`, and each year's CME batches are separated
+  by `job_cme_result_sets.archive_year` / `archive_category` via
+  ManageResultSetsTab (§ 16.3). That's the mechanism for "archive those logs and
+  do it again next year" — one job, many appeal years stacked inside it.
+- **Restore to Active is a genuine un-archive**, clearing `archived_at` /
+  `archived_by`. Used when a town goes back into production (e.g. the next
+  reassessment), not as part of the defense cycle.
+- `goToArchivedJob` checks `job_access_grants` by `ccdd` before opening the
+  workspace, which is how an assessor-tenant employee reaches a defense-phase
+  job they don't otherwise own.
+
+> **Gap worth knowing:** the **Update File** button is rendered only on *active*
+> job cards. Archived cards expose just Go to Job and Restore to Active. The
+> upload modal itself (`selectedJobForUpload` → `FileUploadButton`,
+> `AdminJobManagement.jsx:3305`) is job-agnostic and would work fine on an
+> archived job — the button simply isn't wired onto that card. Today the
+> defense-year file update means restoring to active, uploading, and
+> re-archiving.
 
 ---
 
@@ -1209,6 +1254,12 @@ Rename, relabel, archive (`archived_at`, `archived_by`, `archive_category`,
 Archived sets stay visible here but drop out of the Evaluate picker. **Delete is
 permanent and performs no cleanup of linked `job_cme_evaluations`** — worth
 knowing before you offer it in bulk.
+
+`archive_year` + `archive_category` are what separate one appeal year's CME work
+from the next on the same job (§ 15.5). A job in its second or third defense year
+accumulates result sets across years; archiving last year's batch under its year
+is how the Evaluate picker stays clean without losing the prior year's defense
+record. Relabel exists to re-file a batch under a different year/category.
 
 ### 16.4 Class Effective Age Report (`ClassEffectiveAgeReport.jsx`)
 
@@ -1315,7 +1366,7 @@ applied at fetch.
 | `canManageUsers` is a hard-coded UUID compare, not a role check | It is the current access model for the destructive admin surfaces (Users, Orgs, Revenue, Geocoder). Converting it to a role check silently widens access — ask first. |
 | The shell reads `employees.role`, not `profiles.role` | `employees` is the operational staff record and is what the app is keyed to. `profiles` exists for auth identity. Don't "correct" the lookup to `profiles`. |
 | PPA / LOJIK toggle filters client-side instead of re-querying | The job list is already fully loaded by `App`. A second scoped query would double the load and race with the freshness pass. |
-| Job **Archive** is a status flip, not a snapshot | Despite `jobs.parent_job_id` existing, nothing writes it on archive. Don't build snapshot logic on the assumption that it's already half-implemented. |
+| Job **Archive** is a status flip, not a snapshot | Archived jobs are still live and still get file updates — freezing a copy would defeat the whole appeal-defense phase (§ 15.5). `jobs.parent_job_id` exists but is unused; don't build snapshot logic on the assumption that it's half-implemented. |
 | `EdmundsSyncTab` has no Supabase calls at all | The deliverable is a downloadable audit workbook, not persisted state. Adding a table would create a second source of truth for parcel identity. |
 | Edmunds owner matching uses a 50% fuzzy threshold while everything else uses 90% | Owner-name strings diverge heavily between Edmunds and CAMA (trusts, estates, married-name changes). A 90% threshold produced mostly false discrepancies. |
 | `AdjustmentAnalysisTab` back-tests the grid but never writes to it | It's a defensibility report for a tax board. Making it write recommended values back would turn a measurement into a feedback loop. |
