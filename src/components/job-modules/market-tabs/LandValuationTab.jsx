@@ -5663,7 +5663,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     (vacantSales || []).forEach(sale => {
       const category = saleCategories[sale.id] || 'Uncategorized';
       const region = specialRegions[sale.id] || 'Normal';
-      const qual = sale.sales_nu || '';
+      const qual = sale.property_qualifier || '';
       const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
       const included = includedSales.has(sale.id) ? 'Y' : 'N';
       const notes = landNotes[sale.id] || '';
