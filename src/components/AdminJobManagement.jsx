@@ -3088,7 +3088,7 @@ const AdminJobManagement = ({
                             <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
                               job.vendor === 'Microsystems'
                                 ? 'bg-blue-100 text-blue-800'
-                                : 'bg-orange-200 text-orange-800'
+                                : 'bg-yellow-200 text-yellow-800'
                             }`}>
                               {job.vendor}
                             </span>
@@ -3112,7 +3112,7 @@ const AdminJobManagement = ({
                           </span>
                           {job.source_file_uploaded_at && (
                             <span className="flex items-center space-x-1">
-                              <span>📄 Last Upload: {new Date(job.source_file_uploaded_at).toLocaleDateString()}</span>
+                              <span>📄 Last File Update: {new Date(job.source_file_uploaded_at).toLocaleDateString()}</span>
                             </span>
                           )}
                         </div>
@@ -3127,7 +3127,7 @@ const AdminJobManagement = ({
                           setShowFileUploadModal(true);
                         }}
                         disabled={processing}
-                        className="px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
+                        className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
                         title="Update source or code files to capture new sales for appeal defense"
                       >
                         <Upload className="w-4 h-4" />
@@ -3331,10 +3331,10 @@ const AdminJobManagement = ({
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
               {selectedJobForUpload.archived_at && (
-                <div className="mb-4 rounded-lg border-l-4 border-l-amber-600 bg-amber-50 border border-amber-200 p-4">
+                <div className="mb-4 rounded-lg border-l-4 border-yellow-500 bg-yellow-50 p-4">
                   <div className="flex items-start space-x-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-amber-900">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-yellow-900">
                       <p className="font-semibold">Archived job — appeal-defense update</p>
                       <p className="mt-1">
                         Keep this tab open until processing finishes. Large jobs

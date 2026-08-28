@@ -20,7 +20,7 @@
 
 | Layer | Tech |
 |-------|------|
-| Frontend | React 18 (CRA), Tailwind CSS, Lucide icons |
+| Frontend | React 18 (CRA), **Tailwind 2.2.19 via CDN**, Lucide icons |
 | Mapping | Leaflet + react-leaflet (subject/comp maps), pdf-lib (PDF merge), pdfjs-dist (PDF parsing) |
 | Geocoding | U.S. Census Bureau Batch Geocoder (free, manual round-trip CSV) + manual lat/lng entry |
 | Backend / DB | Supabase (Postgres), Row-Level Security — **Project ID: `zxvavttfvpsagzluqqwn`** |
@@ -1174,9 +1174,39 @@ Consequences that constrain the code:
   workspace, which is how an assessor-tenant employee reaches a defense-phase
   job they don't otherwise own.
 
+### 15.5b Tailwind Palette Constraint (bites here, applies everywhere)
+
+Tailwind is loaded as a **prebuilt CDN stylesheet** — `App.css:6` imports
+`tailwindcss@2.2.19/dist/tailwind.min.css`. There is no `tailwind.config.js` and
+no build step, so **only Tailwind 2's default palette exists**:
+`gray, red, yellow, green, blue, indigo, purple, pink`.
+
+`amber`, `orange`, `slate`, `emerald`, `teal`, `sky`, `violet`, `rose`, `lime`
+and the rest of the v3 palette **do not exist**. Neither does v3's directional
+border-color syntax (`border-l-amber-600`) — in v2 you set width and color
+separately: `border-l-4 border-purple-400`.
+
+A class that doesn't exist doesn't error. It emits nothing, so the element
+renders with no background — a button that is present, clickable, and
+effectively invisible. That is exactly how the archived-card **Update File**
+button first shipped (`bg-amber-600`), and it's the same failure mode as the
+v2 CDN ignoring arbitrary values like `max-h-[80vh]` (§ 13).
+
+> **Pre-existing debt:** roughly **225 lines across 26 components** still
+> reference `amber-*` or `orange-*` and are silently rendering unstyled today —
+> `SalesComparisonTab` (46), `EmployeeManagement` (26), `DetailedAppraisalGrid`
+> (18), `PreValuationTab` (16), `AppealLogTab` (13) and more. This has not been
+> swept. When you touch a component, verify any amber/orange class against the
+> CDN stylesheet rather than assuming it works.
+
+**Before shipping a new colored element, confirm the class exists in
+`tailwind@2.2.19/dist/tailwind.min.css`.** Don't trust muscle memory from v3.
+
 ### 15.6 Defense-Year File Update on an Archived Job
 
-Archived cards carry their own **Update File** button (amber, left of Go to Job)
+Archived cards carry their own **Update File** button (`bg-purple-600`, matching
+the card's `border-purple-400` accent — blue and green are already taken by Go to
+Job and Restore to Active; see § 15.5b for why it isn't amber), left of Go to Job
 so the defense-year sales refresh doesn't require a restore / upload /
 re-archive round trip. It opens the same job-agnostic upload modal as the active
 cards (`selectedJobForUpload` → `FileUploadButton`).
