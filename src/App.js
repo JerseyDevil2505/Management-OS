@@ -609,7 +609,7 @@ const App = () => {
             totalcommercial: job.totalcommercial || 0,
             
             // Billing and dates
-            percentBilled: job.percent_billed || 0,
+            percentBilled: currentYearPercentBilled(job),
             dueDate: job.due_date || job.target_completion_date || '',
             
             // Assignment flags
@@ -958,6 +958,17 @@ const App = () => {
     const events = (job && job.billing_events) || [];
     const soleContract = ((job && job.job_contracts) || []).length <= 1;
     return events.filter(e => (e.contract_id ? e.contract_id === contract.id : soleContract));
+  };
+
+  // jobs.percent_billed is job-wide and stays at last year's figure until a new
+  // invoice is posted, so a fresh contract year would read 100% billed. Derive it
+  // from the current year instead, matching what Billing shows.
+  const currentYearPercentBilled = (job) => {
+    const contract = newestContract(job);
+    if (!contract) return job.percent_billed || 0;
+    return eventsForContract(job, contract)
+      .filter(e => !['turnover', '1st_appeals', '2nd_appeals', '3rd_appeals', 'retainer'].includes(e.billing_type))
+      .reduce((sum, e) => sum + parseFloat(e.percentage_billed || 0), 0);
   };
   const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions) => {
     let totalSigned = 0;
