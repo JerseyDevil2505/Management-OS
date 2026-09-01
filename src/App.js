@@ -568,7 +568,8 @@ const App = () => {
               second_year_appeals_amount,
               third_year_appeals_percentage,
               third_year_appeals_amount,
-              bonding_required
+              bonding_required,
+              contract_year
             ),
             billing_events(
               id,
@@ -578,7 +579,8 @@ const App = () => {
               invoice_number,
               amount_billed,
               billing_type,
-              remaining_due
+              remaining_due,
+              contract_id
             ),
             job_assignments(
               employee_id,
@@ -939,6 +941,24 @@ const App = () => {
   // ==========================================
   // CALCULATION FUNCTIONS
   // ==========================================
+  // Rolling-reassessment towns carry one contract per year. The tiles report the
+  // current book of business, so they read the newest year and its events only.
+  const newestContract = (job) => {
+    const contracts = (job && job.job_contracts) || [];
+    if (contracts.length === 0) return null;
+    let newest = contracts[0];
+    for (const c of contracts) {
+      if ((c.contract_year || 0) > (newest.contract_year || 0)) newest = c;
+    }
+    return newest;
+  };
+
+  const eventsForContract = (job, contract) => {
+    if (!contract) return [];
+    const events = (job && job.billing_events) || [];
+    const soleContract = ((job && job.job_contracts) || []).length <= 1;
+    return events.filter(e => (e.contract_id ? e.contract_id === contract.id : soleContract));
+  };
   const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions) => {
     let totalSigned = 0;
     let totalPaid = 0;
@@ -952,8 +972,9 @@ const App = () => {
     if (activeJobs) {
       activeJobs.forEach(job => {
         if (job.job_contracts?.[0]) {
-          const contract = job.job_contracts[0];
+          const contract = newestContract(job);
           totalSigned += contract.contract_amount || 0;
+          const contractEventIds = new Set(eventsForContract(job, contract).map(e => e.id));
 
           let jobPaid = 0;
           let jobOpen = 0;
@@ -961,6 +982,7 @@ const App = () => {
 
           if (job.billing_events) {
             job.billing_events.forEach(event => {
+              if (!contractEventIds.has(event.id)) return;
               const amount = parseFloat(event.amount_billed || 0);
               const billingYear = new Date(event.billing_date).getFullYear();
               if (event.status === 'P') {
@@ -1005,9 +1027,9 @@ const App = () => {
         }
         
         if (job.job_contracts?.[0]) {
-          const contract = job.job_contracts[0];
-          const totalBilled = job.billing_events?.reduce((sum, event) => 
-            sum + parseFloat(event.amount_billed || 0), 0) || 0;
+          const contract = newestContract(job);
+          const totalBilled = eventsForContract(job, contract).reduce((sum, event) =>
+            sum + parseFloat(event.amount_billed || 0), 0);
           const jobRemaining = contract.contract_amount - totalBilled;
           
           if (jobRemaining > 0) {
