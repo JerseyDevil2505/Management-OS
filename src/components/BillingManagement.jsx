@@ -210,7 +210,8 @@ Thank you for your immediate attention to this matter.`;
     firstYearAppealsPercentage: 0.03,
     secondYearAppealsPercentage: 0.02,
     thirdYearAppealsPercentage: 0.00,
-    bondingRequired: true
+    bondingRequired: true,
+    contractYear: new Date().getFullYear()
   });
   const [billingForm, setBillingForm] = useState({
     billingDate: formatDateLocalYMD(new Date()),
@@ -766,8 +767,38 @@ const calculateDistributionMetrics = async () => {
   const calculateBillingTotals = (job) => {
     if (!job.job_contracts?.[0] || !job.billing_events) return null;
 
-    const contract = job.job_contracts[0];
-    const events = job.billing_events || [];
+    return calculateContractTotals(job, getCurrentContract(job));
+  };
+  
+  // Rolling-reassessment towns sign a fresh contract each year, so a job can
+  // carry several. The card always speaks for the newest year.
+  const getCurrentContract = (job) => {
+    const contracts = (job && job.job_contracts) || [];
+    if (contracts.length === 0) return null;
+    let newest = contracts[0];
+    for (const c of contracts) {
+      if ((c.contract_year || 0) > (newest.contract_year || 0)) newest = c;
+    }
+    return newest;
+  };
+
+  const getContractYears = (job) => {
+    const contracts = (job && job.job_contracts) || [];
+    return [...contracts].sort((a, b) => (b.contract_year || 0) - (a.contract_year || 0));
+  };
+
+  // An event with no contract_id predates contract years. It can only be
+  // attributed unambiguously when the job has a single contract.
+  const getEventsForContract = (job, contract) => {
+    if (!contract) return [];
+    const events = (job && job.billing_events) || [];
+    const soleContract = ((job && job.job_contracts) || []).length <= 1;
+    return events.filter(e => (e.contract_id ? e.contract_id === contract.id : soleContract));
+  };
+
+  const calculateContractTotals = (job, contract) => {
+    if (!contract) return null;
+    const events = getEventsForContract(job, contract);
 
     // Only count regular billing events toward percentage, exclude retainer events
     const totalPercentageBilled = events
@@ -776,10 +807,6 @@ const calculateDistributionMetrics = async () => {
     const totalAmountBilled = events.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
     const remainingDue = contract.contract_amount - totalAmountBilled;
 
-      // DEBUG: Add this for yellow jobs at 100%
-  if (totalPercentageBilled >= 0.99 && totalPercentageBilled <= 1.01) {
-  }
-    
     return {
       contractAmount: contract.contract_amount,
       totalPercentageBilled: totalPercentageBilled * 100,
@@ -788,7 +815,7 @@ const calculateDistributionMetrics = async () => {
       isComplete: Math.round(totalPercentageBilled * 10000) / 10000 >= 1.0
     };
   };
-  
+
   // A legacy job is "satisfied" only when all three hold: nothing left to bill,
   // nothing left excluding the retainer, and no billing event still open.
   // The third check matters on its own — Glen Gardner, Jackson and West Orange
@@ -892,19 +919,21 @@ const calculateDistributionMetrics = async () => {
         second_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.secondYearAppealsPercentage,
         third_year_appeals_percentage: contractSetup.thirdYearAppealsPercentage,
         third_year_appeals_amount: parseFloat(contractSetup.contractAmount) * contractSetup.thirdYearAppealsPercentage,
-        bonding_required: contractSetup.bondingRequired
+        bonding_required: contractSetup.bondingRequired,
+        contract_year: parseInt(contractSetup.contractYear, 10)
       };
 
-      // If editing an existing contract, include the ID so upsert updates instead of inserting
-      if (selectedJob.job_contracts?.[0]?.id) {
-        contractData.id = selectedJob.job_contracts[0].id;
-      }
-
+      // Keyed on (job_id, contract_year), so editing a year updates that row and a
+      // new year inserts. This is also what stops a double-save from duplicating.
       const { error: contractError } = await supabase
         .from('job_contracts')
-        .upsert(contractData);
+        .upsert(contractData, { onConflict: 'job_id,contract_year' });
 
       if (contractError) throw contractError;
+
+      const editedContract = (selectedJob.job_contracts || []).find(
+        c => c.contract_year === parseInt(contractSetup.contractYear, 10)
+      );
 
       // If contract amount changed, recalculate all billing events' amounts
       if (selectedJob.job_contracts?.[0] && 
@@ -915,6 +944,7 @@ const calculateDistributionMetrics = async () => {
           .from('billing_events')
           .select('*')
           .eq('job_id', selectedJob.id)
+          .eq('contract_id', editedContract ? editedContract.id : null)
           .order('billing_date');
 
         if (billingEvents) {
@@ -1017,7 +1047,7 @@ const calculateDistributionMetrics = async () => {
 
     setLoadingStates(prev => ({ ...prev, billingEvent: true }));
     try {
-      const contract = selectedJob.job_contracts[0];
+      const contract = getCurrentContract(selectedJob);
       
       if (showBulkPaste && bulkBillingText.trim()) {
         // Handle bulk paste
@@ -1030,7 +1060,7 @@ const calculateDistributionMetrics = async () => {
         let runningPercentage = 0;
         
         // Get existing events to calculate starting totals
-        const existingEvents = selectedJob.billing_events || [];
+        const existingEvents = getEventsForContract(selectedJob, contract);
         const previousBilled = existingEvents.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
         const previousPercentage = existingEvents.reduce((sum, event) => sum + parseFloat(event.percentage_billed || 0), 0);
         
@@ -1052,7 +1082,8 @@ const calculateDistributionMetrics = async () => {
             retainer_amount: event.retainerAmount,
             amount_billed: event.amountBilled,
             remaining_due: remainingDue,
-            notes: 'Bulk imported'
+            notes: 'Bulk imported',
+            contract_id: contract.id
           };
 
           const { error: eventError } = await supabase
@@ -1091,7 +1122,7 @@ const calculateDistributionMetrics = async () => {
         }
         
         // Calculate remaining due
-        const existingEvents = selectedJob.billing_events || [];
+        const existingEvents = getEventsForContract(selectedJob, contract);
         const previousBilled = existingEvents.reduce((sum, event) => sum + parseFloat(event.amount_billed || 0), 0);
         const remainingDue = contract.contract_amount - previousBilled - amountBilled;
 
@@ -1105,7 +1136,8 @@ const calculateDistributionMetrics = async () => {
           retainer_amount: retainerAmount,
           amount_billed: amountBilled,
           remaining_due: remainingDue,
-          notes: billingForm.notes
+          notes: billingForm.notes,
+          contract_id: contract.id
         };
 
         const { error } = await supabase
@@ -2332,9 +2364,12 @@ const calculateDistributionMetrics = async () => {
               ) : (
                 jobs
                   .sort((a, b) => {
-                    // Calculate percent billed for sorting
-                    const aPercent = a.percent_billed || 0;
-                    const bPercent = b.percent_billed || 0;
+                    // Sort on the same figure the card shows. jobs.percent_billed is
+                    // job-wide, so a new contract year would sink behind last year.
+                    const aTotals = calculateBillingTotals(a);
+                    const bTotals = calculateBillingTotals(b);
+                    const aPercent = aTotals ? aTotals.totalPercentageBilled : 0;
+                    const bPercent = bTotals ? bTotals.totalPercentageBilled : 0;
                     return aPercent - bPercent; // Lowest percent first
                   })
                   .map(job => {
@@ -2349,6 +2384,13 @@ const calculateDistributionMetrics = async () => {
                           <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                             {job.vendor_type || 'No Vendor'}
                           </span>
+                          {getCurrentContract(job) && (
+                            <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
+                              {getCurrentContract(job).contract_year} Contract
+                              {getContractYears(job).length > 1 &&
+                                ' (' + getContractYears(job).length + ' years)'}
+                            </span>
+                          )}
                           {needsContractSetup && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
                               ⚠️ Contract Setup Required
@@ -2386,7 +2428,7 @@ const calculateDistributionMetrics = async () => {
                               onClick={() => {
                                 setSelectedJob(job);
                                 // Pre-fill contract form with existing values
-                                const contract = job.job_contracts[0];
+                                const contract = getCurrentContract(job);
                                 setContractSetup({
                                   contractAmount: contract.contract_amount.toString(),
                                   templateType: contract.contract_template_type || 'standard',
@@ -2395,13 +2437,36 @@ const calculateDistributionMetrics = async () => {
                                   firstYearAppealsPercentage: contract.first_year_appeals_percentage,
                                   secondYearAppealsPercentage: contract.second_year_appeals_percentage,
                                   thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0,
-                                  bondingRequired: contract.bonding_required !== false
+                                  bondingRequired: contract.bonding_required !== false,
+                                  contractYear: contract.contract_year
                                 });
                                 setShowContractSetup(true);
                               }}
                               className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
                             >
                               Edit Contract
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedJob(job);
+                                // Carry the terms forward, blank the amount, bump the year.
+                                const contract = getCurrentContract(job);
+                                setContractSetup({
+                                  contractAmount: '',
+                                  templateType: contract.contract_template_type || 'standard',
+                                  retainerPercentage: contract.retainer_percentage,
+                                  endOfJobPercentage: contract.end_of_job_percentage,
+                                  firstYearAppealsPercentage: contract.first_year_appeals_percentage,
+                                  secondYearAppealsPercentage: contract.second_year_appeals_percentage,
+                                  thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0,
+                                  bondingRequired: contract.bonding_required !== false,
+                                  contractYear: (contract.contract_year || new Date().getFullYear()) + 1
+                                });
+                                setShowContractSetup(true);
+                              }}
+                              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                            >
+                              Add Contract Year
                             </button>
                           </>
                         )}
@@ -2727,6 +2792,13 @@ const calculateDistributionMetrics = async () => {
                           <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
                             Legacy Billing
                           </span>
+                          {getCurrentContract(job) && (
+                            <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-800">
+                              {getCurrentContract(job).contract_year} Contract
+                              {getContractYears(job).length > 1 &&
+                                ' (' + getContractYears(job).length + ' years)'}
+                            </span>
+                          )}
                           {totals?.isComplete && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
                               ✅ 100% Billed
@@ -2746,7 +2818,7 @@ const calculateDistributionMetrics = async () => {
                           <button
                             onClick={() => {
                               setSelectedJob(job);
-                              const contract = job.job_contracts[0];
+                              const contract = getCurrentContract(job);
                               setContractSetup({
                                 contractAmount: contract.contract_amount.toString(),
                                 templateType: contract.contract_template_type || 'standard',
@@ -2754,7 +2826,9 @@ const calculateDistributionMetrics = async () => {
                                 endOfJobPercentage: contract.end_of_job_percentage,
                                 firstYearAppealsPercentage: contract.first_year_appeals_percentage,
                                 secondYearAppealsPercentage: contract.second_year_appeals_percentage,
-                                thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                                thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0,
+                                bondingRequired: contract.bonding_required !== false,
+                                contractYear: contract.contract_year
                               });
                               setShowContractSetup(true);
                             }}
@@ -3580,6 +3654,22 @@ const calculateDistributionMetrics = async () => {
               <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contract Year
+                </label>
+                <input
+                  type="number"
+                  value={contractSetup.contractYear}
+                  onChange={(e) => setContractSetup(prev => ({ ...prev, contractYear: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="2026"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Rolling reassessment towns get one contract per year. Change this to bill a new year on the same job.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contract Amount
                 </label>
                 <input
@@ -3752,7 +3842,8 @@ const calculateDistributionMetrics = async () => {
                     firstYearAppealsPercentage: 0.03,
                     secondYearAppealsPercentage: 0.02,
                     thirdYearAppealsPercentage: 0.00,
-                    bondingRequired: true
+                    bondingRequired: true,
+                    contractYear: new Date().getFullYear()
                   });
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
