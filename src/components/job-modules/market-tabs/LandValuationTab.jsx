@@ -5921,7 +5921,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Single global header row
     const lotSizeHeader = `Avg Lot Size (${bracketUnitLabel})`;
-    const method2Headers = ['VCS','Bracket','Count',lotSizeHeader,'Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','Avg Yr Built','$ ADJUSTED','$ DELTA','LOT DELTA','$ PER ACRE','PER SQ FT'];
+    // Mirror the on-screen bracket table: front foot jobs report a single
+    // $/front foot column, since a frontage delta has no area to spread over.
+    const rateHeaders = bracketUnit === 'ff'
+      ? ['$ PER FRONT FOOT']
+      : ['$ PER ACRE', 'PER SQ FT'];
+    const primaryRateHeader = rateHeaders[0];
+    const method2Headers = ['VCS','Bracket','Count',lotSizeHeader,'Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','Avg Yr Built','$ ADJUSTED','$ DELTA','LOT DELTA', ...rateHeaders];
     method2Rows.push(method2Headers);
 
     // Track rows for coloring (store {vcs, bracket, rowIndex, hasPrevious})
@@ -5982,8 +5988,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           '', // $ ADJUSTED - will use formula
           '', // $ DELTA - will use formula
           lotDelta != null ? roundBracketValue(lotDelta) : '',
-          '', // $ PER ACRE - will use formula
-          '' // PER SQ FT - will use formula
+          ...rateHeaders.map(() => '') // rate columns - will use formulas
         ]);
 
         // Track color info: store calculated delta for coloring
@@ -6019,7 +6024,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         : lotSizeFromAcres(range?.avgAcres);
 
       const rateHeader = bracketUnit === 'ff' ? 'Per Front Foot' : 'Per Acre';
-      method2Rows.push(['Bracket Range', rateHeader, `Avg Lot Size (${bracketUnitLabel})`, 'Per Sq Ft']);
+      const summaryHeaders = ['Bracket Range', rateHeader, `Avg Lot Size (${bracketUnitLabel})`];
+      if (bracketUnit !== 'ff') summaryHeaders.push('Per Sq Ft');
+      method2Rows.push(summaryHeaders);
 
       landBrackets.forEach((def, index) => {
         const range = method2Summary.ranges?.[index] || {};
@@ -6028,7 +6035,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           `${describeBracket(def)} ${bracketUnitLabel}`,
           hasRate ? `$${range.perAcre.toLocaleString()}` : 'N/A',
           lotSizeForRange(range),
-          range.perSqFt && range.perSqFt !== 'N/A' ? `$${range.perSqFt}` : 'N/A'
+          ...(bracketUnit === 'ff'
+            ? []
+            : [range.perSqFt && range.perSqFt !== 'N/A' ? `$${range.perSqFt}` : 'N/A'])
         ]);
       });
 
@@ -6048,10 +6057,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           bracketUnit === 'ff'
             ? (avgSize > 0 ? Math.round(avgSize).toLocaleString() : 'N/A')
             : lotSizeFromAcres(avgLotAcres),
-          bracketUnit === 'ff' ? 'N/A' : `$${(avgPerAcre / 43560).toFixed(2)}`
+          ...(bracketUnit === 'ff' ? [] : [`$${(avgPerAcre / 43560).toFixed(2)}`])
         ]);
       } else {
-        method2Rows.push(['All Positive Deltas Avg', 'N/A', 'N/A', 'N/A']);
+        method2Rows.push(bracketUnit === 'ff'
+          ? ['All Positive Deltas Avg', 'N/A', 'N/A']
+          : ['All Positive Deltas Avg', 'N/A', 'N/A', 'N/A']);
       }
     }
 
@@ -6107,8 +6118,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const adjustedColIndex = method2Headers.indexOf('$ ADJUSTED');
       const deltaColIndex = method2Headers.indexOf('$ DELTA');
       const lotDeltaColIndex = method2Headers.indexOf('LOT DELTA');
-      const perAcreColIndex = method2Headers.indexOf('$ PER ACRE');
-      const perSqFtColIndex = method2Headers.indexOf('PER SQ FT');
+      const perAcreColIndex = method2Headers.indexOf(primaryRateHeader);
+      // Front foot jobs carry no per-square-foot column. Point the index past the
+      // last real column so the shared guard still runs, while every write through
+      // it lands on a cell that does not exist and is skipped.
+      const perSqFtHeaderIndex = method2Headers.indexOf('PER SQ FT');
+      const perSqFtColIndex = perSqFtHeaderIndex === -1 ? method2Headers.length : perSqFtHeaderIndex;
 
       // Build a map of VCS to their averages for formula references
       const vcsAvgMap = new Map();
@@ -6215,8 +6230,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 14 }, // $ ADJUSTED
       { wch: 12 }, // $ DELTA
       { wch: 10 }, // LOT DELTA
-      { wch: 14 }, // $ PER ACRE
-      { wch: 12 }  // PER SQ FT
+      ...(bracketUnit === 'ff'
+        ? [{ wch: 18 }]                      // $ PER FRONT FOOT
+        : [{ wch: 14 }, { wch: 12 }])        // $ PER ACRE, PER SQ FT
     ];
 
     // Apply Leelawadee size 10, bold headers, centered formatting and colors
@@ -6260,7 +6276,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('Method2 formatting skipped', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Lot Value');
 
     return wb;
   };
