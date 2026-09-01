@@ -140,6 +140,7 @@ const AdminJobManagement = ({
   const [assignmentFile, setAssignmentFile] = useState(null);
   const [uploadingAssignment, setUploadingAssignment] = useState(false);
   const [assignmentResults, setAssignmentResults] = useState(null);
+  const [clearingAssignment, setClearingAssignment] = useState(false);
 
   const [newJob, setNewJob] = useState({
     name: '',
@@ -401,6 +402,74 @@ const AdminJobManagement = ({
       warnings: [],
       logs: []
     });
+  };
+
+  // Releases the current inspection scope so a replacement list can be imported.
+  // uploadPropertyAssignment only ever sets is_assigned_property to true, so a
+  // prior scope survives a re-import unless it is cleared here.
+  const clearPropertyAssignments = async (job) => {
+    const confirmed = window.confirm(
+      'Clear all property assignments for ' + job.name + '? ' +
+      'This releases the current inspection scope so a replacement list can be imported. ' +
+      'Inspection data and payroll history are not affected.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setClearingAssignment(true);
+
+      const { error: responsibilitiesError } = await supabase
+        .from('job_responsibilities')
+        .delete()
+        .eq('job_id', job.id);
+
+      if (responsibilitiesError) {
+        throw new Error('Failed to clear assignment records: ' + responsibilitiesError.message);
+      }
+
+      const { count: releasedCount, error: flagError } = await supabase
+        .from('property_records')
+        .update({ is_assigned_property: false }, { count: 'exact' })
+        .eq('job_id', job.id)
+        .eq('is_assigned_property', true);
+
+      if (flagError) {
+        throw new Error('Failed to release assigned properties: ' + flagError.message);
+      }
+
+      const { error: jobUpdateError } = await supabase
+        .from('jobs')
+        .update({
+          has_property_assignments: false,
+          assigned_has_commercial: false
+        })
+        .eq('id', job.id);
+
+      if (jobUpdateError) {
+        addNotification('Warning: Job flags may not have updated properly', 'warning');
+      }
+
+      setAssignmentFile(null);
+      setAssignmentResults(null);
+      // The modal holds a snapshot of the job, so patch it rather than waiting
+      // for the parent refresh to propagate back through props.
+      setShowAssignmentUpload(prev => (
+        prev && prev.id === job.id
+          ? { ...prev, has_property_assignments: false, assignedPropertyCount: 0 }
+          : prev
+      ));
+      await refreshJobsWithAssignedCounts();
+
+      addNotification(
+        'Cleared assignments for ' + job.name + ': ' + (releasedCount || 0).toLocaleString() + ' properties released',
+        'success'
+      );
+    } catch (error) {
+      console.error('Assignment clear error:', error);
+      addNotification('Error clearing assignments: ' + error.message, 'error');
+    } finally {
+      setClearingAssignment(false);
+    }
   };
 
   // Property Assignment Upload Handler with improved composite key matching
@@ -1737,6 +1806,13 @@ const AdminJobManagement = ({
               <p className="text-gray-600 mb-4">
                 Upload CSV to set inspection scope for <strong>{showAssignmentUpload.name}</strong>
               </p>
+
+              {showAssignmentUpload.has_property_assignments && (
+                <p className="text-sm text-gray-700 mb-4">
+                  Current scope: <strong>{(showAssignmentUpload.assignedPropertyCount || 0).toLocaleString()}</strong> properties assigned.
+                  Clear them first to replace the list.
+                </p>
+              )}
               
               <div className="mb-4">
                 <input
@@ -1781,10 +1857,19 @@ const AdminJobManagement = ({
                 >
                   {assignmentResults ? 'Close' : 'Cancel'}
                 </button>
+                {!assignmentResults && showAssignmentUpload.has_property_assignments && (
+                  <button
+                    onClick={() => clearPropertyAssignments(showAssignmentUpload)}
+                    disabled={uploadingAssignment || clearingAssignment}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {clearingAssignment ? 'Clearing...' : 'Clear Assignments'}
+                  </button>
+                )}
                 {!assignmentResults && (
                   <button
                     onClick={() => uploadPropertyAssignment(showAssignmentUpload)}
-                    disabled={!assignmentFile || uploadingAssignment}
+                    disabled={!assignmentFile || uploadingAssignment || clearingAssignment}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
                     {uploadingAssignment ? 'Processing...' : 'Assign Properties'}
