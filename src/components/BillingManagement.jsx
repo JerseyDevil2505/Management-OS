@@ -2364,9 +2364,12 @@ const calculateDistributionMetrics = async () => {
               ) : (
                 jobs
                   .sort((a, b) => {
-                    // Calculate percent billed for sorting
-                    const aPercent = a.percent_billed || 0;
-                    const bPercent = b.percent_billed || 0;
+                    // Sort on the same figure the card shows. jobs.percent_billed is
+                    // job-wide, so a new contract year would sink behind last year.
+                    const aTotals = calculateBillingTotals(a);
+                    const bTotals = calculateBillingTotals(b);
+                    const aPercent = aTotals ? aTotals.totalPercentageBilled : 0;
+                    const bPercent = bTotals ? bTotals.totalPercentageBilled : 0;
                     return aPercent - bPercent; // Lowest percent first
                   })
                   .map(job => {
