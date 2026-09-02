@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -200,6 +200,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [compBrowserSearch, setCompBrowserSearch] = useState('');
   const [compBrowserRadius, setCompBrowserRadius] = useState(''); // miles; '' = no radius filter
   const [compBrowserSort, setCompBrowserSort] = useState({ key: 'sales_date', dir: 'desc' });
+  // The table's own horizontal scrollbar sits at the bottom of the scroll area, so on a
+  // large town it's below the fold until you scroll all the way down. These drive a second
+  // scrollbar pinned above the header that mirrors it.
+  const compBrowserScrollRef = useRef(null);
+  const compBrowserTopScrollRef = useRef(null);
+  const compBrowserTableRef = useRef(null);
+  const [compBrowserScrollWidth, setCompBrowserScrollWidth] = useState(0);
 
   // Tracks which saved result set (if any) is currently loaded. When set,
   // "Evaluate and update" in Detailed will write back to this row in
@@ -424,6 +431,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [poolFilterType, setPoolFilterType] = useState([]);
   const [poolFilterStyle, setPoolFilterStyle] = useState([]);
   const [poolFilterView, setPoolFilterView] = useState([]);
+  // Bedroom counts are numbers, so chips hold numbers here rather than code strings.
+  const [poolFilterBeds, setPoolFilterBeds] = useState([]);
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -1577,6 +1586,76 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const poolUniqueTypes = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_type_use).filter(Boolean))].sort(), [allSalesCandidates]);
   const poolUniqueStyles = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_design_style).filter(Boolean))].sort(), [allSalesCandidates]);
   const poolUniqueViews = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_view).filter(Boolean))].sort(), [allSalesCandidates]);
+
+  // Beds/baths for the comp browser have to agree with the Detailed report, which reads
+  // card-aggregated values via aggregatePropertyData. The pool dedupes to the main card, so
+  // reading the row directly would under-report any multi-card parcel. Indexed by base key
+  // once here because doing the aggregation per row would rescan `properties` for every sale.
+  //
+  // Baths come from total_baths_calculated, the only bath field that exists on
+  // property_records. Both vendors already resolve fractional baths into it at import:
+  // BRT as BATHTOT - PLUMBING2FIX + (PLUMBING2FIX * 0.5), Microsystems as
+  // 4-fixture + 3-fixture + (2-fixture * 0.5). That's why a 3-room count shows as 2.5.
+  const compBrowserBedBath = useMemo(() => {
+    const cardMode = marketLandData?.additional_card_handling_config?.mode === 'separate' ? 'separate' : 'combine';
+    const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+    // Mirrors getPropertyCards: Q-prefixed qualifiers group with the unqualified parcel so
+    // farm cards (7/4 and 7/4/QFARM) land in the same bucket.
+    const baseKeyOf = (p) => {
+      const qual = norm(p.property_qualifier);
+      return `${norm(p.property_block)}|${norm(p.property_lot)}|${qual.startsWith('Q') ? '' : qual}`;
+    };
+    const isMain = (p) => {
+      if (p._isMainCard !== undefined) return p._isMainCard;
+      const card = (p.property_addl_card || '').toString().trim();
+      const n = parseInt(card, 10);
+      return n === 1 || card === '' || Number.isNaN(n) || card.toUpperCase() === 'M';
+    };
+    const map = new Map();
+    (properties || []).forEach(p => {
+      const k = baseKeyOf(p);
+      let entry = map.get(k);
+      if (!entry) {
+        entry = { beds: 0, baths: 0 };
+        map.set(k, entry);
+      }
+      const beds = parseFloat(p.asset_bedrooms) || 0;
+      const baths = parseFloat(p.total_baths_calculated) || 0;
+      if (cardMode === 'separate') {
+        if (isMain(p)) {
+          entry.beds = beds;
+          entry.baths = baths;
+        }
+      } else {
+        entry.beds += beds;
+        entry.baths += baths;
+      }
+    });
+    return { map, baseKeyOf };
+  }, [properties, marketLandData]);
+
+  const poolUniqueBeds = useMemo(() => {
+    const set = new Set();
+    allSalesCandidates.forEach(p => {
+      const entry = compBrowserBedBath.map.get(compBrowserBedBath.baseKeyOf(p));
+      if (entry && entry.beds > 0) set.add(entry.beds);
+    });
+    return [...set].sort((a, b) => a - b);
+  }, [allSalesCandidates, compBrowserBedBath]);
+
+  // Keeps the top scrollbar's spacer the same width as the table so the two thumbs
+  // travel together. Observing the table (not the container) is what catches column
+  // width changes as rows are filtered.
+  useEffect(() => {
+    if (!compBrowserOpen) return undefined;
+    const table = compBrowserTableRef.current;
+    if (!table || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => setCompBrowserScrollWidth(table.scrollWidth || 0);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(table);
+    return () => observer.disconnect();
+  }, [compBrowserOpen]);
 
   // ==================== SALES POOL ANALYTICS ====================
   const includedPoolSales = useMemo(() => salesPoolEntries.filter(e => e._included), [salesPoolEntries]);
@@ -6745,6 +6824,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               if (poolFilterType.length > 0) rows = rows.filter(p => poolFilterType.includes(p.asset_type_use));
               if (poolFilterStyle.length > 0) rows = rows.filter(p => poolFilterStyle.includes(p.asset_design_style));
               if (poolFilterView.length > 0) rows = rows.filter(p => poolFilterView.includes(p.asset_view));
+              // Beds/baths resolve through the aggregated index so the value filtered on, the
+              // value sorted on, and the value rendered are all the one Detailed reports.
+              const EMPTY_BED_BATH = { beds: 0, baths: 0 };
+              const bedBathFor = (p) => {
+                return compBrowserBedBath.map.get(compBrowserBedBath.baseKeyOf(p)) || EMPTY_BED_BATH;
+              };
+              const formatBaths = (v) => (v % 1 === 0 ? String(v) : v.toFixed(1));
+              if (poolFilterBeds.length > 0) {
+                rows = rows.filter(p => poolFilterBeds.includes(bedBathFor(p).beds));
+              }
               if (compBrowserSearch.trim()) {
                 const q = compBrowserSearch.trim().toLowerCase();
                 rows = rows.filter(p =>
@@ -6798,9 +6887,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                   const adj = Number(getAdjustedSFLA(p)) || 0;
                   return p.sales_price && adj > 0 ? p.sales_price / adj : 0;
                 },
+                beds: (p) => bedBathFor(p).beds,
+                baths: (p) => bedBathFor(p).baths,
                 int_cond: (p) => p.asset_int_cond || '',
               };
-              const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built']);
+              const numericKeys = new Set(['sales_price', 'sfla', 'ppsf', 'year_built', 'beds', 'baths']);
               // Block / lot / qualifier are stored as strings but should sort
               // naturally (e.g. "2" before "10", "10" before "101") rather than
               // lexicographically.
@@ -6858,6 +6949,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 setPoolFilterType([]);
                 setPoolFilterStyle([]);
                 setPoolFilterView([]);
+                setPoolFilterBeds([]);
                 setCompBrowserSearch('');
                 setCompBrowserRadius('');
               };
@@ -7146,7 +7238,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         className="text-xs"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
                           gap: 16,
                         }}
                       >
@@ -7249,6 +7341,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           </div>
                         </div>
 
+                        {/* Beds */}
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Beds</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterBeds.map(b => (
+                              <span
+                                key={b}
+                                className="px-2 py-0.5 rounded-full bg-indigo-100 border border-indigo-300 text-indigo-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {b}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterBeds(prev => prev.filter(x => x !== b))}
+                                  className="hover:text-indigo-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterBeds(prev => [...prev, Number(e.target.value)]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Beds</option>
+                              {poolUniqueBeds.filter(b => !poolFilterBeds.includes(b)).map(b => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
                         {/* View */}
                         <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">View</label>
@@ -7284,9 +7409,34 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       </div>
                     </div>
 
+                    {/* Horizontal scrollbar mirrored above the header. The table's own
+                        scrollbar is at the bottom of the scroll area, which sits below the
+                        fold on a large town until you scroll all the way down. */}
+                    <div
+                      ref={compBrowserTopScrollRef}
+                      onScroll={(e) => {
+                        const target = compBrowserScrollRef.current;
+                        if (target && target.scrollLeft !== e.currentTarget.scrollLeft) {
+                          target.scrollLeft = e.currentTarget.scrollLeft;
+                        }
+                      }}
+                      style={{ flexShrink: 0, overflowX: 'auto', overflowY: 'hidden', borderBottom: '1px solid #e5e7eb' }}
+                    >
+                      <div style={{ width: compBrowserScrollWidth || '100%', height: 1 }} />
+                    </div>
+
                     {/* Table */}
-                    <div style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 0 }}>
-                      <table className="min-w-full text-xs" style={{ width: '100%' }}>
+                    <div
+                      ref={compBrowserScrollRef}
+                      onScroll={(e) => {
+                        const target = compBrowserTopScrollRef.current;
+                        if (target && target.scrollLeft !== e.currentTarget.scrollLeft) {
+                          target.scrollLeft = e.currentTarget.scrollLeft;
+                        }
+                      }}
+                      style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 0 }}
+                    >
+                      <table ref={compBrowserTableRef} className="min-w-full text-xs" style={{ width: 'max-content', minWidth: '100%' }}>
                         <thead className="bg-gray-50 sticky top-0 z-10">
                           <tr>
                             <th className="px-2 py-2 text-center font-medium text-gray-600 w-10">Pick</th>
@@ -7305,6 +7455,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               { key: 'year_built', label: 'Yr Built', align: 'right' },
                               { key: 'sfla', label: 'Size', align: 'right' },
                               { key: 'ppsf', label: 'PPSF', align: 'right' },
+                              { key: 'beds', label: 'Beds', align: 'right' },
+                              { key: 'baths', label: 'Baths', align: 'right' },
                               { key: 'int_cond', label: 'Int. Cond.', align: 'left' },
                             ].map(col => (
                               <th
@@ -7335,7 +7487,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <tbody className="divide-y divide-gray-100">
                           {rows.length === 0 && (
                             <tr>
-                              <td colSpan={16} className="px-4 py-8 text-center text-gray-500">
+                              <td colSpan={18} className="px-4 py-8 text-center text-gray-500">
                                 No sales match the current filters. Try Reset Filters or toggle "Show all sales".
                               </td>
                             </tr>
@@ -7349,6 +7501,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             const rowBg = alreadyLoaded
                               ? 'bg-gray-100 text-gray-400'
                               : (p._included ? 'bg-green-50' : '');
+                            const bedBath = bedBathFor(p);
                             const intCondCode = p.asset_int_cond || '';
                             const intCondName = intCondCode && codeDefinitions
                               ? (interpretCodes.getInteriorConditionName(p, codeDefinitions, vendorType) || '')
@@ -7386,7 +7539,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5">{p.property_lot}</td>
                                 <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
                                 <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
-                                <td className="px-2 py-1.5 truncate max-w-[180px]" title={p.property_location || ''}>{p.property_location || ''}</td>
+                                <td className="px-2 py-1.5 truncate" style={{ maxWidth: 180 }} title={p.property_location || ''}>{p.property_location || ''}</td>
                                 <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
                                 <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
@@ -7394,7 +7547,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                                 <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                                 <td className="px-2 py-1.5 text-right">{adjSfla > 0 ? Number(adjSfla).toLocaleString() : '-'}</td>
-                                <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `$${ppsf.toFixed(0)}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `${ppsf.toFixed(0)}` : '-'}</td>
+                                <td className="px-2 py-1.5 text-right">{bedBath.beds > 0 ? bedBath.beds : '-'}</td>
+                                <td className="px-2 py-1.5 text-right">{bedBath.baths > 0 ? formatBaths(bedBath.baths) : '-'}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap" title={intCondName || ''}>{intCondDisplay || '-'}</td>
                               </tr>
                             );
