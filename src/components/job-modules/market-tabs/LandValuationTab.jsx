@@ -1035,6 +1035,39 @@ useEffect(() => {
     return parseFloat(acres);
   }, [vendorType]);
 
+  // ========== VCS LOT SIZE RESOLVERS (vendor-aware) ==========
+  // Unit Rate Configuration is BRT-only (PreValuationTab gates it on vendorType),
+  // so market_manual_lot_* is never written on a Microsystems job. Reading it
+  // there yields null and the VCS sheet loses every lot size. Microsystems
+  // carries its own totals on the property record instead.
+  const getLotSizeSF = useCallback((prop) => {
+    if (vendorType === 'Microsystems') {
+      const assetSf = parseFloat(prop?.asset_lot_sf);
+      if (assetSf > 0) return assetSf;
+      const assetAcre = parseFloat(prop?.asset_lot_acre);
+      if (assetAcre > 0) return assetAcre * 43560;
+      return 0;
+    }
+    const manualSf = parseFloat(prop?.market_manual_lot_sf);
+    if (manualSf > 0) return manualSf;
+    const manualAcre = parseFloat(prop?.market_manual_lot_acre);
+    if (manualAcre > 0) return manualAcre * 43560;
+    return 0;
+  }, [vendorType]);
+
+  const getLotSizeAcres = useCallback((prop) => {
+    if (vendorType === 'Microsystems') {
+      const assetAcre = parseFloat(prop?.asset_lot_acre);
+      if (assetAcre > 0) return assetAcre;
+      const assetSf = parseFloat(prop?.asset_lot_sf);
+      if (assetSf > 0) return assetSf / 43560;
+      return 0;
+    }
+    const manualAcre = parseFloat(prop?.market_manual_lot_acre);
+    if (manualAcre > 0) return manualAcre;
+    return 0;
+  }, [vendorType]);
+
   // ========== GET PRICE PER UNIT ==========
 const getPricePerUnit = useCallback((price, size) => {
   // Always return whole numbers for unit rates per user request
@@ -3961,15 +3994,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         // Collect lot size based on valuation mode
         if (valuationMode === 'sf') {
-          if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-          } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-            // Fallback: convert acres to SF (1 acre = 43,560 SF)
-            const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+          const lotSF = getLotSizeSF(prop);
+          if (lotSF > 0) {
             avgNormTimeLotSize[prop.new_vcs].push(lotSF);
           }
-        } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+        } else if (valuationMode === 'acre' && getLotSizeAcres(prop) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(getLotSizeAcres(prop));
         } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
           avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
         }
@@ -3990,15 +4020,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Collect lot size based on valuation mode
           if (valuationMode === 'sf') {
-            if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-            } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-              // Fallback: convert acres to SF (1 acre = 43,560 SF)
-              const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+            const lotSF = getLotSizeSF(prop);
+            if (lotSF > 0) {
               avgActualPriceLotSize[prop.new_vcs].push(lotSF);
             }
-          } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-            avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+          } else if (valuationMode === 'acre' && getLotSizeAcres(prop) > 0) {
+            avgActualPriceLotSize[prop.new_vcs].push(getLotSizeAcres(prop));
           } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
             avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
           }
@@ -4085,7 +4112,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsSheetData(sheetData);
-  }, [properties, valuationMode]);
+  }, [properties, valuationMode, getLotSizeSF, getLotSizeAcres]);
 
   const calculateVCSRecommendedSites = useCallback((avgPrices, avgNormTimes, counts, avgPriceLotSizes) => {
     console.log('🔍 calculateVCSRecommendedSites called:', {
@@ -5042,24 +5069,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
       } else if (vcsMethod === 'sf') {
-        // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
         const vcsProps = properties?.filter(p =>
-          p.new_vcs === vcs &&
-          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+          p.new_vcs === vcs && getLotSizeSF(p) > 0
         ) || [];
 
         if (vcsProps.length > 0) {
-          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length);
+          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + getLotSizeSF(p), 0) / vcsProps.length);
         }
       } else {
-        // Acre mode: use pre-calculated market_manual_lot_acre from property_market_analysis
         const vcsProps = properties?.filter(p =>
-          p.new_vcs === vcs &&
-          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+          p.new_vcs === vcs && getLotSizeAcres(p) > 0
         ) || [];
 
         if (vcsProps.length > 0) {
-          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+          const avgAcres = vcsProps.reduce((sum, p) => sum + getLotSizeAcres(p), 0) / vcsProps.length;
           typicalLot = Number(avgAcres.toFixed(2));
         }
       }
