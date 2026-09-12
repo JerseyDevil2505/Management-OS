@@ -4,7 +4,7 @@ import {
   X, Plus, Search, TrendingUp,
   Calculator, Download, Trash2,
   Save, FileDown, MapPin,
-  Home, History
+  Home, History, RotateCcw
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors, parseDateLocal } from '../../../lib/supabaseClient';
 import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
@@ -15,6 +15,13 @@ import './sharedTabNav.css';
 
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
+
+// Land rates are struck off the raw deed price in every mode - acre, square
+// foot and front foot alike. Time is already controlled for by pairing sales
+// within a sale year, so starting from values_norm_time would adjust for it
+// twice. values_norm_time stays untouched on the record; it is read elsewhere
+// as a signal that the normalization pass vetted a sale.
+const landSalePrice = (sale) => Number(sale?.sales_price) || 0;
 
 // ======= DATE HELPERS =======
 const safeDateObj = (d) => {
@@ -218,7 +225,7 @@ const LandValuationTab = ({
         sizeForUnit = acres;
       }
 
-      const price = sale.values_norm_time || sale.sales_price || 0;
+      const price = landSalePrice(sale);
       pricePerUnit = sizeForUnit > 0 ? price / sizeForUnit : 0;
 
       return {
@@ -340,6 +347,22 @@ const LandValuationTab = ({
 
   // Method 1 Exclusion State (like Method 2)
   const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
+
+  // Rows the user trashed. Kept separate from method1ExcludedSales because the
+  // header "select all" checkbox dumps every id into that set on deselect —
+  // hiding off it would blank the whole table.
+  const [method1HiddenSales, setMethod1HiddenSales] = useState(new Set());
+  const [showRemovedSales, setShowRemovedSales] = useState(false);
+
+  // Hand-recovered prior sales. Microsystems ships no prev_sales, so on a new
+  // construction parcel the only sale on file is the finished house - the land
+  // sale that actually sets the rate has to be typed in from the deed.
+  // Stored here (not on property_records) so both the improved sale and the
+  // land sale can sit on the table at once; an override would replace one.
+  const [manualPriorSales, setManualPriorSales] = useState([]);
+  const [priorSaleEntryTarget, setPriorSaleEntryTarget] = useState(null);
+  const [priorSaleEntryDate, setPriorSaleEntryDate] = useState('');
+  const [priorSaleEntryPrice, setPriorSaleEntryPrice] = useState('');
 
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
@@ -545,6 +568,7 @@ useEffect(() => {
     debug('⚠️ Found unsaved session changes from', currentSession.lastModified);
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
+    setMethod1HiddenSales(currentSession.method1HiddenSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
     setExcludedMethod2VCS(currentSession.excludedMethod2VCS || new Set());
     setSaleCategories(currentSession.saleCategories || {});
@@ -774,6 +798,16 @@ useEffect(() => {
     setPriorSalePicks(marketLandData.vacant_sales_analysis.prior_sale_picks);
   }
 
+  // Restore Method 1 trashed rows
+  if (marketLandData.vacant_sales_analysis?.hidden_sales) {
+    setMethod1HiddenSales(new Set(marketLandData.vacant_sales_analysis.hidden_sales));
+  }
+
+  // Restore hand-entered prior sales
+  if (Array.isArray(marketLandData.vacant_sales_analysis?.manual_prior_sales)) {
+    setManualPriorSales(marketLandData.vacant_sales_analysis.manual_prior_sales);
+  }
+
   // Also restore Method 1 excluded sales from new field (like Method 2)
   if (marketLandData.vacant_sales_analysis?.excluded_sales) {
     const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
@@ -933,6 +967,7 @@ useEffect(() => {
   isUpdatingSessionRef.current = true;
   updateSession({
     method1ExcludedSales,
+    method1HiddenSales,
     includedSales,
     excludedMethod2VCS,
     saleCategories,
@@ -956,6 +991,7 @@ useEffect(() => {
   }, 0);
 }, [
   method1ExcludedSales,
+  method1HiddenSales,
   includedSales,
   excludedMethod2VCS,
   saleCategories,
@@ -1033,6 +1069,39 @@ useEffect(() => {
 
     const acres = interpretCodes.getCalculatedAcreage(property, vendorType);
     return parseFloat(acres);
+  }, [vendorType]);
+
+  // ========== VCS LOT SIZE RESOLVERS (vendor-aware) ==========
+  // Unit Rate Configuration is BRT-only (PreValuationTab gates it on vendorType),
+  // so market_manual_lot_* is never written on a Microsystems job. Reading it
+  // there yields null and the VCS sheet loses every lot size. Microsystems
+  // carries its own totals on the property record instead.
+  const getLotSizeSF = useCallback((prop) => {
+    if (vendorType === 'Microsystems') {
+      const assetSf = parseFloat(prop?.asset_lot_sf);
+      if (assetSf > 0) return assetSf;
+      const assetAcre = parseFloat(prop?.asset_lot_acre);
+      if (assetAcre > 0) return assetAcre * 43560;
+      return 0;
+    }
+    const manualSf = parseFloat(prop?.market_manual_lot_sf);
+    if (manualSf > 0) return manualSf;
+    const manualAcre = parseFloat(prop?.market_manual_lot_acre);
+    if (manualAcre > 0) return manualAcre * 43560;
+    return 0;
+  }, [vendorType]);
+
+  const getLotSizeAcres = useCallback((prop) => {
+    if (vendorType === 'Microsystems') {
+      const assetAcre = parseFloat(prop?.asset_lot_acre);
+      if (assetAcre > 0) return assetAcre;
+      const assetSf = parseFloat(prop?.asset_lot_sf);
+      if (assetSf > 0) return assetSf / 43560;
+      return 0;
+    }
+    const manualAcre = parseFloat(prop?.market_manual_lot_acre);
+    if (manualAcre > 0) return manualAcre;
+    return 0;
   }, [vendorType]);
 
   // ========== GET PRICE PER UNIT ==========
@@ -1491,7 +1560,7 @@ const getPricePerUnit = useCallback((price, size) => {
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete, priorSalePicks, hpi]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete, priorSalePicks, manualPriorSales, hpi]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -1520,8 +1589,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== HPI FOR PRIOR SALES ==========
   // Prior sales never went through the normalization pass, so they carry no
-  // values_norm_time. Method 1 prices off values_norm_time, so a prior sale has
-  // to be HPI-adjusted here to sit on the same footing as a current sale.
+  // values_norm_time. Method 1 rates no longer price off it - see landSalePrice
+  // - so this is retained for display and for BRT prior-sale rows only.
   useEffect(() => {
     let cancelled = false;
     const normalizeToYear = marketLandData?.normalization_config?.normalizeToYear || 2025;
@@ -1573,6 +1642,11 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode]);
 
+  const hiddenVacantSalesCount = useMemo(
+    () => vacantSales.filter(s => method1HiddenSales.has(s.id)).length,
+    [vacantSales, method1HiddenSales]
+  );
+
   const sortedVacantSales = useMemo(() => {
     if (!method1Sort.field) return vacantSales;
     const dir = method1Sort.direction === 'desc' ? -1 : 1;
@@ -1590,6 +1664,20 @@ const getPricePerUnit = useCallback((price, size) => {
       return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
     });
   }, [vacantSales, method1Sort, method1SortValue]);
+
+  // Select-all must never reach a trashed row: it isn't on screen, so re-checking
+  // its Include would silently pull it back into the rate math.
+  const selectableVacantSales = useMemo(
+    () => vacantSales.filter(s => !method1HiddenSales.has(s.id)),
+    [vacantSales, method1HiddenSales]
+  );
+
+  const visibleVacantSales = useMemo(
+    () => showRemovedSales
+      ? sortedVacantSales
+      : sortedVacantSales.filter(s => !method1HiddenSales.has(s.id)),
+    [sortedVacantSales, method1HiddenSales, showRemovedSales]
+  );
 
   const toggleMethod1Sort = useCallback((field) => {
     setMethod1Sort(prev => prev.field === field
@@ -1759,7 +1847,7 @@ const getPricePerUnit = useCallback((price, size) => {
       manuallyAddedProps.forEach(prop => {
         const acres = calculateAcreage(prop);
         const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-        const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+        const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
         finalSales.push({
           ...prop,
           totalAcres: acres,
@@ -1831,7 +1919,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-          const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+          const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -2001,6 +2089,66 @@ const getPricePerUnit = useCallback((price, size) => {
       });
     }
 
+    // Hand-entered prior sales. Same row shape as the BRT prev_sales rows above,
+    // so everything downstream - enrichment, include/category maps, the
+    // allocation study - treats them as ordinary sales.
+    if (manualPriorSales.length > 0) {
+      const mStart = safeDateObj(dateRange.start)
+        ? new Date(safeDateObj(dateRange.start)).setHours(0, 0, 0, 0)
+        : 0;
+      const mEnd = safeDateObj(dateRange.end)
+        ? new Date(safeDateObj(dateRange.end)).setHours(23, 59, 59, 999)
+        : 8640000000000000;
+
+      const norm = (v) => String(v ?? '').trim().toUpperCase();
+
+      manualPriorSales.forEach(entry => {
+        const price = Number(entry?.sale_price) || 0;
+        const dateStr = entry?.sale_date || null;
+        if (!dateStr || price <= 0) return;
+
+        const saleDateObj = parseDateLocal(dateStr);
+        if (!saleDateObj || isNaN(saleDateObj.getTime())) return;
+        const saleTime = saleDateObj.getTime();
+        if (saleTime < mStart || saleTime > mEnd) return;
+
+        // Re-find the parcel by identity rather than by stored id: a file update
+        // regenerates property_records.id, and this entry may predate it.
+        const parent = properties.find(p =>
+          norm(p.property_block) === norm(entry.block) &&
+          norm(p.property_lot) === norm(entry.lot) &&
+          norm(p.property_qualifier) === norm(entry.qualifier) &&
+          ['', 'NONE', 'M', '1'].includes(norm(p.property_addl_card))
+        );
+        if (!parent) return;
+
+        priorSaleRows.push({
+          ...parent,
+          id: parent.id + '::manual' + entry.id,
+          sales_date: dateStr,
+          sales_price: price,
+          sales_nu: null,
+          sales_book: null,
+          sales_page: null,
+          // Deliberately NOT time-normalized. Vacant land sales are left raw -
+          // a populated values_norm_time is read as a validity signal elsewhere,
+          // so synthesizing one here would fake that signal. enrichProperty
+          // falls back to sales_price for the unit rate, and the allocation
+          // study reads sales_price directly.
+          values_norm_time: null,
+          _isPriorSale: true,
+          _isManualPriorSale: true,
+          _manualPriorSaleId: entry.id,
+          _priorSaleSource: 'manual_entry',
+          _basePropertyId: parent.id,
+          _currentSale: {
+            date: parent.sales_date || null,
+            price: Number(parent.sales_price) || null
+          }
+        });
+      });
+    }
+
     // Package members are looked up by composite key many times below; a linear
     // scan per lookup is O(parcels) each and Berkeley ships ~29k parcels.
     const propsByCompositeKey = new Map();
@@ -2034,9 +2182,9 @@ const getPricePerUnit = useCallback((price, size) => {
       let pricePerUnit;
       if (valuationMode === 'ff') {
         const frontage = parseFloat(prop.asset_lot_frontage) || 0;
-        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, frontage);
+        pricePerUnit = getPricePerUnit(landSalePrice(prop), frontage);
       } else {
-        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, acres);
+        pricePerUnit = getPricePerUnit(landSalePrice(prop), acres);
       }
       // Ensure whole numbers for unit rates
       const roundedUnitPrice = Math.round(pricePerUnit);
@@ -2106,7 +2254,7 @@ const getPricePerUnit = useCallback((price, size) => {
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
           // Use original property sales_price (don't sum - each property already has full package price)
-          const totalPrice = group[0].values_norm_time || group[0].sales_price;
+          const totalPrice = landSalePrice(group[0]);
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
@@ -2199,7 +2347,7 @@ const getPricePerUnit = useCallback((price, size) => {
       // Default: fall back to previous behavior
       if (group.length > 1) {
         // Use original sale price (don't sum - properties already contain full package price)
-        const totalPrice = group[0].values_norm_time || group[0].sales_price;
+        const totalPrice = landSalePrice(group[0]);
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
@@ -2344,7 +2492,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
       return preservedIncluded;
     });
-  }, [properties, dateRange, calculateAcreage, getPricePerUnit, vendorType, priorSalePicks, normalizePriorSalePrice]);
+  }, [properties, dateRange, calculateAcreage, getPricePerUnit, vendorType, priorSalePicks, normalizePriorSalePrice, manualPriorSales]);
 
   // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
   // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
@@ -3134,7 +3282,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+      const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
@@ -3247,13 +3395,67 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const removeSale = (saleId) => {
     // Track exclusion like Method 2 (don't remove from array entirely)
     setMethod1ExcludedSales(prev => new Set([...prev, saleId]));
+    setMethod1HiddenSales(prev => new Set([...prev, saleId]));
     setIncludedSales(prev => {
       const newSet = new Set(prev);
       newSet.delete(saleId);
       return newSet;
     });
+    // Write the literal rather than deleting the key: the auto-categorizer only
+    // fills a category in when the key is absent, so deleting it would stamp the
+    // row back to its autoCategory on the next recalc.
+    setSaleCategories(prev => ({ ...prev, [saleId]: 'uncategorized' }));
 
     debug('����️ Sale removed and tracked as excluded:', saleId);
+  };
+
+  const openPriorSaleEntry = (sale) => {
+    setPriorSaleEntryTarget(sale);
+    setPriorSaleEntryDate('');
+    setPriorSaleEntryPrice('');
+  };
+
+  const saveManualPriorSale = () => {
+    const target = priorSaleEntryTarget;
+    if (!target) return;
+    const price = Number(String(priorSaleEntryPrice).replace(/[^0-9.]/g, ''));
+    if (!priorSaleEntryDate || !(price > 0)) {
+      alert('Enter both a sale date and a sale price.');
+      return;
+    }
+    setManualPriorSales(prev => ([
+      ...prev,
+      {
+        id: `mps_${Date.now()}`,
+        block: target.property_block || null,
+        lot: target.property_lot || null,
+        qualifier: target.property_qualifier || null,
+        address: target.property_location || null,
+        sale_date: priorSaleEntryDate,
+        sale_price: price,
+        created_at: new Date().toISOString()
+      }
+    ]));
+    setPriorSaleEntryTarget(null);
+  };
+
+  const deleteManualPriorSale = (manualId) => {
+    setManualPriorSales(prev => prev.filter(e => e.id !== manualId));
+  };
+
+  const restoreSale = (saleId) => {
+    setMethod1HiddenSales(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(saleId);
+      return newSet;
+    });
+    setMethod1ExcludedSales(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(saleId);
+      return newSet;
+    });
+    // Include stays unchecked and the category stays uncategorized - restoring
+    // puts the row back on the list, it doesn't re-assert a judgement about it.
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
@@ -3899,6 +4101,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     };
   }, [vacantTestSales]);
   // ========== VCS SHEET FUNCTIONS - ENHANCED ==========
+  // Holds the latest calculateVCSRecommendedSites (declared below) so
+  // loadVCSPropertyCounts can reach it without a forward reference in its deps.
+  const calculateVCSRecommendedSitesRef = useRef(null);
+
   const loadVCSPropertyCounts = useCallback(() => {
     if (!properties) return;
 
@@ -3961,15 +4167,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         // Collect lot size based on valuation mode
         if (valuationMode === 'sf') {
-          if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-          } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-            // Fallback: convert acres to SF (1 acre = 43,560 SF)
-            const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+          const lotSF = getLotSizeSF(prop);
+          if (lotSF > 0) {
             avgNormTimeLotSize[prop.new_vcs].push(lotSF);
           }
-        } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+        } else if (valuationMode === 'acre' && getLotSizeAcres(prop) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(getLotSizeAcres(prop));
         } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
           avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
         }
@@ -3990,15 +4193,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Collect lot size based on valuation mode
           if (valuationMode === 'sf') {
-            if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-            } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-              // Fallback: convert acres to SF (1 acre = 43,560 SF)
-              const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+            const lotSF = getLotSizeSF(prop);
+            if (lotSF > 0) {
               avgActualPriceLotSize[prop.new_vcs].push(lotSF);
             }
-          } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-            avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+          } else if (valuationMode === 'acre' && getLotSizeAcres(prop) > 0) {
+            avgActualPriceLotSize[prop.new_vcs].push(getLotSizeAcres(prop));
           } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
             avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
           }
@@ -4066,7 +4266,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       vcs3658: calculatedAvgNormTime['3658'],
       vcs3658Counts: counts['3658']
     });
-    calculateVCSRecommendedSites(calculatedAvgPrice, calculatedAvgNormTime, counts, calculatedAvgPriceLotSize);
+    // Called through a ref: calculateVCSRecommendedSites is declared below this
+    // callback, so it cannot go in the dep array without hitting the TDZ. Calling
+    // it directly captured the instance from the render where targetAllocation was
+    // still null, so it always bailed at its own guard and Rec Site stayed $0 even
+    // after the allocation loaded.
+    calculateVCSRecommendedSitesRef.current?.(calculatedAvgPrice, calculatedAvgNormTime, counts, calculatedAvgPriceLotSize);
     
     // Store in vcsSheetData for display
     const sheetData = {};
@@ -4085,7 +4290,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsSheetData(sheetData);
-  }, [properties, valuationMode]);
+  }, [properties, valuationMode, getLotSizeSF, getLotSizeAcres]);
 
   const calculateVCSRecommendedSites = useCallback((avgPrices, avgNormTimes, counts, avgPriceLotSizes) => {
     console.log('🔍 calculateVCSRecommendedSites called:', {
@@ -4186,6 +4391,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // referencing it here would hit the TDZ during render. It is stable via
   // useCallback and only called from inside this callback's body.
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS]);
+
+  // Assigned during render so the ref is current before any effect fires.
+  calculateVCSRecommendedSitesRef.current = calculateVCSRecommendedSites;
 
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
@@ -4758,6 +4966,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             package_properties: s.packageData?.properties || []
           })),
           excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
+          hidden_sales: Array.from(method1HiddenSales),
+          manual_prior_sales: manualPriorSales,
           prior_sale_picks: priorSalePicks,
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
@@ -4844,6 +5054,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         try {
           updateSessionState({
             method1ExcludedSales: new Set(),
+            method1HiddenSales: new Set(),
             includedSales: new Set(),
             excludedMethod2VCS: new Set(),
             saleCategories: {},
@@ -4926,7 +5137,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       setIsSaving(false);
     }
   }, [
-    jobData?.id, vacantSales, includedSales, method1ExcludedSales,
+    jobData?.id, vacantSales, includedSales, method1ExcludedSales, method1HiddenSales, manualPriorSales,
     saleCategories, specialRegions, landNotes, dateRange, valuationMode,
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
@@ -5042,24 +5253,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
       } else if (vcsMethod === 'sf') {
-        // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
         const vcsProps = properties?.filter(p =>
-          p.new_vcs === vcs &&
-          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+          p.new_vcs === vcs && getLotSizeSF(p) > 0
         ) || [];
 
         if (vcsProps.length > 0) {
-          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length);
+          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + getLotSizeSF(p), 0) / vcsProps.length);
         }
       } else {
-        // Acre mode: use pre-calculated market_manual_lot_acre from property_market_analysis
         const vcsProps = properties?.filter(p =>
-          p.new_vcs === vcs &&
-          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+          p.new_vcs === vcs && getLotSizeAcres(p) > 0
         ) || [];
 
         if (vcsProps.length > 0) {
-          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+          const avgAcres = vcsProps.reduce((sum, p) => sum + getLotSizeAcres(p), 0) / vcsProps.length;
           typicalLot = Number(avgAcres.toFixed(2));
         }
       }
@@ -7082,7 +7289,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
       if (categoryType === 'constrained') {
         if (valuationMode === 'sf') {
-          const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
+          const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
           const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
           return {
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7110,7 +7317,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             block_lot: `${s.property_block}/${s.property_lot}`,
             category: saleCategories[s.id] || 'uncategorized',
             class: s.property_m4_class,
-            price: s.values_norm_time || s.sales_price,
+            price: landSalePrice(s),
             acres: s.totalAcres
           }))
         });
@@ -7138,7 +7345,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 : (larger.totalAcres || 0);
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -7218,7 +7425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Fallback to simple calculation if paired analysis fails
       if (valuationMode === 'sf') {
-        const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
+        const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
         const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
         return {
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7288,7 +7495,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           isInCategory,
           isNormalRegion,
           isInBuildingLot,
-          price: s.values_norm_time || s.sales_price,
+          price: landSalePrice(s),
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
         });
@@ -7301,7 +7508,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           specialRegion: specialRegions[s.id] || 'Normal',
           isInBuildingLot,
-          price: s.values_norm_time || s.sales_price,
+          price: landSalePrice(s),
           acres: s.totalAcres
         });
       }
@@ -7369,7 +7576,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -7764,8 +7971,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       {/* Method 1: Vacant Land Sales */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 1: Vacant Land Sales</h3>
+          {hiddenVacantSalesCount > 0 && (
+            <button
+              onClick={() => setShowRemovedSales(prev => !prev)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: showRemovedSales ? '#6B7280' : 'white',
+                color: showRemovedSales ? 'white' : '#6B7280',
+                border: '1px solid #D1D5DB',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 500
+              }}
+              title={showRemovedSales
+                ? 'Hide the removed rows again'
+                : 'Reveal removed rows so they can be restored individually'}
+            >
+              {showRemovedSales ? 'Hide removed' : `Show removed (${hiddenVacantSalesCount})`}
+            </button>
+          )}
         </div>
         
         <div style={{ overflowX: 'auto' }}>
@@ -7776,17 +8003,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px' }}>
                     <input
                       type="checkbox"
-                      checked={vacantSales.length > 0 && vacantSales.every(s => includedSales.has(s.id))}
+                      checked={selectableVacantSales.length > 0 && selectableVacantSales.every(s => includedSales.has(s.id))}
                       ref={el => {
                         if (el) {
-                          const checkedCount = vacantSales.filter(s => includedSales.has(s.id)).length;
-                          el.indeterminate = checkedCount > 0 && checkedCount < vacantSales.length;
+                          const checkedCount = selectableVacantSales.filter(s => includedSales.has(s.id)).length;
+                          el.indeterminate = checkedCount > 0 && checkedCount < selectableVacantSales.length;
                         }
                       }}
                       onChange={(e) => {
+                        // Trashed rows are deliberately absent from allIds - see selectableVacantSales.
+                        const allIds = selectableVacantSales.map(s => s.id);
                         if (e.target.checked) {
                           // Select all: add all to included, clear all from excluded
-                          const allIds = vacantSales.map(s => s.id);
                           setIncludedSales(prev => new Set([...prev, ...allIds]));
                           setMethod1ExcludedSales(prev => {
                             const newSet = new Set(prev);
@@ -7795,7 +8023,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           });
                         } else {
                           // Deselect all: remove all from included, add all to excluded
-                          const allIds = vacantSales.map(s => s.id);
                           setIncludedSales(prev => {
                             const newSet = new Set(prev);
                             allIds.forEach(id => newSet.delete(id));
@@ -7860,7 +8087,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tr>
             </thead>
             <tbody>
-              {sortedVacantSales.map((sale, index) => {
+              {visibleVacantSales.map((sale, index) => {
+                const isRemoved = method1HiddenSales.has(sale.id);
                 // Get human-readable names - use only synchronous decoding to avoid async rendering issues
                 const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
                   ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_type_use') || sale.asset_type_use || '-'
@@ -7870,11 +8098,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   : sale.asset_design_style || '-';
                 
                 return (
-                  <tr key={sale.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                  <tr key={sale.id} style={{
+                    backgroundColor: isRemoved ? '#F3F4F6' : (index % 2 === 0 ? 'white' : '#F9FAFB'),
+                    opacity: isRemoved ? 0.55 : 1
+                  }}>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <input
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
+                        disabled={isRemoved}
+                        title={isRemoved ? 'Restore this row before including it' : undefined}
                         onChange={(e) => {
                           const checked = e.target.checked;
                           debug(`Checkbox change for ${sale.property_block}/${sale.property_lot}:`, { checked, saleId: sale.id });
@@ -8113,6 +8346,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           <History size={14} />
                         </button>
+                        {vendorType === 'Microsystems' && !sale._isPriorSale && (
+                          <button
+                            onClick={() => openPriorSaleEntry(sale)}
+                            title="Add a prior sale for this parcel (deed date and price)"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#2563EB',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePropertyResearch(sale)}
                           title="Research with AI"
@@ -8127,20 +8376,56 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           <Search size={14} />
                         </button>
-                        <button
-                          onClick={() => removeSale(sale.id)}
-                          title="Remove"
-                          style={{
-                            padding: '4px',
-                            backgroundColor: '#EF4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {sale._isManualPriorSale ? (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Delete this hand-entered prior sale?')) {
+                                deleteManualPriorSale(sale._manualPriorSaleId);
+                              }
+                            }}
+                            title="Delete this hand-entered prior sale"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#EF4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : isRemoved ? (
+                          <button
+                            onClick={() => restoreSale(sale.id)}
+                            title="Restore this row to the list"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#10B981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => removeSale(sale.id)}
+                            title="Remove - hides the row, unchecks Include and resets the category"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#EF4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -10268,6 +10553,68 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
 
+      {/* Manual prior-sale entry - Microsystems has no prev_sales to read */}
+      {priorSaleEntryTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+        }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', width: '420px' }}>
+            <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>Add Prior Sale</h3>
+            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+              {priorSaleEntryTarget.property_block}/{priorSaleEntryTarget.property_lot}
+              {priorSaleEntryTarget.property_qualifier ? `/${priorSaleEntryTarget.property_qualifier}` : ''}
+              {' — '}{priorSaleEntryTarget.property_location}
+            </div>
+            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+              Current sale on file: {priorSaleEntryTarget.sales_date || 'n/a'} for $
+              {(Number(priorSaleEntryTarget.sales_price) || 0).toLocaleString()}
+            </div>
+
+            <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+              Prior sale date
+            </label>
+            <input
+              type="date"
+              value={priorSaleEntryDate}
+              onChange={(e) => setPriorSaleEntryDate(e.target.value)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', marginBottom: '12px' }}
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+              Prior sale price
+            </label>
+            <input
+              type="text"
+              value={priorSaleEntryPrice}
+              onChange={(e) => setPriorSaleEntryPrice(e.target.value)}
+              placeholder="665000"
+              style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', marginBottom: '16px' }}
+            />
+
+            <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '16px' }}>
+              Added as its own row on this parcel. Set its Category and tick Include to
+              use it in the study. Time-normalized value is computed from the sale year.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setPriorSaleEntryTarget(null)}
+                style={{ padding: '8px 16px', backgroundColor: 'white', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveManualPriorSale}
+                style={{ padding: '8px 16px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Add Prior Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sales History Modal - picks which sale a Method 1 row values */}
       {salesHistoryTarget && (() => {
         const baseId = salesHistoryTarget._basePropertyId || salesHistoryTarget.id;
@@ -10565,7 +10912,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-                      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+                      const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
@@ -11936,26 +12283,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const cascadeRates = getVCSCascadeRates(vcs, baseCascadeRates);
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
-                  // Use pre-calculated values from property_market_analysis table (market_manual_lot_sf/acre)
                   let vcsProps, typicalLot;
 
                   if (valuationMode === 'sf') {
-                    // Square Foot mode: use market_manual_lot_sf from property_market_analysis
                     vcsProps = properties?.filter(p =>
-                      p.new_vcs === vcs &&
-                      p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+                      p.new_vcs === vcs && getLotSizeSF(p) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+                      Math.round(vcsProps.reduce((sum, p) => sum + getLotSizeSF(p), 0) / vcsProps.length).toLocaleString() : '';
 
                   } else {
-                    // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
                     vcsProps = properties?.filter(p =>
-                      p.new_vcs === vcs &&
-                      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+                      p.new_vcs === vcs && getLotSizeAcres(p) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
+                      (vcsProps.reduce((sum, p) => sum + getLotSizeAcres(p), 0) / vcsProps.length).toFixed(2) : '';
 
                   }
 
