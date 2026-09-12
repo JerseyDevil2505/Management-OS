@@ -3932,6 +3932,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     };
   }, [vacantTestSales]);
   // ========== VCS SHEET FUNCTIONS - ENHANCED ==========
+  // Holds the latest calculateVCSRecommendedSites (declared below) so
+  // loadVCSPropertyCounts can reach it without a forward reference in its deps.
+  const calculateVCSRecommendedSitesRef = useRef(null);
+
   const loadVCSPropertyCounts = useCallback(() => {
     if (!properties) return;
 
@@ -4093,7 +4097,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       vcs3658: calculatedAvgNormTime['3658'],
       vcs3658Counts: counts['3658']
     });
-    calculateVCSRecommendedSites(calculatedAvgPrice, calculatedAvgNormTime, counts, calculatedAvgPriceLotSize);
+    // Called through a ref: calculateVCSRecommendedSites is declared below this
+    // callback, so it cannot go in the dep array without hitting the TDZ. Calling
+    // it directly captured the instance from the render where targetAllocation was
+    // still null, so it always bailed at its own guard and Rec Site stayed $0 even
+    // after the allocation loaded.
+    calculateVCSRecommendedSitesRef.current?.(calculatedAvgPrice, calculatedAvgNormTime, counts, calculatedAvgPriceLotSize);
     
     // Store in vcsSheetData for display
     const sheetData = {};
@@ -4213,6 +4222,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // referencing it here would hit the TDZ during render. It is stable via
   // useCallback and only called from inside this callback's body.
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS]);
+
+  // Assigned during render so the ref is current before any effect fires.
+  calculateVCSRecommendedSitesRef.current = calculateVCSRecommendedSites;
 
   const formatPageRanges = (pages) => {
     if (pages.length === 0) return '';
@@ -11959,26 +11971,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const cascadeRates = getVCSCascadeRates(vcs, baseCascadeRates);
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
-                  // Use pre-calculated values from property_market_analysis table (market_manual_lot_sf/acre)
                   let vcsProps, typicalLot;
 
                   if (valuationMode === 'sf') {
-                    // Square Foot mode: use market_manual_lot_sf from property_market_analysis
                     vcsProps = properties?.filter(p =>
-                      p.new_vcs === vcs &&
-                      p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+                      p.new_vcs === vcs && getLotSizeSF(p) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+                      Math.round(vcsProps.reduce((sum, p) => sum + getLotSizeSF(p), 0) / vcsProps.length).toLocaleString() : '';
 
                   } else {
-                    // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
                     vcsProps = properties?.filter(p =>
-                      p.new_vcs === vcs &&
-                      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+                      p.new_vcs === vcs && getLotSizeAcres(p) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
+                      (vcsProps.reduce((sum, p) => sum + getLotSizeAcres(p), 0) / vcsProps.length).toFixed(2) : '';
 
                   }
 
