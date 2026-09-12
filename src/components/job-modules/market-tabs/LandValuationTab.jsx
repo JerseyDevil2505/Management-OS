@@ -4,7 +4,7 @@ import {
   X, Plus, Search, TrendingUp,
   Calculator, Download, Trash2,
   Save, FileDown, MapPin,
-  Home, History
+  Home, History, RotateCcw
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors, parseDateLocal } from '../../../lib/supabaseClient';
 import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
@@ -341,6 +341,12 @@ const LandValuationTab = ({
   // Method 1 Exclusion State (like Method 2)
   const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
 
+  // Rows the user trashed. Kept separate from method1ExcludedSales because the
+  // header "select all" checkbox dumps every id into that set on deselect —
+  // hiding off it would blank the whole table.
+  const [method1HiddenSales, setMethod1HiddenSales] = useState(new Set());
+  const [showRemovedSales, setShowRemovedSales] = useState(false);
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
@@ -545,6 +551,7 @@ useEffect(() => {
     debug('⚠️ Found unsaved session changes from', currentSession.lastModified);
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
+    setMethod1HiddenSales(currentSession.method1HiddenSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
     setExcludedMethod2VCS(currentSession.excludedMethod2VCS || new Set());
     setSaleCategories(currentSession.saleCategories || {});
@@ -774,6 +781,11 @@ useEffect(() => {
     setPriorSalePicks(marketLandData.vacant_sales_analysis.prior_sale_picks);
   }
 
+  // Restore Method 1 trashed rows
+  if (marketLandData.vacant_sales_analysis?.hidden_sales) {
+    setMethod1HiddenSales(new Set(marketLandData.vacant_sales_analysis.hidden_sales));
+  }
+
   // Also restore Method 1 excluded sales from new field (like Method 2)
   if (marketLandData.vacant_sales_analysis?.excluded_sales) {
     const method1Excluded = new Set(marketLandData.vacant_sales_analysis.excluded_sales);
@@ -933,6 +945,7 @@ useEffect(() => {
   isUpdatingSessionRef.current = true;
   updateSession({
     method1ExcludedSales,
+    method1HiddenSales,
     includedSales,
     excludedMethod2VCS,
     saleCategories,
@@ -956,6 +969,7 @@ useEffect(() => {
   }, 0);
 }, [
   method1ExcludedSales,
+  method1HiddenSales,
   includedSales,
   excludedMethod2VCS,
   saleCategories,
@@ -1606,6 +1620,11 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode]);
 
+  const hiddenVacantSalesCount = useMemo(
+    () => vacantSales.filter(s => method1HiddenSales.has(s.id)).length,
+    [vacantSales, method1HiddenSales]
+  );
+
   const sortedVacantSales = useMemo(() => {
     if (!method1Sort.field) return vacantSales;
     const dir = method1Sort.direction === 'desc' ? -1 : 1;
@@ -1623,6 +1642,13 @@ const getPricePerUnit = useCallback((price, size) => {
       return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' }) * dir;
     });
   }, [vacantSales, method1Sort, method1SortValue]);
+
+  const visibleVacantSales = useMemo(
+    () => showRemovedSales
+      ? sortedVacantSales
+      : sortedVacantSales.filter(s => !method1HiddenSales.has(s.id)),
+    [sortedVacantSales, method1HiddenSales, showRemovedSales]
+  );
 
   const toggleMethod1Sort = useCallback((field) => {
     setMethod1Sort(prev => prev.field === field
@@ -3280,13 +3306,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const removeSale = (saleId) => {
     // Track exclusion like Method 2 (don't remove from array entirely)
     setMethod1ExcludedSales(prev => new Set([...prev, saleId]));
+    setMethod1HiddenSales(prev => new Set([...prev, saleId]));
     setIncludedSales(prev => {
       const newSet = new Set(prev);
       newSet.delete(saleId);
       return newSet;
     });
+    // Write the literal rather than deleting the key: the auto-categorizer only
+    // fills a category in when the key is absent, so deleting it would stamp the
+    // row back to its autoCategory on the next recalc.
+    setSaleCategories(prev => ({ ...prev, [saleId]: 'uncategorized' }));
 
     debug('����️ Sale removed and tracked as excluded:', saleId);
+  };
+
+  const restoreSale = (saleId) => {
+    setMethod1HiddenSales(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(saleId);
+      return newSet;
+    });
+    setMethod1ExcludedSales(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(saleId);
+      return newSet;
+    });
+    // Include stays unchecked and the category stays uncategorized - restoring
+    // puts the row back on the list, it doesn't re-assert a judgement about it.
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
@@ -4797,6 +4843,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             package_properties: s.packageData?.properties || []
           })),
           excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
+          hidden_sales: Array.from(method1HiddenSales),
           prior_sale_picks: priorSalePicks,
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
@@ -4883,6 +4930,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         try {
           updateSessionState({
             method1ExcludedSales: new Set(),
+            method1HiddenSales: new Set(),
             includedSales: new Set(),
             excludedMethod2VCS: new Set(),
             saleCategories: {},
@@ -4965,7 +5013,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       setIsSaving(false);
     }
   }, [
-    jobData?.id, vacantSales, includedSales, method1ExcludedSales,
+    jobData?.id, vacantSales, includedSales, method1ExcludedSales, method1HiddenSales,
     saleCategories, specialRegions, landNotes, dateRange, valuationMode,
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
@@ -7799,8 +7847,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       {/* Method 1: Vacant Land Sales */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+        <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 1: Vacant Land Sales</h3>
+          {hiddenVacantSalesCount > 0 && (
+            <button
+              onClick={() => setShowRemovedSales(prev => !prev)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: showRemovedSales ? '#6B7280' : 'white',
+                color: showRemovedSales ? 'white' : '#6B7280',
+                border: '1px solid #D1D5DB',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 500
+              }}
+              title={showRemovedSales
+                ? 'Hide the removed rows again'
+                : 'Reveal removed rows so they can be restored individually'}
+            >
+              {showRemovedSales ? 'Hide removed' : `Show removed (${hiddenVacantSalesCount})`}
+            </button>
+          )}
         </div>
         
         <div style={{ overflowX: 'auto' }}>
@@ -7895,7 +7963,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tr>
             </thead>
             <tbody>
-              {sortedVacantSales.map((sale, index) => {
+              {visibleVacantSales.map((sale, index) => {
+                const isRemoved = method1HiddenSales.has(sale.id);
                 // Get human-readable names - use only synchronous decoding to avoid async rendering issues
                 const typeName = vendorType === 'Microsystems' && jobData?.parsed_code_definitions
                   ? interpretCodes.getMicrosystemsValue?.(sale, jobData.parsed_code_definitions, 'asset_type_use') || sale.asset_type_use || '-'
@@ -7905,7 +7974,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   : sale.asset_design_style || '-';
                 
                 return (
-                  <tr key={sale.id} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                  <tr key={sale.id} style={{
+                    backgroundColor: isRemoved ? '#F3F4F6' : (index % 2 === 0 ? 'white' : '#F9FAFB'),
+                    opacity: isRemoved ? 0.55 : 1
+                  }}>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <input
                         type="checkbox"
@@ -8162,20 +8234,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           <Search size={14} />
                         </button>
-                        <button
-                          onClick={() => removeSale(sale.id)}
-                          title="Remove"
-                          style={{
-                            padding: '4px',
-                            backgroundColor: '#EF4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {isRemoved ? (
+                          <button
+                            onClick={() => restoreSale(sale.id)}
+                            title="Restore this row to the list"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#10B981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => removeSale(sale.id)}
+                            title="Remove - hides the row, unchecks Include and resets the category"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#EF4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
