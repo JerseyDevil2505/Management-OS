@@ -16,6 +16,13 @@ import './sharedTabNav.css';
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
 
+// Land rates are struck off the raw deed price in every mode - acre, square
+// foot and front foot alike. Time is already controlled for by pairing sales
+// within a sale year, so starting from values_norm_time would adjust for it
+// twice. values_norm_time stays untouched on the record; it is read elsewhere
+// as a signal that the normalization pass vetted a sale.
+const landSalePrice = (sale) => Number(sale?.sales_price) || 0;
+
 // ======= DATE HELPERS =======
 const safeDateObj = (d) => {
   if (!d) return null;
@@ -218,7 +225,7 @@ const LandValuationTab = ({
         sizeForUnit = acres;
       }
 
-      const price = sale.values_norm_time || sale.sales_price || 0;
+      const price = landSalePrice(sale);
       pricePerUnit = sizeForUnit > 0 ? price / sizeForUnit : 0;
 
       return {
@@ -1582,8 +1589,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== HPI FOR PRIOR SALES ==========
   // Prior sales never went through the normalization pass, so they carry no
-  // values_norm_time. Method 1 prices off values_norm_time, so a prior sale has
-  // to be HPI-adjusted here to sit on the same footing as a current sale.
+  // values_norm_time. Method 1 rates no longer price off it - see landSalePrice
+  // - so this is retained for display and for BRT prior-sale rows only.
   useEffect(() => {
     let cancelled = false;
     const normalizeToYear = marketLandData?.normalization_config?.normalizeToYear || 2025;
@@ -1840,7 +1847,7 @@ const getPricePerUnit = useCallback((price, size) => {
       manuallyAddedProps.forEach(prop => {
         const acres = calculateAcreage(prop);
         const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-        const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+        const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
         finalSales.push({
           ...prop,
           totalAcres: acres,
@@ -1912,7 +1919,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-          const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+          const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -2175,9 +2182,9 @@ const getPricePerUnit = useCallback((price, size) => {
       let pricePerUnit;
       if (valuationMode === 'ff') {
         const frontage = parseFloat(prop.asset_lot_frontage) || 0;
-        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, frontage);
+        pricePerUnit = getPricePerUnit(landSalePrice(prop), frontage);
       } else {
-        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, acres);
+        pricePerUnit = getPricePerUnit(landSalePrice(prop), acres);
       }
       // Ensure whole numbers for unit rates
       const roundedUnitPrice = Math.round(pricePerUnit);
@@ -2247,7 +2254,7 @@ const getPricePerUnit = useCallback((price, size) => {
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
           // Use original property sales_price (don't sum - each property already has full package price)
-          const totalPrice = group[0].values_norm_time || group[0].sales_price;
+          const totalPrice = landSalePrice(group[0]);
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
@@ -2340,7 +2347,7 @@ const getPricePerUnit = useCallback((price, size) => {
       // Default: fall back to previous behavior
       if (group.length > 1) {
         // Use original sale price (don't sum - properties already contain full package price)
-        const totalPrice = group[0].values_norm_time || group[0].sales_price;
+        const totalPrice = landSalePrice(group[0]);
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
@@ -3275,7 +3282,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+      const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
@@ -7282,7 +7289,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
       if (categoryType === 'constrained') {
         if (valuationMode === 'sf') {
-          const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
+          const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
           const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
           return {
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7310,7 +7317,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             block_lot: `${s.property_block}/${s.property_lot}`,
             category: saleCategories[s.id] || 'uncategorized',
             class: s.property_m4_class,
-            price: s.values_norm_time || s.sales_price,
+            price: landSalePrice(s),
             acres: s.totalAcres
           }))
         });
@@ -7338,7 +7345,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 : (larger.totalAcres || 0);
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -7418,7 +7425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Fallback to simple calculation if paired analysis fails
       if (valuationMode === 'sf') {
-        const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
+        const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
         const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
         return {
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7488,7 +7495,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           isInCategory,
           isNormalRegion,
           isInBuildingLot,
-          price: s.values_norm_time || s.sales_price,
+          price: landSalePrice(s),
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
         });
@@ -7501,7 +7508,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           specialRegion: specialRegions[s.id] || 'Normal',
           isInBuildingLot,
-          price: s.values_norm_time || s.sales_price,
+          price: landSalePrice(s),
           acres: s.totalAcres
         });
       }
@@ -7569,7 +7576,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -10905,7 +10912,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-                      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
+                      const pricePerUnit = getPricePerUnit(landSalePrice(prop), sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
