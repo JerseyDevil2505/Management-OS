@@ -2123,7 +2123,12 @@ const getPricePerUnit = useCallback((price, size) => {
           sales_nu: null,
           sales_book: null,
           sales_page: null,
-          values_norm_time: normalizePriorSalePrice(price, dateStr),
+          // Deliberately NOT time-normalized. Vacant land sales are left raw -
+          // a populated values_norm_time is read as a validity signal elsewhere,
+          // so synthesizing one here would fake that signal. enrichProperty
+          // falls back to sales_price for the unit rate, and the allocation
+          // study reads sales_price directly.
+          values_norm_time: null,
           _isPriorSale: true,
           _isManualPriorSale: true,
           _manualPriorSaleId: entry.id,
