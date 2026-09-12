@@ -347,6 +347,16 @@ const LandValuationTab = ({
   const [method1HiddenSales, setMethod1HiddenSales] = useState(new Set());
   const [showRemovedSales, setShowRemovedSales] = useState(false);
 
+  // Hand-recovered prior sales. Microsystems ships no prev_sales, so on a new
+  // construction parcel the only sale on file is the finished house - the land
+  // sale that actually sets the rate has to be typed in from the deed.
+  // Stored here (not on property_records) so both the improved sale and the
+  // land sale can sit on the table at once; an override would replace one.
+  const [manualPriorSales, setManualPriorSales] = useState([]);
+  const [priorSaleEntryTarget, setPriorSaleEntryTarget] = useState(null);
+  const [priorSaleEntryDate, setPriorSaleEntryDate] = useState('');
+  const [priorSaleEntryPrice, setPriorSaleEntryPrice] = useState('');
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
@@ -784,6 +794,11 @@ useEffect(() => {
   // Restore Method 1 trashed rows
   if (marketLandData.vacant_sales_analysis?.hidden_sales) {
     setMethod1HiddenSales(new Set(marketLandData.vacant_sales_analysis.hidden_sales));
+  }
+
+  // Restore hand-entered prior sales
+  if (Array.isArray(marketLandData.vacant_sales_analysis?.manual_prior_sales)) {
+    setManualPriorSales(marketLandData.vacant_sales_analysis.manual_prior_sales);
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -2067,6 +2082,61 @@ const getPricePerUnit = useCallback((price, size) => {
       });
     }
 
+    // Hand-entered prior sales. Same row shape as the BRT prev_sales rows above,
+    // so everything downstream - enrichment, include/category maps, the
+    // allocation study - treats them as ordinary sales.
+    if (manualPriorSales.length > 0) {
+      const mStart = safeDateObj(dateRange.start)
+        ? new Date(safeDateObj(dateRange.start)).setHours(0, 0, 0, 0)
+        : 0;
+      const mEnd = safeDateObj(dateRange.end)
+        ? new Date(safeDateObj(dateRange.end)).setHours(23, 59, 59, 999)
+        : 8640000000000000;
+
+      const norm = (v) => String(v ?? '').trim().toUpperCase();
+
+      manualPriorSales.forEach(entry => {
+        const price = Number(entry?.sale_price) || 0;
+        const dateStr = entry?.sale_date || null;
+        if (!dateStr || price <= 0) return;
+
+        const saleDateObj = parseDateLocal(dateStr);
+        if (!saleDateObj || isNaN(saleDateObj.getTime())) return;
+        const saleTime = saleDateObj.getTime();
+        if (saleTime < mStart || saleTime > mEnd) return;
+
+        // Re-find the parcel by identity rather than by stored id: a file update
+        // regenerates property_records.id, and this entry may predate it.
+        const parent = properties.find(p =>
+          norm(p.property_block) === norm(entry.block) &&
+          norm(p.property_lot) === norm(entry.lot) &&
+          norm(p.property_qualifier) === norm(entry.qualifier) &&
+          ['', 'NONE', 'M', '1'].includes(norm(p.property_addl_card))
+        );
+        if (!parent) return;
+
+        priorSaleRows.push({
+          ...parent,
+          id: parent.id + '::manual' + entry.id,
+          sales_date: dateStr,
+          sales_price: price,
+          sales_nu: null,
+          sales_book: null,
+          sales_page: null,
+          values_norm_time: normalizePriorSalePrice(price, dateStr),
+          _isPriorSale: true,
+          _isManualPriorSale: true,
+          _manualPriorSaleId: entry.id,
+          _priorSaleSource: 'manual_entry',
+          _basePropertyId: parent.id,
+          _currentSale: {
+            date: parent.sales_date || null,
+            price: Number(parent.sales_price) || null
+          }
+        });
+      });
+    }
+
     // Package members are looked up by composite key many times below; a linear
     // scan per lookup is O(parcels) each and Berkeley ships ~29k parcels.
     const propsByCompositeKey = new Map();
@@ -2410,7 +2480,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
       return preservedIncluded;
     });
-  }, [properties, dateRange, calculateAcreage, getPricePerUnit, vendorType, priorSalePicks, normalizePriorSalePrice]);
+  }, [properties, dateRange, calculateAcreage, getPricePerUnit, vendorType, priorSalePicks, normalizePriorSalePrice, manualPriorSales]);
 
   // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
   // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
@@ -3325,6 +3395,40 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setSaleCategories(prev => ({ ...prev, [saleId]: 'uncategorized' }));
 
     debug('����️ Sale removed and tracked as excluded:', saleId);
+  };
+
+  const openPriorSaleEntry = (sale) => {
+    setPriorSaleEntryTarget(sale);
+    setPriorSaleEntryDate('');
+    setPriorSaleEntryPrice('');
+  };
+
+  const saveManualPriorSale = () => {
+    const target = priorSaleEntryTarget;
+    if (!target) return;
+    const price = Number(String(priorSaleEntryPrice).replace(/[^0-9.]/g, ''));
+    if (!priorSaleEntryDate || !(price > 0)) {
+      alert('Enter both a sale date and a sale price.');
+      return;
+    }
+    setManualPriorSales(prev => ([
+      ...prev,
+      {
+        id: `mps_${Date.now()}`,
+        block: target.property_block || null,
+        lot: target.property_lot || null,
+        qualifier: target.property_qualifier || null,
+        address: target.property_location || null,
+        sale_date: priorSaleEntryDate,
+        sale_price: price,
+        created_at: new Date().toISOString()
+      }
+    ]));
+    setPriorSaleEntryTarget(null);
+  };
+
+  const deleteManualPriorSale = (manualId) => {
+    setManualPriorSales(prev => prev.filter(e => e.id !== manualId));
   };
 
   const restoreSale = (saleId) => {
@@ -4851,6 +4955,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })),
           excluded_sales: Array.from(method1ExcludedSales), // Track Method 1 exclusions like Method 2
           hidden_sales: Array.from(method1HiddenSales),
+          manual_prior_sales: manualPriorSales,
           prior_sale_picks: priorSalePicks,
           rates: calculateRates(),
           rates_by_region: getUniqueRegions().map(region => ({
@@ -5020,7 +5125,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       setIsSaving(false);
     }
   }, [
-    jobData?.id, vacantSales, includedSales, method1ExcludedSales, method1HiddenSales,
+    jobData?.id, vacantSales, includedSales, method1ExcludedSales, method1HiddenSales, manualPriorSales,
     saleCategories, specialRegions, landNotes, dateRange, valuationMode,
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
@@ -8229,6 +8334,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           <History size={14} />
                         </button>
+                        {vendorType === 'Microsystems' && !sale._isPriorSale && (
+                          <button
+                            onClick={() => openPriorSaleEntry(sale)}
+                            title="Add a prior sale for this parcel (deed date and price)"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#2563EB',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePropertyResearch(sale)}
                           title="Research with AI"
@@ -8243,7 +8364,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           <Search size={14} />
                         </button>
-                        {isRemoved ? (
+                        {sale._isManualPriorSale ? (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Delete this hand-entered prior sale?')) {
+                                deleteManualPriorSale(sale._manualPriorSaleId);
+                              }
+                            }}
+                            title="Delete this hand-entered prior sale"
+                            style={{
+                              padding: '4px',
+                              backgroundColor: '#EF4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : isRemoved ? (
                           <button
                             onClick={() => restoreSale(sale.id)}
                             title="Restore this row to the list"
@@ -10400,6 +10540,68 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
         </div>
       </div>
+
+      {/* Manual prior-sale entry - Microsystems has no prev_sales to read */}
+      {priorSaleEntryTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+        }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', width: '420px' }}>
+            <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>Add Prior Sale</h3>
+            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+              {priorSaleEntryTarget.property_block}/{priorSaleEntryTarget.property_lot}
+              {priorSaleEntryTarget.property_qualifier ? `/${priorSaleEntryTarget.property_qualifier}` : ''}
+              {' — '}{priorSaleEntryTarget.property_location}
+            </div>
+            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+              Current sale on file: {priorSaleEntryTarget.sales_date || 'n/a'} for $
+              {(Number(priorSaleEntryTarget.sales_price) || 0).toLocaleString()}
+            </div>
+
+            <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+              Prior sale date
+            </label>
+            <input
+              type="date"
+              value={priorSaleEntryDate}
+              onChange={(e) => setPriorSaleEntryDate(e.target.value)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', marginBottom: '12px' }}
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
+              Prior sale price
+            </label>
+            <input
+              type="text"
+              value={priorSaleEntryPrice}
+              onChange={(e) => setPriorSaleEntryPrice(e.target.value)}
+              placeholder="665000"
+              style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px', marginBottom: '16px' }}
+            />
+
+            <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '16px' }}>
+              Added as its own row on this parcel. Set its Category and tick Include to
+              use it in the study. Time-normalized value is computed from the sale year.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setPriorSaleEntryTarget(null)}
+                style={{ padding: '8px 16px', backgroundColor: 'white', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveManualPriorSale}
+                style={{ padding: '8px 16px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Add Prior Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sales History Modal - picks which sale a Method 1 row values */}
       {salesHistoryTarget && (() => {
