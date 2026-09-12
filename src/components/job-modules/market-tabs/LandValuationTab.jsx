@@ -1643,6 +1643,13 @@ const getPricePerUnit = useCallback((price, size) => {
     });
   }, [vacantSales, method1Sort, method1SortValue]);
 
+  // Select-all must never reach a trashed row: it isn't on screen, so re-checking
+  // its Include would silently pull it back into the rate math.
+  const selectableVacantSales = useMemo(
+    () => vacantSales.filter(s => !method1HiddenSales.has(s.id)),
+    [vacantSales, method1HiddenSales]
+  );
+
   const visibleVacantSales = useMemo(
     () => showRemovedSales
       ? sortedVacantSales
@@ -7879,17 +7886,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px' }}>
                     <input
                       type="checkbox"
-                      checked={vacantSales.length > 0 && vacantSales.every(s => includedSales.has(s.id))}
+                      checked={selectableVacantSales.length > 0 && selectableVacantSales.every(s => includedSales.has(s.id))}
                       ref={el => {
                         if (el) {
-                          const checkedCount = vacantSales.filter(s => includedSales.has(s.id)).length;
-                          el.indeterminate = checkedCount > 0 && checkedCount < vacantSales.length;
+                          const checkedCount = selectableVacantSales.filter(s => includedSales.has(s.id)).length;
+                          el.indeterminate = checkedCount > 0 && checkedCount < selectableVacantSales.length;
                         }
                       }}
                       onChange={(e) => {
+                        // Trashed rows are deliberately absent from allIds - see selectableVacantSales.
+                        const allIds = selectableVacantSales.map(s => s.id);
                         if (e.target.checked) {
                           // Select all: add all to included, clear all from excluded
-                          const allIds = vacantSales.map(s => s.id);
                           setIncludedSales(prev => new Set([...prev, ...allIds]));
                           setMethod1ExcludedSales(prev => {
                             const newSet = new Set(prev);
@@ -7898,7 +7906,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           });
                         } else {
                           // Deselect all: remove all from included, add all to excluded
-                          const allIds = vacantSales.map(s => s.id);
                           setIncludedSales(prev => {
                             const newSet = new Set(prev);
                             allIds.forEach(id => newSet.delete(id));
@@ -7982,6 +7989,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <input
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
+                        disabled={isRemoved}
+                        title={isRemoved ? 'Restore this row before including it' : undefined}
                         onChange={(e) => {
                           const checked = e.target.checked;
                           debug(`Checkbox change for ${sale.property_block}/${sale.property_lot}:`, { checked, saleId: sale.id });
