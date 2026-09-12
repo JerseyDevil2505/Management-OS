@@ -1560,7 +1560,7 @@ const getPricePerUnit = useCallback((price, size) => {
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete, priorSalePicks, hpi]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete, priorSalePicks, manualPriorSales, hpi]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
