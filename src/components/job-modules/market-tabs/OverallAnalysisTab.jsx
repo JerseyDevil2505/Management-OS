@@ -2358,9 +2358,10 @@ const OverallAnalysisTab = ({
           // average biases the column now that the baseline is size-adjusted too.
           const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
           const baselineAdjPriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexYB, c: adjPriceCol });
+          const baselineAdjPriceAbs = `$${XLSX.utils.encode_col(adjPriceCol)}$${baselineRowIndexYB + 1}`;
 
           if (ws[currentAdjPriceCell] && ws[baselineAdjPriceCell]) {
-            return `(${currentAdjPriceCell}-$${baselineAdjPriceCell})/$${baselineAdjPriceCell}`;
+            return `(${currentAdjPriceCell}-${baselineAdjPriceAbs})/${baselineAdjPriceAbs}`;
           }
           return null;
         }
