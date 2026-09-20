@@ -4811,6 +4811,88 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     };
   }, [ecoObsFactors, trafficLevels]);
 
+  // Location recommendations, shared by the Eco Obs tab and the Excel export so the
+  // two can't drift. Previously the tab computed this inline and the export ran its
+  // own aggregation that only admitted locations present in 2+ VCS, which silently
+  // dropped every single-VCS location from the exported summary.
+  const ecoObsSummaryList = useMemo(() => {
+    const standaloneLocations = {};
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+        if (!loc || /\bnone\b|\bno analysis\b/i.test(loc)) return;
+        if (/[/|,]|\band\b|&/.test(loc)) return; // compound separators
+        if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [], sumWith: 0, sumWithout: 0, scored: new Set() };
+        standaloneLocations[loc].vcsList.add(vcs);
+        const impact = calculateEcoObsImpact(vcs, loc, globalEcoObsTypeFilter);
+        if (impact && impact.percentImpact && impact.percentImpact !== 'N/A') {
+          const num = parseFloat(String(impact.percentImpact));
+          if (!isNaN(num)) standaloneLocations[loc].impacts.push(num);
+          // Only a VCS with sales on both sides can contribute to the rollup. One
+          // with no with-sales (or, rarely, no baseline) has nothing to compare and
+          // is left out of the totals entirely rather than counted as zero.
+          if (impact.withCount > 0 && impact.withoutCount > 0) {
+            standaloneLocations[loc].sumWith += impact.adjustedSaleWith;
+            standaloneLocations[loc].sumWithout += impact.adjustedSaleWithout;
+            standaloneLocations[loc].scored.add(vcs);
+          }
+        }
+      });
+    });
+
+    // Dollar-weighted across the contributing VCS, not a mean of their percentages --
+    // a VCS carrying most of the dollars should move the recommendation more.
+    const standaloneAvg = {};
+    Object.entries(standaloneLocations).forEach(([loc, data]) => {
+      const avg = data.sumWithout > 0 ? ((data.sumWith - data.sumWithout) / data.sumWithout) * 100 : null;
+      standaloneAvg[loc] = {
+        avg,
+        count: data.vcsList.size,
+        scoredCount: data.scored.size,
+        impacts: data.impacts,
+        sumWith: data.sumWith,
+        sumWithout: data.sumWithout
+      };
+    });
+
+    const compoundLocations = {};
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+        if (!loc) return;
+        if (/[/|,]|\band\b|&/.test(loc)) {
+          if (!compoundLocations[loc]) compoundLocations[loc] = { vcsList: new Set(), parts: [], summedAvg: 0 };
+          compoundLocations[loc].vcsList.add(vcs);
+          const parts = loc.split(/\/|\|| and | & |,/i).map(p => p.trim()).filter(Boolean);
+          compoundLocations[loc].parts = Array.from(new Set([...(compoundLocations[loc].parts || []), ...parts]));
+        }
+      });
+    });
+
+    Object.keys(compoundLocations).forEach(loc => {
+      const parts = compoundLocations[loc].parts || [];
+      let sum = 0;
+      parts.forEach(part => {
+        const p = standaloneAvg[part];
+        if (p && p.avg !== null && !isNaN(p.avg)) sum += p.avg;
+      });
+      // cap at 25% (by absolute value)
+      compoundLocations[loc].summedAvg = Math.sign(sum) * Math.min(Math.abs(sum), 25);
+    });
+
+    let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({
+      location: loc, avgPercent: d.avg, count: d.count, scoredCount: d.scoredCount,
+      impacts: d.impacts, sumWith: d.sumWith, sumWithout: d.sumWithout, isCompound: false
+    }));
+    if (includeCompounded) {
+      combined = combined.concat(Object.keys(compoundLocations).map(loc => ({
+        location: loc, avgPercent: compoundLocations[loc].summedAvg || null,
+        count: compoundLocations[loc].vcsList.size, impacts: [],
+        sumWith: null, sumWithout: null, isCompound: true
+      })));
+    }
+
+    return combined.sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0)));
+  }, [ecoObsFactors, calculateEcoObsImpact, globalEcoObsTypeFilter, includeCompounded]);
+
   const addCustomLocationCode = (code, description, isPositive) => {
     const newCode = {
       code: code.toUpperCase(),
@@ -6696,20 +6778,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const headers = ['VCS','Locational Analysis','Code','With Year Built','With Living Area','With Sale Price','Without Year Built','Without Living Area','Without Sale Price','Adjusted Sale With','Adjusted Sale Without','Dollar Impact','Percent Impact','Applied+%','Applied-%'];
     rows.push(headers);
 
-    // Collect standalone locations (locations appearing in only one VCS)
-    const standaloneLocations = [];
-    const locationVCSMap = {}; // Track which VCSs have each location
-
     const filteredFactors = ecoObsFactors || {};
-    Object.keys(filteredFactors).sort().forEach(vcs => {
-      Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
-        if (locationAnalysis === 'None') return;
-        if (!locationVCSMap[locationAnalysis]) {
-          locationVCSMap[locationAnalysis] = [];
-        }
-        locationVCSMap[locationAnalysis].push(vcs);
-      });
-    });
+
 
     Object.keys(filteredFactors).sort().forEach(vcs => {
       Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
@@ -6735,11 +6805,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         const appliedPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
         const appliedNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
-
-        // Track standalone locations
-        if (locationVCSMap[locationAnalysis] && locationVCSMap[locationAnalysis].length === 1) {
-          standaloneLocations.push({ vcs, locationAnalysis, code, impact });
-        }
 
         rows.push([
           vcs,
@@ -6906,48 +6971,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     summaryRows.push(['', '']); // Blank row
     summaryRows.push(['', 'LOCATION SUMMARY']);
     summaryRows.push(['', '']); // Blank row
-    summaryRows.push(['', 'Location', 'Sum Adj With', 'Sum Adj Without', 'Dollar Impact', 'Percent Impact']);
+    summaryRows.push(['', 'Location', 'VCS Count', 'Recommended %', 'Sum Adj With', 'Sum Adj Without', 'Dollar Impact']);
 
-    // Collect ALL locations that appear in 2+ VCS codes (regardless of compounding)
-    const repeatedLocations = {};
-    Object.keys(locationVCSMap).forEach(location => {
-      const vcsList = locationVCSMap[location];
-      if (vcsList && vcsList.length >= 2) {
-        repeatedLocations[location] = vcsList;
-      }
-    });
+    // Mirrors the Location Recommendations table in the tab, row for row. A location
+    // present in only one VCS is still a recommendation, so it belongs here -- the old
+    // 2+ VCS gate dropped those silently. VCS Count carries the evidence weight in the
+    // same "scored of total" form the tab uses.
+    ecoObsSummaryList.forEach(item => {
+      const vcsCount = item.scoredCount !== undefined && item.scoredCount !== item.count
+        ? `${item.scoredCount} of ${item.count}`
+        : `${item.count}`;
+      const recommended = item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(item.avgPercent)
+        ? `${item.avgPercent.toFixed(1)}%${item.isCompound ? '*' : ''}`
+        : 'N/A';
+      const dollarImpact = item.sumWith != null && item.sumWithout != null
+        ? item.sumWith - item.sumWithout
+        : null;
 
-    // Add repeated locations with aggregated values across ALL VCS
-    Object.keys(repeatedLocations).sort().forEach(location => {
-      const vcsList = repeatedLocations[location];
-
-      let sumAdjWith = 0;
-      let sumAdjWithout = 0;
-      let validCount = 0;
-
-      // Aggregate across ALL VCS entries for this location
-      vcsList.forEach(vcs => {
-        const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
-        if (impact.adjustedSaleWith && impact.adjustedSaleWithout) {
-          sumAdjWith += impact.adjustedSaleWith;
-          sumAdjWithout += impact.adjustedSaleWithout;
-          validCount++;
-        }
-      });
-
-      if (validCount > 0) {
-        const totalDollarImpact = sumAdjWith - sumAdjWithout;
-        const percentImpact = sumAdjWithout > 0 ? ((totalDollarImpact / sumAdjWithout) * 100).toFixed(1) : 'N/A';
-
-        summaryRows.push([
-          '', // Column A - empty
-          location, // Column B - Location name
-          `$${Math.round(sumAdjWith).toLocaleString()}`, // Sum Adj With
-          `$${Math.round(sumAdjWithout).toLocaleString()}`, // Sum Adj Without
-          `$${Math.round(totalDollarImpact).toLocaleString()}`, // Dollar Impact
-          percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact // Percent Impact
-        ]);
-      }
+      summaryRows.push([
+        '', // Column A - empty
+        item.location,
+        vcsCount,
+        recommended,
+        item.sumWith != null ? `$${Math.round(item.sumWith).toLocaleString()}` : '',
+        item.sumWithout != null ? `$${Math.round(item.sumWithout).toLocaleString()}` : '',
+        dollarImpact != null ? `$${Math.round(dollarImpact).toLocaleString()}` : ''
+      ]);
     });
 
     // Add summary rows to the worksheet
@@ -6975,7 +7024,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Style summary header row
     const summaryHeaderRow = summaryStartRow + 3;
-    for (let c = 1; c < 6; c++) { // Columns B-F (1-5)
+    for (let c = 1; c < 7; c++) { // Columns B-G (1-6)
       const cellRef = getCell(summaryHeaderRow, c);
       if (ws2[cellRef]) {
         ws2[cellRef].s = {
@@ -6987,7 +7036,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Update worksheet range to include summary rows
     const maxRow = Math.max(rows.length, currentRow - 1);
-    const maxCol = Math.max(cols - 1, 5); // 6 columns in summary (0-5), 15 in main data (0-14)
+    const maxCol = Math.max(cols - 1, 6); // 7 columns in summary (0-6), 15 in main data (0-14)
     ws2['!ref'] = `A1:${XLSX.utils.encode_col(maxCol)}${maxRow}`;
 
     // Set column widths - widen column B for long location descriptions
@@ -12827,79 +12876,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
   ];
 
-  // Build summary for standalone location analyses (non-compounded)
-  const standaloneLocations = {};
-  Object.keys(ecoObsFactors || {}).forEach(vcs => {
-    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
-      // Skip empty/none and compounded descriptions
-      if (!loc || /\bnone\b|\bno analysis\b/i.test(loc)) return;
-      if (/[\/\|,]|\band\b|&/.test(loc)) return; // compound separators
-      if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [], sumWith: 0, sumWithout: 0, scored: new Set() };
-      standaloneLocations[loc].vcsList.add(vcs);
-      const impact = calculateEcoObsImpact(vcs, loc, globalEcoObsTypeFilter);
-      if (impact && impact.percentImpact && impact.percentImpact !== 'N/A') {
-        const num = parseFloat(String(impact.percentImpact));
-        if (!isNaN(num)) standaloneLocations[loc].impacts.push(num);
-        // Only a VCS with sales on both sides can contribute to the rollup. One
-        // with no with-sales (or, rarely, no baseline) has nothing to compare and
-        // is left out of the totals entirely rather than counted as zero.
-        if (impact.withCount > 0 && impact.withoutCount > 0) {
-          standaloneLocations[loc].sumWith += impact.adjustedSaleWith;
-          standaloneLocations[loc].sumWithout += impact.adjustedSaleWithout;
-          standaloneLocations[loc].scored.add(vcs);
-        }
-      }
-    });
-  });
-
-  // Compute standalone recommendations. Dollar-weighted across the contributing
-  // VCS, not a mean of their percentages -- a VCS carrying most of the dollars
-  // should move the recommendation more than a small one.
-  const standaloneAvg = {};
-  Object.entries(standaloneLocations).forEach(([loc, data]) => {
-    const avg = data.sumWithout > 0 ? ((data.sumWith - data.sumWithout) / data.sumWithout) * 100 : null;
-    standaloneAvg[loc] = { avg, count: data.vcsList.size, scoredCount: data.scored.size, impacts: data.impacts };
-  });
-
-  // Find compound locations and compute summed averages from parts (cap at 25% absolute)
-  const compoundLocations = {};
-  Object.keys(ecoObsFactors || {}).forEach(vcs => {
-    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
-      if (!loc) return;
-      // detect compound
-      if (/[\/\|,]|\band\b|&/.test(loc)) {
-        // Keep original compound key
-        if (!compoundLocations[loc]) compoundLocations[loc] = { vcsList: new Set(), parts: [], summedAvg: 0 };
-        compoundLocations[loc].vcsList.add(vcs);
-        // split into parts using same splitter as mapping
-        const parts = loc.split(/\/|\|| and | & |,|\//i).map(p => p.trim()).filter(Boolean);
-        compoundLocations[loc].parts = Array.from(new Set([...(compoundLocations[loc].parts || []), ...parts]));
-      }
-    });
-  });
-
-  Object.keys(compoundLocations).forEach(loc => {
-    const parts = compoundLocations[loc].parts || [];
-    // sum available standalone averages for parts
-    let sum = 0;
-    parts.forEach(part => {
-      const p = standaloneAvg[part];
-      if (p && p.avg !== null && !isNaN(p.avg)) {
-        sum += p.avg;
-      }
-    });
-    // cap at 25% (by absolute value)
-    const capped = Math.sign(sum) * Math.min(Math.abs(sum), 25);
-    compoundLocations[loc].summedAvg = capped;
-  });
-
-  // Build combined summary list based on includeCompounded toggle
-  let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({ location: loc, avgPercent: d.avg, count: d.count, scoredCount: d.scoredCount, impacts: d.impacts, isCompound: false }));
-  if (includeCompounded) {
-    combined = combined.concat(Object.keys(compoundLocations).map(loc => ({ location: loc, avgPercent: compoundLocations[loc].summedAvg || null, count: compoundLocations[loc].vcsList.size, impacts: [], isCompound: true })));
-  }
-
-  const summaryList = combined.sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
+  // Location recommendations come from the shared ecoObsSummaryList memo so the tab
+  // and the Excel export always show the same rows. No cap -- every location renders.
+  const summaryList = ecoObsSummaryList;
 
   // Helper to split a location into parts (handles /, |, ',', ' and ', '&')
   const splitLocationParts = (loc) => {
