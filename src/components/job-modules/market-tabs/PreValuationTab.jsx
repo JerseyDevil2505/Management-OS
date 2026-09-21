@@ -4218,6 +4218,44 @@ const analyzeImportFile = async (file) => {
                           Keep All Usable
                         </button>
 
+                        {/* Bulk action: clear every decision so Keep All Usable can re-decide.
+                            Keep All Usable only touches rows still at 'pending', and a
+                            re-run of Run Time Normalization carries prior decisions forward,
+                            so without this there is no way back to a clean slate. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const decided = timeNormalizedSales.filter(s => s.keep_reject && s.keep_reject !== 'pending');
+
+                            if (decided.length === 0) {
+                              alert('No keep/reject decisions to reset.');
+                              return;
+                            }
+
+                            if (!window.confirm(
+                              `This will reset ${decided.length} keep/reject decisions back to Pending.\n\n` +
+                              `Click 'Save All Keep/Reject Decisions' after to persist changes. Continue?`
+                            )) return;
+
+                            const updated = timeNormalizedSales.map(s => ({ ...s, keep_reject: 'pending' }));
+
+                            setTimeNormalizedSales(updated);
+                            setNormalizationStats({
+                              ...normalizationStats,
+                              pendingReview: updated.length,
+                              keptCount: 0,
+                              rejectedCount: 0,
+                              acceptedSales: 0
+                            });
+
+                            alert(`${decided.length} decisions reset to Pending. Run 'Keep All Usable', then click 'Save All Keep/Reject Decisions' to persist changes.`);
+                          }}
+                          className="px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                          title="Clear all keep/reject decisions back to Pending"
+                        >
+                          Reset Decisions
+                        </button>
+
                         {/* Export to Excel button */}
                         <button
                           type="button"
