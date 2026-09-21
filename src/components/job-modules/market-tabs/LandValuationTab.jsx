@@ -5432,46 +5432,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
-      if (isResidential && typicalLot) {
-        if (vcsMethod === 'ff' && typicalFF && typicalDepth) {
-          // Front Foot mode - use 3-tier FF calculation
-          const standardRate = cascadeRates.standard?.rate || 0;
-          const standardMax = cascadeRates.standard?.max || 50;
-          const excessRate = cascadeRates.excess?.rate || 0;
-          let remaining = typicalFF;
+      if (isResidential && vcsMethod === 'ff') {
+        // Front Foot never populated typicalLot, so the old guard skipped every FF
+        // row and left this cell as text. The Rec Site formula subtracts it, which
+        // is where the #VALUE! came from. Route through the same helper the tab
+        // uses for Rec Site so the subtraction reconciles, depth factor included.
+        const ffForRawLand = parseFloat(vcsData.avgPriceLotSize) || parseFloat(typicalFF) || 0;
+        if (ffForRawLand > 0) {
+          const depthProps = properties?.filter(p =>
+            p.new_vcs === vcs &&
+            (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+            p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
+          ) || [];
+          const avgDepth = depthProps.length > 0
+            ? depthProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / depthProps.length
+            : 100;
 
-          const standardFF = Math.min(remaining, standardMax);
-          rawLandValue = standardFF * standardRate;
-          remaining -= standardFF;
-
-          // Secondary tier
-          if (cascadeRates.secondary?.rate && cascadeRates.secondary?.max && remaining > 0) {
-            const secondaryMax = cascadeRates.secondary.max - standardMax;
-            const secondaryFF = Math.min(remaining, secondaryMax);
-            rawLandValue += secondaryFF * cascadeRates.secondary.rate;
-            remaining -= secondaryFF;
-          }
-
-          // Excess
-          if (remaining > 0) {
-            rawLandValue += remaining * excessRate;
-          }
-
-          // Apply depth factor if available
-          if (depthTableName && depthTables[depthTableName]) {
-            const depthTable = depthTables[depthTableName];
-            if (depthTable.factors) {
-              const depths = Object.keys(depthTable.factors).map(Number).sort((a, b) => a - b);
-              let closestDepth = depths[0];
-              for (const d of depths) {
-                if (d <= typicalDepth) closestDepth = d;
-                else break;
-              }
-              const depthFactor = depthTable.factors[closestDepth] || 1.0;
-              rawLandValue *= depthFactor;
-            }
-          }
-        } else if (vcsMethod === 'sf') {
+          rawLandValue = calculateRawLandValue(null, cascadeRates, {
+            land_front_feet: ffForRawLand,
+            land_depth: avgDepth,
+            land_zoning: depthProps[0]?.asset_zoning
+          }, 'ff');
+        }
+      } else if (isResidential && typicalLot) {
+        if (vcsMethod === 'sf') {
           // Square Foot mode - use 3-tier SF calculation
           const standardRate = cascadeRates.standard?.rate || 0;
           const standardMax = cascadeRates.standard?.max || 5000;
@@ -5526,7 +5510,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      const rawLandFmt = rawLandValue > 0 ? Math.round(rawLandValue) : '';
+      // A cascade row must leave a number here even when it comes to nothing.
+      // Rec Site subtracts this cell, and an empty string is text to Excel.
+      const rawLandFmt = rawLandValue > 0
+        ? Math.round(rawLandValue)
+        : (isResidential && vcsMethod !== 'site' ? 0 : '');
 
       // Raw Land column - order must match the headers built above
       row.push(rawLandFmt);
@@ -5652,7 +5640,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (rowMethod === 'SITE') {
             recSiteFormula = base;
           } else if (rowMethod === 'FF' || rowMethod === 'SF' || rowMethod === 'AC') {
-            recSiteFormula = rawLandCol ? `${base}-${rawLandCol}${excelRow}` : base;
+            // Only subtract a Raw Land cell that actually holds a number. Pointing
+            // arithmetic at a blank text cell returns #VALUE! for the whole row.
+            const rawLandCellRef = rawLandColIndex >= 0
+              ? XLSX.utils.encode_cell({ r: rowIndex, c: rawLandColIndex })
+              : null;
+            const rawLandIsNumeric = rawLandCellRef && worksheet[rawLandCellRef]?.t === 'n';
+            recSiteFormula = (rawLandCol && rawLandIsNumeric)
+              ? `${base}-${rawLandCol}${excelRow}`
+              : base;
           }
 
           if (recSiteFormula) {
