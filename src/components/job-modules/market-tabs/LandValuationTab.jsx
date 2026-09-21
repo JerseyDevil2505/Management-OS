@@ -5292,12 +5292,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const data = [];
     data.push(headers);
 
+    // Rows whose Rec Site cannot be reproduced from Avg Price, Allocation and Raw
+    // Land. They keep the static figure instead of a formula that would contradict
+    // the tab.
+    const staticRecSiteRows = new Set();
+
     // Add data rows
     Object.keys(vcsSheetData).sort().forEach(vcs => {
       const vcsData = vcsSheetData[vcs];
       const type = vcsTypes[vcs] || 'Residential-Typical';
       const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
-      const recSite = vcsRecommendedSites[vcs] || 0;
+      // Same source the tab renders from, so the sheet cannot drift from the screen
+      const recSiteBreakdown = calculateRecSiteBreakdown(vcs);
+      const recSite = recSiteBreakdown.siteValue || 0;
       // Fix: Use nullish coalescing to allow 0 values in Act Site
       const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
@@ -5435,25 +5442,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isResidential && vcsMethod === 'ff') {
         // Front Foot never populated typicalLot, so the old guard skipped every FF
         // row and left this cell as text. The Rec Site formula subtracts it, which
-        // is where the #VALUE! came from. Route through the same helper the tab
-        // uses for Rec Site so the subtraction reconciles, depth factor included.
-        const ffForRawLand = parseFloat(vcsData.avgPriceLotSize) || parseFloat(typicalFF) || 0;
-        if (ffForRawLand > 0) {
-          const depthProps = properties?.filter(p =>
-            p.new_vcs === vcs &&
-            (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
-            p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
-          ) || [];
-          const avgDepth = depthProps.length > 0
-            ? depthProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / depthProps.length
-            : 100;
-
-          rawLandValue = calculateRawLandValue(null, cascadeRates, {
-            land_front_feet: ffForRawLand,
-            land_depth: avgDepth,
-            land_zoning: depthProps[0]?.asset_zoning
-          }, 'ff');
-        }
+        // is where the #VALUE! came from. Take the component Rec Site was actually
+        // derived from - it already carries the depth table override and factor.
+        rawLandValue = recSiteBreakdown.rawLand ?? 0;
       } else if (isResidential && typicalLot) {
         if (vcsMethod === 'sf') {
           // Square Foot mode - use 3-tier SF calculation
@@ -5515,6 +5506,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const rawLandFmt = rawLandValue > 0
         ? Math.round(rawLandValue)
         : (isResidential && vcsMethod !== 'site' ? 0 : '');
+
+      if (vcsMethod === 'ff' && recSiteBreakdown.rawLand == null) {
+        staticRecSiteRows.add(data.length);
+      }
 
       // Raw Land column - order must match the headers built above
       row.push(rawLandFmt);
@@ -5633,6 +5628,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const rowMethod = data[rowIndex][methodColIndex];
           const recSiteCellRef = XLSX.utils.encode_cell({ r: rowIndex, c: recSiteColIndex });
           if (!worksheet[recSiteCellRef]) continue;
+          if (staticRecSiteRows.has(rowIndex)) continue;
 
           const base = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100`;
           let recSiteFormula = '';
@@ -12046,14 +12042,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
 
   // ========== CALCULATE REC SITE WITH FRONT FOOT FORMULA ==========
-  const calculateRecSite = useCallback((vcs) => {
+  // Returns the site value along with the raw land it was derived from. The Excel
+  // export needs that component, because its Rec Site cell is a live formula that
+  // subtracts the Raw Land column - and the two have to agree with this tab.
+  // rawLand is null when the value came from the stored fallback and there is no
+  // breakdown to hand out.
+  const calculateRecSiteBreakdown = useCallback((vcs) => {
+    const fallback = () => ({ siteValue: vcsRecommendedSites[vcs] || 0, rawLand: null });
+
     // Get VCS data for avg price
     const data = vcsSheetData[vcs];
-    if (!data) return vcsRecommendedSites[vcs] || 0;
+    if (!data) return fallback();
 
     // Use Avg Price, fallback to Avg Price (t)
     const avgPrice = data.avgPrice || data.avgNormTime;
-    if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
+    if (!avgPrice || !targetAllocation) return fallback();
 
     // Get effective method for this VCS (considering overrides)
     const vcsType = vcsTypes[vcs] || '';
@@ -12062,12 +12065,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // For SITE method (condos): use strict site value calculation
     if (vcsMethod === 'site') {
       // For condos/site: Rec Site = Target % × Avg Price
-      return Math.round(avgPrice * (targetAllocation / 100));
+      return { siteValue: Math.round(avgPrice * (targetAllocation / 100)), rawLand: 0 };
     }
 
     // If not in FF mode, return the base recommended value
     if (vcsMethod !== 'ff') {
-      return vcsRecommendedSites[vcs] || 0;
+      return fallback();
     }
 
     // Front Foot mode calculation for non-condo residential
@@ -12075,13 +12078,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Find the most common zoning for this VCS
     const vcsProperties = properties.filter(p => p.new_vcs === vcs);
-    if (vcsProperties.length === 0) return vcsRecommendedSites[vcs] || 0;
+    if (vcsProperties.length === 0) return fallback();
 
     const vcsZonings = vcsProperties
       .map(p => p.asset_zoning)
       .filter(z => z && z.trim() !== '');
 
-    if (vcsZonings.length === 0) return vcsRecommendedSites[vcs] || 0;
+    if (vcsZonings.length === 0) return fallback();
 
     // Get most common zoning
     const zoningCounts = {};
@@ -12097,20 +12100,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                      zcfg[mostCommonZoning?.toUpperCase?.()] ||
                      zcfg[mostCommonZoning?.toLowerCase?.()] || null;
 
-    if (!zoneEntry) return vcsRecommendedSites[vcs] || 0;
+    if (!zoneEntry) return fallback();
 
     // Use VCS-specific depth table override if available, otherwise use zoning default
     const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
     const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
 
-    if (!depthTableName || !minFrontage) return vcsRecommendedSites[vcs] || 0;
+    if (!depthTableName || !minFrontage) return fallback();
 
     // Calculate average frontage and depth for properties in this VCS
     const propsWithFrontage = vcsProperties.filter(p =>
       p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
     );
 
-    if (propsWithFrontage.length === 0) return vcsRecommendedSites[vcs] || 0;
+    if (propsWithFrontage.length === 0) return fallback();
 
     const avgFrontage = propsWithFrontage.reduce((sum, p) =>
       sum + parseFloat(p.asset_lot_frontage), 0
@@ -12145,10 +12148,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const targetValue = Math.round(avgPrice * (targetAllocation / 100));
 
     // Rec Site = Target Value - Raw Land Component
-    const siteValue = targetValue - rawLandComponent;
-
-    return siteValue;
+    return { siteValue: targetValue - rawLandComponent, rawLand: rawLandComponent };
   }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, vcsMethodOverrides, getVCSMethod, resolveCascadeRatesForVCS]);
+
+  const calculateRecSite = useCallback(
+    (vcs) => calculateRecSiteBreakdown(vcs).siteValue,
+    [calculateRecSiteBreakdown]
+  );
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
