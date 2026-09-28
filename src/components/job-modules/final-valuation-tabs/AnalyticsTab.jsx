@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Save, Plus, Trash2 } from 'lucide-react';
-import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear, getSalesWindowYear, isLojikJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const AnalyticsTab = ({ jobData, properties }) => {
@@ -38,11 +38,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
 
   // Determine sales period for a property - MATCH SalesReviewTab logic exactly
   const getSalesPeriod = useCallback((salesDate) => {
-    if (!salesDate || !jobData?.end_date) return null;
+    if (!salesDate || (!jobData?.end_date && !isLojikJob(jobData))) return null;
 
     const sale = parseDateLocal(salesDate);
     if (!sale) return null;
-    const assessmentYear = getAssessmentYear(jobData.end_date);
+    const assessmentYear = getSalesWindowYear(jobData, getAssessmentYear(jobData.end_date));
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
@@ -63,7 +63,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
     if (sale >= hspStart && sale <= hspEnd) return 'HSP';
     return ''; // Blank instead of 'OTHER'
-  }, [jobData?.end_date]);
+  }, [jobData]);
 
   // Calculate VCS analytics
   const vcsAnalytics = useMemo(() => {

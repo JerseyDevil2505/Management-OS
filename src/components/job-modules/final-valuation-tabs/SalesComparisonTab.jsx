@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear, getSalesWindowYear } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -12,7 +12,6 @@ import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
-  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
@@ -45,14 +44,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== COMPARABLE FILTERS STATE ====================
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
-    if (!jobData?.end_date) return { start: '', end: '' };
-    const rawYear = getAssessmentYear(jobData.end_date);
-    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+    const baseYear = jobData?.end_date ? getAssessmentYear(jobData.end_date) : null;
+    const assessmentYear = getSalesWindowYear(jobData, baseYear);
+    if (!assessmentYear) return { start: '', end: '' };
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
       end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0] // 10/31 assessment year
     };
-  }, [jobData?.end_date, isLojikTenant]);
+  }, [jobData?.end_date, jobData?.status, jobData?.organization_id]);
 
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 

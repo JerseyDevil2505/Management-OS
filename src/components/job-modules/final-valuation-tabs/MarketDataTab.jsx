@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { supabase, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, getAssessmentYear, getSalesWindowYear } from '../../../lib/supabaseClient';
 import { Download, AlertCircle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import ClassEffectiveAgeReport from './ClassEffectiveAgeReport';
@@ -234,7 +234,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const saleDateStr = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
     const saleDate = new Date(saleDateStr + 'T12:00:00'); // Add noon to avoid timezone shifts
 
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const assessmentYear = getSalesWindowYear(jobData, jobData?.end_date ? new Date(jobData.end_date).getFullYear() : null);
+    if (!assessmentYear) return null;
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
