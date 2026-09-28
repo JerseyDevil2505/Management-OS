@@ -189,9 +189,32 @@ export function getAssessmentYear(endDate, fallback = new Date().getFullYear()) 
   return dueYear - 1;
 }
 
+const PPA_ORG_ID_FOR_WINDOWS = '00000000-0000-0000-0000-000000000001';
+
+export function isLojikJob(jobData) {
+  if (!jobData) return false;
+  const orgType = jobData.organizations?.org_type || jobData.org_type;
+  if (orgType) return orgType === 'assessor';
+  return !!jobData.organization_id && jobData.organization_id !== PPA_ORG_ID_FOR_WINDOWS;
+}
+
+// Sampling year under appeal defense; flips July 1, after the April 1 / May 1 deadlines.
+export function getRolloverAssessmentYear(today = new Date()) {
+  return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+}
+
+// Year anchoring sales windows and CSP/PSP/HSP labels. LOJIK: rollover year.
+// Archived PPA: roll forward, never backward. Active PPA: caller's base year unchanged.
+export function getSalesWindowYear(jobData, baseYear) {
+  if (isLojikJob(jobData)) return getRolloverAssessmentYear();
+  if (baseYear == null || !Number.isFinite(baseYear)) return null;
+  if (jobData?.status === 'archived') return Math.max(baseYear, getRolloverAssessmentYear());
+  return baseYear;
+}
+
 // CSP/PSP/HSP sales-period windows, anchored on the job assessment year.
 export function getSalesPeriodRanges(jobData) {
-  const ay = getAssessmentYear(jobData?.end_date);
+  const ay = getSalesWindowYear(jobData, getAssessmentYear(jobData?.end_date));
   return {
     assessmentYear: ay,
     CSP: { start: new Date(ay - 1, 9, 1), end: new Date(ay, 11, 31, 23, 59, 59) },

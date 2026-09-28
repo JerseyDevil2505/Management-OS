@@ -14,7 +14,7 @@
 
 import { useMemo, useState } from 'react';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
-import { getAssessmentYear } from '../../../lib/supabaseClient';
+import { getAssessmentYear, getSalesWindowYear, isLojikJob } from '../../../lib/supabaseClient';
 
 // Quality strings the Census batch returns that we treat as "needs review".
 // Anything not in this list and not 'Manual' / 'Exact' / 'Match' is also
@@ -137,19 +137,15 @@ export default function CoordinatesSubTab({ properties = [], jobData }) {
   // Sales-pool window: 10/1 (assessmentYear-2) → 10/31 (assessmentYear-1).
   // Lojik tenants subtract one from end_date.year because end_date is the job end.
   const salesWindow = useMemo(() => {
-    if (!jobData?.end_date) return null;
-    const rawYear = getAssessmentYear(jobData.end_date, null);
-    if (!rawYear) return null;
-    const isLojik =
-      jobData?.organizations?.org_type === 'assessor' ||
-      jobData?.org_type === 'assessor';
-    const ay = isLojik ? rawYear - 1 : rawYear;
+    const rawYear = jobData?.end_date ? getAssessmentYear(jobData.end_date, null) : null;
+    const ay = getSalesWindowYear(jobData, rawYear);
+    if (!ay) return null;
     return {
       start: new Date(ay - 2, 9, 1),
       end: new Date(ay - 1, 9, 31),
-      isLojik,
+      isLojik: isLojikJob(jobData),
     };
-  }, [jobData?.end_date, jobData?.organizations?.org_type, jobData?.org_type]);
+  }, [jobData]);
 
   const filteredForSales = useMemo(() => {
     if (!salesInPool || !salesWindow) return filteredForClass;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob, getAssessmentYear, getSalesWindowYear } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight, Scale, Pin, PinOff, Archive, Pencil, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -12,7 +12,6 @@ import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
-  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   // Scan Masked Sales modal (BRT only) — Sales Pool surface, tight user window
@@ -45,14 +44,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   // ==================== COMPARABLE FILTERS STATE ====================
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
-    if (!jobData?.end_date) return { start: '', end: '' };
-    const rawYear = getAssessmentYear(jobData.end_date);
-    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+    const baseYear = jobData?.end_date ? getAssessmentYear(jobData.end_date) : null;
+    const assessmentYear = getSalesWindowYear(jobData, baseYear);
+    if (!assessmentYear) return { start: '', end: '' };
     return {
       start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
       end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0] // 10/31 assessment year
     };
-  }, [jobData?.end_date, isLojikTenant]);
+  }, [jobData?.end_date, jobData?.status, jobData?.organization_id]);
 
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
@@ -3042,19 +3041,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           }
         }
 
-        // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
-        const rawYear = getAssessmentYear(jobData.end_date);
-        const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
-        const cspStart = new Date(assessmentYear - 1, 9, 1);
-        const cspEnd = new Date(assessmentYear, 9, 31);
+        // SUBJECT SALE PRIORITY: If subject sold inside the user's sales date range
+        // (falls back to CSP when no range is set), it becomes Comp #1 with 0% adjustment.
+        // Added/omitted assessments run windows past the CSP, so the fixed CSP gate dropped them.
+        const priorityStart = compFilters.salesDateStart || cspDateRange.start;
+        const priorityEnd = compFilters.salesDateEnd || cspDateRange.end;
 
-        const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
+        // Compare YYYY-MM-DD strings to avoid UTC-midnight day shifts
+        const subjectSaleDay = subject.sales_date ? String(subject.sales_date).slice(0, 10) : null;
         const subjectSaleCode = String(subject.sales_nu ?? '').trim();
         const isValidSaleCode = !subjectSaleCode ||
           compFilters.salesCodes?.includes(subjectSaleCode);
 
-        const subjectSoldInCSP = subjectSaleDate &&
-          (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
+        const subjectSoldInCSP = subjectSaleDay &&
+          (!priorityStart || subjectSaleDay >= priorityStart) &&
+          (!priorityEnd || subjectSaleDay <= priorityEnd) &&
           (subject.sales_price || 0) > 0 &&
           isValidSaleCode;
 

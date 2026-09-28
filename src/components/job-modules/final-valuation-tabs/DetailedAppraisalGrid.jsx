@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { interpretCodes, supabase, getAssessmentYear } from '../../../lib/supabaseClient';
+import { interpretCodes, supabase, getAssessmentYear, getSalesWindowYear } from '../../../lib/supabaseClient';
 import { FileDown, X, Eye, EyeOff, Printer, Map as MapIcon, History, Flag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -2934,10 +2934,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             // the PDF doesn't paint sale dates red when the on-screen panel
             // shows them green.
             const sampleRange = (() => {
-              if (!jobData?.end_date) return { start: '', end: '' };
-              const rawYear = getAssessmentYear(jobData.end_date);
-              const isLojikTenant = tenantConfig?.orgType === 'assessor';
-              const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
+              const baseYear = jobData?.end_date ? getAssessmentYear(jobData.end_date) : null;
+              const assessmentYear = getSalesWindowYear(jobData, baseYear);
+              if (!assessmentYear) return { start: '', end: '' };
               return {
                 start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
                 end: new Date(assessmentYear, 9, 31).toISOString().split('T')[0]

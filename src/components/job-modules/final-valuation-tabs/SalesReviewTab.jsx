@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, parseDateLocal, formatDateLocalYMD, getAssessmentYear, getSalesWindowYear, isLojikJob } from '../../../lib/supabaseClient';
 import {
   Download,
   Save,
@@ -98,11 +98,11 @@ const SalesReviewTab = ({
   // ==================== PERIOD CLASSIFICATION LOGIC ====================
 
   const getPeriodClassification = useCallback((saleDate, endDate) => {
-    if (!saleDate || !endDate) return null;
+    if (!saleDate || (!endDate && !isLojikJob(jobData))) return null;
 
     const sale = parseDateLocal(saleDate);
     if (!sale) return null;
-    const assessmentYear = getAssessmentYear(endDate);
+    const assessmentYear = getSalesWindowYear(jobData, getAssessmentYear(endDate));
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
@@ -123,7 +123,7 @@ const SalesReviewTab = ({
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
     if (sale >= hspStart && sale <= hspEnd) return 'HSP';
     return ''; // Blank instead of 'OTHER'
-  }, []);
+  }, [jobData]);
 
   // ==================== STATE MANAGEMENT ====================
   
@@ -787,9 +787,9 @@ const SalesReviewTab = ({
   };
 
   const handleSetDateRange = (period) => {
-    if (!jobData?.end_date) return;
+    if (!jobData?.end_date && !isLojikJob(jobData)) return;
 
-    const assessmentYear = getAssessmentYear(jobData.end_date);
+    const assessmentYear = getSalesWindowYear(jobData, getAssessmentYear(jobData.end_date));
 
     switch(period) {
       case 'CSP':
