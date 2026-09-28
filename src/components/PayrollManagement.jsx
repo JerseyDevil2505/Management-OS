@@ -469,8 +469,14 @@ const loadInitialData = async () => {
               comments: comments,
               issues: []
             };
-            
-            if (!initials) {
+
+            // Owners and clerical staff don't do field inspections, so no initials are expected
+            const rosterType = findEmployeeByWorksheetName(employeeName)?.inspector_type?.toLowerCase();
+            const isNonInspector = rosterType === 'owner' || rosterType === 'clerical';
+
+            if (isNonInspector) {
+              // no initials check for non-inspectors
+            } else if (!initials) {
               empData.issues.push(`No initials on the worksheet and no matching employee record - any inspection bonus will be missed`);
             } else if (resolved.fromSheet && resolved.fromRecord && resolved.fromSheet !== resolved.fromRecord) {
               empData.issues.push(`Worksheet initials (${resolved.fromSheet}) do not match the employee record (${resolved.fromRecord}) - using ${resolved.fromRecord}`);
