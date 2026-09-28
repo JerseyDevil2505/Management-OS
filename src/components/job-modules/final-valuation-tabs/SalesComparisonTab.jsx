@@ -3042,19 +3042,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           }
         }
 
-        // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
-        const rawYear = getAssessmentYear(jobData.end_date);
-        const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
-        const cspStart = new Date(assessmentYear - 1, 9, 1);
-        const cspEnd = new Date(assessmentYear, 9, 31);
+        // SUBJECT SALE PRIORITY: If subject sold inside the user's sales date range
+        // (falls back to CSP when no range is set), it becomes Comp #1 with 0% adjustment.
+        // Added/omitted assessments run windows past the CSP, so the fixed CSP gate dropped them.
+        const priorityStart = compFilters.salesDateStart || cspDateRange.start;
+        const priorityEnd = compFilters.salesDateEnd || cspDateRange.end;
 
-        const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
+        // Compare YYYY-MM-DD strings to avoid UTC-midnight day shifts
+        const subjectSaleDay = subject.sales_date ? String(subject.sales_date).slice(0, 10) : null;
         const subjectSaleCode = String(subject.sales_nu ?? '').trim();
         const isValidSaleCode = !subjectSaleCode ||
           compFilters.salesCodes?.includes(subjectSaleCode);
 
-        const subjectSoldInCSP = subjectSaleDate &&
-          (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
+        const subjectSoldInCSP = subjectSaleDay &&
+          (!priorityStart || subjectSaleDay >= priorityStart) &&
+          (!priorityEnd || subjectSaleDay <= priorityEnd) &&
           (subject.sales_price || 0) > 0 &&
           isValidSaleCode;
 
