@@ -12426,10 +12426,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </select>
                       </td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                        {/* Uncontrolled so typing doesn't re-render the whole tab (and rescan every property) per keystroke */}
                         <input
+                          key={`${vcs}-${description}`}
                           type="text"
-                          value={description}
-                          onChange={(e) => updateVCSDescription(vcs, e.target.value)}
+                          defaultValue={description}
+                          onBlur={(e) => {
+                            if (e.target.value !== description) updateVCSDescription(vcs, e.target.value);
+                          }}
                           className="vcs-description-input"
                         />
                       </td>
