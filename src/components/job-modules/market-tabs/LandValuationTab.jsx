@@ -4423,14 +4423,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
       [vcs]: value === '' ? null : parseInt(value) || 0
     }));
-
-    // Immediate save to prevent data loss when navigating away
-    debug('����� Triggering immediate save for Act Site change');
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 500); // Short delay to batch multiple rapid changes
   };
 
   const updateVCSDescription = (vcs, description) => {
@@ -4439,14 +4431,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: description
     }));
-
-    // Trigger autosave to persist the description
-    debug('💾 Triggering autosave for VCS description change');
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 1000); // 1 second delay to batch rapid typing
   };
 
 
@@ -4455,14 +4439,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: type
     }));
-
-    // Trigger autosave to persist the type change
-    debug('💾 Triggering autosave for VCS type change');
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 500);
   };
 
   const updateVCSMethod = (vcs, method) => {
@@ -4470,14 +4446,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: method
     }));
-
-    // Trigger autosave to persist the method change
-    debug('💾 Triggering autosave for VCS method change');
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 500);
   };
 
   const updateVCSRate = (vcs, tier, value) => {
@@ -4488,12 +4456,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         [tier]: value ? parseFloat(value) : null
       }
     }));
-
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 500);
   };
 
   const updateVCSStepdown = (vcs, value) => {
@@ -4501,12 +4463,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: value ? parseFloat(value) : null
     }));
-
-    setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 500);
   };
 
   const toggleFieldCollapse = (fieldName) => {
@@ -12522,9 +12478,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                     ...prev,
                                     [vcs]: newDepthTable
                                   }));
-                                  setTimeout(() => {
-                                    saveAnalysis();
-                                  }, 100);
                                 }}
                                 style={{
                                   width: '100%',
