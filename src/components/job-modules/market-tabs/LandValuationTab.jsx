@@ -2070,9 +2070,9 @@ const getPricePerUnit = useCallback((price, size) => {
         });
       });
 
-      // prev_sales carries no book/page, so a package deed split across lots shows
-      // up once per lot at the full package price. Tag the collisions - grouping
-      // them automatically would guess at a lot combination we can't verify.
+      // prev_sales carries no book/page, so date + price is only a hint: BRT
+      // duplicates prior sales on one parcel, and separate deeds can match by
+      // chance. Count distinct parcels and treat the tag as a prompt to check.
       const priorGroups = {};
       priorSaleRows.forEach(row => {
         const key = row.sales_date + '|' + row.sales_price;
@@ -2080,10 +2080,19 @@ const getPricePerUnit = useCallback((price, size) => {
         priorGroups[key].push(row);
       });
       Object.values(priorGroups).forEach(group => {
-        if (group.length < 2) return;
-        const peers = group.map(g => g.property_block + '/' + g.property_lot).join(', ');
+        const parcels = new Map();
+        group.forEach(g => {
+          const blq = [g.property_block, g.property_lot, g.property_qualifier]
+            .map(v => String(v ?? '').trim().toUpperCase()).join('|');
+          if (!parcels.has(blq)) {
+            parcels.set(blq, g.property_block + '/' + g.property_lot +
+              (g.property_qualifier && String(g.property_qualifier).trim() ? '/' + String(g.property_qualifier).trim() : ''));
+          }
+        });
+        if (parcels.size < 2) return;
+        const peers = Array.from(parcels.values()).join(', ');
         group.forEach(row => {
-          row._priorPackageCount = group.length;
+          row._priorPackageCount = parcels.size;
           row._priorPackagePeers = peers;
         });
       });
@@ -8287,7 +8296,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale._priorPackageCount && (
                         <span
-                          title={'Same prior sale date and price on ' + sale._priorPackageCount + ' parcels (' + sale._priorPackagePeers + ') - likely one deed split across lots, so this price is the whole package.'}
+                          title={'Check deeds: ' + sale._priorPackageCount + ' parcels (' + sale._priorPackagePeers + ') show a prior sale with this same date and price. Prior sales carry no book/page, so this could be one package deed or separate deeds that happen to match - verify before treating the price as a package.'}
                           style={{
                             backgroundColor: '#FEE2E2',
                             color: '#DC2626',
