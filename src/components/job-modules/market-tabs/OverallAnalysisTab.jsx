@@ -286,6 +286,7 @@ const OverallAnalysisTab = ({
     const map = new Map();
     if (marketLandData && Array.isArray(marketLandData.time_normalized_sales)) {
       marketLandData.time_normalized_sales.forEach(s => {
+        if (s.keep_reject !== 'keep') return;
         // normalized sales may be stored with different keys depending on process
         const key = s.property_composite_key || s.property_key || s.property_composite || null;
         const time = s.values_norm_time || s.time_normalized_price || s.normalizedTime || s.time_normalized || s.values_norm_time;
