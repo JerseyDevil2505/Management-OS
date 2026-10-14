@@ -464,7 +464,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (!filtered || filtered.length === 0) return alert('No data to export');
 
     const headers = [
-      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Value','Adjusted Ratio'
+      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Value','Adjusted Ratio','Ratio(t)'
     ];
 
     // Column indexes for reference (0-based)
@@ -472,8 +472,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       INCL: 0, BLOCK: 1, LOT: 2, QUAL: 3, CARD: 4, LOCATION: 5, VCS: 6,
       SALE_DATE: 7, SALE_PRICE: 8, SALE_NU: 9, PRICE_TIME: 10, YEAR_BUILT: 11,
       DEPR: 12, BLDG_CLASS: 13, LIVING_AREA: 14, CURRENT_LAND: 15, DET_ITEM: 16,
-      BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22
+      BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22, RATIO_T: 23
     };
+
+    // Every adjusted value points at one CCF cell under the totals so the user can
+    // tune a single town factor and watch all the ratios move.
+    const actualRowNum = filtered.length + 3;
+    const actualCCFRef = `$U$${actualRowNum}`;
 
     // Sale Price (I) always carries the raw sale, matching the on-screen grid.
     // The basis drives the math only, so the ratio and improv formulas point at
@@ -578,18 +583,14 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         row[COL.CCF] = '';
       }
 
-      // Adjusted Value - FORMULA: =P{rowNum} + ((R{rowNum} * M{rowNum}) * U{rowNum}) + Q{rowNum}
       if (yearBuilt && salePrice) {
-        row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*U${rowNum})+Q${rowNum}`, t: 'n' };
+        row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*${actualCCFRef})+Q${rowNum}`, t: 'n' };
+        row[COL.ADJ_RATIO] = { f: `IF(I${rowNum}=0,"",V${rowNum}/I${rowNum})`, t: 'n' };
+        row[COL.RATIO_T] = { f: `IF(K${rowNum}=0,"",V${rowNum}/K${rowNum})`, t: 'n' };
       } else {
         row[COL.ADJ_VALUE] = '';
-      }
-
-      // Adjusted Ratio - FORMULA: =V{rowNum} / I{rowNum}
-      if (yearBuilt && salePrice) {
-        row[COL.ADJ_RATIO] = { f: `IF(${basisCol}${rowNum}=0,"",V${rowNum}/${basisCol}${rowNum})`, t: 'n' };
-      } else {
         row[COL.ADJ_RATIO] = '';
+        row[COL.RATIO_T] = '';
       }
 
       wsData.push(row);
@@ -625,9 +626,17 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     summaryRow[COL.IMPROV] = { f: `SUM(T2:T${lastDataRow})`, t: 'n' };
     summaryRow[COL.CCF] = { f: `IF(S${summaryRowNum}=0,"",T${summaryRowNum}/S${summaryRowNum})`, t: 'n' }; // Overall CCF
     summaryRow[COL.ADJ_VALUE] = { f: `SUM(V2:V${lastDataRow})`, t: 'n' };
-    summaryRow[COL.ADJ_RATIO] = { f: `IF(${basisCol}${summaryRowNum}=0,"",V${summaryRowNum}/${basisCol}${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
+    summaryRow[COL.ADJ_RATIO] = { f: `IF(I${summaryRowNum}=0,"",V${summaryRowNum}/I${summaryRowNum})`, t: 'n' };
+    summaryRow[COL.RATIO_T] = { f: `IF(K${summaryRowNum}=0,"",V${summaryRowNum}/K${summaryRowNum})`, t: 'n' };
 
     wsData.push(summaryRow);
+
+    const actualRow = [];
+    actualRow[COL.IMPROV] = 'Actual';
+    actualRow[COL.CCF] = (costConvFactor !== null && costConvFactor !== '' && isFinite(Number(costConvFactor)))
+      ? Number(costConvFactor)
+      : { f: `U${summaryRowNum}`, t: 'n' };
+    wsData.push(actualRow);
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
@@ -657,7 +666,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       { wch: 12 }, // Improv
       { wch: 8 },  // CCF
       { wch: 14 }, // Adjusted Value
-      { wch: 12 }  // Adjusted Ratio
+      { wch: 12 }, // Adjusted Ratio
+      { wch: 10 }  // Ratio(t)
     ];
     ws['!cols'] = colWidths;
 
@@ -674,7 +684,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         if (R === 0) {
           // Header row
           ws[cellAddress].s = headerStyle;
-        } else if (R === summaryRowIndex) {
+        } else if (R === summaryRowIndex || R === summaryRowIndex + 1) {
           // Summary row - bold
           const style = {
             font: { name: 'Leelawadee', sz: 10, bold: true },
@@ -690,7 +700,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             style.numFmt = decimalFormat;
           } else if (C === COL.CCF) {
             style.numFmt = decimalFormat;
-          } else if (C === COL.ADJ_RATIO) {
+          } else if (C === COL.ADJ_RATIO || C === COL.RATIO_T) {
             style.numFmt = percentFormat;
           }
 
@@ -708,7 +718,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             style.numFmt = decimalFormat;
           } else if (C === COL.CCF) {
             style.numFmt = decimalFormat;
-          } else if (C === COL.ADJ_RATIO) {
+          } else if (C === COL.ADJ_RATIO || C === COL.RATIO_T) {
             style.numFmt = percentFormat;
           }
 
