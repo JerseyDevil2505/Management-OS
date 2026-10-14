@@ -34,14 +34,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   // Both vendors report det items already multiplied by the current CCF and never
   // report the factor itself. It is implied by repl cost (BRT) / Cost New (Micro)
   // over base cost, so take the most common ratio (strays differ only by rounding).
-  // Measured on completed houses only, matching the rows this tab analyzes; a ratio
-  // below 1 means the file's cost columns are unreliable, so no conversion is applied.
-  const { currentFileCCF, rejectedFileCCF } = useMemo(() => {
+  const currentFileCCF = useMemo(() => {
     const counts = {};
     properties.forEach(p => {
-      const typeVal = String(p.asset_type_use ?? '').trim();
-      if (!typeVal || typeVal === '00') return;
-      if (!(parseInt(String(p.asset_building_class ?? '').trim(), 10) > 10)) return;
       const base = Number(p.values_base_cost);
       const repl = Number(p.values_repl_cost);
       if (base > 0 && repl > 0) {
@@ -51,10 +46,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     });
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     const ccf = top ? Number(top[0]) : null;
-    if (!ccf) return { currentFileCCF: null, rejectedFileCCF: null };
-    return ccf >= 1
-      ? { currentFileCCF: ccf, rejectedFileCCF: null }
-      : { currentFileCCF: null, rejectedFileCCF: ccf };
+    return ccf && ccf > 0 ? ccf : null;
   }, [properties]);
 
   const getBaseDetItems = (p) => {
@@ -986,11 +978,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             {currentFileCCF && (
               <div className="text-xs text-gray-500 mt-1">
                 Det items shown at base: file det item &divide; current file CCF {currentFileCCF.toFixed(2)} ({jobData?.vendor_type === 'Microsystems' ? 'cost new' : 'repl cost'} &divide; base cost)
-              </div>
-            )}
-            {rejectedFileCCF && (
-              <div className="text-xs text-amber-700 mt-1">
-                Det items shown as reported: file cost ratio {rejectedFileCCF.toFixed(2)} ({jobData?.vendor_type === 'Microsystems' ? 'cost new' : 'repl cost'} &divide; base cost) is below 1, so no base conversion was applied. Check the file's cost data.
               </div>
             )}
           </div>
