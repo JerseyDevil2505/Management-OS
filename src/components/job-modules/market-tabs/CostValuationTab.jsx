@@ -31,11 +31,35 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [excludedKeys, setExcludedKeys] = useState(new Set());
   const excludedList = useMemo(() => Array.from(excludedKeys), [excludedKeys]);
 
+  // BRT reports det items already multiplied by the current CCF and never reports
+  // the factor itself. It is implied by repl cost / base cost, so take the most
+  // common ratio across the job (stray records differ only by rounding).
+  const currentFileCCF = useMemo(() => {
+    if ((jobData?.vendor_type || '') !== 'BRT') return null;
+    const counts = {};
+    properties.forEach(p => {
+      const base = Number(p.values_base_cost);
+      const repl = Number(p.values_repl_cost);
+      if (base > 0 && repl > 0) {
+        const ratio = (repl / base).toFixed(2);
+        counts[ratio] = (counts[ratio] || 0) + 1;
+      }
+    });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const ccf = top ? Number(top[0]) : null;
+    return ccf && ccf > 0 ? ccf : null;
+  }, [properties, jobData?.vendor_type]);
+
+  const getBaseDetItems = (p) => {
+    const raw = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+    return currentFileCCF ? Math.round(raw / currentFileCCF) : raw;
+  };
+
   // Helpers to get effective values (edited override or original)
   const getEffectiveDetItems = (p) => {
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
     if (editedDetItemMap[key] !== undefined && editedDetItemMap[key] !== '') return Number(editedDetItemMap[key]);
-    return (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+    return getBaseDetItems(p);
   };
   const getEffectiveBaseCost = (p) => {
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
@@ -952,6 +976,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               const included = includedMap[key] !== undefined ? includedMap[key] : true;
               return (p.values_repl_cost || p.values_base_cost) && included;
             }).length} comparable properties &middot; bold is the active basis</div>
+            {currentFileCCF && (
+              <div className="text-xs text-gray-500 mt-1">
+                Det items shown at base: BRT det item &divide; current file CCF {currentFileCCF.toFixed(2)} (repl cost &divide; base cost)
+              </div>
+            )}
           </div>
                 {/* Recommendation actions removed - keep Save Recommendation manual via Save Factor */}
         </div>
@@ -1072,7 +1101,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     {(() => {
                       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                      const val = editedDetItemMap[key] !== undefined ? editedDetItemMap[key] : (p.values_det_items !== undefined && p.values_det_items !== null ? p.values_det_items : '');
+                      const val = editedDetItemMap[key] !== undefined ? editedDetItemMap[key] : (p.values_det_items !== undefined && p.values_det_items !== null ? getBaseDetItems(p) : '');
                       return (
                         <input
                           type="number"
