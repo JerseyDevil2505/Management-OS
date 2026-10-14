@@ -12175,11 +12175,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Use VCS-specific depth table override if available, otherwise use zoning default
     const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
-    // Breakpoint is the Stepdown column (standard max, incl. per-VCS override); zoning min frontage is the fallback.
-    const stepdown = parseFloat(cascadeRates.standard?.max) ||
-      parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
+    // Breakpoint is the Stepdown column (standard max, incl. per-VCS override).
+    // No step means all frontage prices at the standard rate.
+    const stepdown = parseFloat(cascadeRates.standard?.max) || 0;
 
-    if (!depthTableName || !stepdown) return fallback();
+    if (!depthTableName) return fallback();
 
     // VCS-wide typicals are only a fallback when the price population has no lots with frontage.
     let avgFrontage = lots.frontage;
@@ -12197,11 +12197,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const depthFactor = interpretCodes.getDepthFactor(avgDepth, depthTableName, depthTables);
 
-    const standardFrontage = Math.min(avgFrontage, stepdown);
-    const excessFrontage = Math.max(0, avgFrontage - stepdown);
+    const standardFrontage = stepdown ? Math.min(avgFrontage, stepdown) : avgFrontage;
+    const excessFrontage = stepdown ? Math.max(0, avgFrontage - stepdown) : 0;
 
     const standardFF = cascadeRates.standard?.rate || 0;
-    const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
+    const excessFF = cascadeRates.excess?.rate || 0;
 
     // Each line is rounded on its own, matching the hand calculation.
     const standardComponent = Math.round(standardFrontage * standardFF * depthFactor);
