@@ -4136,6 +4136,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgActualPrice = {};
     const avgNormTimeLotSize = {};
     const avgActualPriceLotSize = {};
+    const salesLotFrontage = {};
+    const salesLotDepth = {};
 
     properties.forEach(prop => {
       if (!prop.new_vcs) return;
@@ -4159,6 +4161,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgActualPrice[prop.new_vcs] = [];
         avgNormTimeLotSize[prop.new_vcs] = [];
         avgActualPriceLotSize[prop.new_vcs] = [];
+        salesLotFrontage[prop.new_vcs] = [];
+        salesLotDepth[prop.new_vcs] = [];
       }
       
       counts[prop.new_vcs].total++;
@@ -4209,6 +4213,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
 
           avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+
+          const saleFrontage = parseFloat(prop.asset_lot_frontage) || 0;
+          const saleDepth = parseFloat(prop.asset_lot_depth) || 0;
+          if (saleFrontage > 0) salesLotFrontage[prop.new_vcs].push(saleFrontage);
+          if (saleFrontage > 0 && saleDepth > 0) salesLotDepth[prop.new_vcs].push(saleDepth);
 
           // Collect lot size based on valuation mode
           if (valuationMode === 'sf') {
@@ -4304,7 +4313,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgNormSize: calculatedAvgNormSize[vcs],
         avgPrice: calculatedAvgPrice[vcs],
         avgNormTimeLotSize: calculatedAvgNormTimeLotSize[vcs],
-        avgPriceLotSize: calculatedAvgPriceLotSize[vcs]
+        avgPriceLotSize: calculatedAvgPriceLotSize[vcs],
+        avgPriceLotFrontage: salesLotFrontage[vcs]?.length
+          ? Math.round(salesLotFrontage[vcs].reduce((sum, v) => sum + v, 0) / salesLotFrontage[vcs].length) : null,
+        avgPriceLotDepth: salesLotDepth[vcs]?.length
+          ? Math.round(salesLotDepth[vcs].reduce((sum, v) => sum + v, 0) / salesLotDepth[vcs].length) : null
       };
     });
 
@@ -12148,45 +12161,41 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Use VCS-specific depth table override if available, otherwise use zoning default
     const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
-    const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
+    const cascadeRates = resolveCascadeRatesForVCS(vcs);
+    // Breakpoint is the Stepdown column (standard max, incl. per-VCS override); zoning min frontage is the fallback.
+    const stepdown = parseFloat(cascadeRates.standard?.max) ||
+      parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
 
-    if (!depthTableName || !minFrontage) return fallback();
+    if (!depthTableName || !stepdown) return fallback();
 
-    // Calculate average frontage and depth for properties in this VCS
-    const propsWithFrontage = vcsProperties.filter(p =>
-      p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
-    );
+    // Lot dimensions come from the same sales as Avg Price, so the land deducted
+    // matches the lots behind the price. Whole numbers throughout, per the manual method.
+    // VCS-wide typicals are only a fallback when the VCS has no sale lots with frontage.
+    let avgFrontage = data.avgPriceLotFrontage;
+    let avgDepth = data.avgPriceLotDepth;
+    if (!avgFrontage) {
+      const propsWithFrontage = vcsProperties.filter(p => parseFloat(p.asset_lot_frontage) > 0);
+      if (propsWithFrontage.length === 0) return fallback();
+      avgFrontage = Math.round(propsWithFrontage.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / propsWithFrontage.length);
+      const propsWithDepth = propsWithFrontage.filter(p => parseFloat(p.asset_lot_depth) > 0);
+      avgDepth = propsWithDepth.length > 0
+        ? Math.round(propsWithDepth.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / propsWithDepth.length)
+        : null;
+    }
+    if (!avgDepth) avgDepth = 100;
 
-    if (propsWithFrontage.length === 0) return fallback();
-
-    const avgFrontage = propsWithFrontage.reduce((sum, p) =>
-      sum + parseFloat(p.asset_lot_frontage), 0
-    ) / propsWithFrontage.length;
-
-    const propsWithDepth = vcsProperties.filter(p =>
-      p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
-    );
-
-    const avgDepth = propsWithDepth.length > 0
-      ? propsWithDepth.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / propsWithDepth.length
-      : 100; // Default depth if not available
-
-    // Get depth factor using interpretCodes function that works with parsed code definitions
     const depthFactor = interpretCodes.getDepthFactor(avgDepth, depthTableName, depthTables);
 
-    // Calculate standard and excess frontage
-    const standardFrontage = Math.min(avgFrontage, minFrontage);
-    const excessFrontage = Math.max(0, avgFrontage - minFrontage);
-
-    const cascadeRates = resolveCascadeRatesForVCS(vcs);
+    const standardFrontage = Math.min(avgFrontage, stepdown);
+    const excessFrontage = Math.max(0, avgFrontage - stepdown);
 
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Step the frontage first, then the depth factor applies to the whole result.
-    const rawLandComponent = Math.round(
-      ((standardFrontage * standardFF) + (excessFrontage * excessFF)) * depthFactor
-    );
+    // Each line is rounded on its own, matching the hand calculation.
+    const standardComponent = Math.round(standardFrontage * standardFF * depthFactor);
+    const excessComponent = Math.round(excessFrontage * excessFF * depthFactor);
+    const rawLandComponent = standardComponent + excessComponent;
 
     // Calculate Target Allocation Value: avgPrice × (target% / 100)
     const targetValue = Math.round(avgPrice * (targetAllocation / 100));
@@ -12841,7 +12850,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgPriceLotSize ? (
-                          valuationMode === 'ff' ? `${Math.round(data.avgPriceLotSize)} ft` :
+                          valuationMode === 'ff' ? (data.avgPriceLotDepth ? `${Math.round(data.avgPriceLotSize)} × ${data.avgPriceLotDepth} ft` : `${Math.round(data.avgPriceLotSize)} ft`) :
                           valuationMode === 'sf' ? `${Math.round(data.avgPriceLotSize).toLocaleString()} SF` :
                           data.avgPriceLotSize.toFixed(2)
                         ) : ''}
