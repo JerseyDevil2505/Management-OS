@@ -31,11 +31,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [excludedKeys, setExcludedKeys] = useState(new Set());
   const excludedList = useMemo(() => Array.from(excludedKeys), [excludedKeys]);
 
-  // BRT reports det items already multiplied by the current CCF and never reports
-  // the factor itself. It is implied by repl cost / base cost, so take the most
-  // common ratio across the job (stray records differ only by rounding).
+  // Both vendors report det items already multiplied by the current CCF and never
+  // report the factor itself. It is implied by repl cost (BRT) / Cost New (Micro)
+  // over base cost, so take the most common ratio (strays differ only by rounding).
   const currentFileCCF = useMemo(() => {
-    if ((jobData?.vendor_type || '') !== 'BRT') return null;
     const counts = {};
     properties.forEach(p => {
       const base = Number(p.values_base_cost);
@@ -48,7 +47,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
     const ccf = top ? Number(top[0]) : null;
     return ccf && ccf > 0 ? ccf : null;
-  }, [properties, jobData?.vendor_type]);
+  }, [properties]);
 
   const getBaseDetItems = (p) => {
     const raw = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
@@ -978,7 +977,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             }).length} comparable properties &middot; bold is the active basis</div>
             {currentFileCCF && (
               <div className="text-xs text-gray-500 mt-1">
-                Det items shown at base: BRT det item &divide; current file CCF {currentFileCCF.toFixed(2)} (repl cost &divide; base cost)
+                Det items shown at base: file det item &divide; current file CCF {currentFileCCF.toFixed(2)} ({jobData?.vendor_type === 'Microsystems' ? 'cost new' : 'repl cost'} &divide; base cost)
               </div>
             )}
           </div>
