@@ -188,6 +188,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
 
+      // Completed houses only: a real type & use and building class above 10.
+      if (!typeVal || typeVal === '00') return false;
+      const buildingClass = parseInt(String(p.asset_building_class ?? '').trim(), 10);
+      if (!(buildingClass > 10)) return false;
+
       // Apply typeGroup filter using code prefixes
       if (typeGroup && typeGroup !== 'all') {
         // Normalize typeVal to string
