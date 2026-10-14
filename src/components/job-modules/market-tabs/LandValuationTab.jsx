@@ -4,7 +4,7 @@ import {
   X, Plus, Search, TrendingUp,
   Calculator, Download, Trash2,
   Save, FileDown, MapPin,
-  Home, History, RotateCcw
+  Home, History, RotateCcw, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors, parseDateLocal } from '../../../lib/supabaseClient';
 import { loadHpiMultiplier, timeNormalizeUnmasked } from '../../../lib/unmaskedSales';
@@ -380,6 +380,8 @@ const LandValuationTab = ({
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
+  const [vcsAllocationTargets, setVcsAllocationTargets] = useState({}); // { [vcs]: pct } - overrides the overall target
+  const [showVcsAllocationTargets, setShowVcsAllocationTargets] = useState(false);
   const [targetAllocationJustSaved, setTargetAllocationJustSaved] = useState(false);
   const [currentOverallAllocation, setCurrentOverallAllocation] = useState(0);
 
@@ -870,6 +872,10 @@ useEffect(() => {
     });
   } else {
     debug('ℹ️ No target allocation found in database');
+  }
+
+  if (marketLandData.allocation_study?.vcs_targets) {
+    setVcsAllocationTargets(marketLandData.allocation_study.vcs_targets);
   }
 
 
@@ -1510,6 +1516,13 @@ const getPricePerUnit = useCallback((price, size) => {
 
     return getVCSCascadeRates(vcs, baseCascadeRates);
   }, [cascadeConfig, getVCSCascadeRates]);
+
+  // A per-VCS target set on the Allocation tab wins over the overall target.
+  const getAllocationForVCS = useCallback((vcs) => {
+    const override = vcsAllocationTargets[vcs];
+    if (override !== undefined && override !== null && override !== '') return Number(override);
+    return targetAllocation != null && targetAllocation !== '' ? Number(targetAllocation) : null;
+  }, [vcsAllocationTargets, targetAllocation]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
@@ -4383,7 +4396,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // override, so ask for the effective method rather than sniffing the type.
       const vcsType = vcsTypes[vcs] || '';
       if (getVCSMethod(vcs, vcsType) === 'site') {
-        const siteValue = avgPrice * (parseFloat(targetAllocation) / 100);
+        const siteValue = avgPrice * ((getAllocationForVCS(vcs) || 0) / 100);
         recommendedSites[vcs] = siteValue;
         return;
       }
@@ -4439,7 +4452,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Calculate site value using target allocation
       // Use Avg Price if available, otherwise Avg Price (t)
-      const totalLandValue = avgPrice * (parseFloat(targetAllocation) / 100);
+      const totalLandValue = avgPrice * ((getAllocationForVCS(vcs) || 0) / 100);
       const siteValue = totalLandValue - rawLandValue;
 
       recommendedSites[vcs] = siteValue; // No rounding - store exact value
@@ -4449,7 +4462,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // getVCSMethod is intentionally omitted: it is declared further down and
   // referencing it here would hit the TDZ during render. It is stable via
   // useCallback and only called from inside this callback's body.
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, resolveCascadeRatesForVCS, getAllocationForVCS]);
 
   // Assigned during render so the ref is current before any effect fires.
   calculateVCSRecommendedSitesRef.current = calculateVCSRecommendedSites;
@@ -4960,6 +4973,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .from('market_land_valuation')
           .update({
             target_allocation: targetValue,
+            allocation_study: { ...(existing.allocation_study || {}), vcs_targets: vcsAllocationTargets },
             updated_at: new Date().toISOString()
           })
           .eq('job_id', jobData.id);
@@ -4970,6 +4984,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           .insert({
             job_id: jobData.id,
             target_allocation: targetValue,
+            allocation_study: { vcs_targets: vcsAllocationTargets },
             updated_at: new Date().toISOString()
           });
       }
@@ -5084,7 +5099,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           vcs_site_values: vcsSiteValues,
           actual_allocations: actualAllocations,
           current_overall_allocation: currentOverallAllocation,
-          stats: calculateAllocationStats()
+          stats: calculateAllocationStats(),
+          vcs_targets: vcsAllocationTargets
         },
         worksheet_data: {
           property_counts: vcsPropertyCounts,
@@ -5235,7 +5251,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       setIsSaving(false);
     }
   }, [
-    recSitePriceBasis,
+    recSitePriceBasis, vcsAllocationTargets,
     jobData?.id, vacantSales, includedSales, method1ExcludedSales, method1HiddenSales, manualPriorSales,
     saleCategories, specialRegions, landNotes, dateRange, valuationMode,
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
@@ -5478,8 +5494,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       row.push(recSiteFmt, actSiteFmt);
 
       // Get Allocation Target from user-set value (export as numeric percentage)
-      const allocationTargetValue = targetAllocation != null ?
-        Number(targetAllocation) : '';
+      const allocationTargetValue = getAllocationForVCS(vcs) ?? '';
 
       // Add Allocation Target to row
       row.push(allocationTargetValue);
@@ -11469,6 +11484,101 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
 
+      {/* Per-VCS allocation targets - blank inherits the overall target */}
+      {(() => {
+        const vcsList = Object.keys(vcsSheetData || {})
+          .filter(vcs => {
+            const c = vcsSheetData[vcs]?.counts || {};
+            return c.residential > 0 || c.condo > 0;
+          })
+          .sort();
+        if (vcsList.length === 0) return null;
+        const overrideCount = vcsList.filter(v => vcsAllocationTargets[v] != null && vcsAllocationTargets[v] !== '').length;
+        const studyByVcs = {};
+        vacantTestSales.filter(s => s.isPositive).forEach(s => {
+          const entry = studyByVcs[s.vcs] || (studyByVcs[s.vcs] = { land: 0, price: 0, count: 0 });
+          entry.land += s.totalLandValue || 0;
+          entry.price += s.avgImprovedPrice || 0;
+          entry.count += 1;
+        });
+        return (
+          <div style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+            <div
+              onClick={() => setShowVcsAllocationTargets(prev => !prev)}
+              style={{ padding: '12px 15px', backgroundColor: '#F9FAFB', borderBottom: showVcsAllocationTargets ? '1px solid #E5E7EB' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {showVcsAllocationTargets ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 'bold' }}>Targets by VCS</h3>
+              <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                {overrideCount > 0
+                  ? `${overrideCount} VCS with their own target - the rest use ${targetAllocation ?? '-'}%`
+                  : `All VCS use the overall target (${targetAllocation ?? '-'}%)`}
+              </span>
+            </div>
+            {showVcsAllocationTargets && (
+              <div style={{ padding: '10px 15px' }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6B7280' }}>
+                  Leave blank to use the overall target. The VCS Sheet's Rec Site and export use whichever applies. Click Save above to store.
+                </p>
+                <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F3F4F6', position: 'sticky', top: 0 }}>
+                        <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>VCS</th>
+                        <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Description</th>
+                        <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Type</th>
+                        <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Study Sales</th>
+                        <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Study Recommended</th>
+                        <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #E5E7EB' }}>Target %</th>
+                        <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Applied</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vcsList.map(vcs => {
+                        const study = studyByVcs[vcs];
+                        const hasOverride = vcsAllocationTargets[vcs] != null && vcsAllocationTargets[vcs] !== '';
+                        const applied = getAllocationForVCS(vcs);
+                        return (
+                          <tr key={vcs} style={{ backgroundColor: hasOverride ? '#EEF2FF' : 'white' }}>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB', fontWeight: 600 }}>{vcs}</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{vcsDescriptions[vcs] || getVCSDescription(vcs)}</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{vcsTypes[vcs] || 'Residential-Typical'}</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB', textAlign: 'right' }}>{study?.count || ''}</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB', textAlign: 'right' }}>
+                              {study && study.price > 0 ? `${((study.land / study.price) * 100).toFixed(1)}%` : ''}
+                            </td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB', textAlign: 'center' }}>
+                              <input
+                                type="number"
+                                value={vcsAllocationTargets[vcs] ?? ''}
+                                placeholder={targetAllocation != null ? String(targetAllocation) : ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setVcsAllocationTargets(prev => {
+                                    const next = { ...prev };
+                                    if (value === '') delete next[vcs];
+                                    else next[vcs] = parseFloat(value);
+                                    return next;
+                                  });
+                                }}
+                                style={{ width: '60px', padding: '3px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'right' }}
+                              />
+                            </td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB', textAlign: 'right', fontWeight: hasOverride ? 'bold' : 'normal', color: hasOverride ? '#4338CA' : '#374151' }}>
+                              {applied != null ? `${applied}%` : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Individual Allocation Analysis Table */}
       <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
@@ -12084,7 +12194,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const fallback = () => ({ siteValue: vcsRecommendedSites[vcs] || 0, rawLand: null });
 
     const data = vcsSheetData[vcs];
-    if (!data || !targetAllocation) return fallback();
+    const vcsAllocation = getAllocationForVCS(vcs);
+    if (!data || !vcsAllocation) return fallback();
 
     // Price and lot dimensions always come from the same population. CSP falls
     // back to the (t) population when the VCS has no sales in the window.
@@ -12095,7 +12206,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const vcsType = vcsTypes[vcs] || '';
     const vcsMethod = getVCSMethod(vcs, vcsType);
-    const targetValue = Math.round(avgPrice * (targetAllocation / 100));
+    const targetValue = Math.round(avgPrice * (vcsAllocation / 100));
 
     if (vcsMethod === 'site') {
       return { siteValue: targetValue, rawLand: 0 };
@@ -12209,7 +12320,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const rawLandComponent = standardComponent + excessComponent;
 
     return { siteValue: targetValue - rawLandComponent, rawLand: rawLandComponent };
-  }, [marketLandData, properties, depthTables, cascadeConfig, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, getVCSMethod, resolveCascadeRatesForVCS, recSitePriceBasis]);
+  }, [marketLandData, properties, depthTables, cascadeConfig, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, getAllocationForVCS, vcsTypes, getVCSMethod, resolveCascadeRatesForVCS, recSitePriceBasis]);
 
   const calculateRecSite = useCallback(
     (vcs) => calculateRecSiteBreakdown(vcs).siteValue,
@@ -12671,7 +12782,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           ) : ''}
                         </td>
                       )}
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        ${Math.round(recSite).toLocaleString()}
+                        {vcsAllocationTargets[vcs] != null && vcsAllocationTargets[vcs] !== '' && (
+                          <div style={{ fontSize: '10px', color: '#4338CA' }} title="This VCS has its own allocation target (Allocation tab)">
+                            @ {vcsAllocationTargets[vcs]}%
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
                           type="number"
