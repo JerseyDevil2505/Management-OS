@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Trash2, X, Upload, Download, FileText, Paperclip, Printer, Image as ImageIcon, Camera, Lock, Unlock } from 'lucide-react';
-import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear, getSalesWindowYear, isLojikJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 import { COLOR_CLASSES } from '../../../lib/appellantCompEvaluator';
 import AppellantEvidencePanel from './AppellantEvidencePanel';
@@ -337,7 +337,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
   // Compute VCS to bracket mapping on mount
   useEffect(() => {
-    if (!jobData?.end_date || properties.length === 0) return;
+    if ((!jobData?.end_date && !isLojikJob(jobData)) || properties.length === 0) return;
 
     // Helper: Get bracket label for a given price value
     const getBracketLabel = (priceValue) => {
@@ -345,7 +345,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
       return bracket ? bracket.label : null;
     };
 
-    const assessmentYear = getAssessmentYear(jobData.end_date);
+    const assessmentYear = getSalesWindowYear(jobData, getAssessmentYear(jobData.end_date));
 
     // Define period boundaries (local time, month is 0-indexed)
     const cspStart = new Date(assessmentYear - 1, 9, 1);    // Oct 1 prior year
@@ -389,7 +389,7 @@ const AppealLogTab = ({ jobData, properties = [], inspectionData = [], marketLan
 
     setVcsBracketMap(newMap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.end_date, properties]);
+  }, [jobData?.end_date, jobData?.status, jobData?.organization_id, properties]);
 
   // Load CME bracket mappings for fallback
   useEffect(() => {

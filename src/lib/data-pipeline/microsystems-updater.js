@@ -864,7 +864,8 @@ export class MicrosystemsUpdater {
       
       // Prepare all property records for batch upsert
       const propertyRecords = [];
-      
+      this.invalidDates = [];
+
       for (const rawRecord of records) {
         try {
           // Generate composite key for this record
@@ -881,7 +882,13 @@ export class MicrosystemsUpdater {
           console.error('Error mapping record:', error);
         }
       }
-      
+
+      if (this.invalidDates.length > 0) {
+        const samples = [...new Set(this.invalidDates)].slice(0, 5).join(', ');
+        console.log(`⚠️ Processing note: ${this.invalidDates.length} unreadable date(s) left blank (e.g. ${samples})`);
+      }
+      this.invalidDates = null;
+
       // Log preservation statistics
       if (versionInfo.preservedFields && preservedDataMap.size > 0) {
         const preservedCount = propertyRecords.filter(record => {
@@ -1627,8 +1634,34 @@ export class MicrosystemsUpdater {
   parseDate(dateString) {
     // Handle null, undefined, empty string, or whitespace-only strings
     if (!dateString || String(dateString).trim() === '') return null;
-    const date = new Date(dateString);
-    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+    const raw = String(dateString).trim();
+    const currentYear = new Date().getFullYear();
+    const fromParts = (y, m, d) => {
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+      return dt.toISOString().split('T')[0];
+    };
+
+    let result = null;
+    if (/^\d{6}$/.test(raw)) {
+      // MMDDYY — new Date('080599') would otherwise read it as year 80599
+      const yy = parseInt(raw.slice(4, 6), 10);
+      const year = 2000 + yy > currentYear + 1 ? 1900 + yy : 2000 + yy;
+      result = fromParts(year, parseInt(raw.slice(0, 2), 10), parseInt(raw.slice(2, 4), 10));
+    } else if (/^\d{8}$/.test(raw)) {
+      const asYmd = fromParts(parseInt(raw.slice(0, 4), 10), parseInt(raw.slice(4, 6), 10), parseInt(raw.slice(6, 8), 10));
+      result = asYmd || fromParts(parseInt(raw.slice(4, 8), 10), parseInt(raw.slice(0, 2), 10), parseInt(raw.slice(2, 4), 10));
+    } else {
+      const date = new Date(raw);
+      result = isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+    }
+
+    const year = result ? parseInt(result.slice(0, 4), 10) : NaN;
+    if (!result || year < 1800 || year > currentYear + 5) {
+      if (this.invalidDates) this.invalidDates.push(raw);
+      return null;
+    }
+    return result;
   }
 
   preserveStringValue(value) {

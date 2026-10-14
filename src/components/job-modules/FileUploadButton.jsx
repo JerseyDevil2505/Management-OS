@@ -1124,20 +1124,20 @@ const handleCodeFileUpdate = async () => {
           });
         }
         */
-        // A masked-sale promotion holds a recovered prior in property_records while
-        // the file keeps shipping the junk deed it displaced, so the two never agree
-        // and the parcel gets re-flagged on every upload forever. Suppress that one
-        // case. A sale above the junk floor still surfaces for review, where Keep Old
-        // preserves the promotion. The $100 floor matches the respect_sales_override
-        // trigger, which decides whether an incoming sale supersedes the promotion.
+        // An overridden sale (masked promotion, Keep Old, manual) holds a sale the
+        // file doesn't carry, so the two never agree and the parcel would be
+        // re-flagged on every upload. Suppress the deed that was already rejected
+        // and anything at or under the $100 junk floor (matches the
+        // respect_sales_override trigger). A genuinely different sale still surfaces.
         let isDisplacedJunkDeed = false;
-        if (dbRecord.sales_override === true
-            && dbRecord.sales_override_meta
-            && dbRecord.sales_override_meta.promoted_from === UNMASK_PROMOTED_FROM) {
-          const displaced = dbRecord.sales_override_meta.original_sale || {};
-          const sameTransaction = parseDate(displaced.date) === sourceSalesDate
-            && Math.abs((parseFloat(displaced.price) || 0) - sourceSalesPrice) <= 0.01;
-          isDisplacedJunkDeed = sameTransaction || sourceSalesPrice <= 100;
+        if (dbRecord.sales_override === true) {
+          const meta = dbRecord.sales_override_meta || {};
+          const isSame = (sale) => !!sale
+            && parseDate(sale.date) === sourceSalesDate
+            && Math.abs((parseFloat(sale.price) || 0) - sourceSalesPrice) <= 0.01;
+          isDisplacedJunkDeed = isSame(meta.original_sale)
+            || isSame(meta.kept_over_sale)
+            || sourceSalesPrice <= 100;
         }
 
         if ((pricesDifferent || datesDifferent) && !isDisplacedJunkDeed) {
@@ -1147,6 +1147,7 @@ const handleCodeFileUpdate = async () => {
             property_lot: dbRecord.property_lot,
             property_qualifier: dbRecord.property_qualifier,
             property_location: dbRecord.property_location,
+            override_meta: dbRecord.sales_override === true ? (dbRecord.sales_override_meta || null) : null,
             differences: {
               sales_price: { old: dbSalesPrice, new: sourceSalesPrice },
               sales_date: { old: dbSalesDate, new: sourceSalesDate },
@@ -1731,13 +1732,34 @@ const handleCodeFileUpdate = async () => {
             let updateData = {};
             
             if (decision === 'Keep Old') {
-              // REVERT to old sales data
+              // REVERT to old sales data and lock it with sales_override so the
+              // respect_sales_override trigger holds it on future uploads until a
+              // newer usable sale (> $100) arrives. A masked-scan meta is kept so
+              // § 13 reversal still recognizes its own promotion.
+              const rejectedSale = {
+                date: salesChange.differences.sales_date.new,
+                price: salesChange.differences.sales_price.new,
+                nu: salesChange.differences.sales_nu.new,
+                book: salesChange.differences.sales_book.new,
+                page: salesChange.differences.sales_page.new,
+              };
+              const priorMeta = salesChange.override_meta;
+              const overrideMeta = priorMeta?.promoted_from === UNMASK_PROMOTED_FROM
+                ? { ...priorMeta, kept_over_sale: rejectedSale }
+                : {
+                    promoted_from: 'keep_old',
+                    original_sale: rejectedSale,
+                    kept_over_sale: rejectedSale,
+                    decided_at: new Date().toISOString(),
+                  };
               updateData = {
                 sales_price: salesChange.differences.sales_price.old,
                 sales_date: salesChange.differences.sales_date.old,
                 sales_nu: salesChange.differences.sales_nu.old,
                 sales_book: salesChange.differences.sales_book.old,
                 sales_page: salesChange.differences.sales_page.old,
+                sales_override: true,
+                sales_override_meta: overrideMeta,
                 sales_history: {
                   comparison_date: new Date().toISOString().split('T')[0],
                   sales_decision: {

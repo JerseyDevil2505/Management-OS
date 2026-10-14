@@ -31,11 +31,34 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [excludedKeys, setExcludedKeys] = useState(new Set());
   const excludedList = useMemo(() => Array.from(excludedKeys), [excludedKeys]);
 
+  // Both vendors report det items already multiplied by the current CCF and never
+  // report the factor itself. It is implied by repl cost (BRT) / Cost New (Micro)
+  // over base cost, so take the most common ratio (strays differ only by rounding).
+  const currentFileCCF = useMemo(() => {
+    const counts = {};
+    properties.forEach(p => {
+      const base = Number(p.values_base_cost);
+      const repl = Number(p.values_repl_cost);
+      if (base > 0 && repl > 0) {
+        const ratio = (repl / base).toFixed(2);
+        counts[ratio] = (counts[ratio] || 0) + 1;
+      }
+    });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const ccf = top ? Number(top[0]) : null;
+    return ccf && ccf > 0 ? ccf : null;
+  }, [properties]);
+
+  const getBaseDetItems = (p) => {
+    const raw = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+    return currentFileCCF ? Math.round(raw / currentFileCCF) : raw;
+  };
+
   // Helpers to get effective values (edited override or original)
   const getEffectiveDetItems = (p) => {
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
     if (editedDetItemMap[key] !== undefined && editedDetItemMap[key] !== '') return Number(editedDetItemMap[key]);
-    return (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+    return getBaseDetItems(p);
   };
   const getEffectiveBaseCost = (p) => {
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
@@ -187,6 +210,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
+
+      // Completed houses only: a real type & use and building class above 10.
+      if (!typeVal || typeVal === '00') return false;
+      const buildingClass = parseInt(String(p.asset_building_class ?? '').trim(), 10);
+      if (!(buildingClass > 10)) return false;
 
       // Apply typeGroup filter using code prefixes
       if (typeGroup && typeGroup !== 'all') {
@@ -436,7 +464,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (!filtered || filtered.length === 0) return alert('No data to export');
 
     const headers = [
-      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Value','Adjusted Ratio'
+      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Value','Adjusted Ratio','Ratio(t)'
     ];
 
     // Column indexes for reference (0-based)
@@ -444,8 +472,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       INCL: 0, BLOCK: 1, LOT: 2, QUAL: 3, CARD: 4, LOCATION: 5, VCS: 6,
       SALE_DATE: 7, SALE_PRICE: 8, SALE_NU: 9, PRICE_TIME: 10, YEAR_BUILT: 11,
       DEPR: 12, BLDG_CLASS: 13, LIVING_AREA: 14, CURRENT_LAND: 15, DET_ITEM: 16,
-      BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22
+      BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22, RATIO_T: 23
     };
+
+    // Every adjusted value points at one CCF cell under the totals so the user can
+    // tune a single town factor and watch all the ratios move.
+    const actualRowNum = filtered.length + 3;
+    const actualCCFRef = `$U$${actualRowNum}`;
 
     // Sale Price (I) always carries the raw sale, matching the on-screen grid.
     // The basis drives the math only, so the ratio and improv formulas point at
@@ -550,18 +583,14 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         row[COL.CCF] = '';
       }
 
-      // Adjusted Value - FORMULA: =P{rowNum} + ((R{rowNum} * M{rowNum}) * U{rowNum}) + Q{rowNum}
       if (yearBuilt && salePrice) {
-        row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*U${rowNum})+Q${rowNum}`, t: 'n' };
+        row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*${actualCCFRef})+Q${rowNum}`, t: 'n' };
+        row[COL.ADJ_RATIO] = { f: `IF(I${rowNum}=0,"",V${rowNum}/I${rowNum})`, t: 'n' };
+        row[COL.RATIO_T] = { f: `IF(K${rowNum}=0,"",V${rowNum}/K${rowNum})`, t: 'n' };
       } else {
         row[COL.ADJ_VALUE] = '';
-      }
-
-      // Adjusted Ratio - FORMULA: =V{rowNum} / I{rowNum}
-      if (yearBuilt && salePrice) {
-        row[COL.ADJ_RATIO] = { f: `IF(${basisCol}${rowNum}=0,"",V${rowNum}/${basisCol}${rowNum})`, t: 'n' };
-      } else {
         row[COL.ADJ_RATIO] = '';
+        row[COL.RATIO_T] = '';
       }
 
       wsData.push(row);
@@ -597,9 +626,17 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     summaryRow[COL.IMPROV] = { f: `SUM(T2:T${lastDataRow})`, t: 'n' };
     summaryRow[COL.CCF] = { f: `IF(S${summaryRowNum}=0,"",T${summaryRowNum}/S${summaryRowNum})`, t: 'n' }; // Overall CCF
     summaryRow[COL.ADJ_VALUE] = { f: `SUM(V2:V${lastDataRow})`, t: 'n' };
-    summaryRow[COL.ADJ_RATIO] = { f: `IF(${basisCol}${summaryRowNum}=0,"",V${summaryRowNum}/${basisCol}${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
+    summaryRow[COL.ADJ_RATIO] = { f: `IF(I${summaryRowNum}=0,"",V${summaryRowNum}/I${summaryRowNum})`, t: 'n' };
+    summaryRow[COL.RATIO_T] = { f: `IF(K${summaryRowNum}=0,"",V${summaryRowNum}/K${summaryRowNum})`, t: 'n' };
 
     wsData.push(summaryRow);
+
+    const actualRow = [];
+    actualRow[COL.IMPROV] = 'Actual';
+    actualRow[COL.CCF] = (costConvFactor !== null && costConvFactor !== '' && isFinite(Number(costConvFactor)))
+      ? Number(costConvFactor)
+      : { f: `U${summaryRowNum}`, t: 'n' };
+    wsData.push(actualRow);
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
@@ -629,7 +666,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       { wch: 12 }, // Improv
       { wch: 8 },  // CCF
       { wch: 14 }, // Adjusted Value
-      { wch: 12 }  // Adjusted Ratio
+      { wch: 12 }, // Adjusted Ratio
+      { wch: 10 }  // Ratio(t)
     ];
     ws['!cols'] = colWidths;
 
@@ -646,7 +684,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         if (R === 0) {
           // Header row
           ws[cellAddress].s = headerStyle;
-        } else if (R === summaryRowIndex) {
+        } else if (R === summaryRowIndex || R === summaryRowIndex + 1) {
           // Summary row - bold
           const style = {
             font: { name: 'Leelawadee', sz: 10, bold: true },
@@ -662,7 +700,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             style.numFmt = decimalFormat;
           } else if (C === COL.CCF) {
             style.numFmt = decimalFormat;
-          } else if (C === COL.ADJ_RATIO) {
+          } else if (C === COL.ADJ_RATIO || C === COL.RATIO_T) {
             style.numFmt = percentFormat;
           }
 
@@ -680,7 +718,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             style.numFmt = decimalFormat;
           } else if (C === COL.CCF) {
             style.numFmt = decimalFormat;
-          } else if (C === COL.ADJ_RATIO) {
+          } else if (C === COL.ADJ_RATIO || C === COL.RATIO_T) {
             style.numFmt = percentFormat;
           }
 
@@ -947,6 +985,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               const included = includedMap[key] !== undefined ? includedMap[key] : true;
               return (p.values_repl_cost || p.values_base_cost) && included;
             }).length} comparable properties &middot; bold is the active basis</div>
+            {currentFileCCF && (
+              <div className="text-xs text-gray-500 mt-1">
+                Det items shown at base: file det item &divide; current file CCF {currentFileCCF.toFixed(2)} ({jobData?.vendor_type === 'Microsystems' ? 'cost new' : 'repl cost'} &divide; base cost)
+              </div>
+            )}
           </div>
                 {/* Recommendation actions removed - keep Save Recommendation manual via Save Factor */}
         </div>
@@ -1067,7 +1110,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     {(() => {
                       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                      const val = editedDetItemMap[key] !== undefined ? editedDetItemMap[key] : (p.values_det_items !== undefined && p.values_det_items !== null ? p.values_det_items : '');
+                      const val = editedDetItemMap[key] !== undefined ? editedDetItemMap[key] : (p.values_det_items !== undefined && p.values_det_items !== null ? getBaseDetItems(p) : '');
                       return (
                         <input
                           type="number"

@@ -286,6 +286,7 @@ const OverallAnalysisTab = ({
     const map = new Map();
     if (marketLandData && Array.isArray(marketLandData.time_normalized_sales)) {
       marketLandData.time_normalized_sales.forEach(s => {
+        if (s.keep_reject !== 'keep') return;
         // normalized sales may be stored with different keys depending on process
         const key = s.property_composite_key || s.property_key || s.property_composite || null;
         const time = s.values_norm_time || s.time_normalized_price || s.normalizedTime || s.time_normalized || s.values_norm_time;
@@ -491,10 +492,11 @@ const OverallAnalysisTab = ({
     const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
     
     filteredProperties.forEach(p => {
+      if (getTypeCategory(p.asset_type_use) !== 'Single Family') return;
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
       const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
-      
+
       // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
           designCode === '00' || designCode === '0' || designCode.trim() === '' ||
@@ -3173,6 +3175,7 @@ const OverallAnalysisTab = ({
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Building className="h-5 w-5" />
                     Design & Style Analysis
+                    <span className="text-sm font-normal text-gray-500">(Single Family)</span>
                   </h3>
                   {expandedSections.design ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>

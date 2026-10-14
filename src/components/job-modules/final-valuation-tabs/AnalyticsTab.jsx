@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Save, Plus, Trash2 } from 'lucide-react';
-import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear } from '../../../lib/supabaseClient';
+import { supabase, parseDateLocal, formatDateLocalYMD, getAssessmentYear, getSalesWindowYear, isLojikJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const AnalyticsTab = ({ jobData, properties }) => {
@@ -38,11 +38,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
 
   // Determine sales period for a property - MATCH SalesReviewTab logic exactly
   const getSalesPeriod = useCallback((salesDate) => {
-    if (!salesDate || !jobData?.end_date) return null;
+    if (!salesDate || (!jobData?.end_date && !isLojikJob(jobData))) return null;
 
     const sale = parseDateLocal(salesDate);
     if (!sale) return null;
-    const assessmentYear = getAssessmentYear(jobData.end_date);
+    const assessmentYear = getSalesWindowYear(jobData, getAssessmentYear(jobData.end_date));
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // Assessment year 2026 (end_date 12/31/2026 or 1/1/2027): 10/1/2025 → 12/31/2026
@@ -63,7 +63,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
     if (sale >= hspStart && sale <= hspEnd) return 'HSP';
     return ''; // Blank instead of 'OTHER'
-  }, [jobData?.end_date]);
+  }, [jobData]);
 
   // Calculate VCS analytics
   const vcsAnalytics = useMemo(() => {
@@ -85,6 +85,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
           oldTotalValue: 0,
           newLandTotal: 0,
           newTotalValue: 0,
+          parcelCount: 0,
+          parcelOldLand: 0,
+          parcelNewLand: 0,
+          parcelOldTotal: 0,
+          parcelNewTotal: 0,
           hspSales: [],
           pspSales: [],
           cspSales: []
@@ -105,6 +110,15 @@ const AnalyticsTab = ({ jobData, properties }) => {
       const newTotal = prop.values_cama_total || 0;
       group.newLandTotal += newLand;
       group.newTotalValue += newTotal;
+
+      // Additional cards repeat the parcel's land/total, so per-parcel figures use the main card only.
+      if (prop._isMainCard !== false) {
+        group.parcelCount++;
+        group.parcelOldLand += currentLand;
+        group.parcelNewLand += newLand;
+        group.parcelOldTotal += currentTotal;
+        group.parcelNewTotal += newTotal;
+      }
       
       // Sales ratios by period - include sales even if newTotal is 0 (will be filtered in display)
       if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0 && prop.sales_price > 0) {
@@ -137,7 +151,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
     const results = Object.entries(vcsGroups).map(([vcs, data]) => {
       const oldLandPct = data.oldTotalValue > 0 ? (data.oldLandTotal / data.oldTotalValue) * 100 : 0;
       const newLandPct = data.newTotalValue > 0 ? (data.newLandTotal / data.newTotalValue) * 100 : 0;
-      const delta = newLandPct - oldLandPct;
+      const avgOldLand = data.parcelCount > 0 ? data.parcelOldLand / data.parcelCount : 0;
+      const avgNewLand = data.parcelCount > 0 ? data.parcelNewLand / data.parcelCount : 0;
+      const assessmentDelta = data.parcelOldTotal > 0
+        ? ((data.parcelNewTotal - data.parcelOldTotal) / data.parcelOldTotal) * 100
+        : null;
       
       // Use weighted mean: (Total Assessed / Total Sales) × 100
       const avgHSP = data.hspSales.length > 0
@@ -155,7 +173,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
         count: data.count,
         oldLandPct,
         newLandPct,
-        delta,
+        avgOldLand,
+        avgNewLand,
+        assessmentDelta,
         hsp: avgHSP,
         psp: avgPSP,
         csp: avgCSP
@@ -171,7 +191,18 @@ const AnalyticsTab = ({ jobData, properties }) => {
     
     const avgOldLandPct = totalOldValue > 0 ? (totalOldLand / totalOldValue) * 100 : 0;
     const avgNewLandPct = totalNewValue > 0 ? (totalNewLand / totalNewValue) * 100 : 0;
-    const avgDelta = avgNewLandPct - avgOldLandPct;
+    const parcelTotals = Object.values(vcsGroups).reduce((acc, g) => ({
+      count: acc.count + g.parcelCount,
+      oldLand: acc.oldLand + g.parcelOldLand,
+      newLand: acc.newLand + g.parcelNewLand,
+      oldTotal: acc.oldTotal + g.parcelOldTotal,
+      newTotal: acc.newTotal + g.parcelNewTotal
+    }), { count: 0, oldLand: 0, newLand: 0, oldTotal: 0, newTotal: 0 });
+    const totalAvgOldLand = parcelTotals.count > 0 ? parcelTotals.oldLand / parcelTotals.count : 0;
+    const totalAvgNewLand = parcelTotals.count > 0 ? parcelTotals.newLand / parcelTotals.count : 0;
+    const totalAssessmentDelta = parcelTotals.oldTotal > 0
+      ? ((parcelTotals.newTotal - parcelTotals.oldTotal) / parcelTotals.oldTotal) * 100
+      : null;
     
     // Calculate true averages for sales ratios (across all properties, not VCS averages)
     const allHSP = Object.values(vcsGroups).flatMap(g => g.hspSales);
@@ -195,7 +226,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
         count: totalCount,
         oldLandPct: avgOldLandPct,
         newLandPct: avgNewLandPct,
-        delta: avgDelta,
+        avgOldLand: totalAvgOldLand,
+        avgNewLand: totalAvgNewLand,
+        assessmentDelta: totalAssessmentDelta,
         hsp: avgHSP,
         psp: avgPSP,
         csp: avgCSP
@@ -253,11 +286,17 @@ const AnalyticsTab = ({ jobData, properties }) => {
     }
   };
 
+  // Saved runs from before these columns existed lack the fields; show them as blank, not $0.
+  const fmtMoney = (v) => (typeof v === 'number' ? `$${Math.round(v).toLocaleString()}` : '-');
+  const fmtDelta = (v) => (typeof v === 'number' ? `${v > 0 ? '+' : ''}${v.toFixed(1)}%` : '-');
+  const xlMoney = (v) => (typeof v === 'number' ? Math.round(v) : '');
+  const xlPct = (v) => (typeof v === 'number' ? v / 100 : '');
+
   // Export to Excel
   const exportToExcel = (data = vcsAnalytics) => {
     const workbook = XLSX.utils.book_new();
 
-    const headers = ['VCS', 'Count', 'Old Land%', 'New Land%', 'Delta', 'HSP', 'PSP', 'CSP'];
+    const headers = ['VCS', 'Count', 'Old Land%', 'New Land%', 'Avg Old Land', 'Avg New Land', 'Assessment Delta', 'HSP', 'PSP', 'CSP'];
     const rows = [headers];
 
     data.data.forEach(row => {
@@ -266,7 +305,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
         row.count,
         row.oldLandPct / 100, // Convert to decimal for Excel percentage
         row.newLandPct / 100,
-        row.delta / 100,
+        xlMoney(row.avgOldLand),
+        xlMoney(row.avgNewLand),
+        xlPct(row.assessmentDelta),
         row.hsp !== null ? row.hsp / 100 : '',
         row.psp !== null ? row.psp / 100 : '',
         row.csp !== null ? row.csp / 100 : ''
@@ -279,7 +320,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
       data.totals.count,
       data.totals.oldLandPct / 100,
       data.totals.newLandPct / 100,
-      data.totals.delta / 100,
+      xlMoney(data.totals.avgOldLand),
+      xlMoney(data.totals.avgNewLand),
+      xlPct(data.totals.assessmentDelta),
       data.totals.hsp !== null ? data.totals.hsp / 100 : '',
       data.totals.psp !== null ? data.totals.psp / 100 : '',
       data.totals.csp !== null ? data.totals.csp / 100 : ''
@@ -307,9 +350,12 @@ const AnalyticsTab = ({ jobData, properties }) => {
             alignment: { horizontal: 'center' }
           };
           
-          // Apply percentage format to columns 2-7 (C, D, E, F, G, H in 0-indexed)
-          if (C >= 2 && C <= 7) {
+          if (C === 2 || C === 3 || C >= 7) {
             worksheet[cellAddress].z = '0%';
+          } else if (C === 4 || C === 5) {
+            worksheet[cellAddress].z = '$#,##0';
+          } else if (C === 6) {
+            worksheet[cellAddress].z = '+0.0%;-0.0%;0.0%';
           }
         }
       }
@@ -328,7 +374,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
       }
     }
 
-    worksheet['!cols'] = Array(8).fill({ wch: 12 });
+    worksheet['!cols'] = [12, 10, 12, 12, 15, 15, 17, 10, 10, 10].map(wch => ({ wch }));
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Analysis');
     XLSX.writeFile(workbook, `VCS_Analysis_${jobData.job_name}_${formatDateLocalYMD(new Date())}.xlsx`);
@@ -428,7 +474,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Count</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Old Land%</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">New Land%</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Delta</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Avg Old Land</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Avg New Land</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" title="Change in total assessment, new vs. old">Assessment Delta</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#FED7AA' }}>HSP</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#D1ECF1' }}>PSP</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#D4EDDA' }}>CSP</th>
@@ -441,7 +489,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
                 <td className="px-4 py-2 text-center">{row.count}</td>
                 <td className="px-4 py-2 text-center">{row.oldLandPct.toFixed(0)}%</td>
                 <td className="px-4 py-2 text-center">{row.newLandPct.toFixed(0)}%</td>
-                <td className="px-4 py-2 text-center">{row.delta.toFixed(0)}%</td>
+                <td className="px-4 py-2 text-center">{fmtMoney(row.avgOldLand)}</td>
+                <td className="px-4 py-2 text-center">{fmtMoney(row.avgNewLand)}</td>
+                <td className="px-4 py-2 text-center">{fmtDelta(row.assessmentDelta)}</td>
                 <td className="px-4 py-2 text-center" style={{ backgroundColor: '#FED7AA' }}>{row.hsp !== null ? `${row.hsp.toFixed(0)}%` : '-'}</td>
                 <td className="px-4 py-2 text-center" style={{ backgroundColor: '#D1ECF1' }}>{row.psp !== null ? `${row.psp.toFixed(0)}%` : '-'}</td>
                 <td className="px-4 py-2 text-center" style={{ backgroundColor: '#D4EDDA' }}>{row.csp !== null ? `${row.csp.toFixed(0)}%` : '-'}</td>
@@ -453,7 +503,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
               <td className="px-4 py-3 text-center">{displayData.totals.count.toLocaleString()}</td>
               <td className="px-4 py-3 text-center">{displayData.totals.oldLandPct.toFixed(0)}%</td>
               <td className="px-4 py-3 text-center">{displayData.totals.newLandPct.toFixed(0)}%</td>
-              <td className="px-4 py-3 text-center">{displayData.totals.delta.toFixed(0)}%</td>
+              <td className="px-4 py-3 text-center">{fmtMoney(displayData.totals.avgOldLand)}</td>
+              <td className="px-4 py-3 text-center">{fmtMoney(displayData.totals.avgNewLand)}</td>
+              <td className="px-4 py-3 text-center">{fmtDelta(displayData.totals.assessmentDelta)}</td>
               <td className="px-4 py-3 text-center" style={{ backgroundColor: '#FED7AA' }}>{displayData.totals.hsp !== null ? `${displayData.totals.hsp.toFixed(0)}%` : '-'}</td>
               <td className="px-4 py-3 text-center" style={{ backgroundColor: '#D1ECF1' }}>{displayData.totals.psp !== null ? `${displayData.totals.psp.toFixed(0)}%` : '-'}</td>
               <td className="px-4 py-3 text-center" style={{ backgroundColor: '#D4EDDA' }}>{displayData.totals.csp !== null ? `${displayData.totals.csp.toFixed(0)}%` : '-'}</td>

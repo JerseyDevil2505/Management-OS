@@ -1737,7 +1737,7 @@ const App = () => {
           <PayrollManagement
             employees={appData.employees.filter(e =>
               ['active', 'part_time', 'full_time'].includes(e.employment_status) &&
-              ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
+              ['residential', 'management', 'owner', 'clerical'].includes(e.inspector_type?.toLowerCase())
             )}
             jobs={appData.jobs?.filter(isPpaJob)}
             archivedPeriods={appData.archivedPayrollPeriods}
