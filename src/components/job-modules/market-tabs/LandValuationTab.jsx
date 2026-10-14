@@ -282,6 +282,7 @@ const LandValuationTab = ({
   const [salesHistoryTarget, setSalesHistoryTarget] = useState(null);
   // Method 1 table sort. field null = the order filterVacantSales produced.
   const [method1Sort, setMethod1Sort] = useState({ field: null, direction: 'asc' });
+  const [showTimeAdjusted, setShowTimeAdjusted] = useState(false);
   // Working copy of the bracket definitions while the editor is open.
   const [bracketDraft, setBracketDraft] = useState([]);
   const [hpi, setHpi] = useState({ fn: null, normalizeToYear: 2025 });
@@ -1610,6 +1611,15 @@ const getPricePerUnit = useCallback((price, size) => {
       hpi.normalizeToYear
     ).values_norm_time;
   }, [hpi]);
+
+  // View/export only: HPI-adjusted price and rate, computed on the fly and never saved.
+  const getTimeAdjusted = useCallback((sale) => {
+    const price = Number(sale?.sales_price) || 0;
+    const adjPrice = normalizePriorSalePrice(price, sale?.sales_date);
+    const mult = price > 0 ? adjPrice / price : 1;
+    const rate = Number(sale?.pricePerAcre) || 0;
+    return { price: adjPrice, rate: Math.round(rate * mult), mult };
+  }, [normalizePriorSalePrice]);
 
   // ========== METHOD 1 TABLE SORT ==========
   const method1SortValue = useCallback((sale, field) => {
@@ -5987,8 +5997,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
     const salesHeaders = valuationMode === 'ff'
-      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
-      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),'Package','Notes'];
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)','Frontage','Depth','$ / FF','$ / FF(t)','Package','Notes']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),`${getUnitLabel()}(t)`,'Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -6008,6 +6018,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         : '';
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
       const pricePerUnit = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
+      const adj = getTimeAdjusted(sale);
+      const salePriceT = salePrice ? `$${adj.price.toLocaleString()}` : '';
+      const rateT = sale.pricePerAcre ? `$${adj.rate.toLocaleString()}` : '';
 
       if (valuationMode === 'ff') {
         const frontage = sale.asset_lot_frontage || '';
@@ -6039,9 +6052,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category,
           sale.sales_date || '',
           salePrice ? `$${salePrice.toLocaleString()}` : '',
+          salePriceT,
           frontage,
           depth,
           ffPrice ? `$${Number(ffPrice).toLocaleString()}` : '',
+          rateT,
           isPackage,
           notes
         ]);
@@ -6063,8 +6078,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category,
           sale.sales_date || '',
           salePrice ? `$${salePrice.toLocaleString()}` : '',
+          salePriceT,
           lotSize,
           pricePerUnit ? `$${pricePerUnit.toLocaleString()}` : '',
+          rateT,
           isPackage,
           notes
         ]);
@@ -6078,28 +6095,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws1[ref]) ws1[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
-    ws1['!cols'] = [
-      { wch: 8 }, // Include
-      { wch: 8 }, // Block
-      { wch: 8 }, // Lot
-      { wch: 8 }, // Qual
-      { wch: 30 }, // Address
-      { wch: 6 }, // Class
-      { wch: 6 }, // Bldg
-      { wch: 6 }, // Type
-      { wch: 8 }, // Design
-      { wch: 10 }, // VCS
-      { wch: 12 }, // Zoning
-      { wch: 20 }, // Location
-      { wch: 12 }, // Special Region
-      { wch: 12 }, // Category
-      { wch: 12 }, // Sale Date
-      { wch: 14 }, // $ Sale Price (formatted)
-      { wch: 10 }, // Lot size
-      { wch: 12 }, // Unit rate
-      { wch: 10 }, // Package
-      { wch: 30 } // Notes
-    ];
+    ws1['!cols'] = salesHeaders.map(h => {
+      if (h === 'Address' || h === 'Notes') return { wch: 30 };
+      if (h === 'Location' || h === 'Depth Table') return { wch: 20 };
+      if (h.startsWith('$ Sale Price')) return { wch: 15 };
+      if (['Zoning','Special Region','Category','Sale Date'].includes(h) || h.includes('/')) return { wch: 12 };
+      if (['Class','Bldg','Type'].includes(h)) return { wch: 6 };
+      return { wch: h === 'VCS' || h === 'Package' || h === 'Frontage' || h === 'Acres' || h === 'Sq Ft' ? 10 : 8 };
+    });
 
     // Append summary for Method 1 (category summary matching UI)
     try {
@@ -6109,6 +6112,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const wetlands = ca.wetlands || { avg: 0, count: 0, avgLotSize: '' };
       const landlocked = ca.landlocked || { avg: 0, count: 0, avgLotSize: '' };
       const conservation = ca.conservation || { avg: 0, count: 0, avgLotSize: '' };
+      const caT = buildCategoryAnalysis(true);
+      const methodLabel = (d) => d?.method === 'paired' ? `Paired (${d.pairedAnalysis?.pairs ?? d.pairs ?? 0} pairs)` : (d?.method || '');
 
       const fmt = (v) => {
         if (v === null || v === undefined || v === '') return '$0';
@@ -6118,25 +6123,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       salesRows.push([]);
-      salesRows.push(['SUMMARY']);
-      salesRows.push(['Raw Land', fmt(raw.avg), `${raw.count} sales`, raw.avgLotSize || '']);
-      salesRows.push(['Building Lot', fmt(building.avg), `${building.count} sales`, building.avgLotSize || '']);
-      salesRows.push(['Wetlands', fmt(wetlands.avg), `${wetlands.count} sales`, wetlands.avgLotSize || '']);
-      salesRows.push(['Landlocked', fmt(landlocked.avg), `${landlocked.count} sales`, landlocked.avgLotSize || '']);
-      salesRows.push(['Conservation', fmt(conservation.avg), `${conservation.count} sales`, conservation.avgLotSize || '']);
+      salesRows.push(['SUMMARY', 'Rate', 'Sales', 'Avg Lot Size', 'Method', 'Rate(t)', 'Method(t)']);
+      [
+        ['Raw Land', raw, caT.rawLand],
+        ['Building Lot', building, caT.buildingLot],
+        ['Wetlands', wetlands, caT.wetlands],
+        ['Landlocked', landlocked, caT.landlocked],
+        ['Conservation', conservation, caT.conservation]
+      ].forEach(([label, d, dT]) => {
+        salesRows.push([label, fmt(d.avg), `${d.count} sales`, d.avgLotSize || '', methodLabel(d), fmt(dT?.avg), methodLabel(dT)]);
+      });
 
       // Add Special Regions Analysis if available
       const specialRegions = ca.specialRegions || {};
       if (Object.keys(specialRegions).length > 0) {
         salesRows.push([]);
         salesRows.push(['SPECIAL REGIONS ANALYSIS']);
-        salesRows.push(['Region', 'Avg Rate', 'Sales', 'Method']);
+        salesRows.push(['Region', 'Avg Rate', 'Sales', 'Method', 'Avg Rate(t)', 'Method(t)']);
         Object.entries(specialRegions).forEach(([region, data]) => {
+          const dataT = caT.specialRegions?.[region];
           salesRows.push([
             region,
             fmt(data.avg),
             `${data.count} sales`,
-            data.method === 'paired' ? `Paired (${data.pairs || 0} pairs)` : data.method || 'single'
+            data.method === 'paired' ? `Paired (${data.pairs || 0} pairs)` : data.method || 'single',
+            fmt(dataT?.avg),
+            dataT?.method === 'paired' ? `Paired (${dataT.pairs || 0} pairs)` : dataT?.method || 'single'
           ]);
         });
       }
@@ -7194,8 +7206,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== REACTIVE CATEGORY CALCULATIONS ==========
-  const categoryAnalysis = useMemo(() => {
-    // Calculate average rate for checked items by category
+  // timeAdjusted=true is a view/export-only variant: HPI-adjusted prices, and pairs may
+  // span sale years within a VCS since time is already controlled for.
+  const buildCategoryAnalysis = useCallback((timeAdjusted = false) => {
+    const priceOf = (sale) => timeAdjusted ? getTimeAdjusted(sale).price : landSalePrice(sale);
+    const rateOf = (sale) => timeAdjusted ? getTimeAdjusted(sale).rate : sale.pricePerAcre;
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
@@ -7272,7 +7287,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const da = parseDateLocal(a.sales_date);
       const db = parseDateLocal(b.sales_date);
       if (!da || !db) return false;
-      return da.getFullYear() === db.getFullYear();
+      return timeAdjusted || da.getFullYear() === db.getFullYear();
     };
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
@@ -7295,7 +7310,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
       if (categoryType === 'constrained') {
         if (valuationMode === 'sf') {
-          const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
+          const totalPrice = filtered.reduce((sum, s) => sum + (priceOf(s)), 0);
           const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
           return {
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7304,7 +7319,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             method: 'simple'
           };
         } else {
-          const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+          const avgRate = filtered.reduce((sum, s) => sum + rateOf(s), 0) / filtered.length;
           return {
             avg: Math.round(avgRate),
             count: filtered.length,
@@ -7323,7 +7338,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             block_lot: `${s.property_block}/${s.property_lot}`,
             category: saleCategories[s.id] || 'uncategorized',
             class: s.property_m4_class,
-            price: landSalePrice(s),
+            price: priceOf(s),
             acres: s.totalAcres
           }))
         });
@@ -7351,7 +7366,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 : (larger.totalAcres || 0);
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
+            const priceDiff = priceOf(larger) - priceOf(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -7431,7 +7446,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Fallback to simple calculation if paired analysis fails
       if (valuationMode === 'sf') {
-        const totalPrice = filtered.reduce((sum, s) => sum + (landSalePrice(s)), 0);
+        const totalPrice = filtered.reduce((sum, s) => sum + (priceOf(s)), 0);
         const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
         return {
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -7440,7 +7455,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           method: 'fallback'
         };
       } else {
-        const avgRate = filtered.reduce((sum, s) => sum + s.pricePerAcre, 0) / filtered.length;
+        const avgRate = filtered.reduce((sum, s) => sum + rateOf(s), 0) / filtered.length;
         return {
           avg: Math.round(avgRate),
           count: filtered.length,
@@ -7501,9 +7516,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           isInCategory,
           isNormalRegion,
           isInBuildingLot,
-          price: landSalePrice(s),
+          price: priceOf(s),
           acres: s.totalAcres,
-          pricePerAcre: s.pricePerAcre
+          pricePerAcre: rateOf(s)
         });
       }
 
@@ -7514,7 +7529,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           specialRegion: specialRegions[s.id] || 'Normal',
           isInBuildingLot,
-          price: landSalePrice(s),
+          price: priceOf(s),
           acres: s.totalAcres
         });
       }
@@ -7553,7 +7568,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Single sale: use individual rate
         const sale = sales[0];
         specialRegionsAnalysis[region] = {
-          avg: Math.round(sale.pricePerAcre),
+          avg: Math.round(rateOf(sale)),
           count: 1,
           region,
           method: 'single'
@@ -7582,7 +7597,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = landSalePrice(larger) - landSalePrice(smaller);
+            const priceDiff = priceOf(larger) - priceOf(smaller);
 
             const pairAllowed = sizeDiff > 0 && canPairSales(smaller, larger);
             if (pairAllowed) {
@@ -7606,7 +7621,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           };
         } else {
           // Fallback to simple average if paired analysis fails
-          const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+          const avgRate = sales.reduce((sum, s) => sum + rateOf(s), 0) / sales.length;
           specialRegionsAnalysis[region] = {
             avg: Math.round(avgRate),
             count: sales.length,
@@ -7662,7 +7677,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     return { rawLand, buildingLot, wetlands, landlocked, conservation, commercialLand, specialRegions: specialRegionsAnalysis };
-  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions, getBracketSize]);
+  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions, getBracketSize, getTimeAdjusted]);
+
+  const categoryAnalysis = useMemo(() => buildCategoryAnalysis(false), [buildCategoryAnalysis]);
+  const categoryAnalysisT = useMemo(
+    () => (showTimeAdjusted ? buildCategoryAnalysis(true) : null),
+    [showTimeAdjusted, buildCategoryAnalysis]
+  );
+
+  const renderTimeAdjustedLine = (data) => {
+    if (!showTimeAdjusted || !data || !data.count) return null;
+    const unit = valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre';
+    const value = valuationMode === 'sf' ? `$${data.avg}` : `$${Number(data.avg).toLocaleString()}`;
+    const pairs = data.pairedAnalysis?.pairs ?? data.pairs;
+    return (
+      <div style={{ fontSize: '11px', color: '#4F46E5', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #C7D2FE' }}>
+        <strong>(t)</strong> {value}{unit}
+        {data.method === 'paired' && pairs ? ` • ${pairs} pairs` : data.method ? ` • ${data.method}` : ''}
+      </div>
+    );
+  };
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
@@ -7979,6 +8013,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 1: Vacant Land Sales</h3>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={() => setShowTimeAdjusted(prev => !prev)}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: showTimeAdjusted ? '#4F46E5' : 'white',
+              color: showTimeAdjusted ? 'white' : '#4F46E5',
+              border: '1px solid #A5B4FC',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500
+            }}
+            title={hpi.fn
+              ? `Show HPI time-adjusted prices and rates (to ${hpi.normalizeToYear}) alongside the raw values. View only - saved rates are unchanged.`
+              : 'No county HPI data loaded - time-adjusted values will match the raw values.'}
+          >
+            {showTimeAdjusted ? 'Hide time-adjusted (t)' : 'Show time-adjusted (t)'}
+          </button>
           {hiddenVacantSalesCount > 0 && (
             <button
               onClick={() => setShowRemovedSales(prev => !prev)}
@@ -7999,6 +8052,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               {showRemovedSales ? 'Hide removed' : `Show removed (${hiddenVacantSalesCount})`}
             </button>
           )}
+          </div>
         </div>
         
         <div style={{ overflowX: 'auto' }}>
@@ -8074,6 +8128,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {method1SortHeader('Category', 'category')}
                 {method1SortHeader('Sale Date', 'saleDate')}
                 {method1SortHeader('Sale Price', 'salePrice', 'right')}
+                {showTimeAdjusted && (
+                  <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }}>Sale Price(t)</th>
+                )}
                 {valuationMode === 'ff' ? (
                   <>
                     {method1SortHeader('Frontage', 'size', 'right')}
@@ -8087,6 +8144,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   )
                 )}
                 {method1SortHeader(getUnitLabel(), 'unitRate', 'right')}
+                {showTimeAdjusted && (
+                  <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }}>{getUnitLabel()}(t)</th>
+                )}
                 {method1SortHeader('Package', 'package', 'center')}
                 {method1SortHeader('Notes', 'notes')}
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Actions</th>
@@ -8265,6 +8325,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
                       ${sale.sales_price?.toLocaleString()}
                     </td>
+                    {showTimeAdjusted && (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', color: '#4F46E5' }}>
+                        ${getTimeAdjusted(sale).price.toLocaleString()}
+                      </td>
+                    )}
                     {valuationMode === 'ff' ? (
                       <>
                         <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
@@ -8293,6 +8358,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         `$${sale.pricePerAcre?.toLocaleString()}` :
                         (valuationMode === 'sf' ? `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` : `$${sale.pricePerAcre?.toLocaleString()}`)}
                     </td>
+                    {showTimeAdjusted && (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right', fontWeight: 'bold', color: '#4F46E5' }}>
+                        {valuationMode === 'sf'
+                          ? `$${(getTimeAdjusted(sale).price / (sale.totalAcres * 43560)).toFixed(2)}`
+                          : `$${getTimeAdjusted(sale).rate.toLocaleString()}`}
+                      </td>
+                    )}
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale._priorPackageCount && (
                         <span
@@ -8456,6 +8528,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.rawLand.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.rawLand)}
                 {categoryAnalysis.rawLand.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.rawLand.avgLotSize}
@@ -8478,6 +8551,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.buildingLot.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.buildingLot)}
                 {categoryAnalysis.buildingLot.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.buildingLot.avgLotSize}
@@ -8498,6 +8572,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.wetlands.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.wetlands)}
                 {categoryAnalysis.wetlands.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.wetlands.avgLotSize}
@@ -8513,6 +8588,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.landlocked.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.landlocked)}
                 {categoryAnalysis.landlocked.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.landlocked.avgLotSize}
@@ -8528,6 +8604,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.conservation.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.conservation)}
                 {categoryAnalysis.conservation.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.conservation.avgLotSize}
@@ -8543,6 +8620,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.commercialLand.count} sales</div>
+                {renderTimeAdjustedLine(categoryAnalysisT?.commercialLand)}
                 {categoryAnalysis.commercialLand.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.commercialLand.avgLotSize}
@@ -8574,6 +8652,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         {data.count} sale{data.count !== 1 ? 's' : ''}
                         {data.method === 'paired' && data.pairs && ` • ${data.pairs} pairs`}
                       </div>
+                      {renderTimeAdjustedLine(categoryAnalysisT?.specialRegions?.[region])}
                     </div>
                   ))}
                 </div>
