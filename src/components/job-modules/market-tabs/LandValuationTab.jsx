@@ -5970,29 +5970,53 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const addTitle = (text) => { titleRows.push(rows.length); rows.push([text]); };
     const addHeaders = () => { headerRows.push(rows.length); rows.push(headers); };
 
+    const totalRows = [];
     addTitle(`Allocation Study - ${viewLabel}`);
-    rows.push(['Current Overall Allocation', `${currentOverallAllocation}%`]);
-    rows.push(['Recommended Allocation', `${calculateAllocationStats(null, exportSales)?.averageAllocation || '0'}%`]);
-    rows.push(['Target Allocation', `${targetAllocation || 'Not Set'}%`]);
 
     const uniqueRegions = [...new Set(exportSales.map(s => s.region))].filter(r => r && r !== 'Normal').sort();
+    const avgPriceCol = headers.indexOf('Avg Price');
+    const totalLandCol = headers.indexOf('Total Land Value');
+    const recCol = headers.indexOf('Recommended %');
 
     ['Normal', ...uniqueRegions].forEach(regionName => {
       const regionSales = exportSales.filter(sale => sale.region === regionName);
       if (regionSales.length === 0) return;
+      const label = regionName.toUpperCase();
 
       rows.push([]);
-      addTitle(regionName === 'Normal' ? 'Normal Region' : `${regionName} Region`);
+      addTitle(label);
       addHeaders();
       regionSales.forEach(sale => rows.push(buildRow(sale)));
 
       // Both totals come off the same included-sales set - rows with no improved
       // match carry a site value but no price, so mixing sets inflates the %.
       const included = regionSales.filter(s => s.isPositive);
-      rows.push(['Sales Included', `${included.length} of ${regionSales.length}`]);
-      rows.push(['Total Land Value', moneyCell(included.reduce((sum, s) => sum + (s.totalLandValue || 0), 0))]);
-      rows.push(['Total Sale Price', moneyCell(included.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0))]);
+      const totalLand = included.reduce((sum, s) => sum + (s.totalLandValue || 0), 0);
+      const totalPrice = included.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0);
+      const totalsRow = new Array(headers.length).fill('');
+      totalsRow[avgPriceCol] = moneyCell(totalPrice);
+      totalsRow[totalLandCol] = moneyCell(totalLand);
+      totalsRow[recCol] = totalPrice > 0 ? `${((totalLand / totalPrice) * 100).toFixed(2)}%` : '';
+      totalRows.push(rows.length);
+      rows.push(totalsRow);
+
+      const withCurrent = included.filter(s => s.currentAllocation > 0);
+      const currentPct = regionName === 'Normal'
+        ? `${currentOverallAllocation}%`
+        : withCurrent.length > 0
+          ? `${((withCurrent.reduce((sum, s) => sum + s.currentAllocation, 0) / withCurrent.length) * 100).toFixed(1)}%`
+          : '';
+      // Per-VCS targets win over the overall target; a region can span VCS with different ones.
+      const targets = regionName === 'Normal'
+        ? [targetAllocation]
+        : [...new Set(regionSales.map(s => getAllocationForVCS(s.vcs)))];
+      const targetPct = targets.filter(t => t != null && t !== '').map(t => `${t}%`).join(' / ') || 'Not Set';
+
+      rows.push([]);
+      addTitle(`SUMMARY ${label}`);
+      rows.push(['Current Overall Allocation', currentPct]);
       rows.push(['Recommended Allocation', `${calculateAllocationStats(regionName, exportSales)?.averageAllocation || '0'}%`]);
+      rows.push(['Target Allocation', targetPct]);
     });
 
     const wb = XLSX.utils.book_new();
@@ -6007,6 +6031,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     titleRows.forEach(r => {
       const ref = XLSX.utils.encode_cell({ r, c: 0 });
       if (ws[ref]) ws[ref].s = { font: { bold: true, sz: 12 } };
+    });
+    totalRows.forEach(r => {
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = { font: { bold: true }, border: { top: { style: 'thin', color: { rgb: '000000' } } } };
+      }
     });
 
     // Column widths for Allocation sheet (adjusted for new structure)
