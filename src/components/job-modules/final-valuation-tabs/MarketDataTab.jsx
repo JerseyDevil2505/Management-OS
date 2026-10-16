@@ -1029,8 +1029,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const currentTotal = `${col('Current Total')}${r}`;
       const deprCell = `${col('DEPR')}${r}`;
       const newValue = `${col('New Value')}${r}`;
+      // Code files store better conditions as positive rates, so they add to DEPR.
       const condPrefix = useConditionTable
-        ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-`
+        ? `+${col('Ext Cond Rate')}${r}+${col('Int Cond Rate')}${r}`
         : '';
 
       row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
@@ -1062,7 +1063,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       row['Delta %'] = { f: `IF(OR(${currentTotal}="",${currentTotal}=0),"",(${projTotal}-${currentTotal})/${currentTotal})` };
 
       // Recommended EFA - BRT emits a year, Microsystems an age
-      const ageFormula = `(1-${condPrefix}((${normTime}-${camaLand}-${detItems})/${costNew}))*100`;
+      const ageFormula = `(1${condPrefix}-((${normTime}-${camaLand}-${detItems})/${costNew}))*100`;
       const recGuard = `OR(${normTime}="",${normTime}=0,${costNew}="",${costNew}=0)`;
       row['Recommended EFA'] = vendorType === 'Microsystems'
         ? { f: `IF(${recGuard},"",ROUND(${ageFormula},0))` }
@@ -1072,8 +1073,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // is a year that has to be turned into one first.
       if (calc.qualifiesForEFA) {
         row['DEPR'] = vendorType === 'Microsystems'
-          ? { f: `IF(${aEFA}="","",MIN(1,1-${condPrefix}(${aEFA}/100)))` }
-          : { f: `IF(${aEFA}="","",MIN(1,1-${condPrefix}((${yearPriorToDueYear}-${aEFA})/100)))` };
+          ? { f: `IF(${aEFA}="","",MIN(1,1${condPrefix}-(${aEFA}/100)))` }
+          : { f: `IF(${aEFA}="","",MIN(1,1${condPrefix}-((${yearPriorToDueYear}-${aEFA})/100)))` };
       }
 
       row['New Value'] = calc.qualifiesForEFA

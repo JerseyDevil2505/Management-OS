@@ -377,6 +377,7 @@ const LandValuationTab = ({
 
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
+  const [allocTimeAdjusted, setAllocTimeAdjusted] = useState(false);
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
@@ -1585,7 +1586,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('���������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
-  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
+  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions, hpi]);
   // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
   // Auto-calculate VCS recommended sites when target allocation changes
@@ -3680,16 +3681,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // SPECIAL REGIONS: Use ALL years for that VCS (rare sales, need full sample)
       // NORMAL REGION: Match by year (standard allocation by year)
       // REGION FILTERING: For special regions, only include properties in that region or unassigned
-      const improvedSalesForYear = properties.filter(prop => {
+      const improvedAllYears = properties.filter(prop => {
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
         const sameVCS = prop.new_vcs === vcs;
-
-        // Every region matches the vacant sale's year. Site value comes from that
-        // year's raw sale price, so the improved average has to be the same
-        // vintage or the allocation is comparing different dollars.
-        const yearMatch = new Date(prop.sales_date).getFullYear() === year;
 
         // Region filtering: ensure improved properties are in the same region
         const propRegion = specialRegions[prop.id] || 'Normal';
@@ -3698,8 +3694,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         // values_norm_time is required as a vetting gate - a sale without one was
         // never validated - but the price used below is the actual sale price.
-        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch && sameRegion;
+        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && sameRegion;
       });
+
+      // Raw view matches the vacant sale's year. Site value comes from that year's
+      // raw sale price, so the improved average has to be the same vintage or the
+      // allocation is comparing different dollars.
+      const improvedSalesForYear = improvedAllYears.filter(prop =>
+        new Date(prop.sales_date).getFullYear() === year
+      );
 
       // Actual sale price, not the time-normalized one. Site value is derived from
       // the vacant sale's real price in its own year, so normalizing only the
@@ -3738,14 +3741,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         ? salesWithModValues.reduce((sum, p) => sum + (p.values_mod_land / p.values_mod_total), 0) / salesWithModValues.length
         : 0;
 
-      // Calculate average improved raw land value for Front Foot mode
+      const avgRawLandFor = (list) => {
       let avgImprovedRawLand = 0;
 
       if (valuationMode === 'ff') {
         let totalImprovedRawLand = 0;
         let validImprovedCount = 0;
 
-        improvedSalesForYear.forEach(prop => {
+        list.forEach(prop => {
           if (prop.asset_lot_frontage > 0) {
             const frontFeet = parseFloat(prop.asset_lot_frontage) || 0;
             const depth = parseFloat(prop.asset_lot_depth) || 100;
@@ -3794,14 +3797,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           totalImprovedRawLand / validImprovedCount : 0;
       } else {
         // Acre/SF mode - same unit rule as the vacant side above.
-        if (improvedSalesForYear.length > 0) {
-          const improvedSizes = improvedSalesForYear.map(p => valuationMode === 'sf'
+        if (list.length > 0) {
+          const improvedSizes = list.map(p => valuationMode === 'sf'
             ? getBracketSize(p)
             : parseFloat(calculateAcreage(p)));
           avgImprovedRawLand = improvedSizes.reduce((sum, size) =>
-            sum + calculateRawLandValue(size, cascadeRates), 0) / improvedSalesForYear.length;
+            sum + calculateRawLandValue(size, cascadeRates), 0) / list.length;
         }
       }
+      return avgImprovedRawLand;
+      };
+
+      const avgImprovedRawLand = avgRawLandFor(improvedSalesForYear);
 
       const improvedRawLandValue = avgImprovedRawLand;
       const totalLandValue = improvedRawLandValue + siteValue;
@@ -3818,7 +3825,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.asset_lot_depth) || 0), 0) / improvedSalesForYear.length
         : 0;
 
+      // Time-adjusted view: HPI-normalized vacant price against values_norm_time
+      // improved sales from every year, so thin years don't starve the comparison.
+      const avgOf = (list, fn) => list.length > 0 ? list.reduce((sum, p) => sum + fn(p), 0) / list.length : 0;
+      const tVacantPrice = getTimeAdjusted(sale).price;
+      const tSiteValue = tVacantPrice - rawLandValue;
+      const tAvgPrice = avgOf(improvedAllYears, p => p.values_norm_time);
+      const tRawLand = avgRawLandFor(improvedAllYears);
+      const tWithMod = improvedAllYears.filter(p => p.values_mod_land > 0 && p.values_mod_total > 0);
+      const timeAdjusted = {
+        vacantPrice: Math.round(tVacantPrice),
+        siteValue: tSiteValue,
+        improvedSalesCount: improvedAllYears.length,
+        avgImprovedPrice: tAvgPrice,
+        avgImprovedAcres: avgOf(improvedAllYears, p => parseFloat(calculateAcreage(p))),
+        avgImprovedSize: avgOf(improvedAllYears, p => getBracketSize(p)),
+        avgImprovedFF: valuationMode === 'ff' ? Math.round(avgOf(improvedAllYears, p => parseFloat(p.asset_lot_frontage) || 0)) : 0,
+        avgImprovedDepth: valuationMode === 'ff' ? Math.round(avgOf(improvedAllYears, p => parseFloat(p.asset_lot_depth) || 0)) : 0,
+        improvedRawLandValue: tRawLand,
+        totalLandValue: tRawLand + tSiteValue,
+        currentAllocation: avgOf(tWithMod, p => p.values_mod_land / p.values_mod_total),
+        recommendedAllocation: tAvgPrice > 0 ? (tRawLand + tSiteValue) / tAvgPrice : 0,
+        isPositive: tSiteValue > 0 && improvedAllYears.length > 0
+      };
+
       processedVacantSales.push({
+        timeAdjusted,
         id: sale.id,
         vcs: vcs,
         year: year,
@@ -3868,7 +3900,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         recommendedPercent: overallRecommended.toFixed(1)
       });
     }
-  }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties]);
+  }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties, getTimeAdjusted]);
 
   // Typical lot size hint for Method 2, already in the selected unit.
   const calculateTypicalLotSize = useMemo(() => {
@@ -4110,9 +4142,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return Array.from(vcs).sort();
   }, [vacantTestSales]);
 
-  const calculateAllocationStats = useCallback((region = null) => {
+  const calculateAllocationStats = useCallback((region = null, sales = vacantTestSales) => {
     // Use only positive sales for final calculation
-    let filtered = vacantTestSales.filter(s => s.isPositive);
+    let filtered = sales.filter(s => s.isPositive);
 
     if (region && region !== 'all') {
       filtered = filtered.filter(s => s.region === region);
@@ -5876,8 +5908,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const headers = valuationMode === 'ff'
       ? ['VCS','Year','Block/Lot','Region','Price','Front Feet','Depth','Zone','Raw Land','Site Value','Count','Avg Price','Avg FF','Avg Depth','Avg Raw Land','Total Land Value','Current %','Recommended %','Status']
       : ['VCS','Year','Block/Lot','Region','Price',`Lot Size (${bracketUnitLabel})`,'Raw Land','Site Value','Count','Avg Price',`Avg Lot Size (${bracketUnitLabel})`,'Avg Raw Land','Total Land Value','Current %','Recommended %','Status'];
-    rows.push(headers);
-
     // Lot sizes travel in the job's own unit, so square-foot jobs must not be
     // rounded to two decimals the way acres are.
     const sizeCell = (value) => {
@@ -5927,70 +5957,94 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ];
     };
 
-    (vacantTestSales || []).forEach(sale => {
-      rows.push(buildRow(sale));
-    });
+    // Export mirrors the on-screen view, so time-adjusted exports the normalized figures.
+    const exportSales = allocTimeAdjusted
+      ? (vacantTestSales || []).map(s => (s.timeAdjusted ? { ...s, ...s.timeAdjusted } : s))
+      : (vacantTestSales || []);
+    const viewLabel = allocTimeAdjusted
+      ? `Time-Adjusted (HPI to ${hpi.normalizeToYear}, improved sales all years, normalized)`
+      : 'Actual Prices (improved sales same year)';
 
-    // Add summary section
-    rows.push([]);
-    rows.push(['SUMMARY']);
-    rows.push(['Current Overall Allocation', `${currentOverallAllocation}%`]);
-    rows.push(['Recommended Allocation', `${calculateAllocationStats()?.averageAllocation || ''}%`]);
-    rows.push(['Target Allocation', `${targetAllocation || 'Not Set'}%`]);
+    const titleRows = [];
+    const headerRows = [];
+    const addTitle = (text) => { titleRows.push(rows.length); rows.push([text]); };
+    const addHeaders = () => { headerRows.push(rows.length); rows.push(headers); };
+
+    const totalRows = [];
+    addTitle(`Allocation Study - ${viewLabel}`);
+
+    const uniqueRegions = [...new Set(exportSales.map(s => s.region))].filter(r => r && r !== 'Normal').sort();
+    const avgPriceCol = headers.indexOf('Avg Price');
+    const totalLandCol = headers.indexOf('Total Land Value');
+    const recCol = headers.indexOf('Recommended %');
+
+    ['Normal', ...uniqueRegions].forEach(regionName => {
+      const regionSales = exportSales.filter(sale => sale.region === regionName);
+      if (regionSales.length === 0) return;
+      const label = regionName.toUpperCase();
+
+      rows.push([]);
+      addTitle(label);
+      addHeaders();
+      regionSales.forEach(sale => rows.push(buildRow(sale)));
+
+      // Both totals come off the same included-sales set - rows with no improved
+      // match carry a site value but no price, so mixing sets inflates the %.
+      const included = regionSales.filter(s => s.isPositive);
+      const totalLand = included.reduce((sum, s) => sum + (s.totalLandValue || 0), 0);
+      const totalPrice = included.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0);
+      const totalsRow = new Array(headers.length).fill('');
+      totalsRow[avgPriceCol] = moneyCell(totalPrice);
+      totalsRow[totalLandCol] = moneyCell(totalLand);
+      totalsRow[recCol] = totalPrice > 0 ? `${((totalLand / totalPrice) * 100).toFixed(2)}%` : '';
+      totalRows.push(rows.length);
+      rows.push(totalsRow);
+
+      const withCurrent = included.filter(s => s.currentAllocation > 0);
+      const currentPct = regionName === 'Normal'
+        ? `${currentOverallAllocation}%`
+        : withCurrent.length > 0
+          ? `${((withCurrent.reduce((sum, s) => sum + s.currentAllocation, 0) / withCurrent.length) * 100).toFixed(1)}%`
+          : '';
+      // Per-VCS targets win over the overall target; a region can span VCS with different ones.
+      const targets = regionName === 'Normal'
+        ? [targetAllocation]
+        : [...new Set(regionSales.map(s => getAllocationForVCS(s.vcs)))];
+      const targetPct = targets.filter(t => t != null && t !== '').map(t => `${t}%`).join(' / ') || 'Not Set';
+
+      rows.push([]);
+      addTitle(`SUMMARY ${label}`);
+      rows.push(['Current Overall Allocation', currentPct]);
+      rows.push(['Recommended Allocation', `${calculateAllocationStats(regionName, exportSales)?.averageAllocation || '0'}%`]);
+      rows.push(['Target Allocation', targetPct]);
+    });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    // basic formatting for header
     const headerCols = headers.length;
-    for (let c = 0; c < headerCols; c++) {
-      const ref = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
-    }
+    headerRows.forEach(r => {
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' }, fill: { fgColor: { rgb: 'F3F4F6' } } };
+      }
+    });
+    titleRows.forEach(r => {
+      const ref = XLSX.utils.encode_cell({ r, c: 0 });
+      if (ws[ref]) ws[ref].s = { font: { bold: true, sz: 12 } };
+    });
+    totalRows.forEach(r => {
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = { font: { bold: true }, border: { top: { style: 'thin', color: { rgb: '000000' } } } };
+      }
+    });
 
     // Column widths for Allocation sheet (adjusted for new structure)
     ws['!cols'] = valuationMode === 'ff'
-      ? [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }]
-      : [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
+      ? [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }]
+      : [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Individual Allocation');
-
-    // Add special region sheets (one sheet per special region)
-    const uniqueRegions = [...new Set(vacantTestSales.map(s => s.region))].filter(r => r && r !== 'Normal').sort();
-
-    uniqueRegions.forEach(regionName => {
-      const regionSales = vacantTestSales.filter(sale => sale.region === regionName);
-      if (regionSales.length === 0) return;
-
-      const regionRows = [];
-      regionRows.push(headers);
-
-      regionSales.forEach(sale => {
-        regionRows.push(buildRow(sale));
-      });
-
-      // Add region summary. Both totals come off the same included-sales set —
-      // rows with no same-year improved sale carry a site value but no price,
-      // so mixing the two sets inflates the region percentage.
-      const regionStats = calculateAllocationStats(regionName);
-      const includedRegionSales = regionSales.filter(s => s.isPositive);
-      regionRows.push([]);
-      regionRows.push([`${regionName} Summary`]);
-      regionRows.push(['Sales Included', `${includedRegionSales.length} of ${regionSales.length}`]);
-      regionRows.push(['Total Land Value', `$${includedRegionSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
-      regionRows.push(['Total Sale Price', `$${includedRegionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
-      regionRows.push(['Recommended Allocation', `${regionStats?.averageAllocation || '0'}%`]);
-
-      const wsRegion = XLSX.utils.aoa_to_sheet(regionRows);
-      for (let c = 0; c < headerCols; c++) {
-        const ref = XLSX.utils.encode_cell({ r: 0, c });
-        if (wsRegion[ref]) wsRegion[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
-      }
-      wsRegion['!cols'] = ws['!cols'];
-
-      // Clean sheet name (Excel has 31 char limit and doesn't allow certain chars)
-      const cleanSheetName = regionName.substring(0, 31).replace(/[:\\/?*\[\]]/g, '_');
-      XLSX.utils.book_append_sheet(wb, wsRegion, cleanSheetName);
-    });
+    XLSX.utils.book_append_sheet(wb, ws, allocTimeAdjusted ? 'Allocation (t)' : 'Allocation');
 
     return wb;
   };
@@ -11381,13 +11435,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     </div>
   );
   // ========== RENDER ALLOCATION STUDY TAB ==========
-  const renderAllocationStudyTab = () => (
+  const renderAllocationStudyTab = () => {
+    // View only - saved allocation, stats and exports stay on actual prices.
+    const viewSales = allocTimeAdjusted
+      ? vacantTestSales.map(s => (s.timeAdjusted ? { ...s, ...s.timeAdjusted } : s))
+      : vacantTestSales;
+    const improvedHeader = allocTimeAdjusted ? 'Improved Sales (All Years, Normalized)' : 'Improved Sales (Same Year)';
+    return (
     <div style={{ padding: '20px' }}>
       {/* Header Stats with Current Overall Allocation */}
       <div style={{ marginBottom: '20px', backgroundColor: '#F9FAFB', padding: '15px', borderRadius: '8px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
           {(() => {
-            const stats = calculateAllocationStats();
+            const stats = calculateAllocationStats(null, viewSales);
             return (
               <>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
@@ -11402,10 +11462,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>Positive Sales</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{vacantTestSales.filter(s => s.isPositive).length}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{viewSales.filter(s => s.isPositive).length}</div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Recommended</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>{allocTimeAdjusted ? 'Recommended (t)' : 'Recommended'}</div>
                   <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>
                     {stats?.averageAllocation || '0'}%
                   </div>
@@ -11465,6 +11525,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Filters */}
         <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
+            onClick={() => setAllocTimeAdjusted(prev => !prev)}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: allocTimeAdjusted ? '#4F46E5' : 'white',
+              color: allocTimeAdjusted ? 'white' : '#4F46E5',
+              border: '1px solid #A5B4FC',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500
+            }}
+            title={hpi.fn
+              ? `Compare HPI time-adjusted vacant prices (to ${hpi.normalizeToYear}) against normalized improved sales from all years. View only - saved allocation and export are unchanged.`
+              : 'No county HPI data loaded - vacant prices will stay raw while improved sales use normalized values.'}
+          >
+            {allocTimeAdjusted ? 'Show actual prices' : 'Show time-adjusted (t)'}
+          </button>
+          <button
             onClick={() => exportToExcel('allocation')}
             style={{
               marginLeft: 'auto',
@@ -11495,7 +11573,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (vcsList.length === 0) return null;
         const overrideCount = vcsList.filter(v => vcsAllocationTargets[v] != null && vcsAllocationTargets[v] !== '').length;
         const studyByVcs = {};
-        vacantTestSales.filter(s => s.isPositive).forEach(s => {
+        viewSales.filter(s => s.isPositive).forEach(s => {
           const entry = studyByVcs[s.vcs] || (studyByVcs[s.vcs] = { land: 0, price: 0, count: 0 });
           entry.land += s.totalLandValue || 0;
           entry.price += s.avgImprovedPrice || 0;
@@ -11584,7 +11662,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Individual Allocation Analysis</h3>
           <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
-            Each vacant sale matched with improved sales from the same year
+            {allocTimeAdjusted
+              ? `Time-adjusted: each vacant sale's HPI-normalized price matched with normalized improved sales from all years`
+              : 'Each vacant sale matched with improved sales from the same year'}
           </p>
         </div>
 
@@ -11610,7 +11690,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>Improved Sales (Same Year)</th>
+                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>{improvedHeader}</th>
                 {/* Allocation Results */}
                 <th style={{
                   padding: '8px',
@@ -11659,7 +11739,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tr>
             </thead>
             <tbody>
-              {vacantTestSales.filter(sale => sale.region === 'Normal').map((sale, index) => (
+              {viewSales.filter(sale => sale.region === 'Normal').map((sale, index) => (
                 <tr
                   key={`${sale.id}_${index}`}
                   style={{
@@ -11766,7 +11846,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {/* Summary Footer */}
         <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           {(() => {
-            const normalRegionSales = vacantTestSales.filter(s => s.region === 'Normal');
+            const normalRegionSales = viewSales.filter(s => s.region === 'Normal');
             const positiveSales = normalRegionSales.filter(s => s.isPositive);
             const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
             const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
@@ -11799,7 +11879,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       {/* Special Region Individual Allocation Analysis - Separate Section per Region */}
       {getUniqueRegions().filter(regionName => regionName !== 'Normal').map(regionName => {
-        const regionSales = vacantTestSales.filter(sale => sale.region === regionName);
+        const regionSales = viewSales.filter(sale => sale.region === regionName);
         if (regionSales.length === 0) return null;
 
         return (
@@ -11833,7 +11913,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>Improved Sales (Same Year)</th>
+                }} colSpan={valuationMode === 'ff' ? "7" : "5"}>{improvedHeader}</th>
                     {/* Allocation Results */}
                     <th style={{
                       padding: '8px',
@@ -12030,7 +12110,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         );
       })}
     </div>
-  );
+    );
+  };
 
   // ========== DYNAMIC COLUMN HELPERS ==========
   const shouldShowResidualColumn = useMemo(() => {
