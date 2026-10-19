@@ -3372,11 +3372,13 @@ const analyzeImportFile = async (file) => {
 
         // If address components were split across columns (e.g. number in Location and street in Location Analysis),
         // join them into a single address when it looks like Location only contains a street number.
+        // Location Analysis holds eco-obs codes (WETLANDS, LANDLOCKED...), never an address part,
+        // so only join for foreign files that lack a Property Location column entirely.
         try {
+          const hasPropertyLocationCol = 'Property Location' in row || 'PROPERTY_LOCATION' in row;
           const locationAnalysis = row['Location Analysis'] || row['LocationAnalysis'] || row['Loc Analysis'] || row['Location_Analysis'] || '';
           const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
-          const isShort = String(location).length <= 6;
-          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+          if (!hasPropertyLocationCol && isNumericOnly && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
             // Preserve original spacing and punctuation from locationAnalysis but remove leading/trailing whitespace
             location = (String(location) + ' ' + String(locationAnalysis)).trim();
           }
@@ -3515,10 +3517,10 @@ const analyzeImportFile = async (file) => {
         const card = String(getVal(row, ['Card','CARD','card','Bldg','BLDG'])).trim() || 'NONE';
         let location = String(getVal(row, ['PROPERTY_LOCATION','Property Location','Location','Address'])) || 'NONE';
         try {
+          const hasPropertyLocationCol = 'Property Location' in row || 'PROPERTY_LOCATION' in row;
           const locationAnalysis = getVal(row, ['Location Analysis','LocationAnalysis','Loc Analysis','Location_Analysis']) || '';
           const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
-          const isShort = String(location).length <= 6;
-          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+          if (!hasPropertyLocationCol && isNumericOnly && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
             location = (String(location) + ' ' + String(locationAnalysis)).trim();
           }
         } catch (e) {

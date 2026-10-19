@@ -875,12 +875,6 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         return str;
       };
 
-      // Condition rate lookups (only populated when condition_table mode)
-      const extCondCode = padBRTCode(property.asset_ext_cond);
-      const intCondCode = padBRTCode(property.asset_int_cond);
-      const extCondRate = useConditionTable && extCondCode ? (conditionRateLookup[extCondCode] || 0) : 0;
-      const intCondRate = useConditionTable && intCondCode ? (conditionRateLookup[intCondCode] || 0) : 0;
-
       return {
         'Block (text)': property.property_block || '',
         'Lot (text)': property.property_lot || '',
@@ -930,8 +924,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Exterior': padBRTCode(property.asset_ext_cond),
         'Interior': padBRTCode(property.asset_int_cond),
         ...(useConditionTable ? {
-          'Ext Cond Rate': extCondRate,
-          'Int Cond Rate': intCondRate,
+          'Ext Cond Rate': 0, // Will be replaced with lookup formula after column order is known
+          'Int Cond Rate': 0,
         } : {}),
         'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
@@ -1007,6 +1001,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const headerNames = Object.keys(rows[0]);
     const col = (name) => colLetter(headerNames.indexOf(name));
 
+    // Code-file condition schedule embedded as an array constant so the rate
+    // follows the row's Exterior/Interior code when it is edited in the roster.
+    const condScheduleArray = Object.entries(conditionRateLookup)
+      .map(([code, rate]) => {
+        const key = /^\d$/.test(String(code).trim()) ? String(code).trim().padStart(2, '0') : String(code).trim();
+        return `"${key.replace(/"/g, '""')}",${rate}`;
+      })
+      .join(';');
+    const condRateFormula = (codeCell) => condScheduleArray
+      ? { f: `IFERROR(VLOOKUP(TEXT(${codeCell},"00"),{${condScheduleArray}},2,FALSE),0)` }
+      : 0;
+
     // Inject Excel formulas using dynamic column references
     rows.forEach((row, idx) => {
       const r = idx + 2;
@@ -1029,9 +1035,15 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const currentTotal = `${col('Current Total')}${r}`;
       const deprCell = `${col('DEPR')}${r}`;
       const newValue = `${col('New Value')}${r}`;
+      // Code files store better conditions as positive rates, so they add to DEPR.
       const condPrefix = useConditionTable
-        ? `${col('Ext Cond Rate')}${r}-${col('Int Cond Rate')}${r}-`
+        ? `+${col('Ext Cond Rate')}${r}+${col('Int Cond Rate')}${r}`
         : '';
+
+      if (useConditionTable) {
+        row['Ext Cond Rate'] = condRateFormula(`${col('Exterior')}${r}`);
+        row['Int Cond Rate'] = condRateFormula(`${col('Interior')}${r}`);
+      }
 
       row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
       row['Check'] = { f: `IF(${col('MOD IV')}${r}=${col('CAMA')}${r},"TRUE","FALSE")` };
@@ -1062,7 +1074,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       row['Delta %'] = { f: `IF(OR(${currentTotal}="",${currentTotal}=0),"",(${projTotal}-${currentTotal})/${currentTotal})` };
 
       // Recommended EFA - BRT emits a year, Microsystems an age
-      const ageFormula = `(1-${condPrefix}((${normTime}-${camaLand}-${detItems})/${costNew}))*100`;
+      const ageFormula = `(1${condPrefix}-((${normTime}-${camaLand}-${detItems})/${costNew}))*100`;
       const recGuard = `OR(${normTime}="",${normTime}=0,${costNew}="",${costNew}=0)`;
       row['Recommended EFA'] = vendorType === 'Microsystems'
         ? { f: `IF(${recGuard},"",ROUND(${ageFormula},0))` }
@@ -1072,8 +1084,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // is a year that has to be turned into one first.
       if (calc.qualifiesForEFA) {
         row['DEPR'] = vendorType === 'Microsystems'
-          ? { f: `IF(${aEFA}="","",MIN(1,1-${condPrefix}(${aEFA}/100)))` }
-          : { f: `IF(${aEFA}="","",MIN(1,1-${condPrefix}((${yearPriorToDueYear}-${aEFA})/100)))` };
+          ? { f: `IF(${aEFA}="","",MIN(1,1${condPrefix}-(${aEFA}/100)))` }
+          : { f: `IF(${aEFA}="","",MIN(1,1${condPrefix}-((${yearPriorToDueYear}-${aEFA})/100)))` };
       }
 
       row['New Value'] = calc.qualifiesForEFA
