@@ -841,6 +841,8 @@ export class BRTProcessor {
       landurinflpc_5: this.parseNumeric(rawRecord.LANDURINFLPC_5),
       landurinflpc_6: this.parseNumeric(rawRecord.LANDURINFLPC_6),
 
+      asset_model: this.preserveStringValue(rawRecord.MODEL),
+
       // Zoning and map page
       property_zoning: this.preserveStringValue(rawRecord.PROPERTY_ZONING),
       property_tax_map_page: this.preserveStringValue(rawRecord.PROPERTY_TAXMAPPAGE),
