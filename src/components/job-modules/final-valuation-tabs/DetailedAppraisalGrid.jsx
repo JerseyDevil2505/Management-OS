@@ -8,6 +8,7 @@ import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCom
 import AppealMap, { distanceMiles } from '../../AppealMap';
 import ParcelPhotoStrip from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
+import { getMiscCodes, buildMiscDescriptions, miscCodeLabel } from '../../../lib/miscCodes';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
 // in component-local state means each keystroke only re-renders this one cell
@@ -42,6 +43,7 @@ const EditableInput = React.memo(function EditableInput({
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null, manualSalesOverrides = [] }) => {
   const subject = result.subject;
+  const miscDescriptions = useMemo(() => buildMiscDescriptions(codeDefinitions, vendorType), [codeDefinitions, vendorType]);
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
   // top of these via `manualComps` below to produce the unified `comps` array
@@ -1104,6 +1106,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       adjustmentName: null
     },
     {
+      id: 'misc_codes',
+      label: 'Misc',
+      render: (prop) => {
+        const codes = getMiscCodes(prop, vendorType);
+        return codes.length ? codes.map(c => miscCodeLabel(c, miscDescriptions)).join(', ') : 'None';
+      },
+      adjustmentName: null
+    },
+    {
       id: 'type_use_code',
       label: 'Type/Use Code',
       render: (prop) => {
@@ -1661,10 +1672,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Combine static and dynamic attributes
   // assmtSource is a dep because ATTRIBUTE_ORDER's prev_assessment row closes over it.
   const jobHasModels = useMemo(() => Array.isArray(allProperties) && allProperties.some(p => p.asset_model), [allProperties]);
+  const jobHasMisc = useMemo(() => Array.isArray(allProperties) && allProperties.some(p => getMiscCodes(p, vendorType).length > 0), [allProperties, vendorType]);
   const allAttributes = useMemo(() => [
-    ...(jobHasModels ? ATTRIBUTE_ORDER : ATTRIBUTE_ORDER.filter(a => a.id !== 'model')),
+    ...ATTRIBUTE_ORDER.filter(a => (a.id !== 'model' || jobHasModels) && (a.id !== 'misc_codes' || jobHasMisc)),
     ...dynamicAttributes
-  ], [dynamicAttributes, assmtSource, jobHasModels]); // eslint-disable-line react-hooks/exhaustive-deps
+  ], [dynamicAttributes, assmtSource, jobHasModels, jobHasMisc, miscDescriptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate a storage key based on job data to persist visibility per job
   const storageKey = useMemo(() => {
