@@ -607,6 +607,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // decode/display. Sales code is a free-text input since NU codes are public
     // record and easily looked up by the assessor.
     style_code: { type: 'code', field: 'asset_design_style', codeType: 'design' },
+    model: { type: 'code', field: 'asset_model', codeType: 'model' },
     type_use_code: { type: 'code', field: 'asset_type_use', codeType: 'typeUse' },
     story_height_code: { type: 'code', field: 'asset_stories', altField: 'asset_story_height', codeType: 'storyHeight' },
     view_code: { type: 'code', field: 'asset_view', altField: 'asset_view_code', codeType: 'view' },
@@ -635,6 +636,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       } else if (codeType === 'view') {
         code = p.asset_view || p.asset_view_code;
         if (code && codeDefinitions) name = interpretCodes.getViewName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'model') {
+        code = p.asset_model;
       }
       if (!code) continue;
       const key = String(code);
@@ -1092,6 +1095,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         }
         return prop.asset_design_style;
       },
+      adjustmentName: null
+    },
+    {
+      id: 'model',
+      label: 'Model',
+      render: (prop) => prop.asset_model || 'N/A',
       adjustmentName: null
     },
     {
@@ -1651,7 +1660,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Combine static and dynamic attributes
   // assmtSource is a dep because ATTRIBUTE_ORDER's prev_assessment row closes over it.
-  const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes, assmtSource]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jobHasModels = useMemo(() => Array.isArray(allProperties) && allProperties.some(p => p.asset_model), [allProperties]);
+  const allAttributes = useMemo(() => [
+    ...(jobHasModels ? ATTRIBUTE_ORDER : ATTRIBUTE_ORDER.filter(a => a.id !== 'model')),
+    ...dynamicAttributes
+  ], [dynamicAttributes, assmtSource, jobHasModels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate a storage key based on job data to persist visibility per job
   const storageKey = useMemo(() => {
