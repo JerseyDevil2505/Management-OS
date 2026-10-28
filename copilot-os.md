@@ -589,6 +589,22 @@ This is the most important vendor difference in the system.
 | Finished basement | BSMNTFINISHCODE/AREA | direct SF |
 | Detached items | Code+Width+Depth | Code+Area (with raw_detached_items jsonb) |
 | Utilities | UTILS codes (cat 52 translation) | Gas Yn / Water Yn / Sewer Yn |
+| Model | MODEL → `asset_model` | 2nd `Location` + 2nd `Filler` (by position) → `asset_model` |
+| Land adj codes | `landffcond/landurcond` (positive), `landffinfl/landurinfl` (negative), `_1`–`_6` | `overall_adj_reason1`–`4` |
+| Land adj percents | `land*pc_1`–`_6` | `overall_adj_percent1`–`4` |
+
+### Land Adjustment Percents (stored vendor-native — do not convert)
+
+| | BRT | Microsystems |
+|---|---|---|
+| Meaning of the stored number | **Magnitude** of the adjustment: `10` = 10% | **Factor**: `110` = +10%, `90` = −10%, `100` = none |
+| Direction comes from | Which column it's in — `*COND*` = positive, `*INFL*` = negative | The value itself (> 100 or < 100) |
+| Value range seen | 1–125 (Berkeley, Oct 2026); never 0 or 100 | — |
+
+Both are stored exactly as the vendor ships them. To get a multiplier:
+BRT `cond` → `1 + pc/100`, BRT `infl` → `1 − pc/100`, Microsystems → `pct/100`.
+Don't normalize at ingest: BRT files carry percents with no paired code (and `00` codes with no percent), so a converted value would silently invent a direction.
+Note `PreValuationTab` derives +/- for Microsystems from `overall_adj_percent` vs 100 — correct for Micro, **wrong if ever pointed at BRT percents**. `DataQualityTab`'s `!== 0 && !== 100` "has adjustment" test is likewise a Microsystems idiom; it's harmless on BRT today only because BRT never emits 100.
 
 ---
 
