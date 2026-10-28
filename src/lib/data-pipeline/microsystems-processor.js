@@ -337,7 +337,16 @@ export class MicrosystemsProcessor {
     // Parse headers and rename duplicates
     const originalHeaders = lines[0].split('|');
     this.headers = this.renameDuplicateHeaders(originalHeaders);
-    
+
+    // Model code = 2nd "Location" + 2nd "Filler". Read by position: the renamed
+    // 2nd Filler ("Filler2") collides with a real Filler2 header later in the file.
+    const nthIndex = (name, n) => {
+      let seen = 0;
+      return originalHeaders.findIndex(h => h.trim() === name && ++seen === n);
+    };
+    const modelLocIdx = nthIndex('Location', 2);
+    const modelFillerIdx = nthIndex('Filler', 2);
+
     console.log(`Found ${this.headers.length} headers with duplicates renamed`);
     
     // Parse data rows
@@ -355,7 +364,10 @@ export class MicrosystemsProcessor {
       this.headers.forEach((header, index) => {
         record[header] = values[index] || null;
       });
-      
+
+      const modelCode = `${modelLocIdx >= 0 ? (values[modelLocIdx] || '').trim() : ''}${modelFillerIdx >= 0 ? (values[modelFillerIdx] || '').trim() : ''}`;
+      record.__model_code = modelCode || null;
+
       records.push(record);
     }
     
@@ -564,6 +576,12 @@ export class MicrosystemsProcessor {
       overall_adj_reason2: rawRecord['Overall Adj Reason2'] || null,
       overall_adj_reason3: rawRecord['Overall Adj Reason3'] || null,
       overall_adj_reason4: rawRecord['Overall Adj Reason4'] || null,
+      overall_adj_percent1: this.parseNumeric(rawRecord['Overall Adj Percent1']),
+      overall_adj_percent2: this.parseNumeric(rawRecord['Overall Adj Percent2']),
+      overall_adj_percent3: this.parseNumeric(rawRecord['Overall Adj Percent3']),
+      overall_adj_percent4: this.parseNumeric(rawRecord['Overall Adj Percent4']),
+
+      asset_model: rawRecord.__model_code || null,
 
       // Processing metadata
       processed_at: new Date().toISOString(),

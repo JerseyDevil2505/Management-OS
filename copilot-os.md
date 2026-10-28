@@ -361,7 +361,8 @@ Master property table. One row per block/lot/qualifier/card per job.
 | landur_1..6, landurunits_1..6 | text/numeric | land-use codes and units |
 | landffcond_*, landurcond_*, landffinfl_*, landurinfl_* | text | land condition/influence codes |
 | landffcondpc_*, landurcondpc_*, landffinflpc_*, landurinflpc_* | numeric | BRT percents paired with the codes above (`_1`–`_6`) |
-| asset_model | text | BRT `MODEL` field |
+| asset_model | text | BRT `MODEL`. Microsystems: 2nd `Location` + 2nd `Filler`, read **by position** in `parseSourceFile` (the renamed `Filler2` collides with a real `Filler2` header) |
+| overall_adj_reason1..4, overall_adj_percent1..4 | text/numeric | Microsystems land adjustment codes + percents (`Overall Adj Reason/Percent{n}`) |
 | special_tax_code_1..4 | text | special tax district codes |
 | basement/garage/deck/patio/porch/pool areas | numeric | extracted physical attributes |
 | utility_heat/water/sewer | text | translated utility info |
