@@ -3191,18 +3191,18 @@ const processSelectedProperties = async () => {
     ];
 
     const SLOTS = [1, 2, 3, 4, 5, 6];
+    const lotTotalHeaders = ['Total Frontage', 'Depth', 'Lot Acre', 'Lot SF'];
     const landHeaders = vendorType === 'BRT'
       ? [
+          ...lotTotalHeaders,
           ...SLOTS.flatMap(i => [`UR Code ${i}`, `UR Units ${i}`]),
           ...SLOTS.flatMap(i => [`FF ${i}`, `Avg Depth ${i}`]),
           ...SLOTS.flatMap(i => [`FF Cond ${i}`, `FF Cond % ${i}`]),
           ...SLOTS.flatMap(i => [`FF Infl ${i}`, `FF Infl % ${i}`]),
           ...SLOTS.flatMap(i => [`UR Cond ${i}`, `UR Cond % ${i}`]),
-          ...SLOTS.flatMap(i => [`UR Infl ${i}`, `UR Infl % ${i}`]),
-          'Lot Acre',
-          'Lot SF'
+          ...SLOTS.flatMap(i => [`UR Infl ${i}`, `UR Infl % ${i}`])
         ]
-      : ['Front Ft', 'Depth', 'Lot Acre', 'Lot SF'];
+      : lotTotalHeaders;
     headers.push(...landHeaders);
 
     const sourceByKey = new Map((properties || []).map(p => [p.property_composite_key, p]));
@@ -3212,14 +3212,16 @@ const processSelectedProperties = async () => {
         return [v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf)];
       }
       return [
+        v(src.asset_lot_frontage),
+        v(src.asset_lot_depth),
+        v(src.market_manual_lot_acre ?? src.asset_lot_acre),
+        v(src.market_manual_lot_sf ?? src.asset_lot_sf),
         ...SLOTS.flatMap(i => [v(src[`landur_${i}`]), v(src[`landurunits_${i}`])]),
         ...SLOTS.flatMap(i => [v(src[`landff_${i}`]), v(src[`landavgdep_${i}`])]),
         ...SLOTS.flatMap(i => [v(src[`landffcond_${i}`]), v(src[`landffcondpc_${i}`])]),
         ...SLOTS.flatMap(i => [v(src[`landffinfl_${i}`]), v(src[`landffinflpc_${i}`])]),
         ...SLOTS.flatMap(i => [v(src[`landurcond_${i}`]), v(src[`landurcondpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landurinfl_${i}`]), v(src[`landurinflpc_${i}`])]),
-        v(src.market_manual_lot_acre),
-        v(src.market_manual_lot_sf)
+        ...SLOTS.flatMap(i => [v(src[`landurinfl_${i}`]), v(src[`landurinflpc_${i}`])])
       ];
     };
 
