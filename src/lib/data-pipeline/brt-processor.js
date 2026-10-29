@@ -681,6 +681,19 @@ export class BRTProcessor {
       landur_6: (rawRecord['LANDUR_6'] !== undefined && rawRecord['LANDUR_6'] !== null) ? String(rawRecord['LANDUR_6']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
       landurunits_6: this.parseNumeric(rawRecord['LANDURUNITS_6']),
 
+      landff_1: this.parseNumeric(rawRecord.LANDFF_1),
+      landff_2: this.parseNumeric(rawRecord.LANDFF_2),
+      landff_3: this.parseNumeric(rawRecord.LANDFF_3),
+      landff_4: this.parseNumeric(rawRecord.LANDFF_4),
+      landff_5: this.parseNumeric(rawRecord.LANDFF_5),
+      landff_6: this.parseNumeric(rawRecord.LANDFF_6),
+      landavgdep_1: this.parseNumeric(rawRecord.LANDAVGDEP_1),
+      landavgdep_2: this.parseNumeric(rawRecord.LANDAVGDEP_2),
+      landavgdep_3: this.parseNumeric(rawRecord.LANDAVGDEP_3),
+      landavgdep_4: this.parseNumeric(rawRecord.LANDAVGDEP_4),
+      landavgdep_5: this.parseNumeric(rawRecord.LANDAVGDEP_5),
+      landavgdep_6: this.parseNumeric(rawRecord.LANDAVGDEP_6),
+
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
       //          asset_zoning, values_norm_size, values_norm_time
