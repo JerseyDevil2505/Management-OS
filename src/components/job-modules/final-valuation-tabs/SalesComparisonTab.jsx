@@ -11,6 +11,7 @@ import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
 import { getMiscCodes, buildMiscDescriptions, miscCodeLabel } from '../../../lib/miscCodes';
+import { displaySalesNu } from '../../../lib/unmaskedSales';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
   // ==================== NESTED TAB STATE ====================
@@ -4886,7 +4887,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
                             </td>
-                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5 text-center">{displaySalesNu(p, '00')}</td>
                             <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                             <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                             <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_view ? getCodeLabel('view', p.asset_view) : ''}</td>
@@ -7049,7 +7050,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 location: (p) => p.property_location || '',
                 sales_date: (p) => p.sales_date || '',
                 sales_price: (p) => Number(p.sales_price) || 0,
-                nu: (p) => p.sales_nu || '',
+                nu: (p) => displaySalesNu(p, ''),
                 type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
                 style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
                 model: (p) => p.asset_model || '',
@@ -7790,7 +7791,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5 truncate" style={{ maxWidth: 180 }} title={p.property_location || ''}>{p.property_location || ''}</td>
                                 <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
-                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                                <td className="px-2 py-1.5 text-center">{displaySalesNu(p, '00')}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                                 {hasModels && <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_model || ''}</td>}

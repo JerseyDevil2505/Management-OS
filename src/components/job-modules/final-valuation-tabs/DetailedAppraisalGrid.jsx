@@ -9,6 +9,7 @@ import AppealMap, { distanceMiles } from '../../AppealMap';
 import ParcelPhotoStrip from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
 import { getMiscCodes, buildMiscDescriptions, miscCodeLabel } from '../../../lib/miscCodes';
+import { isUnmaskedSale, displaySalesNu } from '../../../lib/unmaskedSales';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
 // in component-local state means each keystroke only re-renders this one cell
@@ -1158,7 +1159,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'sales_code',
       label: 'Sales Code',
-      render: (prop) => prop.sales_nu || prop.sales_code || '0',
+      render: (prop) => isUnmaskedSale(prop) ? 'UM' : (prop.sales_nu || prop.sales_code || '0'),
       adjustmentName: null
     },
     {
@@ -2986,7 +2987,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               subject.property_location || '\u2014',
               subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
               subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
-              subject.sales_nu || '\u2014',
+              displaySalesNu(subject, '\u2014'),
               subject.new_vcs || subject.property_vcs || '\u2014',
               codeWithName(subject, 'asset_design_style'),
               codeWithName(subject, 'asset_type_use'),
@@ -3043,7 +3044,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 compProp?.property_location || '\u2014',
                 slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
                 (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
-                slot.sales_nu || compProp?.sales_nu || '\u2014',
+                slot.sales_nu || (compProp ? displaySalesNu(compProp, '\u2014') : '\u2014'),
                 compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
                 compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
                 compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
