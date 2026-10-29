@@ -3203,16 +3203,26 @@ const processSelectedProperties = async () => {
     ];
     const BRT_LAND_CODE_FIELDS = ['LANDUR', 'LANDFFCOND', 'LANDFFINFL', 'LANDURCOND', 'LANDURINFL'];
     const brtLandHeaders = BRT_LAND_FIELDS.flatMap(f => SLOTS.map(i => `${f}_${i}`));
+    // [source header, property_records column]
+    const MICRO_LAND_FIELDS = [
+      ...[1, 2, 3].map(i => [`Front Ft${i}`, `front_ft_${i}`]),
+      ...[1, 2, 3].map(i => [`Avg Depth${i}`, `avg_depth_${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Reason${i}`, `overall_adj_reason${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Percent${i}`, `overall_adj_percent${i}`])
+    ];
     const landHeaders = vendorType === 'BRT'
       ? [...lotTotalHeaders, ...brtLandHeaders]
-      : lotTotalHeaders;
+      : [...lotTotalHeaders, ...MICRO_LAND_FIELDS.map(([h]) => h)];
     headers.push(...landHeaders);
 
     const sourceByKey = new Map((properties || []).map(p => [p.property_composite_key, p]));
     const v = (x) => (x === null || x === undefined ? '' : x);
     const landRow = (src) => {
       if (vendorType !== 'BRT') {
-        return [v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf)];
+        return [
+          v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf),
+          ...MICRO_LAND_FIELDS.map(([, col]) => v(src[col]))
+        ];
       }
       return [
         v(src.asset_lot_frontage),
@@ -3281,7 +3291,7 @@ const processSelectedProperties = async () => {
     const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
     // Land codes keep leading zeros ("01", "08").
     const codeTextCols = headers
-      .map((h, i) => (BRT_LAND_CODE_FIELDS.some(f => /^(.+)_\d$/.exec(h)?.[1] === f) ? i : -1))
+      .map((h, i) => (BRT_LAND_CODE_FIELDS.some(f => /^(.+)_\d$/.exec(h)?.[1] === f) || /^Overall Adj Reason\d$/.test(h) ? i : -1))
       .filter(i => i >= 0);
 
     for (let R = range.s.r; R <= range.e.r; ++R) {
