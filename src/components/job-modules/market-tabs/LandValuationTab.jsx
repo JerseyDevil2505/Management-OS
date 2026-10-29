@@ -1639,6 +1639,48 @@ const getPricePerUnit = useCallback((price, size) => {
     return { price: adjPrice, rate: Math.round(rate * mult), mult };
   }, [normalizePriorSalePrice]);
 
+  // Same improved pool as the Allocation Study: vetted (time-normalized) type/use 1 sales by new VCS.
+  const improvedByVcs = useMemo(() => {
+    const map = new Map();
+    (properties || []).forEach(p => {
+      if (!(p.sales_price > 0) || !p.sales_date || !(p.values_norm_time > 0)) return;
+      if (!String(p.asset_type_use || '').trim().startsWith('1') || !p.new_vcs) return;
+      const year = new Date(p.sales_date).getFullYear();
+      if (!map.has(p.new_vcs)) map.set(p.new_vcs, { byYear: new Map(), normSum: 0, normCount: 0, members: new Map() });
+      const g = map.get(p.new_vcs);
+      const y = g.byYear.get(year) || { sum: 0, count: 0 };
+      y.sum += Number(p.sales_price);
+      y.count += 1;
+      g.byYear.set(year, y);
+      g.normSum += Number(p.values_norm_time);
+      g.normCount += 1;
+      g.members.set(p.property_composite_key, { year, price: Number(p.sales_price), norm: Number(p.values_norm_time) });
+    });
+    return map;
+  }, [properties]);
+
+  // Raw compares against same-year improved sales (like the Allocation Study); (t) against all, time-normalized.
+  const getImprovedComparison = useCallback((sale) => {
+    const g = improvedByVcs.get(sale?.new_vcs);
+    if (!g) return null;
+    const year = sale.sales_date ? new Date(sale.sales_date).getFullYear() : null;
+    const self = g.members.get(sale.property_composite_key);
+    const y = g.byYear.get(year) || { sum: 0, count: 0 };
+    let rawSum = y.sum, rawCount = y.count, tSum = g.normSum, tCount = g.normCount;
+    if (self) {
+      if (self.year === year) { rawSum -= self.price; rawCount -= 1; }
+      tSum -= self.norm; tCount -= 1;
+    }
+    const avgRaw = rawCount > 0 ? Math.round(rawSum / rawCount) : null;
+    const avgT = tCount > 0 ? Math.round(tSum / tCount) : null;
+    const price = Number(sale.sales_price) || 0;
+    const priceT = getTimeAdjusted(sale).price;
+    return {
+      avgRaw, countRaw: rawCount, pctRaw: avgRaw && price ? price / avgRaw : null,
+      avgT, countT: tCount, pctT: avgT && priceT ? priceT / avgT : null
+    };
+  }, [improvedByVcs, getTimeAdjusted]);
+
   // ========== METHOD 1 TABLE SORT ==========
   const method1SortValue = useCallback((sale, field) => {
     switch (field) {
@@ -1666,9 +1708,11 @@ const getPricePerUnit = useCallback((price, size) => {
       case 'unitRate': return Number(sale.pricePerAcre) || 0;
       case 'package': return (sale.packageData && sale.packageData.package_count) || sale._priorPackageCount || 0;
       case 'notes': return landNotes[sale.id] || '';
+      case 'improvedPct': return getImprovedComparison(sale)?.pctRaw ?? '';
+      case 'improvedPctT': return getImprovedComparison(sale)?.pctT ?? '';
       default: return '';
     }
-  }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode]);
+  }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode, getImprovedComparison]);
 
   const hiddenVacantSalesCount = useMemo(
     () => vacantSales.filter(s => method1HiddenSales.has(s.id)).length,
@@ -6055,8 +6099,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
     const salesHeaders = valuationMode === 'ff'
-      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)','Frontage','Depth','$ / FF','$ / FF(t)','Package','Notes','Projected Land','Ratio','Ratio(t)']
-      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),`${getUnitLabel()}(t)`,'Package','Notes','Projected Land','Ratio','Ratio(t)'];
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)','Frontage','Depth','$ / FF','$ / FF(t)','Package','Notes','Projected Land','Ratio','Ratio(t)','VCS Impr Avg','Impr Sales','% of Impr','VCS Impr Avg(t)','Impr Sales(t)','% of Impr(t)']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),`${getUnitLabel()}(t)`,'Package','Notes','Projected Land','Ratio','Ratio(t)','VCS Impr Avg','Impr Sales','% of Impr','VCS Impr Avg(t)','Impr Sales(t)','% of Impr(t)'];
     const salesRows = [salesHeaders];
 
     // Package rows only carry the first parcel's fields, so their land is summed across members.
@@ -6091,10 +6135,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const salePriceT = salePrice ? `$${adj.price.toLocaleString()}` : '';
       const rateT = sale.pricePerAcre ? `$${adj.rate.toLocaleString()}` : '';
       const projectedLand = projectedLandOf(sale);
+      const imp = getImprovedComparison(sale);
       const projectedCols = [
         projectedLand ? `$${Math.round(projectedLand).toLocaleString()}` : '',
         pct(projectedLand, salePrice),
-        pct(projectedLand, adj.price)
+        pct(projectedLand, adj.price),
+        imp?.avgRaw ? `$${imp.avgRaw.toLocaleString()}` : '',
+        imp ? imp.countRaw : '',
+        imp?.pctRaw ? `${Math.round(imp.pctRaw * 100)}%` : '',
+        imp?.avgT ? `$${imp.avgT.toLocaleString()}` : '',
+        imp ? imp.countT : '',
+        imp?.pctT ? `${Math.round(imp.pctT * 100)}%` : ''
       ];
 
       if (valuationMode === 'ff') {
@@ -6175,7 +6226,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ws1['!cols'] = salesHeaders.map(h => {
       if (h === 'Address' || h === 'Notes') return { wch: 30 };
       if (h === 'Location' || h === 'Depth Table') return { wch: 20 };
-      if (h.startsWith('$ Sale Price') || h === 'Projected Land') return { wch: 15 };
+      if (h.startsWith('$ Sale Price') || h === 'Projected Land' || h.startsWith('VCS Impr Avg')) return { wch: 15 };
       if (['Zoning','Special Region','Category','Sale Date'].includes(h) || h.includes('/')) return { wch: 12 };
       if (['Class','Bldg','Type'].includes(h)) return { wch: 6 };
       return { wch: h === 'VCS' || h === 'Package' || h === 'Frontage' || h === 'Acres' || h === 'Sq Ft' ? 10 : 8 };
@@ -8253,6 +8304,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {showTimeAdjusted && (
                   <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }}>{getUnitLabel()}(t)</th>
                 )}
+                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }} title="Average sale price of improved type/use 1 sales in this VCS, same sale year">VCS Impr Avg</th>
+                {method1SortHeader('% of Impr', 'improvedPct', 'right')}
+                {showTimeAdjusted && (
+                  <>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }} title="Average time-normalized price of improved type/use 1 sales in this VCS">VCS Impr Avg(t)</th>
+                    {method1SortHeader('% of Impr(t)', 'improvedPctT', 'right')}
+                  </>
+                )}
                 {method1SortHeader('Package', 'package', 'center')}
                 {method1SortHeader('Notes', 'notes')}
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Actions</th>
@@ -8471,6 +8530,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           : `$${getTimeAdjusted(sale).rate.toLocaleString()}`}
                       </td>
                     )}
+                    {(() => {
+                      const imp = getImprovedComparison(sale);
+                      const cell = { padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' };
+                      const sub = (n) => <div style={{ fontSize: '10px', color: '#9CA3AF' }}>{n} sales</div>;
+                      return (
+                        <>
+                          <td style={cell}>
+                            {imp?.avgRaw ? <>${imp.avgRaw.toLocaleString()}{sub(imp.countRaw)}</> : '—'}
+                          </td>
+                          <td style={{ ...cell, fontWeight: 600 }}>
+                            {imp?.pctRaw ? `${Math.round(imp.pctRaw * 100)}%` : '—'}
+                          </td>
+                          {showTimeAdjusted && (
+                            <>
+                              <td style={{ ...cell, color: '#4F46E5' }}>
+                                {imp?.avgT ? <>${imp.avgT.toLocaleString()}{sub(imp.countT)}</> : '—'}
+                              </td>
+                              <td style={{ ...cell, fontWeight: 600, color: '#4F46E5' }}>
+                                {imp?.pctT ? `${Math.round(imp.pctT * 100)}%` : '—'}
+                              </td>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale._priorPackageCount && (
                         <span
