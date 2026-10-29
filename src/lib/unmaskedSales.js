@@ -193,6 +193,13 @@ export function detectMaskedCandidates(properties, opts = {}) {
 // was promoted by the Detailed grid's swap-hidden-sale UI.
 export const UNMASK_PROMOTED_FROM = 'masked_scan';
 
+// Promoted priors carry no NU/book/page (BRT prev_sales don't ship them), so
+// display surfaces show 'UM' in the NU slot instead of a blank that reads as NU'd.
+export const isUnmaskedSale = (p) =>
+  p?.sales_override === true && p?.sales_override_meta?.promoted_from === UNMASK_PROMOTED_FROM;
+export const displaySalesNu = (p, fallback = '') =>
+  isUnmaskedSale(p) ? 'UM' : (p?.sales_nu || fallback);
+
 /**
  * Persist a batch of unmask decisions.
  *

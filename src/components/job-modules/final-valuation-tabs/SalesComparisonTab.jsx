@@ -10,6 +10,8 @@ import ManageResultSetsTab from './ManageResultSetsTab';
 import ScanMaskedSalesModal from './ScanMaskedSalesModal';
 import ManualSalesModal from './ManualSalesModal';
 import { distanceMiles } from '../../AppealMap';
+import { getMiscCodes, buildMiscDescriptions, miscCodeLabel } from '../../../lib/miscCodes';
+import { displaySalesNu } from '../../../lib/unmaskedSales';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {}, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null, initialManualSubject = null, onManualSubjectConsumed = null, initialAppealSubjects = null, initialBracket = null, patchPropertiesWithMarketAnalysis = null }) => {
   // ==================== NESTED TAB STATE ====================
@@ -92,6 +94,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     sameTypeUse: true, // Default checked
     style: [],
     sameStyle: true, // Default checked
+    model: [],
+    sameModel: false,
+    misc: [],
+    matchMiscSubject: false,
     storyHeight: [],
     sameStoryHeight: false,
     view: [],
@@ -429,6 +435,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const [poolFilterVCS, setPoolFilterVCS] = useState([]);
   const [poolFilterType, setPoolFilterType] = useState([]);
   const [poolFilterStyle, setPoolFilterStyle] = useState([]);
+  const [poolFilterModel, setPoolFilterModel] = useState([]);
+  const [poolFilterMisc, setPoolFilterMisc] = useState([]);
   const [poolFilterView, setPoolFilterView] = useState([]);
   // Bedroom counts are numbers, so chips hold numbers here rather than code strings.
   const [poolFilterBeds, setPoolFilterBeds] = useState([]);
@@ -1398,6 +1406,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
     return Array.from(styleSet).sort();
   }, [properties]);
 
+  const uniqueModel = useMemo(() => {
+    const modelSet = new Set();
+    properties.forEach(p => {
+      if (p.asset_model) modelSet.add(p.asset_model);
+    });
+    return Array.from(modelSet).sort();
+  }, [properties]);
+  const hasModels = uniqueModel.length > 0;
+
+  const miscDescriptions = useMemo(
+    () => buildMiscDescriptions(codeDefinitions || jobData?.parsed_code_definitions, vendorType),
+    [codeDefinitions, jobData?.parsed_code_definitions, vendorType]
+  );
+  const uniqueMisc = useMemo(() => {
+    const set = new Set();
+    properties.forEach(p => getMiscCodes(p, vendorType).forEach(c => set.add(c)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [properties, vendorType]);
+  const hasMisc = uniqueMisc.length > 0;
+  const miscLabel = (c) => miscCodeLabel(c, miscDescriptions);
+
   const uniqueStoryHeight = useMemo(() => {
     const storySet = new Set();
     properties.forEach(p => {
@@ -1585,6 +1614,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
   const poolUniqueTypes = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_type_use).filter(Boolean))].sort(), [allSalesCandidates]);
   const poolUniqueStyles = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_design_style).filter(Boolean))].sort(), [allSalesCandidates]);
   const poolUniqueViews = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_view).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueModels = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_model).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueMisc = useMemo(() => [...new Set(allSalesCandidates.flatMap(p => getMiscCodes(p, vendorType)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [allSalesCandidates, vendorType]);
 
   // Beds/baths for the comp browser have to agree with the Detailed report, which reads
   // card-aggregated values via aggregatePropertyData. The pool dedupes to the main card, so
@@ -2667,6 +2698,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           buildingClass: 0,
           typeUse: 0,
           style: 0,
+          model: 0,
+          misc: 0,
           storyHeight: 0,
           view: 0,
           passed: 0
@@ -2887,6 +2920,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
             }
           }
 
+          // Model filter
+          if (compFilters.sameModel) {
+            if ((comp.asset_model || '') !== (subject.asset_model || '')) {
+              if (isFirstProperty) debugFilters.model++;
+              logExclusion('model', `comp=${comp.asset_model} vs subject=${subject.asset_model}`);
+              return false;
+            }
+          } else if (compFilters.model?.length > 0) {
+            if (!compFilters.model.includes(comp.asset_model)) {
+              if (isFirstProperty) debugFilters.model++;
+              logExclusion('model filter list', `comp=${comp.asset_model}`);
+              return false;
+            }
+          }
+
+          // Misc filter. With matchMiscSubject, the comp must carry exactly the same
+          // subset of the selected codes as the subject (e.g. Elevated subject -> Elevated comps).
+          if (compFilters.misc?.length > 0) {
+            const selected = compFilters.misc;
+            const compSel = getMiscCodes(comp, vendorType).filter(c => selected.includes(c)).sort();
+            if (compFilters.matchMiscSubject) {
+              const subjSel = getMiscCodes(subject, vendorType).filter(c => selected.includes(c)).sort();
+              if (compSel.join('|') !== subjSel.join('|')) {
+                if (isFirstProperty) debugFilters.misc++;
+                logExclusion('misc (match subject)', `comp=${compSel.join(',')} vs subject=${subjSel.join(',')}`);
+                return false;
+              }
+            } else if (compSel.length === 0) {
+              if (isFirstProperty) debugFilters.misc++;
+              logExclusion('misc filter list', `comp has none of ${selected.join(',')}`);
+              return false;
+            }
+          }
+
           // Story height filter
           if (compFilters.sameStoryHeight) {
             if (comp.asset_story_height !== subject.asset_story_height) {
@@ -2970,6 +3037,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
           console.log(`   ❌ Failed building class: ${debugFilters.buildingClass}`);
           console.log(`   ❌ Failed type/use: ${debugFilters.typeUse}`);
           console.log(`   ❌ Failed style: ${debugFilters.style}`);
+          console.log(`   ❌ Failed model: ${debugFilters.model}`);
+          console.log(`   ❌ Failed misc: ${debugFilters.misc}`);
           console.log(`   ❌ Failed story height: ${debugFilters.storyHeight}`);
           console.log(`   ❌ Failed view: ${debugFilters.view}`);
           console.log(`   ❌ Failed farm sales: ${debugFilters.farmSales || 0}`);
@@ -4574,6 +4643,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       </select>
                     </div>
                   </div>
+                  {/* Model Filter */}
+                  {hasModels && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Model</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterModel.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 border border-green-300 text-green-800">
+                          {v}<button onClick={() => setPoolFilterModel(prev => prev.filter(x => x !== v))} className="hover:text-green-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterModel(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Model</option>
+                        {poolUniqueModels.filter(v => !poolFilterModel.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  )}
+                  {/* Misc Filter */}
+                  {hasMisc && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Misc</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterMisc.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-yellow-100 border border-yellow-300 text-yellow-800">
+                          {miscLabel(v)}<button onClick={() => setPoolFilterMisc(prev => prev.filter(x => x !== v))} className="hover:text-yellow-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterMisc(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Misc</option>
+                        {poolUniqueMisc.filter(v => !poolFilterMisc.includes(v)).map(v => (<option key={v} value={v}>{miscLabel(v)}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  )}
                   {/* View Filter */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">View</label>
@@ -4589,8 +4692,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       </select>
                     </div>
                   </div>
-                  {(poolFilterVCS.length > 0 || poolFilterType.length > 0 || poolFilterStyle.length > 0 || poolFilterView.length > 0) && (
-                    <button onClick={() => { setPoolFilterVCS([]); setPoolFilterType([]); setPoolFilterStyle([]); setPoolFilterView([]); }} className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200">
+                  {(poolFilterVCS.length > 0 || poolFilterType.length > 0 || poolFilterStyle.length > 0 || poolFilterModel.length > 0 || poolFilterMisc.length > 0 || poolFilterView.length > 0) && (
+                    <button onClick={() => { setPoolFilterVCS([]); setPoolFilterType([]); setPoolFilterStyle([]); setPoolFilterModel([]); setPoolFilterMisc([]); setPoolFilterView([]); }} className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200">
                       Clear filters
                     </button>
                   )}
@@ -4621,6 +4724,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <SortTh field="property_m4_class" label="Class" />
                             <SortTh field="property_location" label="Location" />
                             <SortTh field="asset_design_style" label="Style" />
+                            {hasModels && <SortTh field="asset_model" label="Model" />}
+                            {hasMisc && <SortTh field="_miscCodes" label="Misc" />}
                             <SortTh field="_currentAsmt" label="Current Asmt" align="right" />
                             <SortTh field="sales_price" label="Sales Price" align="right" />
                             <SortTh field="asset_lot_acre" label="Lot Size Acre/SF" align="right" />
@@ -4660,6 +4765,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       if (poolFilterVCS.length > 0) displayed = displayed.filter(p => poolFilterVCS.includes(p.property_vcs));
                       if (poolFilterType.length > 0) displayed = displayed.filter(p => poolFilterType.includes(p.asset_type_use));
                       if (poolFilterStyle.length > 0) displayed = displayed.filter(p => poolFilterStyle.includes(p.asset_design_style));
+                      if (poolFilterModel.length > 0) displayed = displayed.filter(p => poolFilterModel.includes(p.asset_model));
+                      if (poolFilterMisc.length > 0) displayed = displayed.filter(p => getMiscCodes(p, vendorType).some(c => poolFilterMisc.includes(c)));
                       if (poolFilterView.length > 0) displayed = displayed.filter(p => poolFilterView.includes(p.asset_view));
 
                       // Compute derived fields for sorting and display.
@@ -4670,6 +4777,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         return {
                           ...p,
                           _adjustedSfla: adjSfla,
+                          _miscCodes: getMiscCodes(p, vendorType).join(', '),
                           _currentAsmt: p.values_mod_total || p.values_cama_total || 0,
                           _ppsf: p.sales_price && adjSfla > 0 ? p.sales_price / adjSfla : 0,
                           // Sales Ratio = Current Assessment / Sale Price (calculate on ALL sales)
@@ -4702,7 +4810,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                       if (displayed.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={19} className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan={19 + (hasModels ? 1 : 0) + (hasMisc ? 1 : 0)} className="px-4 py-8 text-center text-gray-500">
                               No sales match the current filters.
                             </td>
                           </tr>
@@ -4765,6 +4873,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="px-2 py-1.5">{p.property_m4_class || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
                             <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                            {hasModels && <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_model || ''}</td>}
+                            {hasMisc && <td className="px-2 py-1.5 whitespace-nowrap" title={getMiscCodes(p, vendorType).map(miscLabel).join('\n')}>{p._miscCodes}</td>}
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._currentAsmt > 0 ? `$${Number(p._currentAsmt).toLocaleString()}` : '-'}
                             </td>
@@ -4777,7 +4887,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
                             </td>
-                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5 text-center">{displaySalesNu(p, '00')}</td>
                             <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                             <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                             <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_view ? getCodeLabel('view', p.asset_view) : ''}</td>
@@ -5460,6 +5570,65 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                     </div>
                   )}
                 </div>
+                {/* Model */}
+                {hasModels && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('model')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameModel}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueModel.filter(m => !compFilters.model?.includes(m)).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Model</span>
+                      <input type="checkbox" checked={!!compFilters.sameModel} onChange={(e) => setCompFilters(prev => ({ ...prev, sameModel: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                  {!compFilters.sameModel && compFilters.model?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.model.map(m => (
+                        <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                          {m}<button onClick={() => toggleCompFilterChip('model')(m)} className="text-green-600 hover:text-green-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                )}
+                {/* Misc */}
+                {hasMisc && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Misc</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('misc')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    >
+                      <option value="">Select...</option>
+                      {uniqueMisc.filter(c => !compFilters.misc?.includes(c)).map(c => <option key={c} value={c}>{miscLabel(c)}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap" title="Comp must carry the same selected misc code(s) as the subject">
+                      <span className="text-gray-500">Match Subject</span>
+                      <input type="checkbox" checked={!!compFilters.matchMiscSubject} disabled={!compFilters.misc?.length} onChange={(e) => setCompFilters(prev => ({ ...prev, matchMiscSubject: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                  {compFilters.misc?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.misc.map(c => (
+                        <span key={c} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs">
+                          {miscLabel(c)}<button onClick={() => toggleCompFilterChip('misc')(c)} className="text-yellow-600 hover:text-yellow-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                )}
                 {/* Story Height */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Story Height</label>
@@ -6824,6 +6993,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
               if (poolFilterVCS.length > 0) rows = rows.filter(p => poolFilterVCS.includes(p.property_vcs));
               if (poolFilterType.length > 0) rows = rows.filter(p => poolFilterType.includes(p.asset_type_use));
               if (poolFilterStyle.length > 0) rows = rows.filter(p => poolFilterStyle.includes(p.asset_design_style));
+              if (poolFilterModel.length > 0) rows = rows.filter(p => poolFilterModel.includes(p.asset_model));
+              if (poolFilterMisc.length > 0) rows = rows.filter(p => getMiscCodes(p, vendorType).some(c => poolFilterMisc.includes(c)));
               if (poolFilterView.length > 0) rows = rows.filter(p => poolFilterView.includes(p.asset_view));
               // Beds/baths resolve through the aggregated index so the value filtered on, the
               // value sorted on, and the value rendered are all the one Detailed reports.
@@ -6879,9 +7050,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 location: (p) => p.property_location || '',
                 sales_date: (p) => p.sales_date || '',
                 sales_price: (p) => Number(p.sales_price) || 0,
-                nu: (p) => p.sales_nu || '',
+                nu: (p) => displaySalesNu(p, ''),
                 type_use: (p) => (p.asset_type_use ? (getCodeLabel('typeUse', p.asset_type_use) || p.asset_type_use) : ''),
                 style: (p) => (p.asset_design_style ? (getCodeLabel('style', p.asset_design_style) || p.asset_design_style) : ''),
+                model: (p) => p.asset_model || '',
+                misc: (p) => getMiscCodes(p, vendorType).join(', '),
                 year_built: (p) => Number(p.asset_year_built) || 0,
                 sfla: (p) => Number(getAdjustedSFLA(p)) || 0,
                 ppsf: (p) => {
@@ -6949,6 +7122,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                 setPoolFilterVCS([]);
                 setPoolFilterType([]);
                 setPoolFilterStyle([]);
+                setPoolFilterModel([]);
+                setPoolFilterMisc([]);
                 setPoolFilterView([]);
                 setPoolFilterBeds([]);
                 setCompBrowserSearch('');
@@ -7054,6 +7229,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                             { label: 'VCS', value: subjectForBrowser.property_vcs },
                             { label: 'Type/Use', value: subjType },
                             { label: 'Style', value: subjStyle },
+                            { label: 'Model', value: subjectForBrowser.asset_model },
                             { label: 'SFLA', value: (() => {
                               const adj = Number(getAdjustedSFLA(subjectForBrowser)) || 0;
                               return adj > 0 ? `${adj.toLocaleString()} sf` : null;
@@ -7342,6 +7518,76 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                           </div>
                         </div>
 
+                        {/* Model */}
+                        {hasModels && (
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Model</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterModel.map(m => (
+                              <span
+                                key={m}
+                                className="px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-green-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {m}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterModel(prev => prev.filter(x => x !== m))}
+                                  className="hover:text-green-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterModel(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Model</option>
+                              {poolUniqueModels.filter(m => !poolFilterModel.includes(m)).map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        )}
+
+                        {/* Misc */}
+                        {hasMisc && (
+                        <div style={{ minWidth: 0 }}>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Misc</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                            {poolFilterMisc.map(c => (
+                              <span
+                                key={c}
+                                className="px-2 py-0.5 rounded-full bg-yellow-100 border border-yellow-300 text-yellow-800"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                {miscLabel(c)}
+                                <button
+                                  type="button"
+                                  onClick={() => setPoolFilterMisc(prev => prev.filter(x => x !== c))}
+                                  className="hover:text-yellow-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setPoolFilterMisc(prev => [...prev, e.target.value]); }}
+                              className="px-1 py-0.5 border border-gray-300 rounded"
+                            >
+                              <option value="">+ Misc</option>
+                              {poolUniqueMisc.filter(c => !poolFilterMisc.includes(c)).map(c => (
+                                <option key={c} value={c}>{miscLabel(c)}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        )}
+
                         {/* Beds */}
                         <div style={{ minWidth: 0 }}>
                           <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Beds</label>
@@ -7453,6 +7699,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                               { key: 'nu', label: 'NU', align: 'center' },
                               { key: 'type_use', label: 'Type/Use', align: 'left' },
                               { key: 'style', label: 'Style', align: 'left' },
+                              ...(hasModels ? [{ key: 'model', label: 'Model', align: 'left' }] : []),
+                              ...(hasMisc ? [{ key: 'misc', label: 'Misc', align: 'left' }] : []),
                               { key: 'year_built', label: 'Yr Built', align: 'right' },
                               { key: 'sfla', label: 'Size', align: 'right' },
                               { key: 'ppsf', label: 'PPSF', align: 'right' },
@@ -7488,7 +7736,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                         <tbody className="divide-y divide-gray-100">
                           {rows.length === 0 && (
                             <tr>
-                              <td colSpan={18} className="px-4 py-8 text-center text-gray-500">
+                              <td colSpan={18 + (hasModels ? 1 : 0) + (hasMisc ? 1 : 0)} className="px-4 py-8 text-center text-gray-500">
                                 No sales match the current filters. Try Reset Filters or toggle "Show all sales".
                               </td>
                             </tr>
@@ -7543,9 +7791,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, marketLandData = {},
                                 <td className="px-2 py-1.5 truncate" style={{ maxWidth: 180 }} title={p.property_location || ''}>{p.property_location || ''}</td>
                                 <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}</td>
-                                <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                                <td className="px-2 py-1.5 text-center">{displaySalesNu(p, '00')}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
                                 <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
+                                {hasModels && <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_model || ''}</td>}
+                                {hasMisc && <td className="px-2 py-1.5 whitespace-nowrap" title={getMiscCodes(p, vendorType).map(miscLabel).join('\n')}>{getMiscCodes(p, vendorType).join(', ')}</td>}
                                 <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                                 <td className="px-2 py-1.5 text-right">{adjSfla > 0 ? Number(adjSfla).toLocaleString() : '-'}</td>
                                 <td className="px-2 py-1.5 text-right font-mono">{ppsf > 0 ? `${ppsf.toFixed(0)}` : '-'}</td>

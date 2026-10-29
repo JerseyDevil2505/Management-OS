@@ -7,6 +7,7 @@ import {
   calculateRecommendedEFA as computeRecommendedEFA,
   resolveActualEFA as computeActualEFA
 } from '../../../lib/effectiveAge';
+import { isUnmaskedSale } from '../../../lib/unmaskedSales';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
@@ -966,7 +967,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           return '';
         })(),
         'Norm Time Value': property.values_norm_time || '',
-        'Sales NU Code': cleanValue(property.sales_nu),
+        'Sales NU Code': isUnmaskedSale(property) ? 'UM' : cleanValue(property.sales_nu),
         'Sales Ratio': '',
         'Sale Comment': calc.saleComment || '',
         'Det Items': property.values_det_items || 0,

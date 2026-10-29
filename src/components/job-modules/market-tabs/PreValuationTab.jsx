@@ -3171,7 +3171,9 @@ const processSelectedProperties = async () => {
       'Property Location',
       'Class',
       ...additionalLotHeaders,
+      'Land',
       'Improvement',
+      'Total',
       'Facility',
       'Current VCS',
       'Building',
@@ -3188,7 +3190,44 @@ const processSelectedProperties = async () => {
       'Ready'
     ];
 
-    const data = filteredWorksheetProps.map(prop => [
+    const SLOTS = [1, 2, 3, 4, 5, 6];
+    const lotTotalHeaders = ['Total Frontage', 'Depth', 'Lot Acre', 'Lot SF'];
+    const landHeaders = vendorType === 'BRT'
+      ? [
+          ...lotTotalHeaders,
+          ...SLOTS.flatMap(i => [`UR Code ${i}`, `UR Units ${i}`]),
+          ...SLOTS.flatMap(i => [`FF ${i}`, `Avg Depth ${i}`]),
+          ...SLOTS.flatMap(i => [`FF Cond ${i}`, `FF Cond % ${i}`]),
+          ...SLOTS.flatMap(i => [`FF Infl ${i}`, `FF Infl % ${i}`]),
+          ...SLOTS.flatMap(i => [`UR Cond ${i}`, `UR Cond % ${i}`]),
+          ...SLOTS.flatMap(i => [`UR Infl ${i}`, `UR Infl % ${i}`])
+        ]
+      : lotTotalHeaders;
+    headers.push(...landHeaders);
+
+    const sourceByKey = new Map((properties || []).map(p => [p.property_composite_key, p]));
+    const v = (x) => (x === null || x === undefined ? '' : x);
+    const landRow = (src) => {
+      if (vendorType !== 'BRT') {
+        return [v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf)];
+      }
+      return [
+        v(src.asset_lot_frontage),
+        v(src.asset_lot_depth),
+        v(src.market_manual_lot_acre ?? src.asset_lot_acre),
+        v(src.market_manual_lot_sf ?? src.asset_lot_sf),
+        ...SLOTS.flatMap(i => [v(src[`landur_${i}`]), v(src[`landurunits_${i}`])]),
+        ...SLOTS.flatMap(i => [v(src[`landff_${i}`]), v(src[`landavgdep_${i}`])]),
+        ...SLOTS.flatMap(i => [v(src[`landffcond_${i}`]), v(src[`landffcondpc_${i}`])]),
+        ...SLOTS.flatMap(i => [v(src[`landffinfl_${i}`]), v(src[`landffinflpc_${i}`])]),
+        ...SLOTS.flatMap(i => [v(src[`landurcond_${i}`]), v(src[`landurcondpc_${i}`])]),
+        ...SLOTS.flatMap(i => [v(src[`landurinfl_${i}`]), v(src[`landurinflpc_${i}`])])
+      ];
+    };
+
+    const data = filteredWorksheetProps.map(prop => {
+      const src = sourceByKey.get(prop.property_composite_key) || {};
+      return [
       prop.block || '',
       prop.lot || '',  // Will be formatted as text to preserve trailing zeros
       prop.qualifier || '',
@@ -3198,7 +3237,9 @@ const processSelectedProperties = async () => {
       ...(vendorType === 'BRT'
         ? [prop.property_additional_lot_1 || '', prop.property_additional_lot_2 || '']
         : [prop.property_additional_lot_1 || '']),
+      src.values_mod_land ?? '',
       prop.values_mod_improvement || '',
+      src.values_mod_total ?? '',
       prop.property_facility || '',
       prop.property_vcs || '',
       prop.building_class_display || '',
@@ -3212,8 +3253,10 @@ const processSelectedProperties = async () => {
       prop.asset_map_page || '',
       prop.asset_key_page || '',
       prop.worksheet_notes || '',
-      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'
-    ]);
+      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No',
+      ...landRow(src)
+    ];
+    });
 
     // Create worksheet from array of arrays
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
@@ -3234,8 +3277,14 @@ const processSelectedProperties = async () => {
     const range = XLSX.utils.decode_range(ws['!ref']);
 
     // Resolved by header name so inserting a column can't shift the rules.
-    const improvementCol = headers.indexOf('Improvement');
+    const currencyCols = ['Land', 'Improvement', 'Total'].map(h => headers.indexOf(h));
+    const acreCol = headers.indexOf('Lot Acre');
+    const sfCol = headers.indexOf('Lot SF');
     const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
+    // Land codes keep leading zeros ("01", "08").
+    const codeTextCols = headers
+      .map((h, i) => (/^(UR Code|FF Cond|FF Infl|UR Cond|UR Infl) \d$/.test(h) ? i : -1))
+      .filter(i => i >= 0);
 
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -3249,15 +3298,23 @@ const processSelectedProperties = async () => {
           ws[cellAddress].s = { ...baseStyle };
 
           // Lot columns - format as text to preserve trailing zeros like .10
-          if (lotTextCols.includes(C)) {
+          if (lotTextCols.includes(C) || codeTextCols.includes(C)) {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
 
-          // Improvement - currency, no decimals ($1,234)
-          if (C === improvementCol && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+          const hasValue = ws[cellAddress].v !== '' && ws[cellAddress].v != null;
+          if (currencyCols.includes(C) && hasValue) {
             ws[cellAddress].t = 'n';
             ws[cellAddress].z = '$#,##0';
+          }
+          if (C === acreCol && hasValue) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '0.00';
+          }
+          if (C === sfCol && hasValue) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '#,##0';
           }
         }
       }
@@ -3272,7 +3329,9 @@ const processSelectedProperties = async () => {
       { wch: 30 },  // Property Location
       { wch: 10 },  // Class
       ...additionalLotHeaders.map(() => ({ wch: 12 })),  // Addl lot slot(s)
+      { wch: 14 },  // Land
       { wch: 14 },  // Improvement
+      { wch: 14 },  // Total
       { wch: 12 },  // Facility
       { wch: 12 },  // Current VCS
       { wch: 15 },  // Building
@@ -3286,7 +3345,8 @@ const processSelectedProperties = async () => {
       { wch: 10 },  // Map Page
       { wch: 10 },  // Key Page
       { wch: 30 },  // Notes
-      { wch: 8 }    // Ready
+      { wch: 8 },   // Ready
+      ...landHeaders.map(h => ({ wch: Math.max(9, h.length + 2) }))
     ];
 
     // Create workbook and export

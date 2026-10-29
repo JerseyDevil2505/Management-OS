@@ -360,6 +360,11 @@ Master property table. One row per block/lot/qualifier/card per job.
 | asset_effective_age | int | **BRT: stored as year; Micro: stored as yearPrior - age** |
 | landur_1..6, landurunits_1..6 | text/numeric | land-use codes and units |
 | landffcond_*, landurcond_*, landffinfl_*, landurinfl_* | text | land condition/influence codes |
+| landffcondpc_*, landurcondpc_*, landffinflpc_*, landurinflpc_* | numeric | BRT percents paired with the codes above (`_1`–`_6`) |
+| landff_*, landavgdep_* | numeric | BRT per-slot `LANDFF_n` / `LANDAVGDEP_n` (`_1`–`_6`); `asset_lot_frontage`/`asset_lot_depth` remain the rollups. Exported with land codes/units/adjustments + market_manual lot acre/SF in the Page by Page worksheet export (Microsystems exports frontage/depth/asset acre/SF) |
+| asset_model | text | BRT `MODEL`. Microsystems: 2nd `Location` + 2nd `Filler`, read **by position** in `parseSourceFile` (the renamed `Filler2` collides with a real `Filler2` header). Surfaced in CME search (`compFilters.model` / `sameModel`, default off), Sales Pool + Comp Browser column/chip filter, and the Detailed grid `model` row under Style — all gated on the job having any non-null model (age-restricted communities, e.g. Berkeley) |
+| overall_adj_reason1..4, overall_adj_percent1..4 | text/numeric | Microsystems land adjustment codes + percents (`Overall Adj Reason/Percent{n}`) |
+| misc_1_brt..5 / misc_item_1..3 | text | Misc codes. `src/lib/miscCodes.js` reads + decodes them (BRT Residential KEY 39, Micro field_codes 590–593). Drives CME `compFilters.misc` / `matchMiscSubject` (e.g. shore-town elevation: select Ground/Elevated/Raised + Match Subject), Sales Pool / Comp Browser Misc column + chips, Detailed `misc_codes` row. **BRT MAP keys are positions, not codes** (Berkeley pos 19 = code 26) — use `item.KEY`. ⚠️ `AdjustmentsTab.loadAvailableCodes` still uses the position, so BRT `miscellaneous_<n>` adjustment IDs are wrong wherever position ≠ code (confirmed: Jackson, Oct 2026). Not yet fixed. |
 | special_tax_code_1..4 | text | special tax district codes |
 | basement/garage/deck/patio/porch/pool areas | numeric | extracted physical attributes |
 | utility_heat/water/sewer | text | translated utility info |
@@ -586,6 +591,22 @@ This is the most important vendor difference in the system.
 | Finished basement | BSMNTFINISHCODE/AREA | direct SF |
 | Detached items | Code+Width+Depth | Code+Area (with raw_detached_items jsonb) |
 | Utilities | UTILS codes (cat 52 translation) | Gas Yn / Water Yn / Sewer Yn |
+| Model | MODEL → `asset_model` | 2nd `Location` + 2nd `Filler` (by position) → `asset_model` |
+| Land adj codes | `landffcond/landurcond` (positive), `landffinfl/landurinfl` (negative), `_1`–`_6` | `overall_adj_reason1`–`4` |
+| Land adj percents | `land*pc_1`–`_6` | `overall_adj_percent1`–`4` |
+
+### Land Adjustment Percents (stored vendor-native — do not convert)
+
+| | BRT | Microsystems |
+|---|---|---|
+| Meaning of the stored number | **Magnitude** of the adjustment: `10` = 10% | **Factor**: `110` = +10%, `90` = −10%, `100` = none |
+| Direction comes from | Which column it's in — `*COND*` = positive, `*INFL*` = negative | The value itself (> 100 or < 100) |
+| Value range seen | 1–125 (Berkeley, Oct 2026); never 0 or 100 | — |
+
+Both are stored exactly as the vendor ships them. To get a multiplier:
+BRT `cond` → `1 + pc/100`, BRT `infl` → `1 − pc/100`, Microsystems → `pct/100`.
+Don't normalize at ingest: BRT files carry percents with no paired code (and `00` codes with no percent), so a converted value would silently invent a direction.
+Note `PreValuationTab` derives +/- for Microsystems from `overall_adj_percent` vs 100 — correct for Micro, **wrong if ever pointed at BRT percents**. `DataQualityTab`'s `!== 0 && !== 100` "has adjustment" test is likewise a Microsystems idiom; it's harmless on BRT today only because BRT never emits 100.
 
 ---
 

@@ -8,6 +8,8 @@ import { evaluateAppellantComp, getNuShortForm } from '../../../lib/appellantCom
 import AppealMap, { distanceMiles } from '../../AppealMap';
 import ParcelPhotoStrip from '../ParcelPhotoStrip';
 import GeocodeStatusChip from '../../GeocodeStatusChip';
+import { getMiscCodes, buildMiscDescriptions, miscCodeLabel } from '../../../lib/miscCodes';
+import { isUnmaskedSale, displaySalesNu } from '../../../lib/unmaskedSales';
 
 // Locally-controlled input for the export-modal cells. Holding the typed value
 // in component-local state means each keystroke only re-renders this one cell
@@ -42,6 +44,7 @@ const EditableInput = React.memo(function EditableInput({
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], customBrackets = [], isJobContainerLoading = false, allProperties = [], marketLandData = {}, tenantConfig = null, onSalesSwapped = null, activeResultSetId = null, onSentToAppealLog = null, onGeocodeSaved = null, manualSalesOverrides = [] }) => {
   const subject = result.subject;
+  const miscDescriptions = useMemo(() => buildMiscDescriptions(codeDefinitions, vendorType), [codeDefinitions, vendorType]);
   // Real comps coming from the comparables search. Manual "M" comps (entered
   // directly in the export modal for out-of-town properties) are layered on
   // top of these via `manualComps` below to produce the unified `comps` array
@@ -607,6 +610,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // decode/display. Sales code is a free-text input since NU codes are public
     // record and easily looked up by the assessor.
     style_code: { type: 'code', field: 'asset_design_style', codeType: 'design' },
+    model: { type: 'code', field: 'asset_model', codeType: 'model' },
     type_use_code: { type: 'code', field: 'asset_type_use', codeType: 'typeUse' },
     story_height_code: { type: 'code', field: 'asset_stories', altField: 'asset_story_height', codeType: 'storyHeight' },
     view_code: { type: 'code', field: 'asset_view', altField: 'asset_view_code', codeType: 'view' },
@@ -635,6 +639,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       } else if (codeType === 'view') {
         code = p.asset_view || p.asset_view_code;
         if (code && codeDefinitions) name = interpretCodes.getViewName(p, codeDefinitions, vendorType);
+      } else if (codeType === 'model') {
+        code = p.asset_model;
       }
       if (!code) continue;
       const key = String(code);
@@ -1095,6 +1101,21 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       adjustmentName: null
     },
     {
+      id: 'model',
+      label: 'Model',
+      render: (prop) => prop.asset_model || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'misc_codes',
+      label: 'Misc',
+      render: (prop) => {
+        const codes = getMiscCodes(prop, vendorType);
+        return codes.length ? codes.map(c => miscCodeLabel(c, miscDescriptions)).join(', ') : 'None';
+      },
+      adjustmentName: null
+    },
+    {
       id: 'type_use_code',
       label: 'Type/Use Code',
       render: (prop) => {
@@ -1138,7 +1159,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'sales_code',
       label: 'Sales Code',
-      render: (prop) => prop.sales_nu || prop.sales_code || '0',
+      render: (prop) => isUnmaskedSale(prop) ? 'UM' : (prop.sales_nu || prop.sales_code || '0'),
       adjustmentName: null
     },
     {
@@ -1651,7 +1672,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Combine static and dynamic attributes
   // assmtSource is a dep because ATTRIBUTE_ORDER's prev_assessment row closes over it.
-  const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes, assmtSource]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jobHasModels = useMemo(() => Array.isArray(allProperties) && allProperties.some(p => p.asset_model), [allProperties]);
+  const jobHasMisc = useMemo(() => Array.isArray(allProperties) && allProperties.some(p => getMiscCodes(p, vendorType).length > 0), [allProperties, vendorType]);
+  const allAttributes = useMemo(() => [
+    ...ATTRIBUTE_ORDER.filter(a => (a.id !== 'model' || jobHasModels) && (a.id !== 'misc_codes' || jobHasMisc)),
+    ...dynamicAttributes
+  ], [dynamicAttributes, assmtSource, jobHasModels, jobHasMisc, miscDescriptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate a storage key based on job data to persist visibility per job
   const storageKey = useMemo(() => {
@@ -2961,7 +2987,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               subject.property_location || '\u2014',
               subject.sales_date ? new Date(subject.sales_date).toISOString().split('T')[0] : '\u2014',
               subject.sales_price ? `$${Number(subject.sales_price).toLocaleString()}` : '\u2014',
-              subject.sales_nu || '\u2014',
+              displaySalesNu(subject, '\u2014'),
               subject.new_vcs || subject.property_vcs || '\u2014',
               codeWithName(subject, 'asset_design_style'),
               codeWithName(subject, 'asset_type_use'),
@@ -3018,7 +3044,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 compProp?.property_location || '\u2014',
                 slot.sales_date || (compProp?.sales_date ? new Date(compProp.sales_date).toISOString().split('T')[0] : '\u2014'),
                 (slot.sales_price || compProp?.sales_price) ? `$${Number(slot.sales_price || compProp.sales_price).toLocaleString()}` : '\u2014',
-                slot.sales_nu || compProp?.sales_nu || '\u2014',
+                slot.sales_nu || (compProp ? displaySalesNu(compProp, '\u2014') : '\u2014'),
                 compProp ? (compProp.new_vcs || compProp.property_vcs || '\u2014') : '\u2014',
                 compProp ? codeWithName(compProp, 'asset_design_style') : '\u2014',
                 compProp ? codeWithName(compProp, 'asset_type_use') : '\u2014',
