@@ -24,6 +24,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [editedDetItemMap, setEditedDetItemMap] = useState({});
   const [editedBaseCostMap, setEditedBaseCostMap] = useState({});
   const [editedBuildingClassMap, setEditedBuildingClassMap] = useState({});
+  const [editedDeprMap, setEditedDeprMap] = useState({});
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   // Persisted exclusions. Kept separate from includedMap because that map only
   // covers rows in the current filter, and narrowing the years must not silently
@@ -64,6 +65,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
     if (editedBaseCostMap[key] !== undefined && editedBaseCostMap[key] !== '') return Number(editedBaseCostMap[key]);
     return (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+  };
+  const getDefaultDepr = (p) => (p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : null);
+  const getEffectiveDepr = (p) => {
+    const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+    if (editedDeprMap[key] !== undefined && editedDeprMap[key] !== '') return Number(editedDeprMap[key]);
+    return getDefaultDepr(p);
   };
   const getEffectiveBuildingClass = (p) => {
     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
@@ -314,7 +321,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   // rendered row, the same way recommendedFactors and summaryTotals do.
   const sortValue = (p, field) => {
     const key = rowKey(p);
-    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : null;
+    const depr = getEffectiveDepr(p);
     const detItems = getEffectiveDetItems(p);
     const baseCost = getEffectiveBaseCost(p);
     const cama = (editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land ?? 0);
@@ -322,8 +329,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const replWithDepr = depr ? (detItems + baseCost) * depr : null;
     const improv = basisPrice - cama - detItems;
     const ccf = (replWithDepr && replWithDepr !== 0) ? improv / replWithDepr : null;
-    const factor = (costConvFactor !== null && costConvFactor !== '') ? Number(costConvFactor) : (ccf ?? 0);
-    const adjusted = depr ? (cama + ((baseCost * depr) * factor) + detItems) : null;
+    const adjusted = (depr && townFactor !== null) ? (cama + ((baseCost * depr) * townFactor) + detItems) : null;
 
     switch (field) {
       case 'incl': return includedMap[key] !== false ? 1 : 0;
@@ -352,26 +358,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       default: return null;
     }
   };
-
-  const sortedFiltered = useMemo(() => {
-    if (!sortConfig.field) return filtered;
-    const dir = sortConfig.direction === 'desc' ? -1 : 1;
-    const isBlank = (v) => v === null || v === undefined || v === '' || (typeof v === 'number' && !isFinite(v));
-
-    return [...filtered].sort((a, b) => {
-      const av = sortValue(a, sortConfig.field);
-      const bv = sortValue(b, sortConfig.field);
-      // Blanks always sink, so flipping direction doesn't fill the top with empties.
-      if (isBlank(av) && isBlank(bv)) return 0;
-      if (isBlank(av)) return 1;
-      if (isBlank(bv)) return -1;
-
-      const an = typeof av === 'number' ? av : parseFloat(av);
-      const bn = typeof bv === 'number' ? bv : parseFloat(bv);
-      if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
-      return String(av).localeCompare(String(bv)) * dir;
-    });
-  }, [filtered, sortConfig, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, editedBuildingClassMap, priceBasis, costConvFactor, currentYear]);
 
   const toggleSort = (field) => {
     setSortConfig(prev => prev.field === field
@@ -409,8 +395,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           const detItems = getEffectiveDetItems(p);
           const baseCost = getEffectiveBaseCost(p);
           const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-          const yearBuilt = p.asset_year_built || '';
-          const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+          const depr = getEffectiveDepr(p);
           if (!depr) return null;
           const replWithDepr = (detItems + baseCost) * depr;
           if (!replWithDepr || replWithDepr === 0) return null;
@@ -427,9 +412,33 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     };
 
     return { price_time: meanForBasis('price_time'), sale_price: meanForBasis('sale_price') };
-  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, currentYear]);
+  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, editedDeprMap, currentYear]);
 
   const recommendedFactor = recommendedFactors[priceBasis] ?? null;
+  // One factor for every row, like the export's single CCF cell: custom if set, else the active-basis recommendation.
+  const townFactor = (costConvFactor !== null && costConvFactor !== '' && isFinite(Number(costConvFactor)))
+    ? Number(costConvFactor)
+    : recommendedFactor;
+
+  const sortedFiltered = useMemo(() => {
+    if (!sortConfig.field) return filtered;
+    const dir = sortConfig.direction === 'desc' ? -1 : 1;
+    const isBlank = (v) => v === null || v === undefined || v === '' || (typeof v === 'number' && !isFinite(v));
+
+    return [...filtered].sort((a, b) => {
+      const av = sortValue(a, sortConfig.field);
+      const bv = sortValue(b, sortConfig.field);
+      // Blanks always sink, so flipping direction doesn't fill the top with empties.
+      if (isBlank(av) && isBlank(bv)) return 0;
+      if (isBlank(av)) return 1;
+      if (isBlank(bv)) return -1;
+
+      const an = typeof av === 'number' ? av : parseFloat(av);
+      const bn = typeof bv === 'number' ? bv : parseFloat(bv);
+      if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }, [filtered, sortConfig, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, editedBuildingClassMap, editedDeprMap, priceBasis, townFactor, currentYear]);
 
   // Recommended median for robustness
   const recommendedMedian = useMemo(() => {
@@ -442,8 +451,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         const detItems = getEffectiveDetItems(p);
         const baseCost = getEffectiveBaseCost(p);
         const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-        const yearBuilt = p.asset_year_built || '';
-        const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+        const depr = getEffectiveDepr(p);
         if (!depr) return null;
         const replWithDepr = (detItems + baseCost) * depr;
         if (!replWithDepr || replWithDepr === 0) return null;
@@ -457,7 +465,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (rows.length === 0) return null;
     const mid = Math.floor(rows.length / 2);
     return rows.length % 2 !== 0 ? rows[mid] : (rows[mid - 1] + rows[mid]) / 2;
-  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, priceBasis, currentYear]);
+  }, [filtered, includedMap, editedLandMap, editedDetItemMap, editedBaseCostMap, editedDeprMap, priceBasis, currentYear]);
 
   // Export to Excel with formulas and formatting
   const exportToExcel = () => {
@@ -546,12 +554,16 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // Year Built
       row[COL.YEAR_BUILT] = yearBuilt;
 
-      // Depr - FORMULA: =1-((CURRENT_YEAR - L{rowNum})/100)
-      if (yearBuilt) {
+      // Depr - edited value as-is, otherwise FORMULA: =1-((CURRENT_YEAR - L{rowNum})/100)
+      const deprEdited = editedDeprMap[key] !== undefined && editedDeprMap[key] !== '';
+      if (deprEdited) {
+        row[COL.DEPR] = Number(editedDeprMap[key]);
+      } else if (yearBuilt) {
         row[COL.DEPR] = { f: `1-((${currentYear}-L${rowNum})/100)`, t: 'n' };
       } else {
         row[COL.DEPR] = '';
       }
+      const hasDepr = deprEdited || !!yearBuilt;
 
       // Building Class, Living Area
       row[COL.BLDG_CLASS] = getEffectiveBuildingClass(p);
@@ -563,7 +575,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       row[COL.BASE_COST] = baseCost || 0;
 
       // Repl w/Depr - FORMULA: =(Q{rowNum} + R{rowNum}) * M{rowNum}
-      if (yearBuilt) {
+      if (hasDepr) {
         row[COL.REPL_DEPR] = { f: `(Q${rowNum}+R${rowNum})*M${rowNum}`, t: 'n' };
       } else {
         row[COL.REPL_DEPR] = '';
@@ -577,13 +589,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       }
 
       // CCF - FORMULA: =T{rowNum} / S{rowNum}
-      if (yearBuilt && salePrice) {
+      if (hasDepr && salePrice) {
         row[COL.CCF] = { f: `IF(S${rowNum}=0,"",T${rowNum}/S${rowNum})`, t: 'n' };
       } else {
         row[COL.CCF] = '';
       }
 
-      if (yearBuilt && salePrice) {
+      if (hasDepr && salePrice) {
         row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*${actualCCFRef})+Q${rowNum}`, t: 'n' };
         row[COL.ADJ_RATIO] = { f: `IF(I${rowNum}=0,"",V${rowNum}/I${rowNum})`, t: 'n' };
         row[COL.RATIO_T] = { f: `IF(K${rowNum}=0,"",V${rowNum}/K${rowNum})`, t: 'n' };
@@ -808,23 +820,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       if (isFinite(salePrice)) sumSale += salePrice;
 
-      // compute adjusted value for this row using job-level factor if present, otherwise use per-row CCF
       {
         const detItems = getEffectiveDetItems(p);
         const baseVal = getEffectiveBaseCost(p);
-        const yearBuilt = p.asset_year_built || '';
-        const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
-        if (depr) {
+        const depr = getEffectiveDepr(p);
+        if (depr && townFactor !== null) {
           const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-          let adjustedValue = null;
-          if (costConvFactor !== null && costConvFactor !== '') {
-            adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * Number(costConvFactor)) + detItems);
-          } else {
-            const replWithDepr = (detItems + baseVal) * depr;
-            const improv = salePrice - cama - detItems;
-            const ccf = (replWithDepr && replWithDepr !== 0) ? (improv / replWithDepr) : null;
-            if (ccf !== null) adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * ccf) + detItems);
-          }
+          const adjustedValue = cama + ((baseVal * depr) * townFactor) + detItems;
           if (isFinite(adjustedValue)) sumAdj += adjustedValue;
         }
       }
@@ -833,7 +835,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const ratioPercent = (sumSale && sumSale !== 0) ? `${Math.round((sumAdj / sumSale) * 100)}%` : '—';
 
     return { sumSale, sumAdj, ratioPercent };
-  }, [filtered, includedMap, costConvFactor, editedLandMap, editedDetItemMap, editedBaseCostMap, currentYear, priceBasis]);
+  }, [filtered, includedMap, townFactor, editedLandMap, editedDetItemMap, editedBaseCostMap, editedDeprMap, currentYear, priceBasis]);
 
   return (
     <div className="bg-white rounded-lg p-6">
@@ -1065,7 +1067,27 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{priceTimeDisplay ? formatCurrencyNoCents(priceTimeDisplay) : '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">
+                    {(() => {
+                      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                      const def = getDefaultDepr(p);
+                      const edited = editedDeprMap[key] !== undefined && editedDeprMap[key] !== '';
+                      const val = editedDeprMap[key] !== undefined ? editedDeprMap[key] : (def !== null ? Number(def.toFixed(2)) : '');
+                      return (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={val}
+                          title={def !== null ? `Default ${def.toFixed(2)} from year built` : 'No year built'}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setEditedDeprMap(prev => ({ ...prev, [key]: raw === '' ? '' : parseFloat(raw) }));
+                          }}
+                          className={`px-2 py-1 border rounded w-20 ${edited ? 'border-blue-500 font-semibold' : ''}`}
+                        />
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     {(() => {
                       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
@@ -1147,8 +1169,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const detItems = getEffectiveDetItems(p);
                     const baseVal = getEffectiveBaseCost(p);
-                    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : '';
-                    const val = depr !== '' ? Math.round((detItems + baseVal) * depr) : '';
+                    const depr = getEffectiveDepr(p);
+                    const val = depr ? Math.round((detItems + baseVal) * depr) : '';
                     return (val !== '' && isFinite(val)) ? formatCurrencyNoCents(val) : '—';
                   })()}</td>
 
@@ -1165,9 +1187,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
                     const detItemsRow = getEffectiveDetItems(p);
                     const baseVal = getEffectiveBaseCost(p);
-                    const yearBuiltRow = p.asset_year_built || '';
-                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
-                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
+                    const deprRow = getEffectiveDepr(p);
+                    const replWithDeprRow = (deprRow ? Math.round((detItemsRow + baseVal) * deprRow) : null);
                     const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
@@ -1180,20 +1201,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
                     const detItemsRow = getEffectiveDetItems(p);
                     const baseVal = getEffectiveBaseCost(p);
-                    const yearBuiltRow = p.asset_year_built || '';
-                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
-                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
-                    const salePriceRow = basisPrice;
+                    const deprRow = getEffectiveDepr(p);
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
-                    if (!replWithDeprRow) return '—';
-                    let adjustedValueRow = null;
-                    if (costConvFactor !== null && costConvFactor !== '') {
-                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
-                    } else {
-                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
-                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
-                    }
+                    if (!deprRow || townFactor === null) return '—';
+                    const adjustedValueRow = camaRow + ((baseVal * deprRow) * townFactor) + detItemsRow;
                     return isFinite(adjustedValueRow) ? formatCurrencyNoCents(Math.round(adjustedValueRow)) : '—';
                   })()}</td>
 
@@ -1201,20 +1212,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
                     const detItemsRow = getEffectiveDetItems(p);
                     const baseVal = getEffectiveBaseCost(p);
-                    const yearBuiltRow = p.asset_year_built || '';
-                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
-                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
+                    const deprRow = getEffectiveDepr(p);
                     const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
-                    if (!replWithDeprRow) return '—';
-                    let adjustedValueRow = null;
-                    if (costConvFactor !== null && costConvFactor !== '') {
-                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
-                    } else {
-                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
-                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
-                    }
+                    if (!deprRow || townFactor === null) return '—';
+                    const adjustedValueRow = camaRow + ((baseVal * deprRow) * townFactor) + detItemsRow;
                     const ratio = (salePriceRow && adjustedValueRow) ? (adjustedValueRow / salePriceRow) : null;
                     return ratio ? formatPercentNoDecimals(ratio) : '—';
                   })()}</td>
@@ -1230,6 +1232,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           <div>Sum Sale Price: <span className="font-semibold">{formatCurrencyNoCents(summaryTotals.sumSale)}</span></div>
           <div>Sum Adjusted Value: <span className="font-semibold">{formatCurrencyNoCents(summaryTotals.sumAdj)}</span></div>
           <div>Ratio: <span className="font-semibold">{summaryTotals.ratioPercent}</span></div>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          Adjusted values use {townFactor !== null ? Number(townFactor).toFixed(2) : '—'} for every row
+          ({(costConvFactor !== null && costConvFactor !== '') ? 'Custom CCF' : `Recommended mean, ${priceBasis === 'price_time' ? 'Price Time' : 'Sale Price'}`})
         </div>
       </div>
 
