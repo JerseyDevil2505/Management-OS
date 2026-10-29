@@ -1624,6 +1624,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           if (!p.sales_price || p.sales_price <= minPrice) continue;
           if (!p.sales_date) continue;
           if (!p.values_mod_improvement || p.values_mod_improvement < 10000) continue;
+          if (['4A', '4B', '4C'].includes(String(p.property_m4_class || '').trim().toUpperCase())) continue;
 
           const saleYear = new Date(p.sales_date).getFullYear();
           if (saleYear < salesFromYear) continue;
