@@ -1489,3 +1489,14 @@ applied at fetch.
 | Type/Use mapping is applied at fetch in `JobContainer`, not stored on the row | Keeps `asset_type_use_raw` authoritative and makes the mapping editable without a data migration. That's also why saving prompts for a reload. |
 | `adjustmentAnalysisPdf` converts the PNG logo to JPEG on a canvas first | jsPDF leaks PNG transparency state into subsequent text rendering. The canvas round-trip is the workaround — don't simplify it back to a direct PNG `addImage`. |
 | Data Quality "Ignored" issues stay in `rawResults` | Ignoring is a display and count filter, not a deletion, so the run history stays a faithful record of what the check actually found. |
+
+### 16.11 Roster Compare (`RosterCompareTab.jsx` + `lib/rosterCompare.js`)
+
+**Final Valuation → Market Data → Roster Compare** (sub-view toggle at the top of `MarketDataTab`). Audits a Final Roster against the job's current data so managers stop hand-merging rosters after class changes, new sales, or vendor-side gremlins.
+
+- **Saved roster.** Every Build Final Roster (including a merged build) saves the roster's values as the job's *current roster*: gzipped JSON `{headers, rows}` at `roster-snapshots/<jobId>/current.json.gz` (private bucket, same authenticated policy as the other buckets) plus metadata in `job_settings` key `roster_snapshot` (`path`, `compressed`, `built_at`, `built_by`, `row_count`, `source_file_version`). Replaced on each build. Formula columns are stored as `null` — SheetJS writes formulas without cached results.
+- **Upload mode.** Reads the manager's Excel-saved roster; formula cells carry Excel's cached results, so a hand-edited `ROUNDUP` New Value is honored. Only this mode runs the **assessment check**: roster `Proj Total` vs current `values_cama_total`, exact to the dollar.
+- **Current side** comes from `MarketDataTab.buildRosterRows()` — the same row builder the export uses — so both sides have identical columns and card consolidation.
+- **Matching** is by Block/Lot/Qualifier using the text columns (keeps `1.10` ≠ `1.1`); falls back to the numeric Block/Lot columns, normalized on both sides, only if the manager deleted the text ones. Columns missing from the roster are skipped and listed, never flagged. All non-key, non-formula columns are compared, ownership included. `''` and `0` are equal; `"03"` equals `3`.
+- **Categories:** Added / Removed parcels, Assessment Mismatch, Sales, Class, Effective Age, Ownership, Values, Taxes, Characteristics. Chip counts are parcels per category.
+- **Merged roster** = a normal build from current data with changed cells highlighted yellow; in upload mode it keeps the manager's `Actual EFA`, `Exterior`, `Interior`, `Special` (`MANAGER_COLUMNS`). Hand edits to formulas (e.g. `ROUNDUP`) are not carried — formulas regenerate.
