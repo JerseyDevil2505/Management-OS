@@ -3192,16 +3192,19 @@ const processSelectedProperties = async () => {
 
     const SLOTS = [1, 2, 3, 4, 5, 6];
     const lotTotalHeaders = ['Total Frontage', 'Depth', 'Lot Acre', 'Lot SF'];
+    // Headers are the literal BRT source names so the CSV can drive mass updates.
+    const BRT_LAND_FIELDS = [
+      'LANDUR', 'LANDURUNITS',
+      'LANDFF', 'LANDAVGDEP', 'LANDFFTRI',
+      'LANDFFCOND', 'LANDFFCONDPC',
+      'LANDFFINFL', 'LANDFFINFLPC',
+      'LANDURCOND', 'LANDURCONDPC',
+      'LANDURINFL', 'LANDURINFLPC'
+    ];
+    const BRT_LAND_CODE_FIELDS = ['LANDUR', 'LANDFFCOND', 'LANDFFINFL', 'LANDURCOND', 'LANDURINFL'];
+    const brtLandHeaders = BRT_LAND_FIELDS.flatMap(f => SLOTS.map(i => `${f}_${i}`));
     const landHeaders = vendorType === 'BRT'
-      ? [
-          ...lotTotalHeaders,
-          ...SLOTS.flatMap(i => [`UR Code ${i}`, `UR Units ${i}`]),
-          ...SLOTS.flatMap(i => [`FF ${i}`, `Avg Depth ${i}`]),
-          ...SLOTS.flatMap(i => [`FF Cond ${i}`, `FF Cond % ${i}`]),
-          ...SLOTS.flatMap(i => [`FF Infl ${i}`, `FF Infl % ${i}`]),
-          ...SLOTS.flatMap(i => [`UR Cond ${i}`, `UR Cond % ${i}`]),
-          ...SLOTS.flatMap(i => [`UR Infl ${i}`, `UR Infl % ${i}`])
-        ]
+      ? [...lotTotalHeaders, ...brtLandHeaders]
       : lotTotalHeaders;
     headers.push(...landHeaders);
 
@@ -3216,12 +3219,7 @@ const processSelectedProperties = async () => {
         v(src.asset_lot_depth),
         v(src.market_manual_lot_acre ?? src.asset_lot_acre),
         v(src.market_manual_lot_sf ?? src.asset_lot_sf),
-        ...SLOTS.flatMap(i => [v(src[`landur_${i}`]), v(src[`landurunits_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landff_${i}`]), v(src[`landavgdep_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landffcond_${i}`]), v(src[`landffcondpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landffinfl_${i}`]), v(src[`landffinflpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landurcond_${i}`]), v(src[`landurcondpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landurinfl_${i}`]), v(src[`landurinflpc_${i}`])])
+        ...brtLandHeaders.map(h => v(src[h.toLowerCase()]))
       ];
     };
 
@@ -3283,7 +3281,7 @@ const processSelectedProperties = async () => {
     const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
     // Land codes keep leading zeros ("01", "08").
     const codeTextCols = headers
-      .map((h, i) => (/^(UR Code|FF Cond|FF Infl|UR Cond|UR Infl) \d$/.test(h) ? i : -1))
+      .map((h, i) => (BRT_LAND_CODE_FIELDS.some(f => /^(.+)_\d$/.exec(h)?.[1] === f) ? i : -1))
       .filter(i => i >= 0);
 
     for (let R = range.s.r; R <= range.e.r; ++R) {
