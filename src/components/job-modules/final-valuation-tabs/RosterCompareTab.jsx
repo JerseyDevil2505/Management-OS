@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx-js-style';
 import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import {
   CATEGORIES, MANAGER_COLUMNS, compareRosters, formatCompareValue, normalizeCell,
-  loadSnapshotMeta, loadSnapshotRows
+  loadSnapshotMeta, loadSnapshotRows, saveCompareResult, loadCompareResult
 } from '../../../lib/rosterCompare';
 
 const ROW_LIMIT = 500;
@@ -69,6 +69,19 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       .finally(() => setMetaLoading(false));
   }, [jobData?.id, snapshotVersion]);
 
+  useEffect(() => {
+    if (!jobData?.id) return;
+    let cancelled = false;
+    loadCompareResult(jobData.id)
+      .then(saved => {
+        if (cancelled || !saved) return;
+        setResult(prev => prev || saved);
+        setMode(saved.source);
+      })
+      .catch(e => console.error('Failed to load last roster compare:', e));
+    return () => { cancelled = true; };
+  }, [jobData?.id]);
+
   const fileUpdatedSinceSnapshot = useMemo(() => {
     const uploadedAt = jobData?.source_file_uploaded_at || jobData?.raw_file_parsed_at;
     if (!meta?.built_at || !uploadedAt) return null;
@@ -106,7 +119,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
         withAssessment: hasProjResults
       });
 
-      setResult({
+      const next = {
         ...res,
         source,
         roster,
@@ -116,7 +129,11 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
           : (!roster.headers.includes('Proj Total')
             ? 'Proj Total column was deleted from this roster.'
             : (!hasProjResults ? 'Proj Total has no calculated values. Open and save the roster in Excel, then upload again.' : null))
-      });
+      };
+      setResult(next);
+      saveCompareResult({ jobId: jobData.id, result: next })
+        .then(m => setResult(r => (r === next ? { ...next, comparedAt: m.compared_at, comparedBy: m.compared_by } : r)))
+        .catch(e => console.error('Failed to save roster compare:', e));
     } catch (e) {
       console.error('Roster compare failed:', e);
       setError(e.message || String(e));
@@ -313,6 +330,11 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
                   vs {result.source === 'snapshot' ? 'saved roster' : (result.roster.fileName || 'uploaded roster')}
                 </span>
               </div>
+              {result.comparedAt && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Compared {fmtDateTime(result.comparedAt)}{result.comparedBy ? ` by ${result.comparedBy}` : ''}
+                </div>
+              )}
               <div className="text-xs text-gray-500 mt-1">
                 {result.columnsCompared.length} columns compared.
                 {result.missingColumns.length > 0 && ` Not in roster (skipped): ${result.missingColumns.join(', ')}.`}
