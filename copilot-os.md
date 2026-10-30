@@ -414,6 +414,7 @@ One row per job. Stores all land-valuation config and results.
 | eco_obs_summary_adjustments | policy-level adjustments by location |
 | eco_obs_applied_adjustments | computed per-property adjustments |
 | cost_conv_factor | cost conversion factor (CCF) |
+| cost_valuation_from/to_year, cost_valuation_excluded, cost_valuation_depr_overrides | Cost Valuation tab state, all written together by **Save Years**. `depr_overrides` = `{ property_composite_key: depr }` for hand-edited Depr cells; unedited rows fall back to `1 − (currentYear − yearBuilt)/100` |
 | vacant_land_appraisals | jsonb array of saved VLA results |
 | custom_attribute_rollup, additional_cards_rollup | attribute card summaries |
 | zoning_config | zoning code mappings |
