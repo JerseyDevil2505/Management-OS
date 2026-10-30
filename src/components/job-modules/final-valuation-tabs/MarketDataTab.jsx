@@ -147,10 +147,15 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       if (error && error.code !== 'PGRST116') throw error;
       setTaxRates(data);
+      return data;
     } catch (error) {
       console.error('Error loading tax rates:', error);
+      return taxRates;
     }
   };
+
+  // Class 5 (farm) and 15 (exempt) parcels are never taxed on the roster.
+  const isNonTaxClass = (cls) => /^(5|15)[A-Z]?$/i.test(String(cls || '').trim());
 
   const yearPriorToDueYear = useMemo(
     () => getAssessmentYear(jobData?.end_date),
@@ -363,14 +368,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const calculateCurrentTaxes = (property) => {
     if (!taxRates?.current_total_rate) return 0;
     const isTaxable = property.property_facility !== 'EXEMPT';
-    if (!isTaxable) return 0;
+    if (!isTaxable || isNonTaxClass(property.property_m4_class)) return 0;
     const currentTotal = property.values_mod_total || 0;
     return currentTotal * taxRates.current_total_rate;
   };
 
   // Formula: Projected Taxes
-  const calculateProjectedTaxes = (projectedTotal) => {
-    if (!taxRates?.projected_total_rate) return 0;
+  const calculateProjectedTaxes = (property, projectedTotal) => {
+    if (!taxRates?.projected_total_rate || isNonTaxClass(property.property_cama_class)) return 0;
     return projectedTotal * taxRates.projected_total_rate;
   };
 
@@ -401,7 +406,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const newLandAllocation = calculateNewLandAllocation(property, projectedTotal);
     const deltaPercent = calculateDeltaPercent(property, projectedTotal);
     const currentTaxes = calculateCurrentTaxes(property);
-    const projectedTaxes = calculateProjectedTaxes(projectedTotal);
+    const projectedTaxes = calculateProjectedTaxes(property, projectedTotal);
     const taxDelta = calculateTaxDelta(currentTaxes, projectedTaxes);
     
     return {
@@ -1002,6 +1007,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // overrides/highlights are keyed by keyFn(row); used by Roster Compare's merged roster.
   const exportToExcel = async ({ overrides = null, highlights = null, keyFn = null, fileLabel = 'Final_Roster' } = {}) => {
     const workbook = XLSX.utils.book_new();
+    // Rates are often entered after this tab loaded; read them fresh for the build.
+    const rates = await loadTaxRates();
     const { rows, consolidatedProperties } = buildRosterRows();
 
     if (overrides && keyFn) {
@@ -1111,6 +1118,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       row['New Value'] = calc.qualifiesForEFA
         ? { f: `IF(${deprCell}="",0,ROUND((${costNew}*${deprCell})+${detItems}+${camaLand},-2))` }
         : 0;
+
+      const curRate = Number(rates?.current_total_rate) || 0;
+      const projRate = Number(rates?.projected_total_rate) || 0;
+      const curTaxable = curRate && property.property_facility !== 'EXEMPT' && !isNonTaxClass(property.property_m4_class);
+      const projTaxable = projRate && !isNonTaxClass(property.property_cama_class);
+      row['Current Taxes'] = curTaxable ? { f: `${currentTotal}*${curRate}` } : 0;
+      row['Projected Taxes'] = projTaxable ? { f: `${projTotal}*${projRate}` } : 0;
+      row['Tax Delta $'] = { f: `${col('Projected Taxes')}${r}-${col('Current Taxes')}${r}` };
     });
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
