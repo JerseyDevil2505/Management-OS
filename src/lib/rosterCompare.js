@@ -6,7 +6,7 @@ export const SNAPSHOT_SETTING_KEY = 'roster_snapshot';
 // Emitted as Excel formulas in the roster. An app-built snapshot has no cached
 // result for them, so they are only compared via the assessment check.
 export const FORMULA_COLUMNS = new Set([
-  'Check', 'Test', 'Eff Year', 'Total SFLA', 'Ext Cond Rate', 'Int Cond Rate',
+  'Check', 'Current EFA', 'Test', 'Eff Year', 'Total SFLA', 'Ext Cond Rate', 'Int Cond Rate',
   'Sales Ratio', 'CLA', 'PLA', 'Cama/Proj Imp', 'Proj Total', 'Delta %',
   'Recommended EFA', 'DEPR', 'New Value', 'Current Taxes', 'Projected Taxes', 'Tax Delta $'
 ]);

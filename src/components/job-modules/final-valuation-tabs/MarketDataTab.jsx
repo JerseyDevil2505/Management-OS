@@ -1069,6 +1069,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         row['Int Cond Rate'] = condRateFormula(`${col('Interior')}${r}`);
       }
 
+      // Actual EFA is seeded from the file's EFA; Current EFA follows the manager's edits so Test reads beside Year Built.
+      row['Current EFA'] = { f: `IF(${aEFA}="","",${aEFA})` };
+
       row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
       row['Check'] = { f: `IF(${col('MOD IV')}${r}=${col('CAMA')}${r},"TRUE","FALSE")` };
 
@@ -1080,7 +1083,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         row['Eff Year'] = { f: `IF(${aEFA}="","",${yearPriorToDueYear}-${aEFA})` };
         row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${effYear}<>""),IF(${effYear}>=${yearBuilt},"TRUE","FALSE"),"")` };
       } else {
-        row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${aEFA}<>""),IF(${aEFA}>=${yearBuilt},"TRUE","FALSE"),"")` };
+        const curEFA = `${col('Current EFA')}${r}`;
+        row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${curEFA}<>""),IF(${curEFA}>=${yearBuilt},"TRUE","FALSE"),"")` };
       }
 
       row['Sales Ratio'] = { f: `IF(OR(${normTime}="",${normTime}=0),"",${projTotal}/${normTime})` };
