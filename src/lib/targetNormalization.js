@@ -183,8 +183,10 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
     const yearBuilt = prop.asset_year_built;
     const yearBuiltValid = !yearBuilt || !saleYear || yearBuilt <= saleYear;
 
+    const isCommercial = ['4A', '4B', '4C'].includes(String(prop.property_m4_class || '').trim().toUpperCase());
+
     // Determine if this sale qualifies for normalization
-    const qualifiesForNorm = hasSale && inYearRange && validCard && validClass && yearBuiltValid &&
+    const qualifiesForNorm = !isCommercial && hasSale && inYearRange && validCard && validClass && yearBuiltValid &&
       prop.asset_type_use?.toString().trim() &&
       prop.asset_design_style?.toString().trim() &&
       prop.asset_sfla && prop.asset_sfla > 0 &&
@@ -212,6 +214,7 @@ export async function computeTargetNormalization(jobId, vendorType, county, chan
     // Auto-flag conditions for the UI
     const normValueTooLow = timeNormalizedPrice !== null && timeNormalizedPrice <= 100;
     const autoFlagReason = isNUd ? 'NU Code' :
+      isCommercial ? 'Commercial class' :
       normValueTooLow ? 'Norm value ≤ 100' :
       !qualifiesForNorm ? 'Does not qualify' :
       null;

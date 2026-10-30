@@ -693,6 +693,12 @@ export class BRTProcessor {
       landavgdep_4: this.parseNumeric(rawRecord.LANDAVGDEP_4),
       landavgdep_5: this.parseNumeric(rawRecord.LANDAVGDEP_5),
       landavgdep_6: this.parseNumeric(rawRecord.LANDAVGDEP_6),
+      landfftri_1: this.parseNumeric(rawRecord.LANDFFTRI_1),
+      landfftri_2: this.parseNumeric(rawRecord.LANDFFTRI_2),
+      landfftri_3: this.parseNumeric(rawRecord.LANDFFTRI_3),
+      landfftri_4: this.parseNumeric(rawRecord.LANDFFTRI_4),
+      landfftri_5: this.parseNumeric(rawRecord.LANDFFTRI_5),
+      landfftri_6: this.parseNumeric(rawRecord.LANDFFTRI_6),
 
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,

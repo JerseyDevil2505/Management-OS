@@ -1624,6 +1624,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           if (!p.sales_price || p.sales_price <= minPrice) continue;
           if (!p.sales_date) continue;
           if (!p.values_mod_improvement || p.values_mod_improvement < 10000) continue;
+          if (['4A', '4B', '4C'].includes(String(p.property_m4_class || '').trim().toUpperCase())) continue;
 
           const saleYear = new Date(p.sales_date).getFullYear();
           if (saleYear < salesFromYear) continue;
@@ -3192,36 +3193,44 @@ const processSelectedProperties = async () => {
 
     const SLOTS = [1, 2, 3, 4, 5, 6];
     const lotTotalHeaders = ['Total Frontage', 'Depth', 'Lot Acre', 'Lot SF'];
+    // Headers are the literal BRT source names so the CSV can drive mass updates.
+    const BRT_LAND_FIELDS = [
+      'LANDUR', 'LANDURUNITS',
+      'LANDFF', 'LANDAVGDEP', 'LANDFFTRI',
+      'LANDFFCOND', 'LANDFFCONDPC',
+      'LANDFFINFL', 'LANDFFINFLPC',
+      'LANDURCOND', 'LANDURCONDPC',
+      'LANDURINFL', 'LANDURINFLPC'
+    ];
+    const BRT_LAND_CODE_FIELDS = ['LANDUR', 'LANDFFCOND', 'LANDFFINFL', 'LANDURCOND', 'LANDURINFL'];
+    const brtLandHeaders = BRT_LAND_FIELDS.flatMap(f => SLOTS.map(i => `${f}_${i}`));
+    // [source header, property_records column]
+    const MICRO_LAND_FIELDS = [
+      ...[1, 2, 3].map(i => [`Front Ft${i}`, `front_ft_${i}`]),
+      ...[1, 2, 3].map(i => [`Avg Depth${i}`, `avg_depth_${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Reason${i}`, `overall_adj_reason${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Percent${i}`, `overall_adj_percent${i}`])
+    ];
     const landHeaders = vendorType === 'BRT'
-      ? [
-          ...lotTotalHeaders,
-          ...SLOTS.flatMap(i => [`UR Code ${i}`, `UR Units ${i}`]),
-          ...SLOTS.flatMap(i => [`FF ${i}`, `Avg Depth ${i}`]),
-          ...SLOTS.flatMap(i => [`FF Cond ${i}`, `FF Cond % ${i}`]),
-          ...SLOTS.flatMap(i => [`FF Infl ${i}`, `FF Infl % ${i}`]),
-          ...SLOTS.flatMap(i => [`UR Cond ${i}`, `UR Cond % ${i}`]),
-          ...SLOTS.flatMap(i => [`UR Infl ${i}`, `UR Infl % ${i}`])
-        ]
-      : lotTotalHeaders;
+      ? [...lotTotalHeaders, ...brtLandHeaders]
+      : [...lotTotalHeaders, ...MICRO_LAND_FIELDS.map(([h]) => h)];
     headers.push(...landHeaders);
 
     const sourceByKey = new Map((properties || []).map(p => [p.property_composite_key, p]));
     const v = (x) => (x === null || x === undefined ? '' : x);
     const landRow = (src) => {
       if (vendorType !== 'BRT') {
-        return [v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf)];
+        return [
+          v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf),
+          ...MICRO_LAND_FIELDS.map(([, col]) => v(src[col]))
+        ];
       }
       return [
         v(src.asset_lot_frontage),
         v(src.asset_lot_depth),
         v(src.market_manual_lot_acre ?? src.asset_lot_acre),
         v(src.market_manual_lot_sf ?? src.asset_lot_sf),
-        ...SLOTS.flatMap(i => [v(src[`landur_${i}`]), v(src[`landurunits_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landff_${i}`]), v(src[`landavgdep_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landffcond_${i}`]), v(src[`landffcondpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landffinfl_${i}`]), v(src[`landffinflpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landurcond_${i}`]), v(src[`landurcondpc_${i}`])]),
-        ...SLOTS.flatMap(i => [v(src[`landurinfl_${i}`]), v(src[`landurinflpc_${i}`])])
+        ...brtLandHeaders.map(h => v(src[h.toLowerCase()]))
       ];
     };
 
@@ -3283,7 +3292,7 @@ const processSelectedProperties = async () => {
     const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
     // Land codes keep leading zeros ("01", "08").
     const codeTextCols = headers
-      .map((h, i) => (/^(UR Code|FF Cond|FF Infl|UR Cond|UR Infl) \d$/.test(h) ? i : -1))
+      .map((h, i) => (BRT_LAND_CODE_FIELDS.some(f => /^(.+)_\d$/.exec(h)?.[1] === f) || /^Overall Adj Reason\d$/.test(h) ? i : -1))
       .filter(i => i >= 0);
 
     for (let R = range.s.r; R <= range.e.r; ++R) {

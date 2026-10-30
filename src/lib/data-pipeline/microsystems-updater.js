@@ -583,6 +583,12 @@ export class MicrosystemsUpdater {
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
+      front_ft_1: this.parseNumeric(rawRecord['Front Ft1']),
+      front_ft_2: this.parseNumeric(rawRecord['Front Ft2']),
+      front_ft_3: this.parseNumeric(rawRecord['Front Ft3']),
+      avg_depth_1: this.parseNumeric(rawRecord['Avg Depth1']),
+      avg_depth_2: this.parseNumeric(rawRecord['Avg Depth2']),
+      avg_depth_3: this.parseNumeric(rawRecord['Avg Depth3']),
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: rawRecord['Story Height'] || null,  // Preserve original value ("2A", "1.5", "3S", etc.)
