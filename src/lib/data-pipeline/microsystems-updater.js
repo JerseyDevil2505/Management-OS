@@ -462,7 +462,16 @@ export class MicrosystemsUpdater {
     // Parse headers and rename duplicates
     const originalHeaders = lines[0].split('|');
     this.headers = this.renameDuplicateHeaders(originalHeaders);
-    
+
+    // Model code = 2nd "Location" + 2nd "Filler". Read by position: the renamed
+    // 2nd Filler ("Filler2") collides with a real Filler2 header later in the file.
+    const nthIndex = (name, n) => {
+      let seen = 0;
+      return originalHeaders.findIndex(h => h.trim() === name && ++seen === n);
+    };
+    const modelLocIdx = nthIndex('Location', 2);
+    const modelFillerIdx = nthIndex('Filler', 2);
+
     console.log(`Found ${this.headers.length} headers with duplicates renamed`);
     
     // Parse data rows
@@ -480,7 +489,10 @@ export class MicrosystemsUpdater {
       this.headers.forEach((header, index) => {
         record[header] = values[index] || null;
       });
-      
+
+      const modelCode = `${modelLocIdx >= 0 ? (values[modelLocIdx] || '').trim() : ''}${modelFillerIdx >= 0 ? (values[modelFillerIdx] || '').trim() : ''}`;
+      record.__model_code = modelCode || null;
+
       records.push(record);
     }
     
@@ -571,6 +583,12 @@ export class MicrosystemsUpdater {
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
+      front_ft_1: this.parseNumeric(rawRecord['Front Ft1']),
+      front_ft_2: this.parseNumeric(rawRecord['Front Ft2']),
+      front_ft_3: this.parseNumeric(rawRecord['Front Ft3']),
+      avg_depth_1: this.parseNumeric(rawRecord['Avg Depth1']),
+      avg_depth_2: this.parseNumeric(rawRecord['Avg Depth2']),
+      avg_depth_3: this.parseNumeric(rawRecord['Avg Depth3']),
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: rawRecord['Story Height'] || null,  // Preserve original value ("2A", "1.5", "3S", etc.)
@@ -688,6 +706,12 @@ export class MicrosystemsUpdater {
       overall_adj_reason2: rawRecord['Overall Adj Reason2'] || null,
       overall_adj_reason3: rawRecord['Overall Adj Reason3'] || null,
       overall_adj_reason4: rawRecord['Overall Adj Reason4'] || null,
+      overall_adj_percent1: this.parseNumeric(rawRecord['Overall Adj Percent1']),
+      overall_adj_percent2: this.parseNumeric(rawRecord['Overall Adj Percent2']),
+      overall_adj_percent3: this.parseNumeric(rawRecord['Overall Adj Percent3']),
+      overall_adj_percent4: this.parseNumeric(rawRecord['Overall Adj Percent4']),
+
+      asset_model: rawRecord.__model_code || null,
 
       // Processing metadata
       processed_at: new Date().toISOString(),

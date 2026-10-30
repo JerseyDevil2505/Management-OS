@@ -7,6 +7,9 @@ import {
   calculateRecommendedEFA as computeRecommendedEFA,
   resolveActualEFA as computeActualEFA
 } from '../../../lib/effectiveAge';
+import { isUnmaskedSale } from '../../../lib/unmaskedSales';
+import { saveRosterSnapshot } from '../../../lib/rosterCompare';
+import RosterCompareTab from './RosterCompareTab';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
@@ -19,6 +22,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     design: false
   });
   const PREVIEW_LIMIT = 500; // Only show first 500 properties
+  const [activeView, setActiveView] = useState('approach');
+  const [snapshotStatus, setSnapshotStatus] = useState(null);
+  const [snapshotVersion, setSnapshotVersion] = useState(0);
 
   // Condition handling config
   const conditionHandlingMethod = jobData?.attribute_condition_config?.conditionHandlingMethod || 'effective_age';
@@ -826,9 +832,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   };
 
   // Export to Excel with formatting
-  const exportToExcel = () => {
-    const workbook = XLSX.utils.book_new();
-
+  const buildRosterRows = () => {
     // Consolidate additional cards before export
     const consolidatedProperties = consolidateProperties(properties);
 
@@ -966,7 +970,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           return '';
         })(),
         'Norm Time Value': property.values_norm_time || '',
-        'Sales NU Code': cleanValue(property.sales_nu),
+        'Sales NU Code': isUnmaskedSale(property) ? 'UM' : cleanValue(property.sales_nu),
         'Sales Ratio': '',
         'Sale Comment': calc.saleComment || '',
         'Det Items': property.values_det_items || 0,
@@ -991,6 +995,22 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Tax Delta $': calc.taxDelta || 0
       };
     });
+
+    return { rows, consolidatedProperties };
+  };
+
+  // overrides/highlights are keyed by keyFn(row); used by Roster Compare's merged roster.
+  const exportToExcel = async ({ overrides = null, highlights = null, keyFn = null, fileLabel = 'Final_Roster' } = {}) => {
+    const workbook = XLSX.utils.book_new();
+    const { rows, consolidatedProperties } = buildRosterRows();
+
+    if (overrides && keyFn) {
+      rows.forEach(row => {
+        const o = overrides.get(keyFn(row));
+        if (o) Object.entries(o).forEach(([c, v]) => { if (c in row) row[c] = v; });
+      });
+    }
+    const rowHighlights = (highlights && keyFn) ? rows.map(r => highlights.get(keyFn(r)) || null) : null;
 
     // Build dynamic column name -> letter map from final header order
     if (rows.length === 0) {
@@ -1179,10 +1199,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           fontColor = { rgb: '4B0082' }; // Indigo/purple
         }
 
+        const highlighted = rowHighlights?.[R - 1]?.has(colName);
         worksheet[cellAddress].s = {
-          font: { name: 'Leelawadee', sz: 10, color: fontColor },
+          font: { name: 'Leelawadee', sz: 10, color: fontColor, bold: !!highlighted },
           alignment: { horizontal: 'center', vertical: 'center' },
-          fill: { fgColor: { rgb: fillColor } },
+          fill: { fgColor: { rgb: highlighted ? 'FFFF00' : fillColor } },
           border: borderStyle,
           numFmt: numFmt
         };
@@ -1193,11 +1214,51 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     worksheet['!cols'] = Array(range.e.c + 1).fill({ wch: 12 });
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Market Data Approach');
-    XLSX.writeFile(workbook, `Final_Roster_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `${fileLabel}_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    // Every build becomes the job's current roster until the next build.
+    setSnapshotStatus('saving');
+    try {
+      await saveRosterSnapshot({ jobData, headers, rows });
+      setSnapshotStatus('saved');
+      setSnapshotVersion(v => v + 1);
+    } catch (e) {
+      console.error('Failed to save roster snapshot:', e);
+      setSnapshotStatus('error');
+    }
   };
+
+  const viewTabs = (
+    <div className="flex gap-2 border-b border-gray-200">
+      {[['approach', 'Market Data Approach'], ['roster-compare', 'Roster Compare']].map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => setActiveView(id)}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeView === id ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (activeView === 'roster-compare') {
+    return (
+      <div className="space-y-4">
+        {viewTabs}
+        <RosterCompareTab
+          jobData={jobData}
+          buildRosterRows={buildRosterRows}
+          buildFinalRoster={exportToExcel}
+          snapshotVersion={snapshotVersion}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
+      {viewTabs}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1208,12 +1269,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={exportToExcel}
+            onClick={() => exportToExcel()}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Download className="w-4 h-4" />
             Build Final Roster
           </button>
+          {snapshotStatus && (
+            <span className={`text-xs ${snapshotStatus === 'error' ? 'text-red-600' : 'text-gray-500'}`}>
+              {snapshotStatus === 'saving' && 'Saving roster copy...'}
+              {snapshotStatus === 'saved' && 'Saved as current roster'}
+              {snapshotStatus === 'error' && 'Roster copy failed to save'}
+            </span>
+          )}
         </div>
       </div>
 

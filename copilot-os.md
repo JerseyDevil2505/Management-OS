@@ -360,6 +360,12 @@ Master property table. One row per block/lot/qualifier/card per job.
 | asset_effective_age | int | **BRT: stored as year; Micro: stored as yearPrior - age** |
 | landur_1..6, landurunits_1..6 | text/numeric | land-use codes and units |
 | landffcond_*, landurcond_*, landffinfl_*, landurinfl_* | text | land condition/influence codes |
+| landffcondpc_*, landurcondpc_*, landffinflpc_*, landurinflpc_* | numeric | BRT percents paired with the codes above (`_1`–`_6`) |
+| landff_*, landavgdep_*, landfftri_* | numeric | BRT per-slot `LANDFF_n` / `LANDAVGDEP_n` / `LANDFFTRI_n` (`_1`–`_6`); `asset_lot_frontage`/`asset_lot_depth` remain the rollups. Exported with land codes/units/adjustments + market_manual lot acre/SF in the Page by Page worksheet export (Microsystems exports frontage/depth/asset acre/SF). **BRT export headers are the literal source names, each field grouped `_1`–`_6`** (`LANDFF_1..6`, then `LANDAVGDEP_1..6`, then `LANDFFTRI_1..6`, …) because the CSV drives BRT mass updates — driven by `BRT_LAND_FIELDS` in `PreValuationTab.exportWorksheetToExcel`; column name = header lowercased |
+| front_ft_1..3, avg_depth_1..3 | numeric | Microsystems per-slot `Front Ft1-3` / `Avg Depth1-3`; `asset_lot_frontage` (sum) / `asset_lot_depth` (avg) remain the rollups. Not to be confused with `depth1-4` / `depthn1-4`, which are detached-item dimensions. Page by Page export: rollups + acre/SF, then `Front Ft1-3`, `Avg Depth1-3`, `Overall Adj Reason1-4`, `Overall Adj Percent1-4` under source header names (`MICRO_LAND_FIELDS`) |
+| asset_model | text | BRT `MODEL`. Microsystems: 2nd `Location` + 2nd `Filler`, read **by position** in `parseSourceFile` (the renamed `Filler2` collides with a real `Filler2` header). Surfaced in CME search (`compFilters.model` / `sameModel`, default off), Sales Pool + Comp Browser column/chip filter, and the Detailed grid `model` row under Style — all gated on the job having any non-null model (age-restricted communities, e.g. Berkeley) |
+| overall_adj_reason1..4, overall_adj_percent1..4 | text/numeric | Microsystems land adjustment codes + percents (`Overall Adj Reason/Percent{n}`) |
+| misc_1_brt..5 / misc_item_1..3 | text | Misc codes. `src/lib/miscCodes.js` reads + decodes them (BRT Residential KEY 39, Micro field_codes 590–593). Drives CME `compFilters.misc` / `matchMiscSubject` (e.g. shore-town elevation: select Ground/Elevated/Raised + Match Subject), Sales Pool / Comp Browser Misc column + chips, Detailed `misc_codes` row. **BRT MAP keys are positions, not codes** (Berkeley pos 19 = code 26) — use `item.KEY`. ⚠️ `AdjustmentsTab.loadAvailableCodes` still uses the position, so BRT `miscellaneous_<n>` adjustment IDs are wrong wherever position ≠ code (confirmed: Jackson, Oct 2026). Not yet fixed. |
 | special_tax_code_1..4 | text | special tax district codes |
 | basement/garage/deck/patio/porch/pool areas | numeric | extracted physical attributes |
 | utility_heat/water/sewer | text | translated utility info |
@@ -586,6 +592,22 @@ This is the most important vendor difference in the system.
 | Finished basement | BSMNTFINISHCODE/AREA | direct SF |
 | Detached items | Code+Width+Depth | Code+Area (with raw_detached_items jsonb) |
 | Utilities | UTILS codes (cat 52 translation) | Gas Yn / Water Yn / Sewer Yn |
+| Model | MODEL → `asset_model` | 2nd `Location` + 2nd `Filler` (by position) → `asset_model` |
+| Land adj codes | `landffcond/landurcond` (positive), `landffinfl/landurinfl` (negative), `_1`–`_6` | `overall_adj_reason1`–`4` |
+| Land adj percents | `land*pc_1`–`_6` | `overall_adj_percent1`–`4` |
+
+### Land Adjustment Percents (stored vendor-native — do not convert)
+
+| | BRT | Microsystems |
+|---|---|---|
+| Meaning of the stored number | **Magnitude** of the adjustment: `10` = 10% | **Factor**: `110` = +10%, `90` = −10%, `100` = none |
+| Direction comes from | Which column it's in — `*COND*` = positive, `*INFL*` = negative | The value itself (> 100 or < 100) |
+| Value range seen | 1–125 (Berkeley, Oct 2026); never 0 or 100 | — |
+
+Both are stored exactly as the vendor ships them. To get a multiplier:
+BRT `cond` → `1 + pc/100`, BRT `infl` → `1 − pc/100`, Microsystems → `pct/100`.
+Don't normalize at ingest: BRT files carry percents with no paired code (and `00` codes with no percent), so a converted value would silently invent a direction.
+Note `PreValuationTab` derives +/- for Microsystems from `overall_adj_percent` vs 100 — correct for Micro, **wrong if ever pointed at BRT percents**. `DataQualityTab`'s `!== 0 && !== 100` "has adjustment" test is likewise a Microsystems idiom; it's harmless on BRT today only because BRT never emits 100.
 
 ---
 
@@ -1467,3 +1489,14 @@ applied at fetch.
 | Type/Use mapping is applied at fetch in `JobContainer`, not stored on the row | Keeps `asset_type_use_raw` authoritative and makes the mapping editable without a data migration. That's also why saving prompts for a reload. |
 | `adjustmentAnalysisPdf` converts the PNG logo to JPEG on a canvas first | jsPDF leaks PNG transparency state into subsequent text rendering. The canvas round-trip is the workaround — don't simplify it back to a direct PNG `addImage`. |
 | Data Quality "Ignored" issues stay in `rawResults` | Ignoring is a display and count filter, not a deletion, so the run history stays a faithful record of what the check actually found. |
+
+### 16.11 Roster Compare (`RosterCompareTab.jsx` + `lib/rosterCompare.js`)
+
+**Final Valuation → Market Data → Roster Compare** (sub-view toggle at the top of `MarketDataTab`). Audits a Final Roster against the job's current data so managers stop hand-merging rosters after class changes, new sales, or vendor-side gremlins.
+
+- **Saved roster.** Every Build Final Roster (including a merged build) saves the roster's values as the job's *current roster*: gzipped JSON `{headers, rows}` at `roster-snapshots/<jobId>/current.json.gz` (private bucket, same authenticated policy as the other buckets) plus metadata in `job_settings` key `roster_snapshot` (`path`, `compressed`, `built_at`, `built_by`, `row_count`, `source_file_version`). Replaced on each build. Formula columns are stored as `null` — SheetJS writes formulas without cached results.
+- **Upload mode.** Reads the manager's Excel-saved roster; formula cells carry Excel's cached results, so a hand-edited `ROUNDUP` New Value is honored. Only this mode runs the **assessment check**: roster `Proj Total` vs current `values_cama_total`, exact to the dollar.
+- **Current side** comes from `MarketDataTab.buildRosterRows()` — the same row builder the export uses — so both sides have identical columns and card consolidation.
+- **Matching** is by Block/Lot/Qualifier using the text columns (keeps `1.10` ≠ `1.1`); falls back to the numeric Block/Lot columns, normalized on both sides, only if the manager deleted the text ones. Columns missing from the roster are skipped and listed, never flagged. All non-key, non-formula columns are compared, ownership included. `''` and `0` are equal; `"03"` equals `3`.
+- **Categories:** Added / Removed parcels, Assessment Mismatch, Sales, Class, Effective Age, Ownership, Values, Taxes, Characteristics. Chip counts are parcels per category.
+- **Merged roster** = a normal build from current data with changed cells highlighted yellow; in upload mode it keeps the manager's `Actual EFA`, `Exterior`, `Interior`, `Special` (`MANAGER_COLUMNS`). Hand edits to formulas (e.g. `ROUNDUP`) are not carried — formulas regenerate.

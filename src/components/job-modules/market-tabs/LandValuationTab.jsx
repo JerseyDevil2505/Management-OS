@@ -1639,6 +1639,51 @@ const getPricePerUnit = useCallback((price, size) => {
     return { price: adjPrice, rate: Math.round(rate * mult), mult };
   }, [normalizePriorSalePrice]);
 
+  // Excludes new construction (built in the last 10 years) so teardowns are measured against existing housing stock.
+  const improvedNewConstructionYear = new Date().getFullYear() - 10;
+  const improvedByVcs = useMemo(() => {
+    const map = new Map();
+    (properties || []).forEach(p => {
+      if (!(p.sales_price > 0) || !p.sales_date || !(p.values_norm_time > 0)) return;
+      if (!String(p.asset_type_use || '').trim().startsWith('1') || !p.new_vcs) return;
+      const yb = parseInt(p.asset_year_built, 10);
+      if (yb && yb >= improvedNewConstructionYear) return;
+      const year = new Date(p.sales_date).getFullYear();
+      if (!map.has(p.new_vcs)) map.set(p.new_vcs, { byYear: new Map(), normSum: 0, normCount: 0, members: new Map() });
+      const g = map.get(p.new_vcs);
+      const y = g.byYear.get(year) || { sum: 0, count: 0 };
+      y.sum += Number(p.sales_price);
+      y.count += 1;
+      g.byYear.set(year, y);
+      g.normSum += Number(p.values_norm_time);
+      g.normCount += 1;
+      g.members.set(p.property_composite_key, { year, price: Number(p.sales_price), norm: Number(p.values_norm_time) });
+    });
+    return map;
+  }, [properties, improvedNewConstructionYear]);
+
+  // Raw compares against same-year improved sales (like the Allocation Study); (t) against all, time-normalized.
+  const getImprovedComparison = useCallback((sale) => {
+    const g = improvedByVcs.get(sale?.new_vcs);
+    if (!g) return null;
+    const year = sale.sales_date ? new Date(sale.sales_date).getFullYear() : null;
+    const self = g.members.get(sale.property_composite_key);
+    const y = g.byYear.get(year) || { sum: 0, count: 0 };
+    let rawSum = y.sum, rawCount = y.count, tSum = g.normSum, tCount = g.normCount;
+    if (self) {
+      if (self.year === year) { rawSum -= self.price; rawCount -= 1; }
+      tSum -= self.norm; tCount -= 1;
+    }
+    const avgRaw = rawCount > 0 ? Math.round(rawSum / rawCount) : null;
+    const avgT = tCount > 0 ? Math.round(tSum / tCount) : null;
+    const price = Number(sale.sales_price) || 0;
+    const priceT = getTimeAdjusted(sale).price;
+    return {
+      avgRaw, countRaw: rawCount, pctRaw: avgRaw && price ? price / avgRaw : null,
+      avgT, countT: tCount, pctT: avgT && priceT ? priceT / avgT : null
+    };
+  }, [improvedByVcs, getTimeAdjusted]);
+
   // ========== METHOD 1 TABLE SORT ==========
   const method1SortValue = useCallback((sale, field) => {
     switch (field) {
@@ -1666,9 +1711,11 @@ const getPricePerUnit = useCallback((price, size) => {
       case 'unitRate': return Number(sale.pricePerAcre) || 0;
       case 'package': return (sale.packageData && sale.packageData.package_count) || sale._priorPackageCount || 0;
       case 'notes': return landNotes[sale.id] || '';
+      case 'improvedPct': return getImprovedComparison(sale)?.pctRaw ?? '';
+      case 'improvedPctT': return getImprovedComparison(sale)?.pctT ?? '';
       default: return '';
     }
-  }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode]);
+  }, [includedSales, specialRegions, saleCategories, landNotes, valuationMode, getImprovedComparison]);
 
   const hiddenVacantSalesCount = useMemo(
     () => vacantSales.filter(s => method1HiddenSales.has(s.id)).length,
@@ -6055,9 +6102,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
     const salesHeaders = valuationMode === 'ff'
-      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)','Frontage','Depth','$ / FF','$ / FF(t)','Package','Notes']
-      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),`${getUnitLabel()}(t)`,'Package','Notes'];
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)','Frontage','Depth','$ / FF','$ / FF(t)','Package','Notes','Projected Land','Ratio','Ratio(t)','VCS Impr Avg','Impr Sales','% of Impr','VCS Impr Avg(t)','Impr Sales(t)','% of Impr(t)']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Location','Special Region','Category','Sale Date','$ Sale Price','$ Sale Price(t)',bracketUnit === 'sf' ? 'Sq Ft' : 'Acres',getUnitLabel(),`${getUnitLabel()}(t)`,'Package','Notes','Projected Land','Ratio','Ratio(t)','VCS Impr Avg','Impr Sales','% of Impr','VCS Impr Avg(t)','Impr Sales(t)','% of Impr(t)'];
     const salesRows = [salesHeaders];
+
+    // Package rows only carry the first parcel's fields, so their land is summed across members.
+    const camaLandByKey = new Map((properties || []).map(p => [p.property_composite_key, Number(p.values_cama_land) || 0]));
+    const projectedLandOf = (sale) => {
+      const keys = sale.packageData?.properties;
+      if (Array.isArray(keys) && keys.length > 0) {
+        return keys.reduce((sum, k) => sum + (camaLandByKey.get(k) || 0), 0);
+      }
+      return Number(sale.values_cama_land) || 0;
+    };
+    const pct = (num, den) => (num && den ? `${Math.round((num / den) * 100)}%` : '');
 
     (vacantSales || []).forEach(sale => {
       const category = saleCategories[sale.id] || 'Uncategorized';
@@ -6079,6 +6137,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const adj = getTimeAdjusted(sale);
       const salePriceT = salePrice ? `$${adj.price.toLocaleString()}` : '';
       const rateT = sale.pricePerAcre ? `$${adj.rate.toLocaleString()}` : '';
+      const projectedLand = projectedLandOf(sale);
+      const imp = getImprovedComparison(sale);
+      const projectedCols = [
+        projectedLand ? `$${Math.round(projectedLand).toLocaleString()}` : '',
+        pct(projectedLand, salePrice),
+        pct(projectedLand, adj.price),
+        imp?.avgRaw ? `$${imp.avgRaw.toLocaleString()}` : '',
+        imp ? imp.countRaw : '',
+        imp?.pctRaw ? `${Math.round(imp.pctRaw * 100)}%` : '',
+        imp?.avgT ? `$${imp.avgT.toLocaleString()}` : '',
+        imp ? imp.countT : '',
+        imp?.pctT ? `${Math.round(imp.pctT * 100)}%` : ''
+      ];
 
       if (valuationMode === 'ff') {
         const frontage = sale.asset_lot_frontage || '';
@@ -6116,7 +6187,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           ffPrice ? `$${Number(ffPrice).toLocaleString()}` : '',
           rateT,
           isPackage,
-          notes
+          notes,
+          ...projectedCols
         ]);
       } else {
         salesRows.push([
@@ -6141,7 +6213,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           pricePerUnit ? `$${pricePerUnit.toLocaleString()}` : '',
           rateT,
           isPackage,
-          notes
+          notes,
+          ...projectedCols
         ]);
       }
     });
@@ -6156,7 +6229,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ws1['!cols'] = salesHeaders.map(h => {
       if (h === 'Address' || h === 'Notes') return { wch: 30 };
       if (h === 'Location' || h === 'Depth Table') return { wch: 20 };
-      if (h.startsWith('$ Sale Price')) return { wch: 15 };
+      if (h.startsWith('$ Sale Price') || h === 'Projected Land' || h.startsWith('VCS Impr Avg')) return { wch: 15 };
       if (['Zoning','Special Region','Category','Sale Date'].includes(h) || h.includes('/')) return { wch: 12 };
       if (['Class','Bldg','Type'].includes(h)) return { wch: 6 };
       return { wch: h === 'VCS' || h === 'Package' || h === 'Frontage' || h === 'Acres' || h === 'Sq Ft' ? 10 : 8 };
@@ -7350,7 +7423,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
       const filtered = checkedSales.filter(filterFn);
-      if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0, method: 'none' };
+      if (filtered.length === 0) return { avg: 0, count: 0, avgLotSize: 0, method: 'none', overallAvg: 0 };
+
+      let overallAvg;
+      if (valuationMode === 'sf') {
+        const totalPrice = filtered.reduce((sum, s) => sum + (priceOf(s)), 0);
+        const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
+        overallAvg = totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0;
+      } else {
+        overallAvg = Math.round(filtered.reduce((sum, s) => sum + rateOf(s), 0) / filtered.length);
+      }
 
       // Calculate average lot size
       const totalAcres = filtered.reduce((sum, s) => sum + s.totalAcres, 0);
@@ -7374,7 +7456,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
             count: filtered.length,
             avgLotSize,
-            method: 'simple'
+            method: 'simple',
+            overallAvg
           };
         } else {
           const avgRate = filtered.reduce((sum, s) => sum + rateOf(s), 0) / filtered.length;
@@ -7382,7 +7465,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             avg: Math.round(avgRate),
             count: filtered.length,
             avgLotSize,
-            method: 'simple'
+            method: 'simple',
+            overallAvg
           };
         }
       }
@@ -7490,6 +7574,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             count: filtered.length,
             avgLotSize,
             method: 'paired',
+            overallAvg,
             pairedAnalysis: {
               pairs: pairedRates.length,
               medianRate: Math.round(medianRate),
@@ -7510,7 +7595,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
           count: filtered.length,
           avgLotSize,
-          method: 'fallback'
+          method: 'fallback',
+          overallAvg
         };
       } else {
         const avgRate = filtered.reduce((sum, s) => sum + rateOf(s), 0) / filtered.length;
@@ -7518,7 +7604,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           avg: Math.round(avgRate),
           count: filtered.length,
           avgLotSize,
-          method: 'fallback'
+          method: 'fallback',
+          overallAvg
         };
       }
     };
@@ -7629,7 +7716,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           avg: Math.round(rateOf(sale)),
           count: 1,
           region,
-          method: 'single'
+          method: 'single',
+          overallAvg: Math.round(rateOf(sale))
         };
       } else {
         // Multiple sales: use paired analysis
@@ -7664,6 +7752,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }
         }
 
+        const regionOverallAvg = Math.round(sales.reduce((sum, s) => sum + rateOf(s), 0) / sales.length);
         if (pairedRates.length > 0) {
           const rates = pairedRates.sort((a, b) => a - b);
           const medianRate = rates.length % 2 === 0 ?
@@ -7675,16 +7764,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             count: sales.length,
             region,
             method: 'paired',
-            pairs: pairedRates.length
+            pairs: pairedRates.length,
+            overallAvg: regionOverallAvg
           };
         } else {
           // Fallback to simple average if paired analysis fails
-          const avgRate = sales.reduce((sum, s) => sum + rateOf(s), 0) / sales.length;
           specialRegionsAnalysis[region] = {
-            avg: Math.round(avgRate),
+            avg: regionOverallAvg,
             count: sales.length,
             region,
-            method: 'fallback'
+            method: 'fallback',
+            overallAvg: regionOverallAvg
           };
         }
       }
@@ -7742,6 +7832,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     () => (showTimeAdjusted ? buildCategoryAnalysis(true) : null),
     [showTimeAdjusted, buildCategoryAnalysis]
   );
+
+  // Paired rate is the reported headline; the plain average still shows beneath it.
+  const renderOverallAvgLine = (data, timeAdjusted = false) => {
+    if (!data || !data.count || data.method !== 'paired' || data.overallAvg === undefined) return null;
+    const unit = valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre';
+    const value = valuationMode === 'sf' ? `$${data.overallAvg}` : `$${Number(data.overallAvg).toLocaleString()}`;
+    return (
+      <div style={{ fontSize: '11px', color: timeAdjusted ? '#4F46E5' : '#374151', marginTop: '2px' }}>
+        {timeAdjusted ? '(t) ' : ''}Overall avg: <strong>{value}</strong>{unit}
+      </div>
+    );
+  };
 
   const renderTimeAdjustedLine = (data) => {
     if (!showTimeAdjusted || !data || !data.count) return null;
@@ -8112,7 +8214,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           )}
           </div>
         </div>
-        
+        <div style={{ padding: '8px 15px', fontSize: '12px', color: '#4B5563', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E5E7EB' }}>
+          Vacant sale rates here are total land rates, used to help set raw land rates; vet them against the Allocation Study and VCS sales.
+          VCS Impr Avg compares each sale to time-normalized type/use 1 sales in the same VCS, excluding new construction (built {improvedNewConstructionYear} or later).
+          A sale near or above that average likely paid the improved market, not land value.
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', fontSize: '14px' }}>
             <thead>
@@ -8204,6 +8311,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {method1SortHeader(getUnitLabel(), 'unitRate', 'right')}
                 {showTimeAdjusted && (
                   <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }}>{getUnitLabel()}(t)</th>
+                )}
+                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }} title={`Average sale price of improved type/use 1 sales in this VCS, same sale year, built before ${improvedNewConstructionYear}`}>VCS Impr Avg</th>
+                {method1SortHeader('% of Impr', 'improvedPct', 'right')}
+                {showTimeAdjusted && (
+                  <>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }} title={`Average time-normalized price of improved type/use 1 sales in this VCS, built before ${improvedNewConstructionYear}`}>VCS Impr Avg(t)</th>
+                    {method1SortHeader('% of Impr(t)', 'improvedPctT', 'right')}
+                  </>
                 )}
                 {method1SortHeader('Package', 'package', 'center')}
                 {method1SortHeader('Notes', 'notes')}
@@ -8423,6 +8538,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           : `$${getTimeAdjusted(sale).rate.toLocaleString()}`}
                       </td>
                     )}
+                    {(() => {
+                      const imp = getImprovedComparison(sale);
+                      const cell = { padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' };
+                      const sub = (n) => <div style={{ fontSize: '10px', color: '#9CA3AF' }}>{n} sales</div>;
+                      return (
+                        <>
+                          <td style={cell}>
+                            {imp?.avgRaw ? <>${imp.avgRaw.toLocaleString()}{sub(imp.countRaw)}</> : '—'}
+                          </td>
+                          <td style={{ ...cell, fontWeight: 600 }}>
+                            {imp?.pctRaw ? `${Math.round(imp.pctRaw * 100)}%` : '—'}
+                          </td>
+                          {showTimeAdjusted && (
+                            <>
+                              <td style={{ ...cell, color: '#4F46E5' }}>
+                                {imp?.avgT ? <>${imp.avgT.toLocaleString()}{sub(imp.countT)}</> : '—'}
+                              </td>
+                              <td style={{ ...cell, fontWeight: 600, color: '#4F46E5' }}>
+                                {imp?.pctT ? `${Math.round(imp.pctT * 100)}%` : '—'}
+                              </td>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale._priorPackageCount && (
                         <span
@@ -8585,8 +8725,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                   </span>
                 </div>
+                {renderOverallAvgLine(categoryAnalysis.rawLand)}
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.rawLand.count} sales</div>
                 {renderTimeAdjustedLine(categoryAnalysisT?.rawLand)}
+                {showTimeAdjusted && renderOverallAvgLine(categoryAnalysisT?.rawLand)}
                 {categoryAnalysis.rawLand.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.rawLand.avgLotSize}
@@ -8608,8 +8750,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                   </span>
                 </div>
+                {renderOverallAvgLine(categoryAnalysis.buildingLot)}
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.buildingLot.count} sales</div>
                 {renderTimeAdjustedLine(categoryAnalysisT?.buildingLot)}
+                {showTimeAdjusted && renderOverallAvgLine(categoryAnalysisT?.buildingLot)}
                 {categoryAnalysis.buildingLot.count > 0 && (
                   <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
                     Avg: {categoryAnalysis.buildingLot.avgLotSize}
@@ -8706,11 +8850,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                         </span>
                       </div>
+                      {renderOverallAvgLine(data)}
                       <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
                         {data.count} sale{data.count !== 1 ? 's' : ''}
                         {data.method === 'paired' && data.pairs && ` • ${data.pairs} pairs`}
                       </div>
                       {renderTimeAdjustedLine(categoryAnalysisT?.specialRegions?.[region])}
+                      {showTimeAdjusted && renderOverallAvgLine(categoryAnalysisT?.specialRegions?.[region])}
                     </div>
                   ))}
                 </div>

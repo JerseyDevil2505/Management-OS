@@ -1624,6 +1624,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           if (!p.sales_price || p.sales_price <= minPrice) continue;
           if (!p.sales_date) continue;
           if (!p.values_mod_improvement || p.values_mod_improvement < 10000) continue;
+          if (['4A', '4B', '4C'].includes(String(p.property_m4_class || '').trim().toUpperCase())) continue;
 
           const saleYear = new Date(p.sales_date).getFullYear();
           if (saleYear < salesFromYear) continue;
@@ -3171,7 +3172,9 @@ const processSelectedProperties = async () => {
       'Property Location',
       'Class',
       ...additionalLotHeaders,
+      'Land',
       'Improvement',
+      'Total',
       'Facility',
       'Current VCS',
       'Building',
@@ -3188,7 +3191,52 @@ const processSelectedProperties = async () => {
       'Ready'
     ];
 
-    const data = filteredWorksheetProps.map(prop => [
+    const SLOTS = [1, 2, 3, 4, 5, 6];
+    const lotTotalHeaders = ['Total Frontage', 'Depth', 'Lot Acre', 'Lot SF'];
+    // Headers are the literal BRT source names so the CSV can drive mass updates.
+    const BRT_LAND_FIELDS = [
+      'LANDUR', 'LANDURUNITS',
+      'LANDFF', 'LANDAVGDEP', 'LANDFFTRI',
+      'LANDFFCOND', 'LANDFFCONDPC',
+      'LANDFFINFL', 'LANDFFINFLPC',
+      'LANDURCOND', 'LANDURCONDPC',
+      'LANDURINFL', 'LANDURINFLPC'
+    ];
+    const BRT_LAND_CODE_FIELDS = ['LANDUR', 'LANDFFCOND', 'LANDFFINFL', 'LANDURCOND', 'LANDURINFL'];
+    const brtLandHeaders = BRT_LAND_FIELDS.flatMap(f => SLOTS.map(i => `${f}_${i}`));
+    // [source header, property_records column]
+    const MICRO_LAND_FIELDS = [
+      ...[1, 2, 3].map(i => [`Front Ft${i}`, `front_ft_${i}`]),
+      ...[1, 2, 3].map(i => [`Avg Depth${i}`, `avg_depth_${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Reason${i}`, `overall_adj_reason${i}`]),
+      ...[1, 2, 3, 4].map(i => [`Overall Adj Percent${i}`, `overall_adj_percent${i}`])
+    ];
+    const landHeaders = vendorType === 'BRT'
+      ? [...lotTotalHeaders, ...brtLandHeaders]
+      : [...lotTotalHeaders, ...MICRO_LAND_FIELDS.map(([h]) => h)];
+    headers.push(...landHeaders);
+
+    const sourceByKey = new Map((properties || []).map(p => [p.property_composite_key, p]));
+    const v = (x) => (x === null || x === undefined ? '' : x);
+    const landRow = (src) => {
+      if (vendorType !== 'BRT') {
+        return [
+          v(src.asset_lot_frontage), v(src.asset_lot_depth), v(src.asset_lot_acre), v(src.asset_lot_sf),
+          ...MICRO_LAND_FIELDS.map(([, col]) => v(src[col]))
+        ];
+      }
+      return [
+        v(src.asset_lot_frontage),
+        v(src.asset_lot_depth),
+        v(src.market_manual_lot_acre ?? src.asset_lot_acre),
+        v(src.market_manual_lot_sf ?? src.asset_lot_sf),
+        ...brtLandHeaders.map(h => v(src[h.toLowerCase()]))
+      ];
+    };
+
+    const data = filteredWorksheetProps.map(prop => {
+      const src = sourceByKey.get(prop.property_composite_key) || {};
+      return [
       prop.block || '',
       prop.lot || '',  // Will be formatted as text to preserve trailing zeros
       prop.qualifier || '',
@@ -3198,7 +3246,9 @@ const processSelectedProperties = async () => {
       ...(vendorType === 'BRT'
         ? [prop.property_additional_lot_1 || '', prop.property_additional_lot_2 || '']
         : [prop.property_additional_lot_1 || '']),
+      src.values_mod_land ?? '',
       prop.values_mod_improvement || '',
+      src.values_mod_total ?? '',
       prop.property_facility || '',
       prop.property_vcs || '',
       prop.building_class_display || '',
@@ -3212,8 +3262,10 @@ const processSelectedProperties = async () => {
       prop.asset_map_page || '',
       prop.asset_key_page || '',
       prop.worksheet_notes || '',
-      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'
-    ]);
+      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No',
+      ...landRow(src)
+    ];
+    });
 
     // Create worksheet from array of arrays
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
@@ -3234,8 +3286,14 @@ const processSelectedProperties = async () => {
     const range = XLSX.utils.decode_range(ws['!ref']);
 
     // Resolved by header name so inserting a column can't shift the rules.
-    const improvementCol = headers.indexOf('Improvement');
+    const currencyCols = ['Land', 'Improvement', 'Total'].map(h => headers.indexOf(h));
+    const acreCol = headers.indexOf('Lot Acre');
+    const sfCol = headers.indexOf('Lot SF');
     const lotTextCols = ['Lot', ...additionalLotHeaders].map(h => headers.indexOf(h));
+    // Land codes keep leading zeros ("01", "08").
+    const codeTextCols = headers
+      .map((h, i) => (BRT_LAND_CODE_FIELDS.some(f => /^(.+)_\d$/.exec(h)?.[1] === f) || /^Overall Adj Reason\d$/.test(h) ? i : -1))
+      .filter(i => i >= 0);
 
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -3249,15 +3307,23 @@ const processSelectedProperties = async () => {
           ws[cellAddress].s = { ...baseStyle };
 
           // Lot columns - format as text to preserve trailing zeros like .10
-          if (lotTextCols.includes(C)) {
+          if (lotTextCols.includes(C) || codeTextCols.includes(C)) {
             ws[cellAddress].t = 's';  // Force text type
             ws[cellAddress].z = '@';   // Text format
           }
 
-          // Improvement - currency, no decimals ($1,234)
-          if (C === improvementCol && ws[cellAddress].v !== '' && ws[cellAddress].v != null) {
+          const hasValue = ws[cellAddress].v !== '' && ws[cellAddress].v != null;
+          if (currencyCols.includes(C) && hasValue) {
             ws[cellAddress].t = 'n';
             ws[cellAddress].z = '$#,##0';
+          }
+          if (C === acreCol && hasValue) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '0.00';
+          }
+          if (C === sfCol && hasValue) {
+            ws[cellAddress].t = 'n';
+            ws[cellAddress].z = '#,##0';
           }
         }
       }
@@ -3272,7 +3338,9 @@ const processSelectedProperties = async () => {
       { wch: 30 },  // Property Location
       { wch: 10 },  // Class
       ...additionalLotHeaders.map(() => ({ wch: 12 })),  // Addl lot slot(s)
+      { wch: 14 },  // Land
       { wch: 14 },  // Improvement
+      { wch: 14 },  // Total
       { wch: 12 },  // Facility
       { wch: 12 },  // Current VCS
       { wch: 15 },  // Building
@@ -3286,7 +3354,8 @@ const processSelectedProperties = async () => {
       { wch: 10 },  // Map Page
       { wch: 10 },  // Key Page
       { wch: 30 },  // Notes
-      { wch: 8 }    // Ready
+      { wch: 8 },   // Ready
+      ...landHeaders.map(h => ({ wch: Math.max(9, h.length + 2) }))
     ];
 
     // Create workbook and export
