@@ -1639,12 +1639,15 @@ const getPricePerUnit = useCallback((price, size) => {
     return { price: adjPrice, rate: Math.round(rate * mult), mult };
   }, [normalizePriorSalePrice]);
 
-  // Same improved pool as the Allocation Study: vetted (time-normalized) type/use 1 sales by new VCS.
+  // Excludes new construction (built in the last 10 years) so teardowns are measured against existing housing stock.
+  const improvedNewConstructionYear = new Date().getFullYear() - 10;
   const improvedByVcs = useMemo(() => {
     const map = new Map();
     (properties || []).forEach(p => {
       if (!(p.sales_price > 0) || !p.sales_date || !(p.values_norm_time > 0)) return;
       if (!String(p.asset_type_use || '').trim().startsWith('1') || !p.new_vcs) return;
+      const yb = parseInt(p.asset_year_built, 10);
+      if (yb && yb >= improvedNewConstructionYear) return;
       const year = new Date(p.sales_date).getFullYear();
       if (!map.has(p.new_vcs)) map.set(p.new_vcs, { byYear: new Map(), normSum: 0, normCount: 0, members: new Map() });
       const g = map.get(p.new_vcs);
@@ -1657,7 +1660,7 @@ const getPricePerUnit = useCallback((price, size) => {
       g.members.set(p.property_composite_key, { year, price: Number(p.sales_price), norm: Number(p.values_norm_time) });
     });
     return map;
-  }, [properties]);
+  }, [properties, improvedNewConstructionYear]);
 
   // Raw compares against same-year improved sales (like the Allocation Study); (t) against all, time-normalized.
   const getImprovedComparison = useCallback((sale) => {
@@ -8211,7 +8214,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           )}
           </div>
         </div>
-        
+        <div style={{ padding: '8px 15px', fontSize: '12px', color: '#4B5563', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E5E7EB' }}>
+          Vacant sale rates here are total land rates, used to help set raw land rates; vet them against the Allocation Study and VCS sales.
+          VCS Impr Avg compares each sale to time-normalized type/use 1 sales in the same VCS, excluding new construction (built {improvedNewConstructionYear} or later).
+          A sale near or above that average likely paid the improved market, not land value.
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', fontSize: '14px' }}>
             <thead>
@@ -8304,11 +8312,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 {showTimeAdjusted && (
                   <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }}>{getUnitLabel()}(t)</th>
                 )}
-                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }} title="Average sale price of improved type/use 1 sales in this VCS, same sale year">VCS Impr Avg</th>
+                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }} title={`Average sale price of improved type/use 1 sales in this VCS, same sale year, built before ${improvedNewConstructionYear}`}>VCS Impr Avg</th>
                 {method1SortHeader('% of Impr', 'improvedPct', 'right')}
                 {showTimeAdjusted && (
                   <>
-                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }} title="Average time-normalized price of improved type/use 1 sales in this VCS">VCS Impr Avg(t)</th>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB', color: '#4F46E5' }} title={`Average time-normalized price of improved type/use 1 sales in this VCS, built before ${improvedNewConstructionYear}`}>VCS Impr Avg(t)</th>
                     {method1SortHeader('% of Impr(t)', 'improvedPctT', 'right')}
                   </>
                 )}
