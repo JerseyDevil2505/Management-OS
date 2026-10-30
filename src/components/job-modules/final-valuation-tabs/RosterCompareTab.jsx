@@ -24,6 +24,23 @@ const parseRosterFile = async (file) => {
   return { headers: headers.filter(Boolean), rows };
 };
 
+const headerKey = (h) => String(h).replace(/\s+/g, ' ').trim().toUpperCase();
+
+// Managers often re-case headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
+const canonicalizeRoster = (roster, currentHeaders) => {
+  const byKey = new Map(currentHeaders.map(h => [headerKey(h), h]));
+  const rename = (h) => byKey.get(headerKey(h)) || h;
+  return {
+    ...roster,
+    headers: roster.headers.map(rename),
+    rows: roster.rows.map(r => {
+      const o = {};
+      Object.keys(r).forEach(h => { o[rename(h)] = r[h]; });
+      return o;
+    })
+  };
+};
+
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString() : '—');
 
 // The export writes condition codes as "01"; Excel may have turned them into 1.
@@ -75,6 +92,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       const { rows: currentRows, consolidatedProperties } = buildRosterRows();
       if (currentRows.length === 0) throw new Error('No properties loaded for this job.');
       const currentHeaders = Object.keys(currentRows[0]);
+      if (source === 'upload') roster = canonicalizeRoster(roster, currentHeaders);
 
       const hasProjResults = source === 'upload' && roster.headers.includes('Proj Total') &&
         roster.rows.some(r => { const v = normalizeCell(r['Proj Total']); return typeof v === 'number' && v !== 0; });
@@ -113,7 +131,8 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     setError(null);
     try {
       const parsed = await parseRosterFile(file);
-      if (!parsed.headers.includes('Qualifier') || !(parsed.headers.includes('Block (text)') || parsed.headers.includes('Block'))) {
+      const keys = new Set(parsed.headers.map(headerKey));
+      if (!keys.has('QUALIFIER') || !(keys.has('BLOCK (TEXT)') || keys.has('BLOCK'))) {
         throw new Error('This does not look like a Final Roster (missing Block/Lot/Qualifier columns).');
       }
       setUploaded({ ...parsed, fileName: file.name });
