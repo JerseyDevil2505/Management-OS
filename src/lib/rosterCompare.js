@@ -130,7 +130,9 @@ export const compareRosters = ({ rosterHeaders, rosterRows, currentHeaders, curr
     }
     const cRow = cur.row;
     const label = parcelLabel(cRow);
+    const isUnmasked = [rRow, cRow].some(r => String(normalizeCell(r['Sales NU Code'])).toUpperCase() === 'UM');
     columns.forEach(col => {
+      if (isUnmasked && categoryOf(col) === 'sales') return;
       if (!cellsEqual(rRow[col], cRow[col])) {
         items.push({
           key, category: categoryOf(col), column: col,
