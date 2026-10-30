@@ -9,6 +9,7 @@ import {
 } from '../../../lib/effectiveAge';
 import { isUnmaskedSale } from '../../../lib/unmaskedSales';
 import { saveRosterSnapshot } from '../../../lib/rosterCompare';
+import { loadRosterTaxRates } from '../../../lib/taxRates';
 import RosterCompareTab from './RosterCompareTab';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
@@ -111,11 +112,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Load final valuation data and tax rates
   useEffect(() => {
-    if (jobData?.id) {
-      loadFinalValuationData();
-      loadTaxRates();
-    }
+    if (jobData?.id) loadFinalValuationData();
   }, [jobData?.id]);
+
+  useEffect(() => {
+    if (jobData?.id && properties?.length) loadTaxRates();
+  }, [jobData?.id, properties]);
 
   const loadFinalValuationData = async () => {
     try {
@@ -139,15 +141,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   const loadTaxRates = async () => {
     try {
-      const { data, error} = await supabase
-        .from('job_tax_rates')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      setTaxRates(data);
-      return data;
+      const rates = await loadRosterTaxRates({ jobId: jobData.id, properties, vendorType: jobData?.vendor_type || 'BRT' });
+      const usable = rates.current_total_rate || rates.projected_total_rate ? rates : null;
+      setTaxRates(usable);
+      return usable;
     } catch (error) {
       console.error('Error loading tax rates:', error);
       return taxRates;
@@ -370,13 +367,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const isTaxable = property.property_facility !== 'EXEMPT';
     if (!isTaxable || isNonTaxClass(property.property_m4_class)) return 0;
     const currentTotal = property.values_mod_total || 0;
-    return currentTotal * taxRates.current_total_rate;
+    return currentTotal * taxRates.current_total_rate / 100;
   };
 
   // Formula: Projected Taxes
   const calculateProjectedTaxes = (property, projectedTotal) => {
     if (!taxRates?.projected_total_rate || isNonTaxClass(property.property_cama_class)) return 0;
-    return projectedTotal * taxRates.projected_total_rate;
+    return projectedTotal * taxRates.projected_total_rate / 100;
   };
 
   // Formula: Tax Delta
@@ -1123,8 +1120,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const projRate = Number(rates?.projected_total_rate) || 0;
       const curTaxable = curRate && property.property_facility !== 'EXEMPT' && !isNonTaxClass(property.property_m4_class);
       const projTaxable = projRate && !isNonTaxClass(property.property_cama_class);
-      row['Current Taxes'] = curTaxable ? { f: `${currentTotal}*${curRate}` } : 0;
-      row['Projected Taxes'] = projTaxable ? { f: `${projTotal}*${projRate}` } : 0;
+      row['Current Taxes'] = curTaxable ? { f: `${currentTotal}*${curRate}/100` } : 0;
+      row['Projected Taxes'] = projTaxable ? { f: `${projTotal}*${projRate}/100` } : 0;
       row['Tax Delta $'] = { f: `${col('Projected Taxes')}${r}-${col('Current Taxes')}${r}` };
     });
 
@@ -1752,7 +1749,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           <div>
             <h4 className="font-semibold text-yellow-900">Tax Rates Not Configured</h4>
             <p className="text-sm text-yellow-800 mt-1">
-              Current and projected tax calculations require tax rates. Please configure them in the Tax Rate Calculator tab.
+              Current and projected tax calculations require tax rates. Enter the budget and current rate in Ratable Comparison → Tax Rate Calculator.
             </p>
           </div>
         </div>
