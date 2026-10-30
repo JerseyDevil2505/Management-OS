@@ -6,9 +6,9 @@ export const SNAPSHOT_SETTING_KEY = 'roster_snapshot';
 // Emitted as Excel formulas in the roster. An app-built snapshot has no cached
 // result for them, so they are only compared via the assessment check.
 export const FORMULA_COLUMNS = new Set([
-  'Check', 'Test', 'Eff Year', 'Total SFLA', 'Ext Cond Rate', 'Int Cond Rate',
+  'Check', 'Current EFA', 'Test', 'Eff Year', 'Total SFLA', 'Ext Cond Rate', 'Int Cond Rate',
   'Sales Ratio', 'CLA', 'PLA', 'Cama/Proj Imp', 'Proj Total', 'Delta %',
-  'Recommended EFA', 'DEPR', 'New Value'
+  'Recommended EFA', 'DEPR', 'New Value', 'Current Taxes', 'Projected Taxes', 'Tax Delta $'
 ]);
 
 const KEY_COLUMNS = new Set(['Block (text)', 'Lot (text)', 'Block', 'Lot', 'Qualifier']);
@@ -25,7 +25,6 @@ export const CATEGORIES = [
   { id: 'efa', label: 'Effective Age' },
   { id: 'ownership', label: 'Ownership' },
   { id: 'values', label: 'Values' },
-  { id: 'taxes', label: 'Taxes' },
   { id: 'characteristics', label: 'Characteristics' }
 ];
 
@@ -36,8 +35,7 @@ const CATEGORY_BY_COLUMN = {
   'HPI Multiplier': 'sales', 'Norm Time Value': 'sales', 'Sales NU Code': 'sales', 'Sale Comment': 'sales',
   'Current EFA': 'efa', 'Actual EFA': 'efa',
   'Det Items': 'values', 'Cost New': 'values', 'Current Land': 'values', 'Current Impr': 'values',
-  'Current Total': 'values', 'CAMA Land': 'values',
-  'Current Taxes': 'taxes', 'Projected Taxes': 'taxes', 'Tax Delta $': 'taxes'
+  'Current Total': 'values', 'CAMA Land': 'values'
 };
 
 export const categoryOf = (column) => CATEGORY_BY_COLUMN[column] || 'characteristics';
@@ -130,7 +128,9 @@ export const compareRosters = ({ rosterHeaders, rosterRows, currentHeaders, curr
     }
     const cRow = cur.row;
     const label = parcelLabel(cRow);
+    const isUnmasked = [rRow, cRow].some(r => String(normalizeCell(r['Sales NU Code'])).toUpperCase() === 'UM');
     columns.forEach(col => {
+      if (isUnmasked && categoryOf(col) === 'sales') return;
       if (!cellsEqual(rRow[col], cRow[col])) {
         items.push({
           key, category: categoryOf(col), column: col,
@@ -219,6 +219,68 @@ export const saveRosterSnapshot = async ({ jobData, headers, rows }) => {
   );
   if (metaErr) throw metaErr;
   return meta;
+};
+
+// ---------- last compare result ----------
+
+const COMPARE_SETTING_KEY = 'roster_compare_last';
+
+// Roster rows are trimmed to what Build Merged Roster needs (keys + manager columns).
+export const saveCompareResult = async ({ jobId, result }) => {
+  const keep = [...KEY_COLUMNS, ...MANAGER_COLUMNS].filter(h => result.roster.headers.includes(h));
+  const payload = {
+    items: result.items,
+    counts: result.counts,
+    columnsCompared: result.columnsCompared,
+    missingColumns: result.missingColumns,
+    source: result.source,
+    assessmentChecked: result.assessmentChecked,
+    assessmentSkippedReason: result.assessmentSkippedReason,
+    roster: {
+      headers: result.roster.headers,
+      fileName: result.roster.fileName || null,
+      rows: result.source === 'upload'
+        ? result.roster.rows.map(r => { const o = {}; keep.forEach(h => { o[h] = unwrap(r[h]); }); return o; })
+        : []
+    }
+  };
+  const { blob, compressed } = await gzip(JSON.stringify(payload));
+  const path = `${jobId}/last-compare.json${compressed ? '.gz' : ''}`;
+  const { error: upErr } = await supabase.storage.from(SNAPSHOT_BUCKET).upload(path, blob, {
+    upsert: true,
+    contentType: compressed ? 'application/gzip' : 'application/json'
+  });
+  if (upErr) throw upErr;
+
+  const { data: userData } = await supabase.auth.getUser();
+  const meta = { path, compressed, compared_at: new Date().toISOString(), compared_by: userData?.user?.email || null };
+  const { error: metaErr } = await supabase.from('job_settings').upsert(
+    { job_id: jobId, setting_key: COMPARE_SETTING_KEY, setting_value: JSON.stringify(meta), updated_at: meta.compared_at },
+    { onConflict: 'job_id,setting_key' }
+  );
+  if (metaErr) throw metaErr;
+  return meta;
+};
+
+export const loadCompareResult = async (jobId) => {
+  const { data, error } = await supabase
+    .from('job_settings')
+    .select('setting_value')
+    .eq('job_id', jobId)
+    .eq('setting_key', COMPARE_SETTING_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.setting_value) return null;
+  const meta = typeof data.setting_value === 'string' ? JSON.parse(data.setting_value) : data.setting_value;
+  const { data: blob, error: dlErr } = await supabase.storage.from(SNAPSHOT_BUCKET).download(meta.path);
+  if (dlErr) throw dlErr;
+  const saved = JSON.parse(await gunzipText(blob, meta.compressed));
+  return {
+    ...saved,
+    keyFn: makeKeyFn(saved.roster.headers),
+    comparedAt: meta.compared_at,
+    comparedBy: meta.compared_by
+  };
 };
 
 export const loadSnapshotMeta = async (jobId) => {
