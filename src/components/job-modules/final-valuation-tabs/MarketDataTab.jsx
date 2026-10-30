@@ -14,6 +14,7 @@ import RosterCompareTab from './RosterCompareTab';
 
 const ROSTER_BLUE = '0070C0';
 const ROSTER_GREEN = '00B050';
+const ROSTER_VALUE_FILL = 'DFF5EF'; // Slipstream Green, Accent 4, Lighter 80%
 const ROSTER_FONT_COLORS = {
   'Block (text)': ROSTER_BLUE,
   'Lot (text)': ROSTER_BLUE,
@@ -22,7 +23,8 @@ const ROSTER_FONT_COLORS = {
   'Eff Year': ROSTER_GREEN,
   'Test': ROSTER_GREEN,
   'Norm Time Value': ROSTER_GREEN,
-  'Recommended EFA': ROSTER_GREEN
+  'Recommended EFA': ROSTER_GREEN,
+  'Actual EFA': '9C5700'
 };
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
@@ -1189,6 +1191,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         fillColor = 'FED7AA'; // Light orange
       }
 
+      const valueStart = getColIndex('Det Items');
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         // Create cell if it doesn't exist (for empty string values)
@@ -1209,7 +1212,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
                     'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
-        } else if (['Current Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
+        } else if (colName === 'Tax Delta $') {
+          numFmt = '$#,##0.00;[Red]$#,##0.00';
+        } else if (['Current Taxes', 'Projected Taxes'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
         } else if (['CLA', 'PLA', 'Sales Ratio', 'Delta %'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
@@ -1221,11 +1226,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
         const fontColor = { rgb: ROSTER_FONT_COLORS[colName] || '000000' };
 
+        const cellFill = colName === 'Actual EFA' ? 'FFEB9C'
+          : (valueStart >= 0 && C >= valueStart ? ROSTER_VALUE_FILL : fillColor);
+
         const highlighted = rowHighlights?.[R - 1]?.has(colName);
         worksheet[cellAddress].s = {
           font: { name: 'Leelawadee', sz: 10, color: fontColor, bold: !!highlighted },
           alignment: { horizontal: 'center', vertical: 'center' },
-          fill: { fgColor: { rgb: highlighted ? 'FFFF00' : fillColor } },
+          fill: { fgColor: { rgb: highlighted ? 'FFFF00' : cellFill } },
           border: borderStyle,
           numFmt: numFmt
         };
