@@ -12,6 +12,19 @@ import { saveRosterSnapshot } from '../../../lib/rosterCompare';
 import { loadRosterTaxRates } from '../../../lib/taxRates';
 import RosterCompareTab from './RosterCompareTab';
 
+const ROSTER_BLUE = '0070C0';
+const ROSTER_GREEN = '00B050';
+const ROSTER_FONT_COLORS = {
+  'Block (text)': ROSTER_BLUE,
+  'Lot (text)': ROSTER_BLUE,
+  'Total SFLA': ROSTER_BLUE,
+  'Current EFA': ROSTER_GREEN,
+  'Eff Year': ROSTER_GREEN,
+  'Test': ROSTER_GREEN,
+  'Norm Time Value': ROSTER_GREEN,
+  'Recommended EFA': ROSTER_GREEN
+};
+
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
   const [finalValuationData, setFinalValuationData] = useState({});
@@ -1151,10 +1164,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       // Special purple/blue font for Block and Lot (text) column headers
       const headerName = headers[C];
-      let headerFontColor = { rgb: '000000' }; // Default black
-      if (headerName === 'Block (text)' || headerName === 'Lot (text)') {
-        headerFontColor = { rgb: '4B0082' }; // Indigo/purple
-      }
+      const headerFontColor = { rgb: ROSTER_FONT_COLORS[headerName] || '000000' };
 
       worksheet[cellAddress].s = {
         font: { name: 'Leelawadee', sz: 10, bold: true, color: headerFontColor },
@@ -1209,11 +1219,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = 'mm/dd/yyyy'; // Date format
         }
 
-        // Special purple/blue font color for Block and Lot (text) columns
-        let fontColor = { rgb: '000000' }; // Default black
-        if (colName === 'Block (text)' || colName === 'Lot (text)') {
-          fontColor = { rgb: '4B0082' }; // Indigo/purple
-        }
+        const fontColor = { rgb: ROSTER_FONT_COLORS[colName] || '000000' };
 
         const highlighted = rowHighlights?.[R - 1]?.has(colName);
         worksheet[cellAddress].s = {
