@@ -9,7 +9,23 @@ import {
 } from '../../../lib/effectiveAge';
 import { isUnmaskedSale } from '../../../lib/unmaskedSales';
 import { saveRosterSnapshot } from '../../../lib/rosterCompare';
+import { loadRosterTaxRates } from '../../../lib/taxRates';
 import RosterCompareTab from './RosterCompareTab';
+
+const ROSTER_BLUE = '0070C0';
+const ROSTER_GREEN = '00B050';
+const ROSTER_VALUE_FILL = 'DFF5EF'; // Slipstream Green, Accent 4, Lighter 80%
+const ROSTER_FONT_COLORS = {
+  'Block (text)': ROSTER_BLUE,
+  'Lot (text)': ROSTER_BLUE,
+  'Total SFLA': ROSTER_BLUE,
+  'Current EFA': ROSTER_GREEN,
+  'Eff Year': ROSTER_GREEN,
+  'Test': ROSTER_GREEN,
+  'Norm Time Value': ROSTER_GREEN,
+  'Recommended EFA': ROSTER_GREEN,
+  'Actual EFA': '9C5700'
+};
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
@@ -111,11 +127,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Load final valuation data and tax rates
   useEffect(() => {
-    if (jobData?.id) {
-      loadFinalValuationData();
-      loadTaxRates();
-    }
+    if (jobData?.id) loadFinalValuationData();
   }, [jobData?.id]);
+
+  useEffect(() => {
+    if (jobData?.id && properties?.length) loadTaxRates();
+  }, [jobData?.id, properties]);
 
   const loadFinalValuationData = async () => {
     try {
@@ -139,18 +156,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   const loadTaxRates = async () => {
     try {
-      const { data, error} = await supabase
-        .from('job_tax_rates')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      setTaxRates(data);
+      const rates = await loadRosterTaxRates({ jobId: jobData.id, properties, vendorType: jobData?.vendor_type || 'BRT' });
+      const usable = rates.current_total_rate || rates.projected_total_rate ? rates : null;
+      setTaxRates(usable);
+      return usable;
     } catch (error) {
       console.error('Error loading tax rates:', error);
+      return taxRates;
     }
   };
+
+  // Class 5 (farm) and 15 (exempt) parcels are never taxed on the roster.
+  const isNonTaxClass = (cls) => /^(5|15)[A-Z]?$/i.test(String(cls || '').trim());
 
   const yearPriorToDueYear = useMemo(
     () => getAssessmentYear(jobData?.end_date),
@@ -363,15 +380,15 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const calculateCurrentTaxes = (property) => {
     if (!taxRates?.current_total_rate) return 0;
     const isTaxable = property.property_facility !== 'EXEMPT';
-    if (!isTaxable) return 0;
+    if (!isTaxable || isNonTaxClass(property.property_m4_class)) return 0;
     const currentTotal = property.values_mod_total || 0;
-    return currentTotal * taxRates.current_total_rate;
+    return currentTotal * taxRates.current_total_rate / 100;
   };
 
   // Formula: Projected Taxes
-  const calculateProjectedTaxes = (projectedTotal) => {
-    if (!taxRates?.projected_total_rate) return 0;
-    return projectedTotal * taxRates.projected_total_rate;
+  const calculateProjectedTaxes = (property, projectedTotal) => {
+    if (!taxRates?.projected_total_rate || isNonTaxClass(property.property_cama_class)) return 0;
+    return projectedTotal * taxRates.projected_total_rate / 100;
   };
 
   // Formula: Tax Delta
@@ -401,7 +418,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const newLandAllocation = calculateNewLandAllocation(property, projectedTotal);
     const deltaPercent = calculateDeltaPercent(property, projectedTotal);
     const currentTaxes = calculateCurrentTaxes(property);
-    const projectedTaxes = calculateProjectedTaxes(projectedTotal);
+    const projectedTaxes = calculateProjectedTaxes(property, projectedTotal);
     const taxDelta = calculateTaxDelta(currentTaxes, projectedTaxes);
     
     return {
@@ -1002,6 +1019,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // overrides/highlights are keyed by keyFn(row); used by Roster Compare's merged roster.
   const exportToExcel = async ({ overrides = null, highlights = null, keyFn = null, fileLabel = 'Final_Roster' } = {}) => {
     const workbook = XLSX.utils.book_new();
+    // Rates are often entered after this tab loaded; read them fresh for the build.
+    const rates = await loadTaxRates();
     const { rows, consolidatedProperties } = buildRosterRows();
 
     if (overrides && keyFn) {
@@ -1065,6 +1084,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         row['Int Cond Rate'] = condRateFormula(`${col('Interior')}${r}`);
       }
 
+      // Actual EFA is seeded from the file's EFA; Current EFA follows the manager's edits so Test reads beside Year Built.
+      row['Current EFA'] = { f: `IF(${aEFA}="","",${aEFA})` };
+
       row['Total SFLA'] = { f: `${col('Card SF')}${r}+${col('SFLA')}${r}` };
       row['Check'] = { f: `IF(${col('MOD IV')}${r}=${col('CAMA')}${r},"TRUE","FALSE")` };
 
@@ -1076,7 +1098,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         row['Eff Year'] = { f: `IF(${aEFA}="","",${yearPriorToDueYear}-${aEFA})` };
         row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${effYear}<>""),IF(${effYear}>=${yearBuilt},"TRUE","FALSE"),"")` };
       } else {
-        row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${aEFA}<>""),IF(${aEFA}>=${yearBuilt},"TRUE","FALSE"),"")` };
+        const curEFA = `${col('Current EFA')}${r}`;
+        row['Test'] = { f: `IF(AND(${yearBuilt}<>"",${curEFA}<>""),IF(${curEFA}>=${yearBuilt},"TRUE","FALSE"),"")` };
       }
 
       row['Sales Ratio'] = { f: `IF(OR(${normTime}="",${normTime}=0),"",${projTotal}/${normTime})` };
@@ -1111,6 +1134,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       row['New Value'] = calc.qualifiesForEFA
         ? { f: `IF(${deprCell}="",0,ROUND((${costNew}*${deprCell})+${detItems}+${camaLand},-2))` }
         : 0;
+
+      const curRate = Number(rates?.current_total_rate) || 0;
+      const projRate = Number(rates?.projected_total_rate) || 0;
+      const curTaxable = curRate && property.property_facility !== 'EXEMPT' && !isNonTaxClass(property.property_m4_class);
+      const projTaxable = projRate && !isNonTaxClass(property.property_cama_class);
+      row['Current Taxes'] = curTaxable ? { f: `${currentTotal}*${curRate}/100` } : 0;
+      row['Projected Taxes'] = projTaxable ? { f: `${projTotal}*${projRate}/100` } : 0;
+      row['Tax Delta $'] = { f: `${col('Projected Taxes')}${r}-${col('Current Taxes')}${r}` };
     });
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -1135,10 +1166,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       // Special purple/blue font for Block and Lot (text) column headers
       const headerName = headers[C];
-      let headerFontColor = { rgb: '000000' }; // Default black
-      if (headerName === 'Block (text)' || headerName === 'Lot (text)') {
-        headerFontColor = { rgb: '4B0082' }; // Indigo/purple
-      }
+      const headerFontColor = { rgb: ROSTER_FONT_COLORS[headerName] || '000000' };
 
       worksheet[cellAddress].s = {
         font: { name: 'Leelawadee', sz: 10, bold: true, color: headerFontColor },
@@ -1163,6 +1191,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         fillColor = 'FED7AA'; // Light orange
       }
 
+      const valueStart = getColIndex('Det Items');
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         // Create cell if it doesn't exist (for empty string values)
@@ -1183,7 +1212,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
                     'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
-        } else if (['Current Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
+        } else if (colName === 'Tax Delta $') {
+          numFmt = '$#,##0.00;[Red]$#,##0.00';
+        } else if (['Current Taxes', 'Projected Taxes'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
         } else if (['CLA', 'PLA', 'Sales Ratio', 'Delta %'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
@@ -1193,17 +1224,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = 'mm/dd/yyyy'; // Date format
         }
 
-        // Special purple/blue font color for Block and Lot (text) columns
-        let fontColor = { rgb: '000000' }; // Default black
-        if (colName === 'Block (text)' || colName === 'Lot (text)') {
-          fontColor = { rgb: '4B0082' }; // Indigo/purple
-        }
+        const fontColor = { rgb: ROSTER_FONT_COLORS[colName] || '000000' };
+
+        const cellFill = colName === 'Actual EFA' ? 'FFEB9C'
+          : (valueStart >= 0 && C >= valueStart ? ROSTER_VALUE_FILL : fillColor);
 
         const highlighted = rowHighlights?.[R - 1]?.has(colName);
         worksheet[cellAddress].s = {
           font: { name: 'Leelawadee', sz: 10, color: fontColor, bold: !!highlighted },
           alignment: { horizontal: 'center', vertical: 'center' },
-          fill: { fgColor: { rgb: highlighted ? 'FFFF00' : fillColor } },
+          fill: { fgColor: { rgb: highlighted ? 'FFFF00' : cellFill } },
           border: borderStyle,
           numFmt: numFmt
         };
@@ -1737,7 +1767,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           <div>
             <h4 className="font-semibold text-yellow-900">Tax Rates Not Configured</h4>
             <p className="text-sm text-yellow-800 mt-1">
-              Current and projected tax calculations require tax rates. Please configure them in the Tax Rate Calculator tab.
+              Current and projected tax calculations require tax rates. Enter the budget and current rate in Ratable Comparison → Tax Rate Calculator.
             </p>
           </div>
         </div>
