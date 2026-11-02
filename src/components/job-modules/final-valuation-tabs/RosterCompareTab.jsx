@@ -228,6 +228,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       result.roster.rows.forEach(r => {
         const o = {};
         managerCols.forEach(c => { o[c] = managerCellValue(c, r[c]); });
+        if (result.roster.headers.includes('CAMA Land')) o['CAMA Land'] = r['CAMA Land'];
         const ownedCols = managerOwnedColumns(r);
         ownedCols.forEach(c => { o[c] = r[c]; });
         overrides.set(result.keyFn(r), o);
@@ -246,7 +247,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       else if (it.column && !(keepManager && (MANAGER_COLUMNS.includes(it.column) || owned.get(it.key)?.includes(it.column)))) mark(it.key, it.column);
     });
 
-    await buildFinalRoster({ overrides, highlights, keyFn: result.keyFn, fileLabel: 'Final_Roster_Merged' });
+    await buildFinalRoster({ overrides, highlights, keyFn: result.keyFn, fileLabel: 'Final_Roster_Merged', brtCheck: keepManager });
   };
 
   const totalChanges = result ? result.items.length : 0;
@@ -363,7 +364,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
                 onClick={buildMerged}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 title={result.source === 'upload'
-                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior, Special, ACT sales and lot-size notes (SITE, ZALI); changed cells highlighted. Becomes the saved roster.'
+                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior, Special, CAMA Land, ACT sales and lot-size notes (SITE, ZALI), with temporary BRT Land / Imp / Total / Totals Match columns after Proj Total; changed cells highlighted. Becomes the saved roster.'
                   : 'Fresh roster from current data with changed cells highlighted. Becomes the saved roster.'}
               >
                 <Download className="w-4 h-4" />

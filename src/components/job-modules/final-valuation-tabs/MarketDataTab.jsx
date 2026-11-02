@@ -1021,16 +1021,36 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   };
 
   // overrides/highlights are keyed by keyFn(row); used by Roster Compare's merged roster.
-  const exportToExcel = async ({ overrides = null, highlights = null, keyFn = null, fileLabel = 'Final_Roster' } = {}) => {
+  const exportToExcel = async ({ overrides = null, highlights = null, keyFn = null, fileLabel = 'Final_Roster', brtCheck = false } = {}) => {
     const workbook = XLSX.utils.book_new();
     // Rates are often entered after this tab loaded; read them fresh for the build.
     const rates = await loadTaxRates();
-    const { rows, consolidatedProperties } = buildRosterRows();
+    const built = buildRosterRows();
+    const { consolidatedProperties } = built;
+    let { rows } = built;
 
     if (overrides && keyFn) {
       rows.forEach(row => {
         const o = overrides.get(keyFn(row));
         if (o) Object.entries(o).forEach(([c, v]) => { if (c in row) row[c] = v; });
+      });
+    }
+
+    // Temporary reconciliation columns after Proj Total; managers delete them once resolved.
+    if (brtCheck) {
+      rows = rows.map((row, idx) => {
+        const p = consolidatedProperties[idx];
+        const out = {};
+        Object.entries(row).forEach(([c, v]) => {
+          out[c] = v;
+          if (c === 'Proj Total') {
+            out['BRT Land'] = p.values_cama_land || 0;
+            out['BRT Imp'] = p.values_cama_improvement || 0;
+            out['BRT Total'] = p.values_cama_total || 0;
+            out['Totals Match'] = '';
+          }
+        });
+        return out;
       });
     }
     const rowHighlights = (highlights && keyFn) ? rows.map(r => highlights.get(keyFn(r)) || null) : null;
@@ -1117,6 +1137,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         : (property.values_cama_improvement || 0);
 
       row['Proj Total'] = { f: `${camaLand}+${col('Cama/Proj Imp')}${r}` };
+
+      if (brtCheck) {
+        row['Totals Match'] = { f: `IF(ROUND(${projTotal},0)=ROUND(${col('BRT Total')}${r},0),"TRUE","FALSE")` };
+      }
 
       row['Delta %'] = { f: `IF(OR(${currentTotal}="",${currentTotal}=0),"",(${projTotal}-${currentTotal})/${currentTotal})` };
 
@@ -1216,7 +1240,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         } else if (['Sale Price', 'Norm Time Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
         } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
-                    'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
+                    'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value',
+                    'BRT Land', 'BRT Imp', 'BRT Total'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
         } else if (colName === 'Tax Delta $') {
           numFmt = '$#,##0.00;[Red]$#,##0.00';
