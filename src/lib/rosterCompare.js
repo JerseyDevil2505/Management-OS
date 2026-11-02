@@ -248,9 +248,10 @@ export const saveRosterSnapshot = async ({ jobData, headers, rows }) => {
 
 const COMPARE_SETTING_KEY = 'roster_compare_last';
 
-// Roster rows are trimmed to what Build Merged Roster needs (keys + manager columns).
+// Roster rows are trimmed to what Build Merged Roster needs (keys + manager-owned columns).
 export const saveCompareResult = async ({ jobId, result }) => {
-  const keep = [...KEY_COLUMNS, ...MANAGER_COLUMNS].filter(h => result.roster.headers.includes(h));
+  const keep = [...KEY_COLUMNS, ...MANAGER_COLUMNS, 'Code', 'Norm Time Value', ...LOT_SIZE_COLUMNS]
+    .filter(h => result.roster.headers.includes(h));
   const payload = {
     items: result.items,
     counts: result.counts,

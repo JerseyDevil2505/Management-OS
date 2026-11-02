@@ -222,13 +222,16 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     if (!result) return;
     const keepManager = result.source === 'upload';
     const overrides = new Map();
+    const owned = new Map();
     if (keepManager) {
       const managerCols = MANAGER_COLUMNS.filter(c => result.roster.headers.includes(c));
       result.roster.rows.forEach(r => {
         const o = {};
         managerCols.forEach(c => { o[c] = managerCellValue(c, r[c]); });
-        managerOwnedColumns(r).forEach(c => { o[c] = r[c]; });
+        const ownedCols = managerOwnedColumns(r);
+        ownedCols.forEach(c => { o[c] = r[c]; });
         overrides.set(result.keyFn(r), o);
+        owned.set(result.keyFn(r), ownedCols);
       });
     }
 
@@ -240,7 +243,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     result.items.forEach(it => {
       if (it.category === 'added') KEY_HIGHLIGHT.forEach(c => mark(it.key, c));
       else if (it.category === 'assessment') mark(it.key, 'Proj Total');
-      else if (it.column && !(keepManager && MANAGER_COLUMNS.includes(it.column))) mark(it.key, it.column);
+      else if (it.column && !(keepManager && (MANAGER_COLUMNS.includes(it.column) || owned.get(it.key)?.includes(it.column)))) mark(it.key, it.column);
     });
 
     await buildFinalRoster({ overrides, highlights, keyFn: result.keyFn, fileLabel: 'Final_Roster_Merged' });
