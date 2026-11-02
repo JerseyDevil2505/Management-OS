@@ -907,8 +907,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Address': property.property_location || '',
         'Owner Name': property.owner_name || '',
         'Owner Address': property.owner_street || '',
-        'Owner City State': property.owner_csz || '',
-        'Owner Zip': property.owner_csz?.split(' ').pop() || '',
+        // owner_csz is "CITY ST ZIP" (processors join BRT's separate fields); split the ZIP back out.
+        'Owner City State': (property.owner_csz || '').replace(/\s*\b\d{5}(-\d{4})?$/, '').trim(),
+        'Owner Zip': (property.owner_csz || '').match(/\b(\d{5}(-\d{4})?)$/)?.[1] || '',
         'Sp Tax Cd 1': cleanValue(property.special_tax_code_1),
         'Sp Tax Cd 2': cleanValue(property.special_tax_code_2),
         'Sp Tax Cd 3': cleanValue(property.special_tax_code_3),

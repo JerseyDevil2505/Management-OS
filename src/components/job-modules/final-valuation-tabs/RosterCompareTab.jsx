@@ -24,12 +24,15 @@ const parseRosterFile = async (file) => {
   return { headers: headers.filter(Boolean), rows };
 };
 
-const headerKey = (h) => String(h).replace(/\s+/g, ' ').trim().toUpperCase();
+// Letters/digits only, so case, punctuation ("Impr.") and invisible characters don't matter.
+const headerKey = (h) => String(h).toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-// Managers often re-case headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
+const HEADER_ALIASES = { CURRENTIMP: 'Current Impr' };
+
+// Managers often re-case or shorten headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
 const canonicalizeRoster = (roster, currentHeaders) => {
   const byKey = new Map(currentHeaders.map(h => [headerKey(h), h]));
-  const rename = (h) => byKey.get(headerKey(h)) || h;
+  const rename = (h) => byKey.get(headerKey(h)) || HEADER_ALIASES[headerKey(h)] || h;
   return {
     ...roster,
     headers: roster.headers.map(rename),
@@ -149,7 +152,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     try {
       const parsed = await parseRosterFile(file);
       const keys = new Set(parsed.headers.map(headerKey));
-      if (!keys.has('QUALIFIER') || !(keys.has('BLOCK (TEXT)') || keys.has('BLOCK'))) {
+      if (!keys.has('QUALIFIER') || !(keys.has('BLOCKTEXT') || keys.has('BLOCK'))) {
         throw new Error('This does not look like a Final Roster (missing Block/Lot/Qualifier columns).');
       }
       setUploaded({ ...parsed, fileName: file.name });
