@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import {
-  CATEGORIES, MANAGER_COLUMNS, compareRosters, formatCompareValue, normalizeCell,
+  CATEGORIES, MANAGER_COLUMNS, managerOwnedColumns, compareRosters, formatCompareValue, normalizeCell,
   loadSnapshotMeta, loadSnapshotRows, saveCompareResult, loadCompareResult
 } from '../../../lib/rosterCompare';
 
@@ -227,6 +227,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       result.roster.rows.forEach(r => {
         const o = {};
         managerCols.forEach(c => { o[c] = managerCellValue(c, r[c]); });
+        managerOwnedColumns(r).forEach(c => { o[c] = r[c]; });
         overrides.set(result.keyFn(r), o);
       });
     }
@@ -359,7 +360,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
                 onClick={buildMerged}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 title={result.source === 'upload'
-                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior and Special; changed cells highlighted. Becomes the saved roster.'
+                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior, Special, ACT sales and lot-size notes (SITE, ZALI); changed cells highlighted. Becomes the saved roster.'
                   : 'Fresh roster from current data with changed cells highlighted. Becomes the saved roster.'}
               >
                 <Download className="w-4 h-4" />

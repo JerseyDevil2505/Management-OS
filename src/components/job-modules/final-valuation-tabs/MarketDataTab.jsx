@@ -1191,6 +1191,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       } else if (salesCode === 'HSP') {
         fillColor = 'FED7AA'; // Light orange
       }
+      // Manager-entered ACT sales carried over by a merged build.
+      if (String(rows[R - 1]?.['Code'] ?? '').trim().toUpperCase() === 'ACT') fillColor = 'E4DFEC';
 
       const valueStart = getColIndex('Det Items');
       for (let C = range.s.c; C <= range.e.c; ++C) {

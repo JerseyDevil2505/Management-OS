@@ -16,6 +16,20 @@ const KEY_COLUMNS = new Set(['Block (text)', 'Lot (text)', 'Block', 'Lot', 'Qual
 // Columns the manager works in Excel; the merged roster keeps their value.
 export const MANAGER_COLUMNS = ['Actual EFA', 'Exterior', 'Interior', 'Special'];
 
+const LOT_SIZE_COLUMNS = ['Lot Frontage', 'Lot Depth', 'Lot Size (Acre)', 'Lot Size (SF)'];
+
+// Per-row manager entries: an ACT sale (Code + hand-entered Norm Time Value) and
+// words like SITE / ZALI typed into the lot-size columns.
+export const managerOwnedColumns = (rosterRow) => {
+  const cols = [];
+  if (String(normalizeCell(rosterRow['Code'])).toUpperCase() === 'ACT') cols.push('Code', 'Norm Time Value');
+  LOT_SIZE_COLUMNS.forEach(c => {
+    const v = normalizeCell(rosterRow[c]);
+    if (typeof v === 'string' && /[A-Z]/i.test(v)) cols.push(c);
+  });
+  return cols;
+};
+
 export const CATEGORIES = [
   { id: 'added', label: 'Added Parcels' },
   { id: 'removed', label: 'Removed Parcels' },
@@ -133,8 +147,10 @@ export const compareRosters = ({ rosterHeaders, rosterRows, currentHeaders, curr
     const cRow = cur.row;
     const label = parcelLabel(cRow);
     const isUnmasked = [rRow, cRow].some(r => String(normalizeCell(r['Sales NU Code'])).toUpperCase() === 'UM');
+    const owned = managerOwnedColumns(rRow);
     columns.forEach(col => {
       if (isUnmasked && categoryOf(col) === 'sales') return;
+      if (owned.includes(col)) return;
       const equal = WHOLE_DOLLAR_COLUMNS.has(col)
         ? cellsEqual(roundIfNumber(rRow[col]), roundIfNumber(cRow[col]))
         : cellsEqual(rRow[col], cRow[col]);
