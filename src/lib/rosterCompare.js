@@ -54,6 +54,10 @@ export const normalizeCell = (raw) => {
 
 const isEmptyish = (v) => v === '' || v === 0;
 
+// Older rosters carried unrounded values here; compare to the dollar.
+const WHOLE_DOLLAR_COLUMNS = new Set(['Norm Time Value']);
+const roundIfNumber = (raw) => { const v = normalizeCell(raw); return typeof v === 'number' ? Math.round(v) : v; };
+
 export const cellsEqual = (a, b) => {
   const na = normalizeCell(a);
   const nb = normalizeCell(b);
@@ -131,7 +135,10 @@ export const compareRosters = ({ rosterHeaders, rosterRows, currentHeaders, curr
     const isUnmasked = [rRow, cRow].some(r => String(normalizeCell(r['Sales NU Code'])).toUpperCase() === 'UM');
     columns.forEach(col => {
       if (isUnmasked && categoryOf(col) === 'sales') return;
-      if (!cellsEqual(rRow[col], cRow[col])) {
+      const equal = WHOLE_DOLLAR_COLUMNS.has(col)
+        ? cellsEqual(roundIfNumber(rRow[col]), roundIfNumber(cRow[col]))
+        : cellsEqual(rRow[col], cRow[col]);
+      if (!equal) {
         items.push({
           key, category: categoryOf(col), column: col,
           rosterValue: normalizeCell(rRow[col]), currentValue: normalizeCell(cRow[col]),

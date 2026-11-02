@@ -987,7 +987,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
           return '';
         })(),
-        'Norm Time Value': property.values_norm_time || '',
+        'Norm Time Value': property.values_norm_time ? Math.round(property.values_norm_time) : '',
         'Sales NU Code': isUnmaskedSale(property) ? 'UM' : cleanValue(property.sales_nu),
         'Sales Ratio': '',
         'Sale Comment': calc.saleComment || '',
