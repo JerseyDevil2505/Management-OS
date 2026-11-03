@@ -49,6 +49,12 @@ const DataQualityTab = ({
   const [modalData, setModalData] = useState({ title: '', properties: [] });
   const [modalSelectedKeys, setModalSelectedKeys] = useState(new Set());
   const [modalClassFilter, setModalClassFilter] = useState('all');
+  const [modalVcsFilter, setModalVcsFilter] = useState('all');
+  const modalClassOf = (p) => p.details?.property_m4_class || 'Unknown';
+  const modalVcsOf = (p) => p.details?.property_vcs || 'Unknown';
+  const passesModalFilters = (p) =>
+    (modalClassFilter === 'all' || modalClassOf(p) === modalClassFilter) &&
+    (modalVcsFilter === 'all' || modalVcsOf(p) === modalVcsFilter);
 
   // Helper: filter out ignored issues from results for display
   const filterIgnoredResults = (results, ignoredSet = ignoredIssues) => {
@@ -1904,6 +1910,7 @@ const generateQCFormPDF = () => {
     setShowDetailsModal(true);
     setModalSelectedKeys(new Set());
     setModalClassFilter('all');
+    setModalVcsFilter('all');
   };
 
   const saveCustomChecksToDb = async (checks) => {
@@ -3003,11 +3010,12 @@ const editCustomCheck = (check) => {
               </div>
               {/* Bulk actions bar */}
               {(() => {
-                const allClasses = [...new Set(modalData.properties.map(p => p.details?.property_m4_class || 'Unknown'))].sort();
+                const allClasses = [...new Set(modalData.properties.map(modalClassOf))].sort();
+                const allVcs = [...new Set(modalData.properties.map(modalVcsOf))].sort();
                 const nonIgnoredProps = modalData.properties.filter(p => !ignoredIssues.has(`${p.property_key}-${p.check}`));
-                const visibleNonIgnored = modalClassFilter === 'all'
-                  ? nonIgnoredProps
-                  : nonIgnoredProps.filter(p => (p.details?.property_m4_class || 'Unknown') === modalClassFilter);
+                const visibleNonIgnored = nonIgnoredProps.filter(passesModalFilters);
+                const vcsBase = nonIgnoredProps.filter(p => modalClassFilter === 'all' || modalClassOf(p) === modalClassFilter);
+                const classBase = nonIgnoredProps.filter(p => modalVcsFilter === 'all' || modalVcsOf(p) === modalVcsFilter);
                 const selectableKeys = new Set(visibleNonIgnored.map(p => `${p.property_key}-${p.check}`));
                 const selectedCount = [...modalSelectedKeys].filter(k => selectableKeys.has(k)).length;
                 const allSelected = selectableKeys.size > 0 && selectedCount === selectableKeys.size;
@@ -3018,10 +3026,21 @@ const editCustomCheck = (check) => {
                       onChange={(e) => setModalClassFilter(e.target.value)}
                       className="text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="all">All Classes ({nonIgnoredProps.length})</option>
+                      <option value="all">All Classes ({classBase.length})</option>
                       {allClasses.map(cls => {
-                        const count = nonIgnoredProps.filter(p => (p.details?.property_m4_class || 'Unknown') === cls).length;
+                        const count = classBase.filter(p => modalClassOf(p) === cls).length;
                         return <option key={cls} value={cls}>{cls} ({count})</option>;
+                      })}
+                    </select>
+                    <select
+                      value={modalVcsFilter}
+                      onChange={(e) => setModalVcsFilter(e.target.value)}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="all">All VCS ({vcsBase.length})</option>
+                      {allVcs.map(v => {
+                        const count = vcsBase.filter(p => modalVcsOf(p) === v).length;
+                        return <option key={v} value={v}>{v} ({count})</option>;
                       })}
                     </select>
                     <span className="text-sm text-gray-400">|</span>
@@ -3117,6 +3136,9 @@ const editCustomCheck = (check) => {
                       Class
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                      VCS
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                       Issue Details
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
@@ -3126,7 +3148,7 @@ const editCustomCheck = (check) => {
                 </thead>
                 <tbody>
                   {modalData.properties
-                    .filter(p => modalClassFilter === 'all' || (p.details?.property_m4_class || 'Unknown') === modalClassFilter)
+                    .filter(passesModalFilters)
                     .map((prop, index) => {
                     const property = prop.details;
                     const issueKey = `${prop.property_key}-${prop.check}`;
@@ -3166,6 +3188,9 @@ const editCustomCheck = (check) => {
                         </td>
                         <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
                           {property?.property_m4_class || ''}
+                        </td>
+                        <td className={`py-3 px-4 text-sm text-gray-900 ${isIgnored ? 'line-through' : ''}`}>
+                          {property?.property_vcs || ''}
                         </td>
                         <td className={`py-3 px-4 text-sm text-gray-600 ${isIgnored ? 'line-through' : ''}`}>
                           {prop.message}

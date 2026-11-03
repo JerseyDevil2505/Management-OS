@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import {
-  CATEGORIES, MANAGER_COLUMNS, compareRosters, formatCompareValue, normalizeCell,
+  CATEGORIES, MANAGER_COLUMNS, managerOwnedColumns, compareRosters, formatCompareValue, normalizeCell,
   loadSnapshotMeta, loadSnapshotRows, saveCompareResult, loadCompareResult
 } from '../../../lib/rosterCompare';
 
@@ -24,12 +24,15 @@ const parseRosterFile = async (file) => {
   return { headers: headers.filter(Boolean), rows };
 };
 
-const headerKey = (h) => String(h).replace(/\s+/g, ' ').trim().toUpperCase();
+// Letters/digits only, so case, punctuation ("Impr.") and invisible characters don't matter.
+const headerKey = (h) => String(h).toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-// Managers often re-case headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
+const HEADER_ALIASES = { CURRENTIMP: 'Current Impr' };
+
+// Managers often re-case or shorten headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
 const canonicalizeRoster = (roster, currentHeaders) => {
   const byKey = new Map(currentHeaders.map(h => [headerKey(h), h]));
-  const rename = (h) => byKey.get(headerKey(h)) || h;
+  const rename = (h) => byKey.get(headerKey(h)) || HEADER_ALIASES[headerKey(h)] || h;
   return {
     ...roster,
     headers: roster.headers.map(rename),
@@ -149,7 +152,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     try {
       const parsed = await parseRosterFile(file);
       const keys = new Set(parsed.headers.map(headerKey));
-      if (!keys.has('QUALIFIER') || !(keys.has('BLOCK (TEXT)') || keys.has('BLOCK'))) {
+      if (!keys.has('QUALIFIER') || !(keys.has('BLOCKTEXT') || keys.has('BLOCK'))) {
         throw new Error('This does not look like a Final Roster (missing Block/Lot/Qualifier columns).');
       }
       setUploaded({ ...parsed, fileName: file.name });
@@ -219,12 +222,17 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     if (!result) return;
     const keepManager = result.source === 'upload';
     const overrides = new Map();
+    const owned = new Map();
     if (keepManager) {
       const managerCols = MANAGER_COLUMNS.filter(c => result.roster.headers.includes(c));
       result.roster.rows.forEach(r => {
         const o = {};
         managerCols.forEach(c => { o[c] = managerCellValue(c, r[c]); });
+        if (result.roster.headers.includes('CAMA Land')) o['CAMA Land'] = r['CAMA Land'];
+        const ownedCols = managerOwnedColumns(r);
+        ownedCols.forEach(c => { o[c] = r[c]; });
         overrides.set(result.keyFn(r), o);
+        owned.set(result.keyFn(r), ownedCols);
       });
     }
 
@@ -236,10 +244,10 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     result.items.forEach(it => {
       if (it.category === 'added') KEY_HIGHLIGHT.forEach(c => mark(it.key, c));
       else if (it.category === 'assessment') mark(it.key, 'Proj Total');
-      else if (it.column && !(keepManager && MANAGER_COLUMNS.includes(it.column))) mark(it.key, it.column);
+      else if (it.column && !(keepManager && (MANAGER_COLUMNS.includes(it.column) || owned.get(it.key)?.includes(it.column)))) mark(it.key, it.column);
     });
 
-    await buildFinalRoster({ overrides, highlights, keyFn: result.keyFn, fileLabel: 'Final_Roster_Merged' });
+    await buildFinalRoster({ overrides, highlights, keyFn: result.keyFn, fileLabel: 'Final_Roster_Merged', brtCheck: keepManager });
   };
 
   const totalChanges = result ? result.items.length : 0;
@@ -356,7 +364,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
                 onClick={buildMerged}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 title={result.source === 'upload'
-                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior and Special; changed cells highlighted. Becomes the saved roster.'
+                  ? 'Fresh roster from current data, keeping the manager\'s Actual EFA, Exterior, Interior, Special, CAMA Land, ACT sales and lot-size notes (SITE, ZALI), with temporary BRT Land / Imp / Total / Totals Match columns after Proj Total; changed cells highlighted. Becomes the saved roster.'
                   : 'Fresh roster from current data with changed cells highlighted. Becomes the saved roster.'}
               >
                 <Download className="w-4 h-4" />
