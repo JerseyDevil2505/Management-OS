@@ -8,7 +8,7 @@ import {
   resolveActualEFA as computeActualEFA
 } from '../../../lib/effectiveAge';
 import { isUnmaskedSale } from '../../../lib/unmaskedSales';
-import { saveRosterSnapshot } from '../../../lib/rosterCompare';
+import { saveRosterSnapshot, rosterHeaderLabel } from '../../../lib/rosterCompare';
 import { loadRosterTaxRates } from '../../../lib/taxRates';
 import RosterCompareTab from './RosterCompareTab';
 
@@ -1196,6 +1196,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const headerName = headers[C];
       const headerFontColor = { rgb: ROSTER_FONT_COLORS[headerName] || '000000' };
 
+      const headerLabel = rosterHeaderLabel(vendorType, headerName);
+      worksheet[cellAddress].v = headerLabel;
+      worksheet[cellAddress].w = headerLabel;
       worksheet[cellAddress].s = {
         font: { name: 'Leelawadee', sz: 10, bold: true, color: headerFontColor },
         alignment: { horizontal: 'center', vertical: 'center' },
