@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx-js-style';
 import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import {
   CATEGORIES, MANAGER_COLUMNS, managerOwnedColumns, compareRosters, formatCompareValue, normalizeCell,
-  loadSnapshotMeta, loadSnapshotRows, saveCompareResult, loadCompareResult
+  loadSnapshotMeta, loadSnapshotRows, saveCompareResult, loadCompareResult, rosterHeaderLabels
 } from '../../../lib/rosterCompare';
 
 const ROW_LIMIT = 500;
@@ -30,8 +30,11 @@ const headerKey = (h) => String(h).toUpperCase().replace(/[^A-Z0-9]/g, '');
 const HEADER_ALIASES = { CURRENTIMP: 'Current Impr' };
 
 // Managers often re-case or shorten headers (e.g. "BLOCK (TEXT)"); map them back to the export's names.
-const canonicalizeRoster = (roster, currentHeaders) => {
-  const byKey = new Map(currentHeaders.map(h => [headerKey(h), h]));
+// Vendor source headers and our older names both resolve, so pre-vendor-label rosters still match.
+const canonicalizeRoster = (roster, currentHeaders, vendorType) => {
+  const labels = rosterHeaderLabels(vendorType);
+  const byKey = new Map(currentHeaders.filter(h => labels[h]).map(h => [headerKey(labels[h]), h]));
+  currentHeaders.forEach(h => byKey.set(headerKey(h), h));
   const rename = (h) => byKey.get(headerKey(h)) || HEADER_ALIASES[headerKey(h)] || h;
   return {
     ...roster,
@@ -53,6 +56,8 @@ const managerCellValue = (col, v) => {
 };
 
 const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshotVersion }) => {
+  const vendorType = jobData?.vendor_type || 'BRT';
+  const labelOf = (col) => rosterHeaderLabels(vendorType)[col] || col;
   const [meta, setMeta] = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
   const [mode, setMode] = useState('snapshot');
@@ -108,7 +113,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       const { rows: currentRows, consolidatedProperties } = buildRosterRows();
       if (currentRows.length === 0) throw new Error('No properties loaded for this job.');
       const currentHeaders = Object.keys(currentRows[0]);
-      if (source === 'upload') roster = canonicalizeRoster(roster, currentHeaders);
+      if (source === 'upload') roster = canonicalizeRoster(roster, currentHeaders, vendorType);
 
       const hasProjResults = source === 'upload' && roster.headers.includes('Proj Total') &&
         roster.rows.some(r => { const v = normalizeCell(r['Proj Total']); return typeof v === 'number' && v !== 0; });
@@ -152,7 +157,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     try {
       const parsed = await parseRosterFile(file);
       const keys = new Set(parsed.headers.map(headerKey));
-      if (!keys.has('QUALIFIER') || !(keys.has('BLOCKTEXT') || keys.has('BLOCK'))) {
+      if (!(keys.has('QUALIFIER') || keys.has('QUAL')) || !(keys.has('BLOCKTEXT') || keys.has('BLOCK'))) {
         throw new Error('This does not look like a Final Roster (missing Block/Lot/Qualifier columns).');
       }
       setUploaded({ ...parsed, fileName: file.name });
@@ -169,9 +174,10 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     return result.items.filter(it => {
       if (!activeCats.has(it.category)) return false;
       if (!q) return true;
-      return `${it.block} ${it.lot} ${it.qualifier} ${it.address} ${it.column}`.toUpperCase().includes(q);
+      const label = rosterHeaderLabels(vendorType)[it.column] || '';
+      return `${it.block} ${it.lot} ${it.qualifier} ${it.address} ${it.column} ${label}`.toUpperCase().includes(q);
     });
-  }, [result, activeCats, search]);
+  }, [result, activeCats, search, vendorType]);
 
   const toggleCat = (id) => {
     setActiveCats(prev => {
@@ -195,7 +201,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
     const summary = [['Category', 'Count'], ...CATEGORIES.map(c => [c.label, result.counts[c.id] || 0])];
     summary.push([]);
     summary.push(['Compared against', result.source === 'snapshot' ? `Saved roster built ${fmtDateTime(meta?.built_at)}` : (result.roster.fileName || 'Uploaded roster')]);
-    if (result.missingColumns.length) summary.push(['Columns not in roster', result.missingColumns.join(', ')]);
+    if (result.missingColumns.length) summary.push(['Columns not in roster', result.missingColumns.map(labelOf).join(', ')]);
     const wsSum = XLSX.utils.aoa_to_sheet(summary);
     styleHeader(wsSum, 2);
     wsSum['!cols'] = [{ wch: 24 }, { wch: 60 }];
@@ -208,7 +214,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
       const head = parcelOnly ? ['Block', 'Lot', 'Qualifier', 'Address'] : ['Block', 'Lot', 'Qualifier', 'Address', 'Field', 'Roster', 'Current'];
       const aoa = [head, ...items.map(it => parcelOnly
         ? [it.block, it.lot, it.qualifier, it.address]
-        : [it.block, it.lot, it.qualifier, it.address, it.column, formatCompareValue(it.column, it.rosterValue), formatCompareValue(it.column, it.currentValue)])];
+        : [it.block, it.lot, it.qualifier, it.address, labelOf(it.column), formatCompareValue(it.column, it.rosterValue), formatCompareValue(it.column, it.currentValue)])];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       styleHeader(ws, head.length);
       ws['!cols'] = head.map(h => ({ wch: h === 'Address' ? 30 : h === 'Field' ? 22 : 14 }));
@@ -345,7 +351,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
               )}
               <div className="text-xs text-gray-500 mt-1">
                 {result.columnsCompared.length} columns compared.
-                {result.missingColumns.length > 0 && ` Not in roster (skipped): ${result.missingColumns.join(', ')}.`}
+                {result.missingColumns.length > 0 && ` Not in roster (skipped): ${result.missingColumns.map(labelOf).join(', ')}.`}
               </div>
               {result.assessmentSkippedReason && (
                 <div className="text-xs text-yellow-700 mt-1">Assessment check skipped: {result.assessmentSkippedReason}</div>
@@ -424,7 +430,7 @@ const RosterCompareTab = ({ jobData, buildRosterRows, buildFinalRoster, snapshot
                     <td className="px-2 py-1 border border-gray-200">{it.qualifier}</td>
                     <td className="px-2 py-1 border border-gray-200 whitespace-nowrap">{it.address}</td>
                     <td className="px-2 py-1 border border-gray-200">{CATEGORIES.find(c => c.id === it.category)?.label}</td>
-                    <td className="px-2 py-1 border border-gray-200">{it.column || (it.category === 'added' ? 'New in data' : 'Gone from data')}</td>
+                    <td className="px-2 py-1 border border-gray-200">{it.column ? labelOf(it.column) : (it.category === 'added' ? 'New in data' : 'Gone from data')}</td>
                     <td className="px-2 py-1 border border-gray-200 bg-red-50">{it.column ? formatCompareValue(it.column, it.rosterValue) : ''}</td>
                     <td className="px-2 py-1 border border-gray-200 bg-green-50">{it.column ? formatCompareValue(it.column, it.currentValue) : ''}</td>
                   </tr>
