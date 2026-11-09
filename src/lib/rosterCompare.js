@@ -16,6 +16,90 @@ const KEY_COLUMNS = new Set(['Block (text)', 'Lot (text)', 'Block', 'Lot', 'Qual
 // Columns the manager works in Excel; the merged roster keeps their value.
 export const MANAGER_COLUMNS = ['Actual EFA', 'Exterior', 'Interior', 'Special'];
 
+// Roster columns that carry a vendor field verbatim are headed with that vendor's
+// source-file header so the worked roster lines up with the vendor for reimport.
+// Internal names stay the working keys (formulas, compare, snapshots); only the
+// written header row and the compare display use these labels. Derived columns,
+// our own fields, and Microsystems' duplicate Land/Impr/Totl Value headers keep
+// our names (Excel can't hold two identical headers).
+const VENDOR_HEADER_LABELS = {
+  BRT: {
+    'Qualifier': 'QUALIFIER',
+    'Address': 'PROPERTY_LOCATION',
+    'Owner Name': 'OWNER_OWNER',
+    'Owner Address': 'OWNER_ADDRESS',
+    'Owner City State': 'OWNER_CITYSTATE',
+    'Owner Zip': 'OWNER_ZIP',
+    'Sp Tax Cd 1': 'EXEMPT_SPECIAL_TAXCODE1',
+    'Sp Tax Cd 2': 'EXEMPT_SPECIAL_TAXCODE2',
+    'Sp Tax Cd 3': 'EXEMPT_SPECIAL_TAXCODE3',
+    'Sp Tax Cd 4': 'EXEMPT_SPECIAL_TAXCODE4',
+    'MOD IV': 'PROPERTY_CLASS',
+    'CAMA': 'PROPCLASS',
+    'Info By': 'INFOBY',
+    'Exempt Facility': 'EXEMPT_FACILITYNAME',
+    'View': 'VIEW',
+    'Type Use': 'TYPEUSE',
+    'Building Class': 'BLDGCLASS',
+    'Year Built': 'YEARBUILT',
+    'Design': 'DESIGN',
+    'Bedroom Total': 'BEDTOT',
+    'Story Height': 'STORYHGT',
+    'SFLA': 'SFLA_TOTAL',
+    'Exterior': 'EXTERIORNC',
+    'Interior': 'INTERIORNC',
+    'Sale Date': 'CURRENTSALE_DATE',
+    'Sale Book': 'CURRENTSALE_DEEDBOOK',
+    'Sale Page': 'CURRENTSALE_DEEDPAGE',
+    'Sale Price': 'CURRENTSALE_PRICE',
+    'Sales NU Code': 'CURRENTSALE_NUC',
+    'Det Items': 'DETACHEDITEMS',
+    'Cost New': 'REPLCOSTNEW',
+    'Current Land': 'VALUES_LANDTAXABLEVALUE',
+    'Current Impr': 'VALUES_IMPROVTAXABLEVALUE',
+    'Current Total': 'VALUES_NETTAXABLEVALUE',
+    'CAMA Land': 'TOTALLANDVALUE',
+    'Actual EFA': 'EFFAGE'
+  },
+  Microsystems: {
+    'Qualifier': 'Qual',
+    'Address': 'Location',
+    'Owner Address': 'Owner Street',
+    'Sp Tax Cd 1': 'Sp Tax Cd1',
+    'Sp Tax Cd 2': 'Sp Tax Cd2',
+    'MOD IV': 'Class',
+    'Info By': 'Interior Finish3',
+    'Exempt Facility': 'Facility Name',
+    'Type Use': 'Type Use Code',
+    'Building Class': 'Bldg Qual Class Code',
+    'Design': 'Style Code',
+    'Bedroom Total': 'Total Bedrms',
+    'SFLA': 'Livable Area',
+    'Exterior': 'Condition',
+    'Interior': 'Interior Cond Or End Unit',
+    'Sales NU Code': 'Sale Nu',
+    'Actual EFA': 'Effective Age'
+  }
+};
+
+export const rosterHeaderLabels = (vendorType) => VENDOR_HEADER_LABELS[vendorType] || VENDOR_HEADER_LABELS.BRT;
+
+export const rosterHeaderLabel = (vendorType, column) => rosterHeaderLabels(vendorType)[column] || column;
+
+const LOT_SIZE_COLUMNS = ['Lot Frontage', 'Lot Depth', 'Lot Size (Acre)', 'Lot Size (SF)'];
+
+// Per-row manager entries: an ACT sale (Code + hand-entered Norm Time Value) and
+// words like SITE / ZALI typed into the lot-size columns.
+export const managerOwnedColumns = (rosterRow) => {
+  const cols = [];
+  if (String(normalizeCell(rosterRow['Code'])).toUpperCase() === 'ACT') cols.push('Code', 'Norm Time Value');
+  LOT_SIZE_COLUMNS.forEach(c => {
+    const v = normalizeCell(rosterRow[c]);
+    if (typeof v === 'string' && /[A-Z]/i.test(v)) cols.push(c);
+  });
+  return cols;
+};
+
 export const CATEGORIES = [
   { id: 'added', label: 'Added Parcels' },
   { id: 'removed', label: 'Removed Parcels' },
@@ -53,6 +137,10 @@ export const normalizeCell = (raw) => {
 };
 
 const isEmptyish = (v) => v === '' || v === 0;
+
+// Older rosters carried unrounded values here; compare to the dollar.
+const WHOLE_DOLLAR_COLUMNS = new Set(['Norm Time Value']);
+const roundIfNumber = (raw) => { const v = normalizeCell(raw); return typeof v === 'number' ? Math.round(v) : v; };
 
 export const cellsEqual = (a, b) => {
   const na = normalizeCell(a);
@@ -129,9 +217,14 @@ export const compareRosters = ({ rosterHeaders, rosterRows, currentHeaders, curr
     const cRow = cur.row;
     const label = parcelLabel(cRow);
     const isUnmasked = [rRow, cRow].some(r => String(normalizeCell(r['Sales NU Code'])).toUpperCase() === 'UM');
+    const owned = managerOwnedColumns(rRow);
     columns.forEach(col => {
       if (isUnmasked && categoryOf(col) === 'sales') return;
-      if (!cellsEqual(rRow[col], cRow[col])) {
+      if (owned.includes(col)) return;
+      const equal = WHOLE_DOLLAR_COLUMNS.has(col)
+        ? cellsEqual(roundIfNumber(rRow[col]), roundIfNumber(cRow[col]))
+        : cellsEqual(rRow[col], cRow[col]);
+      if (!equal) {
         items.push({
           key, category: categoryOf(col), column: col,
           rosterValue: normalizeCell(rRow[col]), currentValue: normalizeCell(cRow[col]),
@@ -225,9 +318,10 @@ export const saveRosterSnapshot = async ({ jobData, headers, rows }) => {
 
 const COMPARE_SETTING_KEY = 'roster_compare_last';
 
-// Roster rows are trimmed to what Build Merged Roster needs (keys + manager columns).
+// Roster rows are trimmed to what Build Merged Roster needs (keys + manager-owned columns).
 export const saveCompareResult = async ({ jobId, result }) => {
-  const keep = [...KEY_COLUMNS, ...MANAGER_COLUMNS].filter(h => result.roster.headers.includes(h));
+  const keep = [...KEY_COLUMNS, ...MANAGER_COLUMNS, 'CAMA Land', 'Code', 'Norm Time Value', ...LOT_SIZE_COLUMNS]
+    .filter(h => result.roster.headers.includes(h));
   const payload = {
     items: result.items,
     counts: result.counts,
